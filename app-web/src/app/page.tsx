@@ -2,6 +2,51 @@
 
 import { useEffect, useRef, useState } from "react";
 
+// ----- Minimal Web Speech API types -----
+// The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
+// just enough surface to use it safely without `any`.
+type SpeechRecognitionAlternative = { transcript: string };
+type SpeechRecognitionResult = {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternative;
+  length: number;
+};
+type SpeechRecognitionResultList = {
+  length: number;
+  [index: number]: SpeechRecognitionResult;
+};
+type SpeechRecognitionEvent = {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+};
+type SpeechRecognitionErrorEvent = { error: string; message?: string };
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: ((event: Event) => void) | null;
+  onend: ((event: Event) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+// Both Chromium-based browsers and Safari expose webkitSpeechRecognition;
+// some Edge builds also expose the unprefixed name.
+function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 // Option lists kept as plain string arrays so they are easy to edit later.
 const LEVELS = ["Foundation", "Beginner", "Intermediate", "Advanced", "Expert"] as const;
 const MODES = ["Fluency Sprint", "Argument Drill", "Reading-to-Speaking", "Debate"] as const;
@@ -291,6 +336,36 @@ export default function Home() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // --- Speech-to-text (browser only) ---
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(true);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  // Detect browser support once on mount.
+  useEffect(() => {
+    setSpeechSupported(getSpeechRecognitionCtor() !== null);
+  }, []);
+
+  // Make sure any active recognition is torn down on unmount.
+  useEffect(() => {
+    return () => {
+      const rec = recognitionRef.current;
+      if (rec) {
+        try {
+          rec.onstart = null;
+          rec.onend = null;
+          rec.onerror = null;
+          rec.onresult = null;
+          rec.abort();
+        } catch {
+          // Ignore: instance was already cleaned up.
+        }
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
+
   // --- Captured attempt (after Submit) ---
   const [capturedAttempt, setCapturedAttempt] = useState<CapturedAttempt | null>(
     null,
@@ -366,6 +441,9 @@ export default function Home() {
     setCapturedRetry(null);
     setSessionSummary(null);
     setCsvCopied(false);
+    // Speech-to-text: stop any active session before starting a new one.
+    stopRecognitionInstance();
+    setSpeechError(null);
     // Note: sessions history is intentionally NOT cleared on restart.
   };
 
@@ -376,12 +454,107 @@ export default function Home() {
     setElapsedSeconds(0);
   };
 
+  // --- Speech input handlers ---
+  const stopRecognitionInstance = () => {
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    try {
+      rec.stop();
+    } catch {
+      // Ignore: nothing was running.
+    }
+  };
+
+  const handleStartSpeechInput = () => {
+    if (isListening) return;
+    const Ctor = getSpeechRecognitionCtor();
+    if (!Ctor) {
+      setSpeechSupported(false);
+      return;
+    }
+
+    setSpeechError(null);
+
+    // Tear down any previous instance first to avoid duplicates.
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // Ignore.
+      }
+      recognitionRef.current = null;
+    }
+
+    const recognition = new Ctor();
+    recognition.lang =
+      typeof navigator !== "undefined" && navigator.language
+        ? navigator.language
+        : "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onerror = (event) => {
+      setIsListening(false);
+      const code = event.error || "unknown";
+      const message =
+        code === "not-allowed" || code === "service-not-allowed"
+          ? "Microphone access was denied. Allow it in the browser address bar to use speech input."
+          : code === "no-speech"
+            ? "No speech detected. Try speaking again."
+            : code === "audio-capture"
+              ? "No microphone detected. Check your input device."
+              : `Speech input error: ${code}`;
+      setSpeechError(message);
+    };
+    recognition.onresult = (event) => {
+      // Append only final segments. Interim results are noisy and the spec
+      // already disables them.
+      let appended = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          appended += result[0].transcript;
+        }
+      }
+      const cleaned = appended.trim();
+      if (cleaned.length === 0) return;
+      setTranscript((prev) => {
+        if (prev.length === 0) return cleaned;
+        // Preserve a trailing newline if the user already added one,
+        // otherwise join with a single space.
+        const sep = /\s$/.test(prev) ? "" : " ";
+        return `${prev}${sep}${cleaned}`;
+      });
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (err) {
+      setIsListening(false);
+      recognitionRef.current = null;
+      const message =
+        err instanceof Error ? err.message : "Could not start speech input.";
+      setSpeechError(message);
+    }
+  };
+
+  const handleStopSpeechInput = () => {
+    stopRecognitionInstance();
+  };
+
   const trimmedTranscript = transcript.trim();
   const canSubmit = trimmedTranscript.length > 0 && capturedAttempt === null;
 
   const handleSubmitAttempt = () => {
     if (!canSubmit) return;
     setIsTimerRunning(false);
+    stopRecognitionInstance();
     setCapturedAttempt({
       transcript: trimmedTranscript,
       durationSeconds: elapsedSeconds,
@@ -722,8 +895,67 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Speech Input */}
+            <div className="mt-8 rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-neutral-200">
+                    Speech input
+                  </h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Browser speech-to-text. Audio stays on your device.
+                  </p>
+                </div>
+                {speechSupported ? (
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={handleStartSpeechInput}
+                      disabled={isListening}
+                      className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                    >
+                      Start Speech Input
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopSpeechInput}
+                      disabled={!isListening}
+                      className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                    >
+                      Stop Speech Input
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {speechSupported ? (
+                <p
+                  aria-live="polite"
+                  className="mt-3 text-xs text-neutral-400"
+                >
+                  {isListening
+                    ? "Listening… speak clearly. Recognized text will be appended below."
+                    : "Speech input accuracy depends on your browser and microphone. You can edit the transcript before submitting."}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-neutral-400">
+                  Speech input is not supported in this browser. Please type or
+                  paste your transcript manually.
+                </p>
+              )}
+
+              {speechError && (
+                <p
+                  role="alert"
+                  className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200"
+                >
+                  {speechError}
+                </p>
+              )}
+            </div>
+
             {/* Transcript */}
-            <div className="mt-8">
+            <div className="mt-6">
               <label
                 htmlFor="transcript"
                 className="mb-2 block text-sm font-medium text-neutral-300"
