@@ -49,7 +49,7 @@ function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
 
 // Option lists kept as plain string arrays so they are easy to edit later.
 const LEVELS = ["Foundation", "Beginner", "Intermediate", "Advanced", "Expert"] as const;
-const MODES = ["Fluency Sprint", "Argument Drill", "Reading-to-Speaking", "Debate"] as const;
+const MODES = ["Fluency Sprint", "Argument Drill", "Reading-to-Speaking", "Debate", "Diagnostic"] as const;
 const FEEDBACK_TYPES = ["Quick", "Deep"] as const;
 const SESSION_TYPES = ["Micro", "Standard", "Deep"] as const;
 const AI_PROVIDERS = ["Claude", "DeepSeek", "Gemini"] as const;
@@ -86,6 +86,23 @@ type FeedbackResult = {
   retryTask: string;
   providerUsed: string;
   scores: FeedbackScores;
+};
+
+type DiagnosticScoresShape = {
+  fluency: number;
+  grammar: number;
+  vocabulary: number;
+  coherence: number;
+  argument: number;
+  academicTone: number;
+};
+
+type DiagnosticResult = {
+  recommendedLevel: Level;
+  mainBottleneck: string;
+  summary: string;
+  scores: DiagnosticScoresShape;
+  sevenDayFocusPlan: string[];
 };
 
 // Score dimensions per level. Order in arrays matches CSV column order.
@@ -568,6 +585,27 @@ function buildSpeakingPrompt(
   todayTarget: string,
   variantIndex: number,
 ): SpeakingPrompt {
+  if (mode === "Diagnostic") {
+    return {
+      task:
+        "Diagnostic baseline. Speak (or paste a combined transcript) covering all three sections in one go: " +
+        "(A) a 60-second self-introduction including your learning goal, " +
+        "(B) an explanation of one academic concept you recently learned, and " +
+        "(C) a short opinion with one reason and one example.",
+      constraints: [
+        "Cover all three sections A, B, and C in one combined transcript.",
+        "No sample answers will be given. Use your own current ability.",
+        "Be specific. Mention real concepts, real reasons, real examples.",
+        ...(todayTarget.trim().length > 0
+          ? [`Today's focus: ${todayTarget.trim()}`]
+          : []),
+      ],
+      targetStructure:
+        "A: Self-introduction + goal · B: One concept explanation · C: Opinion + reason + example",
+      timeLimit: "About 3-4 minutes total across all three sections",
+    };
+  }
+
   return {
     task: pickTaskByLevel(level, variantIndex),
     constraints: constraintsFor(level, mode, sessionType, todayTarget),
@@ -773,6 +811,12 @@ export default function Home() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
+  // --- Diagnostic mode state ---
+  const [diagnosticResult, setDiagnosticResult] =
+    useState<DiagnosticResult | null>(null);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
+
   // --- Retry loop state ---
   const [retryTranscript, setRetryTranscript] = useState("");
   const [capturedRetry, setCapturedRetry] = useState<CapturedRetry | null>(null);
@@ -859,6 +903,10 @@ export default function Home() {
     // Speech-to-text: stop any active session before starting a new one.
     stopRecognitionInstance();
     setSpeechError(null);
+    // Diagnostic mode: reset the standalone diagnostic result/error.
+    setDiagnosticResult(null);
+    setDiagnosticError(null);
+    setDiagnosticLoading(false);
     // Note: sessions history is intentionally NOT cleared on restart.
   };
 
@@ -1061,6 +1109,66 @@ export default function Home() {
     } finally {
       setFeedbackLoading(false);
     }
+  };
+
+  const handleRunDiagnostic = async () => {
+    if (!activeSession || !capturedAttempt) return;
+    setDiagnosticLoading(true);
+    setDiagnosticError(null);
+    setDiagnosticResult(null);
+
+    try {
+      const res = await fetch("/api/diagnostic", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: activeSession.aiProvider,
+          transcript: capturedAttempt.transcript,
+          durationSeconds: capturedAttempt.durationSeconds,
+          currentLevel: activeSession.level,
+          todayTarget: activeSession.target,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | (DiagnosticResult & { error?: string })
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !data || ("error" in data && data.error)) {
+        const rawMessage =
+          (data && "error" in data && data.error) ||
+          `Request failed with status ${res.status}.`;
+        setDiagnosticError(sanitizeErrorMessage(rawMessage));
+        return;
+      }
+
+      const result = data as DiagnosticResult;
+      if (
+        !result.recommendedLevel ||
+        !result.mainBottleneck ||
+        !result.summary ||
+        !Array.isArray(result.sevenDayFocusPlan)
+      ) {
+        setDiagnosticError("Diagnostic response was incomplete. Try again.");
+        return;
+      }
+      setDiagnosticResult(result);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Network error while contacting the API.";
+      setDiagnosticError(sanitizeErrorMessage(message));
+    } finally {
+      setDiagnosticLoading(false);
+    }
+  };
+
+  const handleApplyRecommendedLevel = () => {
+    if (!diagnosticResult) return;
+    setLevel(diagnosticResult.recommendedLevel);
+    setTarget(diagnosticResult.mainBottleneck);
   };
 
   const trimmedRetryTranscript = retryTranscript.trim();
@@ -1565,14 +1673,25 @@ export default function Home() {
               </div>
             </dl>
             <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleGetFeedback}
-                disabled={feedbackLoading}
-                className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
-              >
-                {feedbackLoading ? "Generating feedback..." : "Get AI Feedback"}
-              </button>
+              {activeSession?.mode === "Diagnostic" ? (
+                <button
+                  type="button"
+                  onClick={handleRunDiagnostic}
+                  disabled={diagnosticLoading}
+                  className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
+                >
+                  {diagnosticLoading ? "Running diagnostic..." : "Run Diagnostic"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGetFeedback}
+                  disabled={feedbackLoading}
+                  className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
+                >
+                  {feedbackLoading ? "Generating feedback..." : "Get AI Feedback"}
+                </button>
+              )}
             </div>
 
             {feedbackError && (
@@ -1652,6 +1771,108 @@ export default function Home() {
                     </ul>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Diagnostic error and result (only shown in Diagnostic mode) */}
+            {activeSession?.mode === "Diagnostic" && diagnosticError && (
+              <div
+                role="alert"
+                className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200"
+              >
+                <p>{diagnosticError}</p>
+                <p className="mt-1 text-xs text-red-200/80">
+                  You can try again, wait a moment, or switch provider.
+                </p>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleRunDiagnostic}
+                    disabled={diagnosticLoading}
+                    className="rounded-lg border border-red-800/70 bg-red-950/60 px-3 py-1.5 text-xs font-medium text-red-100 transition-colors hover:bg-red-900/60 focus:outline-none focus:ring-2 focus:ring-red-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {diagnosticLoading ? "Trying again..." : "Try Again"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeSession?.mode === "Diagnostic" && diagnosticResult && (
+              <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950/60 p-5">
+                <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-neutral-400">
+                  Diagnostic result
+                </h3>
+                <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                  <SummaryRow
+                    label="Recommended Level"
+                    value={diagnosticResult.recommendedLevel}
+                  />
+                  <SummaryRow
+                    label="Main Bottleneck"
+                    value={diagnosticResult.mainBottleneck}
+                    multiline
+                  />
+                  <div className="sm:col-span-2">
+                    <SummaryRow
+                      label="Summary"
+                      value={diagnosticResult.summary}
+                      multiline
+                    />
+                  </div>
+                </dl>
+
+                <div className="mt-5 border-t border-neutral-800 pt-4">
+                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    Scores
+                  </p>
+                  <ul className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-3">
+                    {(
+                      [
+                        "fluency",
+                        "grammar",
+                        "vocabulary",
+                        "coherence",
+                        "argument",
+                        "academicTone",
+                      ] as const
+                    ).map((key) => (
+                      <li
+                        key={key}
+                        className="flex items-baseline justify-between text-sm"
+                      >
+                        <span className="text-neutral-400">
+                          {SCORE_LABELS[key]}
+                        </span>
+                        <span className="font-mono tabular-nums text-neutral-100">
+                          {diagnosticResult.scores[key]}/5
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-5 border-t border-neutral-800 pt-4">
+                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    7-Day Focus Plan
+                  </p>
+                  <ol className="list-none space-y-1 text-sm text-neutral-100">
+                    {diagnosticResult.sevenDayFocusPlan.map((item, i) => (
+                      <li key={i} className="break-words">
+                        {item}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="mt-6">
+                  <button
+                    type="button"
+                    onClick={handleApplyRecommendedLevel}
+                    className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+                  >
+                    Apply Recommended Level
+                  </button>
+                </div>
               </div>
             )}
           </section>

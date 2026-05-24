@@ -124,3 +124,25 @@ verify the behavior.
 - [ ] Use Recommendation button updates Mode, Session Type, and Today's Target in Session setup
 - [ ] User can still manually override Level, Mode, Session Type, and Today's Target after using the recommendation
 - [ ] Recommendation never auto-applies without the user clicking Use Recommendation
+
+## 11. Diagnostic Mode
+
+> Note: Diagnostic Mode is a standalone assessment. It uses a separate API
+> route (`/api/diagnostic`) and does not produce Quick Feedback, Retry, CSV,
+> or history entries.
+
+- [ ] Diagnostic appears as an option in the Mode selector
+- [ ] When Mode is Diagnostic, the Speaking Prompt panel shows three sections (A, B, C) instead of the normal mode prompt
+- [ ] Diagnostic prompt does NOT include any sample answers
+- [ ] After submitting the transcript, the Captured panel shows "Run Diagnostic" instead of "Get AI Feedback"
+- [ ] Run Diagnostic button is disabled and reads "Running diagnostic..." while loading
+- [ ] On success, a Diagnostic Result panel appears with Recommended Level, Main Bottleneck, Summary, six 1-5 Scores, and a 7-Day Focus Plan
+- [ ] Each score is an integer between 1 and 5
+- [ ] Recommended Level is one of: Foundation, Beginner, Intermediate, Advanced, Expert
+- [ ] If the model returns an unknown level, the result falls back to "Foundation"
+- [ ] If the model returns missing or invalid scores, each missing dimension falls back to 3
+- [ ] Apply Recommended Level button updates the Level selector and Today's Target in Session setup
+- [ ] Diagnostic Mode does NOT show Quick Feedback, Retry attempt, Retry captured, or Session summary panels
+- [ ] Diagnostic Mode does NOT add a new entry to localStorage `adaptive-speaking-app:sessions`
+- [ ] Recent Sessions and Previous Weakness panels are unaffected by running a diagnostic
+- [ ] Provider errors (rate limit, key rejected, model unavailable) show short friendly messages, never raw JSON
