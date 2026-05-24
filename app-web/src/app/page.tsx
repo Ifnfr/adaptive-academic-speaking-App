@@ -24,6 +24,9 @@ type SessionSetup = {
   sessionType: SessionType;
   aiProvider: AIProvider;
   target: string;
+  // True only when the target was auto-filled from the previous session's
+  // retry task because the user left Today's Target blank.
+  autoFilledFromPrevious: boolean;
 };
 
 type CapturedAttempt = {
@@ -46,6 +49,90 @@ type CapturedRetry = {
 type SessionSummary = {
   csv: string;
 };
+
+// Full record persisted to localStorage at end of a completed session.
+type SessionRecord = {
+  id: string;
+  date: string;
+  level: Level;
+  mode: Mode;
+  feedbackType: FeedbackType;
+  sessionType: SessionType;
+  provider: AIProvider;
+  todayTarget: string;
+  durationSeconds: number;
+  transcript: string;
+  mainWeakness: string;
+  evidence: string;
+  betterPhrase: string;
+  retryTask: string;
+  retryTranscript: string;
+  csv: string;
+};
+
+const SESSIONS_STORAGE_KEY = "adaptive-speaking-app:sessions";
+const MAX_STORED_SESSIONS = 20;
+
+// Type guard: defensive against shape drift or hand-edited storage.
+function isSessionRecord(value: unknown): value is SessionRecord {
+  if (!value || typeof value !== "object") return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.id === "string" &&
+    typeof r.date === "string" &&
+    typeof r.level === "string" &&
+    typeof r.mode === "string" &&
+    typeof r.feedbackType === "string" &&
+    typeof r.sessionType === "string" &&
+    typeof r.provider === "string" &&
+    typeof r.todayTarget === "string" &&
+    typeof r.durationSeconds === "number" &&
+    typeof r.transcript === "string" &&
+    typeof r.mainWeakness === "string" &&
+    typeof r.evidence === "string" &&
+    typeof r.betterPhrase === "string" &&
+    typeof r.retryTask === "string" &&
+    typeof r.retryTranscript === "string" &&
+    typeof r.csv === "string"
+  );
+}
+
+function loadSessions(): SessionRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isSessionRecord).slice(0, MAX_STORED_SESSIONS);
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(sessions: SessionRecord[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      SESSIONS_STORAGE_KEY,
+      JSON.stringify(sessions.slice(0, MAX_STORED_SESSIONS)),
+    );
+  } catch {
+    // Quota exceeded or storage unavailable; skip silently.
+  }
+}
+
+function generateSessionId(): string {
+  // crypto.randomUUID is available in modern browsers; fall back to a
+  // timestamp-plus-random combo for environments without it.
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 // CSV cell escaping per RFC 4180: wrap in quotes and double any inner quotes
 // when the value contains a comma, quote, or newline.
@@ -205,6 +292,17 @@ export default function Home() {
   );
   const [csvCopied, setCsvCopied] = useState(false);
 
+  // --- Session history (localStorage) ---
+  const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [lastCsvCopied, setLastCsvCopied] = useState(false);
+
+  // Hydrate sessions from localStorage on mount. Runs only on the client.
+  useEffect(() => {
+    setSessions(loadSessions());
+  }, []);
+
+  const previousSession = sessions[0] ?? null;
+
   // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
   useEffect(() => {
     if (!isTimerRunning) return;
@@ -222,13 +320,20 @@ export default function Home() {
   }, [isTimerRunning]);
 
   const handleStart = () => {
+    const userTypedTarget = target.trim();
+    const fallbackTarget = previousSession?.retryTask?.trim() ?? "";
+    const shouldAutoFill =
+      userTypedTarget.length === 0 && fallbackTarget.length > 0;
+    const finalTarget = shouldAutoFill ? fallbackTarget : target;
+
     setActiveSession({
       level,
       mode,
       feedbackType,
       sessionType,
       aiProvider,
-      target,
+      target: finalTarget,
+      autoFilledFromPrevious: shouldAutoFill,
     });
     // Reset attempt-related state so a fresh session starts clean.
     setTranscript("");
@@ -242,6 +347,7 @@ export default function Home() {
     setCapturedRetry(null);
     setSessionSummary(null);
     setCsvCopied(false);
+    // Note: sessions history is intentionally NOT cleared on restart.
   };
 
   const handleStartTimer = () => setIsTimerRunning(true);
@@ -332,10 +438,37 @@ export default function Home() {
   };
 
   const handleEndSession = () => {
-    if (!activeSession || !feedback) return;
+    if (!activeSession || !feedback || !capturedAttempt || !capturedRetry) {
+      return;
+    }
     const csv = buildCsv(activeSession.level, activeSession.mode, feedback);
     setSessionSummary({ csv });
     setCsvCopied(false);
+
+    // Persist the completed session at the front of the history.
+    const record: SessionRecord = {
+      id: generateSessionId(),
+      date: todayISODate(),
+      level: activeSession.level,
+      mode: activeSession.mode,
+      feedbackType: activeSession.feedbackType,
+      sessionType: activeSession.sessionType,
+      provider: activeSession.aiProvider,
+      todayTarget: activeSession.target,
+      durationSeconds: capturedAttempt.durationSeconds,
+      transcript: capturedAttempt.transcript,
+      mainWeakness: feedback.mainWeakness,
+      evidence: feedback.evidence,
+      betterPhrase: feedback.betterPhrase,
+      retryTask: feedback.retryTask,
+      retryTranscript: capturedRetry.transcript,
+      csv,
+    };
+    setSessions((prev) => {
+      const next = [record, ...prev].slice(0, MAX_STORED_SESSIONS);
+      saveSessions(next);
+      return next;
+    });
   };
 
   const handleCopyCsv = async () => {
@@ -354,6 +487,24 @@ export default function Home() {
     } catch {
       // Stay silent; the CSV is still visible in the code block for manual copy.
       setCsvCopied(false);
+    }
+  };
+
+  const handleCopyLastCsv = async () => {
+    const last = sessions[0];
+    if (!last) return;
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === "function"
+      ) {
+        await navigator.clipboard.writeText(last.csv);
+        setLastCsvCopied(true);
+        setTimeout(() => setLastCsvCopied(false), 1500);
+      }
+    } catch {
+      setLastCsvCopied(false);
     }
   };
 
@@ -441,6 +592,31 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Previous Weakness (Spaced Repetition reminder) */}
+        {previousSession && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <h2 className="mb-4 text-lg font-medium text-neutral-200">
+              Previous weakness
+            </h2>
+            <p className="mb-4 text-xs text-neutral-500">
+              From your last session on {previousSession.date}. Leave Today&apos;s
+              Target empty to carry this forward automatically.
+            </p>
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+              <SummaryRow
+                label="Main Weakness"
+                value={previousSession.mainWeakness}
+                multiline
+              />
+              <SummaryRow
+                label="Next Target"
+                value={previousSession.retryTask}
+                multiline
+              />
+            </dl>
+          </section>
+        )}
+
         {/* Active Session Summary */}
         {activeSession && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
@@ -474,6 +650,14 @@ export default function Home() {
                 />
               </div>
             </dl>
+            {activeSession.autoFilledFromPrevious && (
+              <p className="mt-4 rounded-lg border border-dashed border-neutral-700 bg-neutral-950/60 px-4 py-3 text-sm text-neutral-300">
+                Today we target:{" "}
+                <span className="font-medium text-neutral-100">
+                  {activeSession.target}
+                </span>
+              </p>
+            )}
           </section>
         )}
 
@@ -742,6 +926,69 @@ export default function Home() {
                 </span>
               )}
             </div>
+          </section>
+        )}
+
+        {/* Recent Sessions (history) */}
+        {sessions.length > 0 && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-medium text-neutral-200">
+                  Recent sessions
+                </h2>
+                <p className="mt-1 text-xs text-neutral-500">
+                  Showing the {Math.min(sessions.length, 5)} most recent of{" "}
+                  {sessions.length} stored.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCopyLastCsv}
+                  className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+                >
+                  Copy Last CSV
+                </button>
+                {lastCsvCopied && (
+                  <span
+                    role="status"
+                    className="text-xs font-medium text-emerald-300"
+                  >
+                    Copied
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <ul className="flex flex-col gap-3">
+              {sessions.slice(0, 5).map((s) => (
+                <li
+                  key={s.id}
+                  className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-neutral-400">
+                    <span className="font-mono text-neutral-300">{s.date}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{s.level}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{s.mode}</span>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+                    <SummaryRow
+                      label="Main Weakness"
+                      value={s.mainWeakness}
+                      multiline
+                    />
+                    <SummaryRow
+                      label="Next Target"
+                      value={s.retryTask}
+                      multiline
+                    />
+                  </dl>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
