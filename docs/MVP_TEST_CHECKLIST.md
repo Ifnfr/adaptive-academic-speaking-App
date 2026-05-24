@@ -29,10 +29,20 @@ verify the behavior.
 
 ## 3. AI Feedback
 
+> Note: only Quick Feedback is implemented. The "Deep" Feedback Type option in
+> Session setup is accepted by the UI but routes through the same Quick
+> Feedback prompt; a dedicated deep-analysis mode is a future batch.
+
 - [ ] Attempt Captured panel shows duration and transcript preview
 - [ ] Get AI Feedback button is visible and enabled after capture
 - [ ] While loading, button is disabled and reads "Generating feedback..."
 - [ ] Successful response shows Main Weakness, Evidence, Better Phrase, Retry Task, Provider Used
+- [ ] Successful response also shows a Scores section in the Quick Feedback panel
+- [ ] Foundation Scores show only Fluency and Coherence
+- [ ] Beginner Scores show Fluency, Grammar, and Coherence
+- [ ] Intermediate / Advanced / Expert Scores show all six dimensions (Fluency, Grammar, Vocabulary, Coherence, Argument, Academic Tone)
+- [ ] Each score is an integer between 1 and 5
+- [ ] If the model returns a missing or out-of-range score, the UI shows 3/5 for that dimension (server-side clamp + fallback)
 - [ ] Evidence references a moment from the user's transcript (not generic)
 - [ ] Foundation level does NOT receive grammar or vocabulary corrections
 
@@ -54,7 +64,9 @@ verify the behavior.
 - [ ] Foundation CSV uses 8 columns (no Grammar/Vocabulary/Argument/AcademicTone)
 - [ ] Beginner CSV uses 9 columns (adds Grammar)
 - [ ] Intermediate / Advanced / Expert CSV uses 12 columns
-- [ ] Placeholder score columns are all `3`
+- [ ] Score columns are integers between 1 and 5, taken from the AI feedback (not a hardcoded placeholder)
+- [ ] Score values in the CSV match what the Quick Feedback panel displayed
+- [ ] If a score was missing or invalid in the API response, the corresponding CSV cell is `3` (safe fallback)
 - [ ] Main_Weakness, Evidence, and Next_Target match the AI feedback
 - [ ] Copy CSV button copies the full CSV to clipboard
 - [ ] Copy confirmation appears briefly after a successful copy

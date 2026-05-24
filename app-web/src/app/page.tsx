@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -221,6 +221,68 @@ function saveSessions(sessions: SessionRecord[]): void {
   } catch {
     // Quota exceeded or storage unavailable; skip silently.
   }
+}
+
+// ---------- External stores for useSyncExternalStore ----------
+// These keep page.tsx lint-clean: instead of calling setState inside
+// useEffect to load values from window APIs, we expose subscribe + getter
+// functions and let React subscribe through useSyncExternalStore.
+
+const subscribeNoop = () => () => {};
+
+function getSpeechSupportedClient(): boolean {
+  return getSpeechRecognitionCtor() !== null;
+}
+
+function getSpeechSupportedServer(): boolean {
+  // SSR has no Web Speech API. Treat as unsupported on the server so the
+  // initial markup matches what we'd render before hydration would change.
+  return false;
+}
+
+// In-memory cache of the sessions array so getSessionsClient is referentially
+// stable between renders unless updateSessions changes it.
+const EMPTY_SESSIONS: SessionRecord[] = [];
+let sessionsCache: SessionRecord[] = EMPTY_SESSIONS;
+let sessionsHydrated = false;
+const sessionsListeners = new Set<() => void>();
+
+function notifySessionsListeners(): void {
+  for (const listener of sessionsListeners) {
+    listener();
+  }
+}
+
+function subscribeSessions(listener: () => void): () => void {
+  // Lazy hydrate from localStorage the first time anyone subscribes (i.e. on
+  // first client render), then notify so React re-renders with real data.
+  if (!sessionsHydrated && typeof window !== "undefined") {
+    sessionsHydrated = true;
+    sessionsCache = loadSessions();
+    // Defer the first notify so we don't fire while React is still
+    // attaching the subscription.
+    queueMicrotask(notifySessionsListeners);
+  }
+  sessionsListeners.add(listener);
+  return () => {
+    sessionsListeners.delete(listener);
+  };
+}
+
+function getSessionsClient(): SessionRecord[] {
+  return sessionsCache;
+}
+
+function getSessionsServer(): SessionRecord[] {
+  // Empty array on the server avoids any localStorage access during SSR.
+  return EMPTY_SESSIONS;
+}
+
+function updateSessions(next: SessionRecord[]): void {
+  sessionsCache = next.slice(0, MAX_STORED_SESSIONS);
+  sessionsHydrated = true;
+  saveSessions(sessionsCache);
+  notifySessionsListeners();
 }
 
 function generateSessionId(): string {
@@ -559,14 +621,18 @@ export default function Home() {
 
   // --- Speech-to-text (browser only) ---
   const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(true);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
-  // Detect browser support once on mount.
-  useEffect(() => {
-    setSpeechSupported(getSpeechRecognitionCtor() !== null);
-  }, []);
+  // Detect browser support via useSyncExternalStore. The value is read on the
+  // client at hydration time and is stable for the lifetime of the page, so
+  // the subscribe function is a no-op. This is SSR-safe and lint-clean
+  // (no setState inside useEffect).
+  const speechSupported = useSyncExternalStore(
+    subscribeNoop,
+    getSpeechSupportedClient,
+    getSpeechSupportedServer,
+  );
 
   // Make sure any active recognition is torn down on unmount.
   useEffect(() => {
@@ -608,13 +674,16 @@ export default function Home() {
   const [csvCopied, setCsvCopied] = useState(false);
 
   // --- Session history (localStorage) ---
-  const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  // Sessions are an external value (localStorage). We read them via
+  // useSyncExternalStore so the initial value is loaded SSR-safely without
+  // triggering setState inside useEffect. Writes go through updateSessions,
+  // which both persists to localStorage and notifies subscribers.
+  const sessions = useSyncExternalStore(
+    subscribeSessions,
+    getSessionsClient,
+    getSessionsServer,
+  );
   const [lastCsvCopied, setLastCsvCopied] = useState(false);
-
-  // Hydrate sessions from localStorage on mount. Runs only on the client.
-  useEffect(() => {
-    setSessions(loadSessions());
-  }, []);
 
   const previousSession = sessions[0] ?? null;
 
@@ -910,11 +979,9 @@ export default function Home() {
       retryTranscript: capturedRetry.transcript,
       csv,
     };
-    setSessions((prev) => {
-      const next = [record, ...prev].slice(0, MAX_STORED_SESSIONS);
-      saveSessions(next);
-      return next;
-    });
+    // Persist + notify subscribers via the external store helper.
+    const next = [record, ...sessions].slice(0, MAX_STORED_SESSIONS);
+    updateSessions(next);
   };
 
   const handleCopyCsv = async () => {
