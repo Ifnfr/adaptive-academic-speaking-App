@@ -361,6 +361,159 @@ function formatTime(totalSeconds: number): string {
   return `${mm}:${ss}`;
 }
 
+// ---------- Local Speaking Prompt generator ----------
+// Pure, deterministic, runs on the client only. No AI call.
+// Each level/mode contributes a few task variants; we cycle through them.
+
+type SpeakingPrompt = {
+  task: string;
+  constraints: string[];
+  targetStructure: string;
+  timeLimit: string;
+};
+
+const FOUNDATION_TASKS = [
+  "Describe your morning routine without stopping. Focus on speaking continuously.",
+  "Talk about a place you visit often. Just keep talking, even if you repeat yourself.",
+  "Describe what is on your desk right now. Aim for steady, uninterrupted speech.",
+];
+
+const BEGINNER_TASKS = [
+  "Share your opinion on whether students should learn a second language.",
+  "Give your view on whether public transport is better than driving.",
+  "Share your opinion on whether reading on paper is better than reading on a screen.",
+];
+
+const INTERMEDIATE_TASKS = [
+  "Take a clear position on whether remote work is better than office work, and explain why.",
+  "Take a clear position on whether AI tools should be allowed in schools, and explain why.",
+  "Take a clear position on whether cities should ban single-use plastics, and explain why.",
+];
+
+const ADVANCED_TASKS = [
+  "Defend the claim that universities should require basic statistics for all majors.",
+  "Defend the claim that working from home long-term harms early-career professionals.",
+  "Defend the claim that social media platforms should be liable for misinformation.",
+];
+
+const EXPERT_TASKS = [
+  "Argue, with academic rigor, that climate adaptation deserves more public funding than mitigation.",
+  "Argue, with academic rigor, that standardized testing should be redesigned rather than abolished.",
+  "Argue, with academic rigor, that open-source AI models pose greater systemic risk than closed ones.",
+];
+
+function pickTaskByLevel(level: Level, variantIndex: number): string {
+  const pool =
+    level === "Foundation"
+      ? FOUNDATION_TASKS
+      : level === "Beginner"
+        ? BEGINNER_TASKS
+        : level === "Intermediate"
+          ? INTERMEDIATE_TASKS
+          : level === "Advanced"
+            ? ADVANCED_TASKS
+            : EXPERT_TASKS;
+  return pool[variantIndex % pool.length];
+}
+
+function targetStructureForLevel(level: Level): string {
+  switch (level) {
+    case "Foundation":
+      return "Speak continuously. No fixed structure required.";
+    case "Beginner":
+      return "Opinion → Reason → Example → Closing";
+    case "Intermediate":
+      return "Position → Reason → Example → Conclusion";
+    case "Advanced":
+      return "Claim → Evidence → Reasoning → Limitation";
+    case "Expert":
+      return "Claim → Warrant → Evidence → Limitation → Implication";
+  }
+}
+
+function timeLimitForLevel(level: Level): string {
+  switch (level) {
+    case "Foundation":
+      return "60-90 seconds";
+    case "Beginner":
+      return "60 seconds";
+    case "Intermediate":
+      return "60-90 seconds";
+    case "Advanced":
+      return "90-120 seconds";
+    case "Expert":
+      return "2-3 minutes";
+  }
+}
+
+function constraintsFor(
+  level: Level,
+  mode: Mode,
+  sessionType: SessionType,
+  todayTarget: string,
+): string[] {
+  const out: string[] = [];
+
+  // Mode-driven constraints first so they sit at the top of the list.
+  if (mode === "Fluency Sprint") {
+    out.push("Keep speaking without long pauses. Fluency over correctness.");
+  } else if (mode === "Argument Drill") {
+    out.push("Take one clear position and defend it.");
+  } else if (mode === "Reading-to-Speaking") {
+    out.push(
+      "Paste a short excerpt into the transcript area first, then explain or critique it.",
+    );
+  } else if (mode === "Debate") {
+    out.push(
+      "State your position clearly so it could be challenged by an opponent later.",
+    );
+  }
+
+  // Level-specific reminders.
+  if (level === "Foundation") {
+    out.push("Focus on volume of speech and basic coherence.");
+    out.push("Grammar and vocabulary are NOT being evaluated this round.");
+  } else if (level === "Beginner") {
+    out.push("Use one short example to support your reason.");
+  } else if (level === "Intermediate") {
+    out.push("Use clear transitions between your reason and your example.");
+  } else if (level === "Advanced") {
+    out.push("Acknowledge at least one limitation of your own argument.");
+  } else if (level === "Expert") {
+    out.push("Name your warrant explicitly and address one counter-implication.");
+  }
+
+  // Session-type pacing nudge.
+  if (sessionType === "Micro") {
+    out.push("This is a micro session: keep it short and decisive.");
+  } else if (sessionType === "Deep") {
+    out.push("This is a deep session: organize your points before speaking.");
+  }
+
+  // Carry today's target / previous weakness through if present.
+  const trimmedTarget = todayTarget.trim();
+  if (trimmedTarget.length > 0) {
+    out.push(`Today's focus: ${trimmedTarget}`);
+  }
+
+  return out;
+}
+
+function buildSpeakingPrompt(
+  level: Level,
+  mode: Mode,
+  sessionType: SessionType,
+  todayTarget: string,
+  variantIndex: number,
+): SpeakingPrompt {
+  return {
+    task: pickTaskByLevel(level, variantIndex),
+    constraints: constraintsFor(level, mode, sessionType, todayTarget),
+    targetStructure: targetStructureForLevel(level),
+    timeLimit: timeLimitForLevel(level),
+  };
+}
+
 // Trim long upstream provider errors and strip stack-trace-like noise so the UI
 // stays short and readable. Friendly route-level messages (no colon, short)
 // pass through as-is.
@@ -391,6 +544,12 @@ export default function Home() {
 
   // --- Active session state ---
   const [activeSession, setActiveSession] = useState<SessionSetup | null>(null);
+
+  // --- Speaking prompt (local, no AI) ---
+  const [speakingPrompt, setSpeakingPrompt] = useState<SpeakingPrompt | null>(
+    null,
+  );
+  const [promptVariantIndex, setPromptVariantIndex] = useState(0);
 
   // --- Speaking attempt state ---
   const [transcript, setTranscript] = useState("");
@@ -491,6 +650,11 @@ export default function Home() {
       target: finalTarget,
       autoFilledFromPrevious: shouldAutoFill,
     });
+    // Generate the local speaking prompt for this session. No AI call.
+    setPromptVariantIndex(0);
+    setSpeakingPrompt(
+      buildSpeakingPrompt(level, mode, sessionType, finalTarget, 0),
+    );
     // Reset attempt-related state so a fresh session starts clean.
     setTranscript("");
     setElapsedSeconds(0);
@@ -514,6 +678,24 @@ export default function Home() {
   const handleResetTimer = () => {
     setIsTimerRunning(false);
     setElapsedSeconds(0);
+  };
+
+  const handleRegeneratePrompt = () => {
+    if (!activeSession) return;
+    // Cycle through the next variant. The pool has 3 entries per level so
+    // pressing Regenerate repeatedly walks through them then loops back.
+    const nextIndex = promptVariantIndex + 1;
+    setPromptVariantIndex(nextIndex);
+    setSpeakingPrompt(
+      buildSpeakingPrompt(
+        activeSession.level,
+        activeSession.mode,
+        activeSession.sessionType,
+        activeSession.target,
+        nextIndex,
+      ),
+    );
+    // Note: transcript and timer are intentionally NOT touched here.
   };
 
   // --- Speech input handlers ---
@@ -927,10 +1109,60 @@ export default function Home() {
           </section>
         )}
 
+        {/* Speaking Prompt (local, no AI) */}
+        {activeSession && speakingPrompt && !capturedAttempt && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <StepHeader step={3} title="Speaking prompt" />
+
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
+              <SummaryRow label="Task" value={speakingPrompt.task} multiline />
+
+              <div className="flex flex-col gap-1">
+                <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  Constraints
+                </dt>
+                <dd>
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-neutral-100">
+                    {speakingPrompt.constraints.map((c, i) => (
+                      <li key={i} className="break-words">
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+
+              <SummaryRow
+                label="Target Structure"
+                value={speakingPrompt.targetStructure}
+                multiline
+              />
+              <SummaryRow
+                label="Time Limit"
+                value={speakingPrompt.timeLimit}
+              />
+            </dl>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-neutral-500">
+                Generated locally from your level, mode, session type, and
+                today&apos;s focus. The AI will not answer the prompt for you.
+              </p>
+              <button
+                type="button"
+                onClick={handleRegeneratePrompt}
+                className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+              >
+                Regenerate Local Prompt
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Speaking Attempt */}
         {activeSession && !capturedAttempt && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={3} title="Speaking attempt" />
+            <StepHeader step={4} title="Speaking attempt" />
 
             {/* Timer */}
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1061,7 +1293,7 @@ export default function Home() {
         {/* Captured Attempt */}
         {capturedAttempt && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={4} title="Attempt captured" />
+            <StepHeader step={5} title="Attempt captured" />
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
               <SummaryRow
                 label="Duration"
@@ -1163,7 +1395,7 @@ export default function Home() {
         {/* Retry Attempt */}
         {feedback && !capturedRetry && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={5} title="Retry attempt" />
+            <StepHeader step={6} title="Retry attempt" />
 
             <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -1207,7 +1439,7 @@ export default function Home() {
         {/* Retry Captured */}
         {capturedRetry && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={6} title="Retry captured" />
+            <StepHeader step={7} title="Retry captured" />
 
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
               <SummaryRow
@@ -1238,7 +1470,7 @@ export default function Home() {
         {/* Session Summary */}
         {sessionSummary && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={7} title="Session summary" />
+            <StepHeader step={8} title="Session summary" />
             <p className="mb-6 text-sm text-neutral-400">
               CSV row generated. Score columns are placeholders for the MVP.
             </p>
@@ -1273,7 +1505,7 @@ export default function Home() {
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950 font-mono text-xs text-neutral-300">
-                  8
+                  9
                 </span>
                 <div>
                   <h2 className="text-lg font-medium text-neutral-200">
