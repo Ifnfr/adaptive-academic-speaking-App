@@ -950,7 +950,9 @@ export default function Home() {
     if (isListening) return;
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
-      setSpeechSupported(false);
+      setSpeechError(
+        "Speech input is not supported in this browser. Please type or paste your transcript manually.",
+      );
       return;
     }
 

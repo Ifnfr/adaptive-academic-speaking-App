@@ -77,7 +77,7 @@ new values. Environment variables are not hot-reloaded.
 ## Security notes
 
 - Never commit `.env.local`. The Next.js default `.gitignore` already excludes it.
-- Never expose API keys in client code. Provider calls happen only inside `app-web/src/app/api/feedback/route.ts`.
+- Never expose API keys in client code. Provider calls happen only inside `app-web/src/app/api/feedback/route.ts` and `app-web/src/app/api/diagnostic/route.ts`.
 - Do not prefix provider keys with `NEXT_PUBLIC_`. That prefix would expose them to the browser.
 - Treat the values you paste in `.env.local` as secrets. Rotate them if you suspect a leak.
 
@@ -101,6 +101,7 @@ adaptive-academic-speaking-app/
 ├── app-web/                      # Next.js app
 │   ├── src/app/page.tsx          # Single-page UI
 │   ├── src/app/api/feedback/     # Server-side AI feedback route
+│   ├── src/app/api/diagnostic/route.ts # Server-side diagnostic route
 │   ├── .env.example              # Copy to .env.local and fill
 │   └── package.json
 ├── docs/

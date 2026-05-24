@@ -6,7 +6,7 @@ verify the behavior.
 ## 1. Session Setup
 
 - [ ] User can select Level (Foundation, Beginner, Intermediate, Advanced, Expert)
-- [ ] User can select Mode (Fluency Sprint, Argument Drill, Reading-to-Speaking, Debate)
+- [ ] User can select Mode (Fluency Sprint, Argument Drill, Reading-to-Speaking, Debate, Diagnostic)
 - [ ] User can select Feedback Type (Quick, Deep)
 - [ ] User can select Session Type (Micro, Standard, Deep)
 - [ ] User can select AI Provider (Claude, DeepSeek, Gemini)
