@@ -108,3 +108,19 @@ verify the behavior.
 - [ ] No `NEXT_PUBLIC_` prefixed provider keys exist
 - [ ] Provider HTTP errors do not leak full upstream JSON to the UI
 - [ ] No real keys committed in `.env.example`, README, or any docs file
+
+## 10. Coach Recommendation
+
+> Note: this is a deterministic, local rule-based scaffold. It reads only
+> what is already in localStorage history. It does not call any AI model.
+
+- [ ] Coach Recommendation panel appears between Previous Weakness and Active Session
+- [ ] Panel hides automatically once a session is active (after Start Session)
+- [ ] With no history, panel shows: focus "Build speaking volume", Mode "Fluency Sprint", Session Type "Micro", and a message that one session is needed to personalize
+- [ ] With at least one stored session, focus uses the latest retryTask (or mainWeakness if retryTask is missing)
+- [ ] Recommended Session Type is Micro for Foundation/Beginner, Standard for Intermediate, Deep for Advanced/Expert
+- [ ] Recommended Mode reflects the latest weakness/retryTask keywords (Fluency Sprint for fluency/pause/hesitation; Argument Drill for argument/evidence/coherence; vocabulary/academic-tone keywords map to Argument Drill)
+- [ ] Reason text references the date of the last session and names the recommended Mode
+- [ ] Use Recommendation button updates Mode, Session Type, and Today's Target in Session setup
+- [ ] User can still manually override Level, Mode, Session Type, and Today's Target after using the recommendation
+- [ ] Recommendation never auto-applies without the user clicking Use Recommendation

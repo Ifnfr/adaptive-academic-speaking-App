@@ -576,6 +576,116 @@ function buildSpeakingPrompt(
   };
 }
 
+// ---------- Local Coach Engine ----------
+// Pure, rule-based recommendation built from existing localStorage history.
+// No AI call. No external requests. No machine learning. The logic is
+// intentionally simple and inspectable so it stays trustworthy as the rest
+// of the app grows.
+
+type CoachRecommendation = {
+  hasHistory: boolean;
+  focus: string;
+  recommendedMode: Mode;
+  recommendedSessionType: SessionType;
+  reason: string;
+  nextAction: string;
+};
+
+function recommendedSessionTypeForLevel(level: Level): SessionType {
+  if (level === "Foundation" || level === "Beginner") return "Micro";
+  if (level === "Intermediate") return "Standard";
+  return "Deep"; // Advanced, Expert
+}
+
+// Map a piece of weakness/retry text to a recommended mode using simple
+// keyword groups. Order matters: the first matching group wins so the user
+// sees one consistent suggestion.
+function pickModeFromText(text: string, level: Level): Mode {
+  const t = text.toLowerCase();
+  const has = (...words: string[]) => words.some((w) => t.includes(w));
+
+  if (has("fluency", "pause", "hesitat", "continuity", "stopping", "stop", "filler")) {
+    return "Fluency Sprint";
+  }
+  if (
+    has("grammar", "sentence", "structure", "subject", "verb", "tense", "clarity")
+  ) {
+    // Lower levels still benefit more from continuous speech than from
+    // structured argument work, so we keep them on Fluency Sprint.
+    if (level === "Foundation" || level === "Beginner") return "Fluency Sprint";
+    return "Argument Drill";
+  }
+  if (
+    has("argument", "reasoning", "evidence", "claim", "logic", "assumption", "coherence")
+  ) {
+    return "Argument Drill";
+  }
+  if (has("academic tone", "vocabulary", "phrase", "word choice", "formal")) {
+    return "Argument Drill";
+  }
+  return "Fluency Sprint"; // Safe default when no keyword matches.
+}
+
+function buildCoachRecommendation(
+  sessions: SessionRecord[],
+  currentLevel: Level,
+): CoachRecommendation {
+  const latest = sessions[0];
+
+  // No history: beginner-friendly default.
+  if (!latest) {
+    return {
+      hasHistory: false,
+      focus: "Build speaking volume",
+      recommendedMode: "Fluency Sprint",
+      recommendedSessionType: "Micro",
+      reason:
+        "No previous session data yet. Start by speaking consistently without over-focusing on accuracy.",
+      nextAction:
+        "Complete one session to unlock personalized recommendations.",
+    };
+  }
+
+  // Choose the focus text we'll center the recommendation around. Prefer the
+  // explicit retryTask the AI gave on the last session, then fall back to
+  // the mainWeakness, then a sensible default.
+  const retryTask = latest.retryTask?.trim() ?? "";
+  const mainWeakness = latest.mainWeakness?.trim() ?? "";
+  const focus =
+    retryTask.length > 0
+      ? retryTask
+      : mainWeakness.length > 0
+        ? mainWeakness
+        : "Build consistent speaking practice.";
+
+  // Pick mode from the strongest signal we have, falling back to whatever
+  // the user practiced last time if no keywords match.
+  const sourceText = `${retryTask} ${mainWeakness}`.trim();
+  let recommendedMode: Mode = pickModeFromText(sourceText, currentLevel);
+  if (sourceText.length === 0) {
+    recommendedMode = (latest.mode as Mode) ?? "Fluency Sprint";
+  }
+
+  const recommendedSessionType = recommendedSessionTypeForLevel(currentLevel);
+
+  const reason =
+    `Based on your last session on ${latest.date}, the main weakness was: "${
+      mainWeakness || "(not recorded)"
+    }". Working on ${recommendedMode.toLowerCase()} should reinforce the retry task directly.`;
+
+  const nextAction =
+    "Click Use Recommendation to load this focus into Session setup, then Start Session.";
+
+  return {
+    hasHistory: true,
+    focus,
+    recommendedMode,
+    recommendedSessionType,
+    reason,
+    nextAction,
+  };
+}
+
 // Trim long upstream provider errors and strip stack-trace-like noise so the UI
 // stays short and readable. Friendly route-level messages (no colon, short)
 // pass through as-is.
@@ -686,6 +796,16 @@ export default function Home() {
   const [lastCsvCopied, setLastCsvCopied] = useState(false);
 
   const previousSession = sessions[0] ?? null;
+
+  // Local Coach Engine: deterministic, rule-based recommendation derived
+  // from session history and the currently selected level. No AI call.
+  const coachRecommendation = buildCoachRecommendation(sessions, level);
+
+  const handleUseRecommendation = () => {
+    setMode(coachRecommendation.recommendedMode);
+    setSessionType(coachRecommendation.recommendedSessionType);
+    setTarget(coachRecommendation.focus);
+  };
 
   // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
   useEffect(() => {
@@ -1131,6 +1251,70 @@ export default function Home() {
                 multiline
               />
             </dl>
+          </section>
+        )}
+
+        {/* Coach Recommendation (local, no AI) */}
+        {!activeSession && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <div className="mb-4 flex items-baseline gap-3">
+              <h2 className="text-lg font-medium text-neutral-200">
+                Coach recommendation
+              </h2>
+              <span className="text-xs uppercase tracking-wide text-neutral-500">
+                Local · No AI call
+              </span>
+            </div>
+
+            {coachRecommendation.hasHistory ? (
+              <p className="mb-4 text-sm text-neutral-300">
+                Based on your last session, here is a focused starting point.
+                You can apply it or override anything in Session setup.
+              </p>
+            ) : (
+              <p className="mb-4 text-sm text-neutral-300">
+                Complete one session to personalize future recommendations.
+                Until then, here is a beginner-friendly starting point.
+              </p>
+            )}
+
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+              <SummaryRow
+                label="Recommended focus"
+                value={coachRecommendation.focus}
+                multiline
+              />
+              <SummaryRow
+                label="Recommended Mode"
+                value={coachRecommendation.recommendedMode}
+              />
+              <SummaryRow
+                label="Recommended Session Type"
+                value={coachRecommendation.recommendedSessionType}
+              />
+              <SummaryRow
+                label="Next Action"
+                value={coachRecommendation.nextAction}
+                multiline
+              />
+              <div className="sm:col-span-2">
+                <SummaryRow
+                  label="Why this matters"
+                  value={coachRecommendation.reason}
+                  multiline
+                />
+              </div>
+            </dl>
+
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleUseRecommendation}
+                className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+              >
+                Use Recommendation
+              </button>
+            </div>
           </section>
         )}
 
