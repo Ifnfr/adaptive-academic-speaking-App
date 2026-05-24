@@ -1329,7 +1329,21 @@ export default function Home() {
                 role="alert"
                 className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200"
               >
-                {feedbackError}
+                <p>{feedbackError}</p>
+                <p className="mt-1 text-xs text-red-200/80">
+                  You can try again, wait a moment, or switch provider before
+                  starting a new session.
+                </p>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleGetFeedback}
+                    disabled={feedbackLoading}
+                    className="rounded-lg border border-red-800/70 bg-red-950/60 px-3 py-1.5 text-xs font-medium text-red-100 transition-colors hover:bg-red-900/60 focus:outline-none focus:ring-2 focus:ring-red-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {feedbackLoading ? "Trying again..." : "Try Again"}
+                  </button>
+                </div>
               </div>
             )}
 

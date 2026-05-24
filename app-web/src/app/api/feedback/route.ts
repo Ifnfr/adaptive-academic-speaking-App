@@ -241,6 +241,48 @@ function normalizeScores(level: string, raw: unknown): Scores {
 
 // ---------- Provider callers ----------
 
+// Map common upstream HTTP errors to short, user-facing messages.
+// We never expose the raw upstream JSON or stack traces to the client.
+function friendlyProviderError(
+  provider: Provider,
+  status: number,
+  errText: string,
+): string {
+  const text = (errText || "").toLowerCase();
+
+  // Model not found / unavailable (specific to Gemini's wording but safe
+  // to apply across providers if they say something similar).
+  const isModelError =
+    /model.*(not found|not available|unavailable|not supported|does not exist)/i.test(
+      errText,
+    ) ||
+    /not found for api version|is not supported for generatecontent/i.test(
+      errText,
+    );
+  if (provider === "Gemini" && (status === 404 || isModelError)) {
+    return "Gemini model not available. Check GEMINI_MODEL in .env.local.";
+  }
+  if (isModelError) {
+    return `${provider} model not available. Check your provider settings.`;
+  }
+
+  if (status === 401 || status === 403) {
+    return "API key rejected. Check your .env.local key for the selected provider.";
+  }
+  if (status === 429 || /rate limit|quota|too many requests/.test(text)) {
+    return "Rate limit reached. Please wait before trying again.";
+  }
+  if (status === 503 || status === 502 || status === 504) {
+    return `${provider} is temporarily unavailable. Please wait a moment and try again.`;
+  }
+  if (status === 400) {
+    return `${provider} rejected the request. Please try again or switch provider.`;
+  }
+
+  // Generic fallback: short and provider-tagged, no JSON or stack traces.
+  return `${provider} request failed (status ${status}). Please try again or switch provider.`;
+}
+
 async function callClaude(
   apiKey: string,
   system: string,
@@ -263,7 +305,11 @@ async function callClaude(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${errText.slice(0, 300)}`);
+    // Keep the technical detail in the server log; surface a clean message.
+    console.error(
+      `Claude API error ${res.status}: ${errText.slice(0, 500)}`,
+    );
+    throw new Error(friendlyProviderError("Claude", res.status, errText));
   }
 
   const data = (await res.json()) as {
@@ -297,9 +343,10 @@ async function callDeepSeek(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(
-      `DeepSeek API error ${res.status}: ${errText.slice(0, 300)}`,
+    console.error(
+      `DeepSeek API error ${res.status}: ${errText.slice(0, 500)}`,
     );
+    throw new Error(friendlyProviderError("DeepSeek", res.status, errText));
   }
 
   const data = (await res.json()) as {
@@ -333,19 +380,10 @@ async function callGemini(
 
   if (!res.ok) {
     const errText = await res.text();
-    // Surface a friendly, actionable message for the common model-not-found case
-    // (HTTP 404 or the API's "is not found / not supported" wording).
-    const isModelError =
-      res.status === 404 ||
-      /not found for API version|is not supported for generateContent|models\//i.test(
-        errText,
-      );
-    if (isModelError) {
-      throw new Error(
-        "Gemini model not available. Check GEMINI_MODEL in .env.local.",
-      );
-    }
-    throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 300)}`);
+    console.error(
+      `Gemini API error ${res.status}: ${errText.slice(0, 500)}`,
+    );
+    throw new Error(friendlyProviderError("Gemini", res.status, errText));
   }
 
   const data = (await res.json()) as {
