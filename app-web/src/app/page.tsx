@@ -39,6 +39,125 @@ type FeedbackResult = {
   providerUsed: string;
 };
 
+type CapturedRetry = {
+  transcript: string;
+};
+
+type SessionSummary = {
+  csv: string;
+};
+
+// CSV cell escaping per RFC 4180: wrap in quotes and double any inner quotes
+// when the value contains a comma, quote, or newline.
+function csvEscape(value: string): string {
+  const needsQuoting = /[",\n\r]/.test(value);
+  const escaped = value.replace(/"/g, '""');
+  return needsQuoting ? `"${escaped}"` : escaped;
+}
+
+function csvRow(cells: string[]): string {
+  return cells.map(csvEscape).join(",");
+}
+
+function todayISODate(): string {
+  // Local date in YYYY-MM-DD so the CSV reflects the user's day.
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildCsv(
+  level: Level,
+  mode: Mode,
+  feedback: FeedbackResult,
+): string {
+  const date = todayISODate();
+  const score = "3"; // MVP placeholder; real scoring is a future batch.
+
+  if (level === "Foundation") {
+    const header = [
+      "Date",
+      "Level",
+      "Mode",
+      "Fluency",
+      "Coherence",
+      "Main_Weakness",
+      "Evidence",
+      "Next_Target",
+    ];
+    const row = [
+      date,
+      level,
+      mode,
+      score,
+      score,
+      feedback.mainWeakness,
+      feedback.evidence,
+      feedback.retryTask,
+    ];
+    return `${csvRow(header)}\n${csvRow(row)}`;
+  }
+
+  if (level === "Beginner") {
+    const header = [
+      "Date",
+      "Level",
+      "Mode",
+      "Fluency",
+      "Grammar",
+      "Coherence",
+      "Main_Weakness",
+      "Evidence",
+      "Next_Target",
+    ];
+    const row = [
+      date,
+      level,
+      mode,
+      score,
+      score,
+      score,
+      feedback.mainWeakness,
+      feedback.evidence,
+      feedback.retryTask,
+    ];
+    return `${csvRow(header)}\n${csvRow(row)}`;
+  }
+
+  // Intermediate, Advanced, Expert
+  const header = [
+    "Date",
+    "Level",
+    "Mode",
+    "Fluency",
+    "Grammar",
+    "Vocabulary",
+    "Coherence",
+    "Argument",
+    "AcademicTone",
+    "Main_Weakness",
+    "Evidence",
+    "Next_Target",
+  ];
+  const row = [
+    date,
+    level,
+    mode,
+    score,
+    score,
+    score,
+    score,
+    score,
+    score,
+    feedback.mainWeakness,
+    feedback.evidence,
+    feedback.retryTask,
+  ];
+  return `${csvRow(header)}\n${csvRow(row)}`;
+}
+
 function formatTime(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const minutes = Math.floor(safe / 60);
@@ -76,6 +195,16 @@ export default function Home() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
+  // --- Retry loop state ---
+  const [retryTranscript, setRetryTranscript] = useState("");
+  const [capturedRetry, setCapturedRetry] = useState<CapturedRetry | null>(null);
+
+  // --- End session / CSV state ---
+  const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(
+    null,
+  );
+  const [csvCopied, setCsvCopied] = useState(false);
+
   // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
   useEffect(() => {
     if (!isTimerRunning) return;
@@ -109,6 +238,10 @@ export default function Home() {
     setFeedback(null);
     setFeedbackError(null);
     setFeedbackLoading(false);
+    setRetryTranscript("");
+    setCapturedRetry(null);
+    setSessionSummary(null);
+    setCsvCopied(false);
   };
 
   const handleStartTimer = () => setIsTimerRunning(true);
@@ -186,6 +319,41 @@ export default function Home() {
       setFeedbackError(message);
     } finally {
       setFeedbackLoading(false);
+    }
+  };
+
+  const trimmedRetryTranscript = retryTranscript.trim();
+  const canSubmitRetry =
+    trimmedRetryTranscript.length > 0 && capturedRetry === null;
+
+  const handleSubmitRetry = () => {
+    if (!canSubmitRetry) return;
+    setCapturedRetry({ transcript: trimmedRetryTranscript });
+  };
+
+  const handleEndSession = () => {
+    if (!activeSession || !feedback) return;
+    const csv = buildCsv(activeSession.level, activeSession.mode, feedback);
+    setSessionSummary({ csv });
+    setCsvCopied(false);
+  };
+
+  const handleCopyCsv = async () => {
+    if (!sessionSummary) return;
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.writeText === "function"
+      ) {
+        await navigator.clipboard.writeText(sessionSummary.csv);
+        setCsvCopied(true);
+        // Reset the "Copied" hint after a short moment.
+        setTimeout(() => setCsvCopied(false), 1500);
+      }
+    } catch {
+      // Stay silent; the CSV is still visible in the code block for manual copy.
+      setCsvCopied(false);
     }
   };
 
@@ -408,10 +576,6 @@ export default function Home() {
                 />
               </div>
             </dl>
-            <p className="mt-6 rounded-lg border border-dashed border-neutral-700 bg-neutral-950/60 px-4 py-3 text-sm text-neutral-400">
-              AI feedback will be added in the next batch.
-            </p>
-
             <div className="mt-6">
               <button
                 type="button"
@@ -465,6 +629,119 @@ export default function Home() {
                 </dl>
               </div>
             )}
+          </section>
+        )}
+
+        {/* Retry Attempt */}
+        {feedback && !capturedRetry && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <h2 className="mb-6 text-lg font-medium text-neutral-200">
+              Retry attempt
+            </h2>
+
+            <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                Retry task
+              </p>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-neutral-100">
+                {feedback.retryTask}
+              </p>
+            </div>
+
+            <div className="mt-6">
+              <label
+                htmlFor="retry-transcript"
+                className="mb-2 block text-sm font-medium text-neutral-300"
+              >
+                Retry transcript
+              </label>
+              <textarea
+                id="retry-transcript"
+                value={retryTranscript}
+                onChange={(e) => setRetryTranscript(e.target.value)}
+                rows={8}
+                placeholder="Type or paste your retry attempt here..."
+                className="w-full resize-y rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm leading-6 text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+              />
+            </div>
+
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleSubmitRetry}
+                disabled={!canSubmitRetry}
+                className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
+              >
+                Submit Retry
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Retry Captured */}
+        {capturedRetry && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <h2 className="mb-6 text-lg font-medium text-neutral-200">
+              Retry captured
+            </h2>
+
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
+              <SummaryRow
+                label="Retry transcript preview"
+                value={capturedRetry.transcript}
+                multiline
+              />
+            </dl>
+
+            <p className="mt-6 rounded-lg border border-dashed border-neutral-700 bg-neutral-950/60 px-4 py-3 text-sm text-neutral-400">
+              Retry saved. You can now end the session.
+            </p>
+
+            {!sessionSummary && (
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={handleEndSession}
+                  className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950"
+                >
+                  End Session
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Session Summary */}
+        {sessionSummary && (
+          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
+            <h2 className="mb-2 text-lg font-medium text-neutral-200">
+              Session summary
+            </h2>
+            <p className="mb-6 text-sm text-neutral-400">
+              CSV row generated. Scores are placeholder values for the MVP.
+            </p>
+
+            <pre className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950 p-4 font-mono text-xs leading-6 text-neutral-100">
+              {sessionSummary.csv}
+            </pre>
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCopyCsv}
+                className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+              >
+                Copy CSV
+              </button>
+              {csvCopied && (
+                <span
+                  role="status"
+                  className="text-xs font-medium text-emerald-300"
+                >
+                  Copied to clipboard
+                </span>
+              )}
+            </div>
           </section>
         )}
 
