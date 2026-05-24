@@ -743,6 +743,23 @@ function sanitizeErrorMessage(raw: string): string {
   return cleaned;
 }
 
+// ---------- Light UI tokens (Tailwind class strings) ----------
+// Centralized so every panel reads the same way and we can tweak the look
+// in one place. Used as plain string concatenations.
+const card =
+  "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm";
+const cardHeader =
+  "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
+const cardBody = "p-6";
+const labelClass =
+  "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
+const inputClass =
+  "w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]";
+const buttonPrimary =
+  "rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:bg-[var(--brand-border-strong)] disabled:text-[var(--brand-muted)]";
+const buttonSecondary =
+  "rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-4 py-2 text-sm font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50";
+
 export default function Home() {
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
@@ -950,9 +967,6 @@ export default function Home() {
     if (isListening) return;
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
-      setSpeechError(
-        "Speech input is not supported in this browser. Please type or paste your transcript manually.",
-      );
       return;
     }
 
@@ -1251,204 +1265,117 @@ export default function Home() {
     }
   };
 
+  const isDiagnosticMode = activeSession?.mode === "Diagnostic";
+  const subtitle = activeSession
+    ? "Session in progress. Work the prompt, then submit your transcript for AI feedback."
+    : "Configure a session, choose a mode, and start practicing.";
+
   return (
-    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-12 sm:py-16">
-        {/* Header */}
-        <header className="flex flex-col gap-2 text-center sm:text-left">
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Adaptive Academic Speaking App
-          </h1>
-          <p className="text-sm text-neutral-400 sm:text-base">
-            AI-powered deliberate speaking practice.
-          </p>
-        </header>
-
-        {/* Setup panel */}
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-          <StepHeader step={1} title="Session setup" />
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <SelectField
-              label="Level"
-              value={level}
-              options={LEVELS}
-              onChange={(v) => setLevel(v as Level)}
-            />
-            <SelectField
-              label="Mode"
-              value={mode}
-              options={MODES}
-              onChange={(v) => setMode(v as Mode)}
-            />
-            <SelectField
-              label="Feedback Type"
-              value={feedbackType}
-              options={FEEDBACK_TYPES}
-              onChange={(v) => setFeedbackType(v as FeedbackType)}
-            />
-            <SelectField
-              label="Session Type"
-              value={sessionType}
-              options={SESSION_TYPES}
-              onChange={(v) => setSessionType(v as SessionType)}
-            />
-            <div className="sm:col-span-2">
-              <SelectField
-                label="AI Provider"
-                value={aiProvider}
-                options={AI_PROVIDERS}
-                onChange={(v) => setAiProvider(v as AIProvider)}
-              />
+    <div className="min-h-screen w-full">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10">
+        {/* Sidebar */}
+        <aside className="lg:w-72 lg:flex-shrink-0">
+          <div className="flex flex-col gap-5 lg:sticky lg:top-6">
+            {/* Brand */}
+            <div className={card}>
+              <div className="flex flex-col items-start gap-3 p-5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/fonetik_logo_website.svg"
+                  alt="fonetik logo"
+                  className="h-9 w-auto"
+                />
+                <div>
+                  <p className="text-sm font-medium text-[var(--brand-teal-ink)]">
+                    Speak Better
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                    AI-Powered academic speaking practice
+                  </p>
+                </div>
+              </div>
             </div>
 
-            {/* Today's Target */}
-            <div className="sm:col-span-2">
-              <label
-                htmlFor="target"
-                className="mb-2 block text-sm font-medium text-neutral-300"
-              >
-                Today&apos;s Target
-              </label>
-              <textarea
-                id="target"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                rows={4}
-                placeholder="What do you want to improve in this session?"
-                className="w-full resize-y rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600"
-              />
+            {/* Current level */}
+            <div className={card}>
+              <div className="px-5 py-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+                  Current Level
+                </p>
+                <p className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  {level}
+                </p>
+                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                  Adjust in Session setup.
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Start button */}
-          <div className="mt-8">
-            {!previousSession && (
-              <p className="mb-4 text-xs text-neutral-500">
-                No previous weakness yet. Complete one session to activate
-                weakness repetition.
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={handleStart}
-              className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950"
-            >
-              {activeSession ? "Restart Session" : "Start Session"}
-            </button>
+            {/* Nav anchors (visual only for now) */}
+            <nav className={card} aria-label="Sections">
+              <ul className="flex flex-col py-2 text-sm">
+                {[
+                  { href: "#practice", label: "Practice" },
+                  { href: "#history", label: "History" },
+                  { href: "#progress", label: "Progress" },
+                  { href: "#system", label: "System" },
+                ].map((item) => (
+                  <li key={item.href}>
+                    <a
+                      href={item.href}
+                      className="block px-5 py-2 text-[var(--brand-ink-soft)] transition-colors hover:bg-[var(--brand-surface-2)] hover:text-[var(--brand-teal-ink)]"
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </div>
-        </section>
+        </aside>
 
-        {/* Previous Weakness (Spaced Repetition reminder) */}
-        {previousSession && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-4 text-lg font-medium text-neutral-200">
-              Previous weakness
-            </h2>
-            <p className="mb-4 text-xs text-neutral-500">
-              From your last session on {previousSession.date}. Leave Today&apos;s
-              Target empty to carry this forward automatically.
+        {/* Main */}
+        <main className="flex min-w-0 flex-1 flex-col gap-6">
+          {/* Topbar */}
+          <header
+            id="practice"
+            className={`${card} flex flex-col gap-1 px-6 py-5`}
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+              fonetik · Active Practice
             </p>
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-              <SummaryRow
-                label="Main Weakness"
-                value={previousSession.mainWeakness}
-                multiline
-              />
-              <SummaryRow
-                label="Next Target"
-                value={previousSession.retryTask}
-                multiline
-              />
-            </dl>
-          </section>
-        )}
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--brand-ink)] sm:text-3xl">
+              Active Practice
+            </h1>
+            <p className="text-sm text-[var(--brand-ink-soft)]">{subtitle}</p>
+          </header>
 
-        {/* Coach Recommendation (local, no AI) */}
-        {!activeSession && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <div className="mb-4 flex items-baseline gap-3">
-              <h2 className="text-lg font-medium text-neutral-200">
-                Coach recommendation
-              </h2>
-              <span className="text-xs uppercase tracking-wide text-neutral-500">
-                Local · No AI call
-              </span>
-            </div>
-
-            {coachRecommendation.hasHistory ? (
-              <p className="mb-4 text-sm text-neutral-300">
-                Based on your last session, here is a focused starting point.
-                You can apply it or override anything in Session setup.
-              </p>
-            ) : (
-              <p className="mb-4 text-sm text-neutral-300">
-                Complete one session to personalize future recommendations.
-                Until then, here is a beginner-friendly starting point.
-              </p>
-            )}
-
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-              <SummaryRow
-                label="Recommended focus"
-                value={coachRecommendation.focus}
-                multiline
-              />
-              <SummaryRow
-                label="Recommended Mode"
-                value={coachRecommendation.recommendedMode}
-              />
-              <SummaryRow
-                label="Recommended Session Type"
-                value={coachRecommendation.recommendedSessionType}
-              />
-              <SummaryRow
-                label="Next Action"
-                value={coachRecommendation.nextAction}
-                multiline
-              />
-              <div className="sm:col-span-2">
-                <SummaryRow
-                  label="Why this matters"
-                  value={coachRecommendation.reason}
-                  multiline
+          {/* Active Session Hero (only when active) */}
+          {activeSession && (
+            <section className={`${card} overflow-hidden`}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Active session
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  {activeSession.mode} · {activeSession.level}
+                </h2>
+              </div>
+              <div className={`${cardBody} grid grid-cols-2 gap-4 sm:grid-cols-4`}>
+                <SummaryCell label="Level" value={activeSession.level} />
+                <SummaryCell label="Mode" value={activeSession.mode} />
+                <SummaryCell
+                  label="Session Type"
+                  value={activeSession.sessionType}
+                />
+                <SummaryCell
+                  label="Duration"
+                  value={formatTime(elapsedSeconds)}
+                  mono
                 />
               </div>
-            </dl>
-
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleUseRecommendation}
-                className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
-              >
-                Use Recommendation
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Active Session Summary */}
-        {activeSession && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={2} title="Active session" />
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-              <SummaryRow label="Level" value={activeSession.level} />
-              <SummaryRow label="Mode" value={activeSession.mode} />
-              <SummaryRow
-                label="Feedback Type"
-                value={activeSession.feedbackType}
-              />
-              <SummaryRow
-                label="Session Type"
-                value={activeSession.sessionType}
-              />
-              <SummaryRow
-                label="AI Provider"
-                value={activeSession.aiProvider}
-              />
-              <div className="sm:col-span-2">
-                <SummaryRow
+              <div className="px-6 pb-6">
+                <SummaryCell
                   label="Today's Target"
                   value={
                     activeSession.target.trim().length > 0
@@ -1457,608 +1384,874 @@ export default function Home() {
                   }
                   multiline
                 />
-              </div>
-            </dl>
-            {activeSession.autoFilledFromPrevious && (
-              <p className="mt-4 rounded-lg border border-dashed border-neutral-700 bg-neutral-950/60 px-4 py-3 text-sm text-neutral-300">
-                Today we target:{" "}
-                <span className="font-medium text-neutral-100">
-                  {activeSession.target}
-                </span>
-              </p>
-            )}
-          </section>
-        )}
-
-        {/* Speaking Prompt (local, no AI) */}
-        {activeSession && speakingPrompt && !capturedAttempt && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={3} title="Speaking prompt" />
-
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
-              <SummaryRow label="Task" value={speakingPrompt.task} multiline />
-
-              <div className="flex flex-col gap-1">
-                <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  Constraints
-                </dt>
-                <dd>
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-neutral-100">
-                    {speakingPrompt.constraints.map((c, i) => (
-                      <li key={i} className="break-words">
-                        {c}
-                      </li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-
-              <SummaryRow
-                label="Target Structure"
-                value={speakingPrompt.targetStructure}
-                multiline
-              />
-              <SummaryRow
-                label="Time Limit"
-                value={speakingPrompt.timeLimit}
-              />
-            </dl>
-
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-neutral-500">
-                Generated locally from your level, mode, session type, and
-                today&apos;s focus. The AI will not answer the prompt for you.
-              </p>
-              <button
-                type="button"
-                onClick={handleRegeneratePrompt}
-                className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
-              >
-                Regenerate Local Prompt
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Speaking Attempt */}
-        {activeSession && !capturedAttempt && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={4} title="Speaking attempt" />
-
-            {/* Timer */}
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div
-                aria-live="polite"
-                className="font-mono text-5xl tabular-nums text-neutral-100"
-              >
-                {formatTime(elapsedSeconds)}
-              </div>
-              <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                <button
-                  type="button"
-                  onClick={handleStartTimer}
-                  disabled={isTimerRunning}
-                  className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
-                >
-                  Start Timer
-                </button>
-                <button
-                  type="button"
-                  onClick={handleStopTimer}
-                  disabled={!isTimerRunning}
-                  className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
-                >
-                  Stop Timer
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetTimer}
-                  className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 sm:flex-none"
-                >
-                  Reset Timer
-                </button>
-              </div>
-            </div>
-
-            {/* Speech Input */}
-            <div className="mt-8 rounded-xl border border-neutral-800 bg-neutral-950/40 p-4 sm:p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-medium text-neutral-200">
-                    Speech input
-                  </h3>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    Browser speech-to-text. Audio stays on your device.
+                {activeSession.autoFilledFromPrevious && (
+                  <p className="mt-3 rounded-lg border border-[var(--brand-gold)]/40 bg-[var(--brand-gold-soft)] px-3 py-2 text-xs text-[var(--brand-ink)]">
+                    Today we target:{" "}
+                    <span className="font-medium">{activeSession.target}</span>
                   </p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Session Setup (hidden visually demoted while active but kept for restart) */}
+          <section className={card}>
+            <div className={cardHeader}>
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                Step 1
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                Session setup
+              </h2>
+              <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                Pick your mode visibly, set the rest, then start.
+              </p>
+            </div>
+            <div className={cardBody}>
+              {/* Mode cards (replaces the old dropdown) */}
+              <fieldset>
+                <legend className={labelClass}>Mode</legend>
+                <div
+                  role="radiogroup"
+                  aria-label="Practice mode"
+                  className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+                >
+                  {MODES.map((m) => {
+                    const selected = mode === m;
+                    const isDiagnostic = m === "Diagnostic";
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setMode(m)}
+                        className={
+                          "flex flex-col items-start gap-1 rounded-xl border p-3 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                          (selected
+                            ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                            : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-surface)]")
+                        }
+                      >
+                        <span className="font-medium">{m}</span>
+                        <span className="text-xs text-[var(--brand-ink-soft)]">
+                          {isDiagnostic
+                            ? "Baseline assessment"
+                            : m === "Fluency Sprint"
+                              ? "Speak without stopping"
+                              : m === "Argument Drill"
+                                ? "Defend a position"
+                                : m === "Reading-to-Speaking"
+                                  ? "Explain an excerpt"
+                                  : "Make a debatable claim"}
+                        </span>
+                        {isDiagnostic && (
+                          <span className="mt-1 inline-flex items-center rounded-full border border-[var(--brand-gold)]/50 bg-[var(--brand-gold-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--brand-ink)]">
+                            Assessment
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-                {speechSupported ? (
+              </fieldset>
+
+              {/* Other controls */}
+              <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <SelectField
+                  label="Level"
+                  value={level}
+                  options={LEVELS}
+                  onChange={(v) => setLevel(v as Level)}
+                />
+                <SelectField
+                  label="Feedback Type"
+                  value={feedbackType}
+                  options={FEEDBACK_TYPES}
+                  onChange={(v) => setFeedbackType(v as FeedbackType)}
+                />
+                <SelectField
+                  label="Session Type"
+                  value={sessionType}
+                  options={SESSION_TYPES}
+                  onChange={(v) => setSessionType(v as SessionType)}
+                />
+                <SelectField
+                  label="AI Provider"
+                  value={aiProvider}
+                  options={AI_PROVIDERS}
+                  onChange={(v) => setAiProvider(v as AIProvider)}
+                />
+
+                <div className="sm:col-span-2">
+                  <label htmlFor="target" className={labelClass}>
+                    Today&apos;s Target
+                  </label>
+                  <textarea
+                    id="target"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    rows={3}
+                    placeholder="What do you want to improve in this session?"
+                    className={`${inputClass} resize-y`}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                {!previousSession && (
+                  <p className="mb-3 text-xs text-[var(--brand-ink-soft)]">
+                    No previous weakness yet. Complete one session to activate
+                    weakness repetition.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  className={`${buttonPrimary} w-full sm:w-auto`}
+                >
+                  {activeSession ? "Restart Session" : "Start Session"}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Coach + Previous Weakness (only before a session is active) */}
+          {!activeSession && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Coach Recommendation */}
+              <section
+                className={`${card} border-l-4 border-l-[var(--brand-teal)]`}
+              >
+                <div className={cardHeader}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                        Coach
+                      </p>
+                      <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                        Coach Recommendation
+                      </h2>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
+                      Local · No AI call
+                    </span>
+                  </div>
+                </div>
+                <div className={cardBody}>
+                  <p className="mb-4 text-sm text-[var(--brand-ink-soft)]">
+                    {coachRecommendation.hasHistory
+                      ? "Based on your last session, here is a focused starting point. You can apply it or override anything."
+                      : "Complete one session to personalize future recommendations. Until then, here is a beginner-friendly starting point."}
+                  </p>
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                    <SummaryCell
+                      label="Focus"
+                      value={coachRecommendation.focus}
+                      multiline
+                    />
+                    <SummaryCell
+                      label="Mode"
+                      value={coachRecommendation.recommendedMode}
+                    />
+                    <SummaryCell
+                      label="Session Type"
+                      value={coachRecommendation.recommendedSessionType}
+                    />
+                    <SummaryCell
+                      label="Next Action"
+                      value={coachRecommendation.nextAction}
+                      multiline
+                    />
+                    <div className="sm:col-span-2">
+                      <SummaryCell
+                        label="Reason"
+                        value={coachRecommendation.reason}
+                        multiline
+                      />
+                    </div>
+                  </dl>
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={handleUseRecommendation}
+                      className={buttonSecondary}
+                    >
+                      Use Recommendation
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* Previous Weakness */}
+              {previousSession && (
+                <section
+                  className={`${card} border-l-4 border-l-[var(--brand-gold)]`}
+                >
+                  <div className={cardHeader}>
+                    <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+                      Spaced repetition
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                      Previous weakness
+                    </h2>
+                    <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                      From your last session on {previousSession.date}. Leave
+                      Today&apos;s Target empty to carry it forward
+                      automatically.
+                    </p>
+                  </div>
+                  <div className={cardBody}>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-3">
+                      <SummaryCell
+                        label="Main Weakness"
+                        value={previousSession.mainWeakness}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Next Target"
+                        value={previousSession.retryTask}
+                        multiline
+                      />
+                    </dl>
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+
+          {/* Speaking Prompt (local, no AI) */}
+          {activeSession && speakingPrompt && !capturedAttempt && (
+            <section
+              className={`${card} border-l-4 border-l-[var(--brand-teal)]`}
+            >
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Step 2
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Speaking prompt
+                </h2>
+              </div>
+              <div className={cardBody}>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-4">
+                  <SummaryCell
+                    label="Task"
+                    value={speakingPrompt.task}
+                    multiline
+                  />
+                  <div className="flex flex-col gap-1">
+                    <dt className={labelClass}>Constraints</dt>
+                    <dd>
+                      <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--brand-ink)]">
+                        {speakingPrompt.constraints.map((c, i) => (
+                          <li key={i} className="break-words">
+                            {c}
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                  <SummaryCell
+                    label="Target Structure"
+                    value={speakingPrompt.targetStructure}
+                    multiline
+                  />
+                  <SummaryCell
+                    label="Time Limit"
+                    value={speakingPrompt.timeLimit}
+                  />
+                </dl>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-[var(--brand-ink-soft)]">
+                    Generated locally from your level, mode, session type, and
+                    today&apos;s focus. The AI will not answer the prompt for
+                    you.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRegeneratePrompt}
+                    className={buttonSecondary}
+                  >
+                    Regenerate Local Prompt
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Speaking Attempt */}
+          {activeSession && !capturedAttempt && (
+            <section className={card}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Step 3
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Speaking attempt
+                </h2>
+              </div>
+              <div className={cardBody}>
+                {/* Timer */}
+                <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div
+                    aria-live="polite"
+                    className="font-mono text-5xl tabular-nums text-[var(--brand-ink)]"
+                  >
+                    {formatTime(elapsedSeconds)}
+                  </div>
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                     <button
                       type="button"
-                      onClick={handleStartSpeechInput}
-                      disabled={isListening}
-                      className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                      onClick={handleStartTimer}
+                      disabled={isTimerRunning}
+                      className={buttonSecondary}
                     >
-                      Start Speech Input
+                      Start Timer
                     </button>
                     <button
                       type="button"
-                      onClick={handleStopSpeechInput}
-                      disabled={!isListening}
-                      className="flex-1 rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
+                      onClick={handleStopTimer}
+                      disabled={!isTimerRunning}
+                      className={buttonSecondary}
                     >
-                      Stop Speech Input
+                      Stop Timer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetTimer}
+                      className={buttonSecondary}
+                    >
+                      Reset Timer
                     </button>
                   </div>
-                ) : null}
-              </div>
-
-              {speechSupported ? (
-                <p
-                  aria-live="polite"
-                  className="mt-3 text-xs text-neutral-400"
-                >
-                  {isListening
-                    ? "Listening… speak clearly. Recognized text will be appended below."
-                    : "Speech input accuracy depends on your browser and microphone. You can edit the transcript before submitting."}
-                </p>
-              ) : (
-                <p className="mt-3 text-xs text-neutral-400">
-                  Speech input is not supported in this browser. Please type or
-                  paste your transcript manually.
-                </p>
-              )}
-
-              {speechError && (
-                <p
-                  role="alert"
-                  className="mt-3 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-xs text-red-200"
-                >
-                  {speechError}
-                </p>
-              )}
-            </div>
-
-            {/* Transcript */}
-            <div className="mt-6">
-              <label
-                htmlFor="transcript"
-                className="mb-2 block text-sm font-medium text-neutral-300"
-              >
-                Transcript
-              </label>
-              <textarea
-                id="transcript"
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                rows={8}
-                placeholder="Type or paste what you said during the attempt..."
-                className="w-full resize-y rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm leading-6 text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600"
-              />
-            </div>
-
-            {/* Submit */}
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleSubmitAttempt}
-                disabled={!canSubmit}
-                className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
-              >
-                Submit Attempt
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Captured Attempt */}
-        {capturedAttempt && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={5} title="Attempt captured" />
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-              <SummaryRow
-                label="Duration"
-                value={formatTime(capturedAttempt.durationSeconds)}
-              />
-              <SummaryRow
-                label="Words"
-                value={String(
-                  capturedAttempt.transcript.split(/\s+/).filter(Boolean).length,
-                )}
-              />
-              <div className="sm:col-span-2">
-                <SummaryRow
-                  label="Transcript preview"
-                  value={capturedAttempt.transcript}
-                  multiline
-                />
-              </div>
-            </dl>
-            <div className="mt-6">
-              {activeSession?.mode === "Diagnostic" ? (
-                <button
-                  type="button"
-                  onClick={handleRunDiagnostic}
-                  disabled={diagnosticLoading}
-                  className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
-                >
-                  {diagnosticLoading ? "Running diagnostic..." : "Run Diagnostic"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleGetFeedback}
-                  disabled={feedbackLoading}
-                  className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
-                >
-                  {feedbackLoading ? "Generating feedback..." : "Get AI Feedback"}
-                </button>
-              )}
-            </div>
-
-            {feedbackError && (
-              <div
-                role="alert"
-                className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200"
-              >
-                <p>{feedbackError}</p>
-                <p className="mt-1 text-xs text-red-200/80">
-                  You can try again, wait a moment, or switch provider before
-                  starting a new session.
-                </p>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={handleGetFeedback}
-                    disabled={feedbackLoading}
-                    className="rounded-lg border border-red-800/70 bg-red-950/60 px-3 py-1.5 text-xs font-medium text-red-100 transition-colors hover:bg-red-900/60 focus:outline-none focus:ring-2 focus:ring-red-500/60 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {feedbackLoading ? "Trying again..." : "Try Again"}
-                  </button>
                 </div>
-              </div>
-            )}
 
-            {feedback && (
-              <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950/60 p-5">
-                <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-neutral-400">
-                  Quick feedback
-                </h3>
-                <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
-                  <SummaryRow
-                    label="Main Weakness"
-                    value={feedback.mainWeakness}
-                    multiline
-                  />
-                  <SummaryRow
-                    label="Evidence"
-                    value={feedback.evidence}
-                    multiline
-                  />
-                  <SummaryRow
-                    label="Better Phrase"
-                    value={feedback.betterPhrase}
-                    multiline
-                  />
-                  <SummaryRow
-                    label="Retry Task"
-                    value={feedback.retryTask}
-                    multiline
-                  />
-                  <SummaryRow
-                    label="Provider Used"
-                    value={feedback.providerUsed}
-                  />
-                </dl>
-
-                {activeSession && (
-                  <div className="mt-5 border-t border-neutral-800 pt-4">
-                    <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                      Scores
-                    </p>
-                    <ul className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-3">
-                      {scoreKeysForLevel(activeSession.level).map((key) => (
-                        <li
-                          key={key}
-                          className="flex items-baseline justify-between text-sm"
+                {/* Speech Input */}
+                <div className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-[var(--brand-ink)]">
+                        Speech input
+                      </h3>
+                      <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                        Browser speech-to-text. Audio stays on your device.
+                      </p>
+                    </div>
+                    {speechSupported ? (
+                      <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={handleStartSpeechInput}
+                          disabled={isListening}
+                          className={buttonSecondary}
                         >
-                          <span className="text-neutral-400">
-                            {SCORE_LABELS[key]}
-                          </span>
-                          <span className="font-mono tabular-nums text-neutral-100">
-                            {safeScore(feedback.scores?.[key])}/5
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
+                          Start Speech Input
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleStopSpeechInput}
+                          disabled={!isListening}
+                          className={buttonSecondary}
+                        >
+                          Stop Speech Input
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* Diagnostic error and result (only shown in Diagnostic mode) */}
-            {activeSession?.mode === "Diagnostic" && diagnosticError && (
-              <div
-                role="alert"
-                className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200"
-              >
-                <p>{diagnosticError}</p>
-                <p className="mt-1 text-xs text-red-200/80">
-                  You can try again, wait a moment, or switch provider.
-                </p>
-                <div className="mt-3">
+                  {speechSupported ? (
+                    <p
+                      aria-live="polite"
+                      className="mt-3 text-xs text-[var(--brand-ink-soft)]"
+                    >
+                      {isListening
+                        ? "Listening… speak clearly. Recognized text will be appended below."
+                        : "Speech input accuracy depends on your browser and microphone. You can edit the transcript before submitting."}
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-xs text-[var(--brand-ink-soft)]">
+                      Speech input is not supported in this browser. Please type
+                      or paste your transcript manually.
+                    </p>
+                  )}
+
+                  {speechError && (
+                    <p
+                      role="alert"
+                      className="mt-3 rounded-lg border border-[var(--brand-coral)]/40 bg-[var(--brand-coral-soft)] px-3 py-2 text-xs text-[var(--brand-coral)]"
+                    >
+                      {speechError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Transcript */}
+                <div className="mt-6">
+                  <label htmlFor="transcript" className={labelClass}>
+                    Transcript
+                  </label>
+                  <textarea
+                    id="transcript"
+                    value={transcript}
+                    onChange={(e) => setTranscript(e.target.value)}
+                    rows={8}
+                    placeholder="Type or paste what you said during the attempt..."
+                    className={`${inputClass} resize-y leading-6`}
+                  />
+                </div>
+
+                {/* Submit */}
+                <div className="mt-5">
                   <button
                     type="button"
-                    onClick={handleRunDiagnostic}
-                    disabled={diagnosticLoading}
-                    className="rounded-lg border border-red-800/70 bg-red-950/60 px-3 py-1.5 text-xs font-medium text-red-100 transition-colors hover:bg-red-900/60 focus:outline-none focus:ring-2 focus:ring-red-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={handleSubmitAttempt}
+                    disabled={!canSubmit}
+                    className={`${buttonPrimary} w-full sm:w-auto`}
                   >
-                    {diagnosticLoading ? "Trying again..." : "Try Again"}
+                    Submit Attempt
                   </button>
                 </div>
               </div>
-            )}
+            </section>
+          )}
 
-            {activeSession?.mode === "Diagnostic" && diagnosticResult && (
-              <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950/60 p-5">
-                <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-neutral-400">
-                  Diagnostic result
-                </h3>
-                <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                  <SummaryRow
-                    label="Recommended Level"
-                    value={diagnosticResult.recommendedLevel}
+          {/* Captured Attempt + Feedback / Diagnostic */}
+          {capturedAttempt && (
+            <section className={card}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Step 4
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Attempt captured
+                </h2>
+              </div>
+              <div className={cardBody}>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                  <SummaryCell
+                    label="Duration"
+                    value={formatTime(capturedAttempt.durationSeconds)}
                   />
-                  <SummaryRow
-                    label="Main Bottleneck"
-                    value={diagnosticResult.mainBottleneck}
-                    multiline
+                  <SummaryCell
+                    label="Words"
+                    value={String(
+                      capturedAttempt.transcript
+                        .split(/\s+/)
+                        .filter(Boolean).length,
+                    )}
                   />
                   <div className="sm:col-span-2">
-                    <SummaryRow
-                      label="Summary"
-                      value={diagnosticResult.summary}
+                    <SummaryCell
+                      label="Transcript preview"
+                      value={capturedAttempt.transcript}
                       multiline
                     />
                   </div>
                 </dl>
 
-                <div className="mt-5 border-t border-neutral-800 pt-4">
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                    Scores
-                  </p>
-                  <ul className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-3">
-                    {(
-                      [
-                        "fluency",
-                        "grammar",
-                        "vocabulary",
-                        "coherence",
-                        "argument",
-                        "academicTone",
-                      ] as const
-                    ).map((key) => (
-                      <li
-                        key={key}
-                        className="flex items-baseline justify-between text-sm"
-                      >
-                        <span className="text-neutral-400">
-                          {SCORE_LABELS[key]}
-                        </span>
-                        <span className="font-mono tabular-nums text-neutral-100">
-                          {diagnosticResult.scores[key]}/5
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="mt-5 border-t border-neutral-800 pt-4">
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
-                    7-Day Focus Plan
-                  </p>
-                  <ol className="list-none space-y-1 text-sm text-neutral-100">
-                    {diagnosticResult.sevenDayFocusPlan.map((item, i) => (
-                      <li key={i} className="break-words">
-                        {item}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
                 <div className="mt-6">
+                  {isDiagnosticMode ? (
+                    <button
+                      type="button"
+                      onClick={handleRunDiagnostic}
+                      disabled={diagnosticLoading}
+                      className={`${buttonPrimary} w-full sm:w-auto`}
+                    >
+                      {diagnosticLoading
+                        ? "Running diagnostic..."
+                        : "Run Diagnostic"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleGetFeedback}
+                      disabled={feedbackLoading}
+                      className={`${buttonPrimary} w-full sm:w-auto`}
+                    >
+                      {feedbackLoading
+                        ? "Generating feedback..."
+                        : "Get AI Feedback"}
+                    </button>
+                  )}
+                </div>
+
+                {feedbackError && (
+                  <div
+                    role="alert"
+                    className="mt-4 rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
+                  >
+                    <p>{feedbackError}</p>
+                    <p className="mt-1 text-xs opacity-80">
+                      You can try again, wait a moment, or switch provider
+                      before starting a new session.
+                    </p>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={handleGetFeedback}
+                        disabled={feedbackLoading}
+                        className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {feedbackLoading ? "Trying again..." : "Try Again"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {feedback && (
+                  <div className="mt-6 rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+                    <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                      Quick feedback
+                    </h3>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4">
+                      <SummaryCell
+                        label="Main Weakness"
+                        value={feedback.mainWeakness}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Evidence"
+                        value={feedback.evidence}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Better Phrase"
+                        value={feedback.betterPhrase}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Retry Task"
+                        value={feedback.retryTask}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Provider Used"
+                        value={feedback.providerUsed}
+                      />
+                    </dl>
+
+                    {activeSession && (
+                      <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
+                        <p className={labelClass}>Scores</p>
+                        <ul className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+                          {scoreKeysForLevel(activeSession.level).map((key) => (
+                            <li
+                              key={key}
+                              className="flex items-baseline justify-between text-sm"
+                            >
+                              <span className="text-[var(--brand-ink-soft)]">
+                                {SCORE_LABELS[key]}
+                              </span>
+                              <span className="font-mono tabular-nums text-[var(--brand-ink)]">
+                                {safeScore(feedback.scores?.[key])}/5
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isDiagnosticMode && diagnosticError && (
+                  <div
+                    role="alert"
+                    className="mt-4 rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
+                  >
+                    <p>{diagnosticError}</p>
+                    <p className="mt-1 text-xs opacity-80">
+                      You can try again, wait a moment, or switch provider.
+                    </p>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={handleRunDiagnostic}
+                        disabled={diagnosticLoading}
+                        className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {diagnosticLoading ? "Trying again..." : "Try Again"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isDiagnosticMode && diagnosticResult && (
+                  <div className="mt-6 rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+                    <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                      Diagnostic result
+                    </h3>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                      <SummaryCell
+                        label="Recommended Level"
+                        value={diagnosticResult.recommendedLevel}
+                      />
+                      <SummaryCell
+                        label="Main Bottleneck"
+                        value={diagnosticResult.mainBottleneck}
+                        multiline
+                      />
+                      <div className="sm:col-span-2">
+                        <SummaryCell
+                          label="Summary"
+                          value={diagnosticResult.summary}
+                          multiline
+                        />
+                      </div>
+                    </dl>
+                    <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
+                      <p className={labelClass}>Scores</p>
+                      <ul className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+                        {(
+                          [
+                            "fluency",
+                            "grammar",
+                            "vocabulary",
+                            "coherence",
+                            "argument",
+                            "academicTone",
+                          ] as const
+                        ).map((key) => (
+                          <li
+                            key={key}
+                            className="flex items-baseline justify-between text-sm"
+                          >
+                            <span className="text-[var(--brand-ink-soft)]">
+                              {SCORE_LABELS[key]}
+                            </span>
+                            <span className="font-mono tabular-nums text-[var(--brand-ink)]">
+                              {diagnosticResult.scores[key]}/5
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
+                      <p className={labelClass}>7-Day Focus Plan</p>
+                      <ol className="list-none space-y-1 text-sm text-[var(--brand-ink)]">
+                        {diagnosticResult.sevenDayFocusPlan.map((item, i) => (
+                          <li key={i} className="break-words">
+                            {item}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                    <div className="mt-5">
+                      <button
+                        type="button"
+                        onClick={handleApplyRecommendedLevel}
+                        className={buttonSecondary}
+                      >
+                        Apply Recommended Level
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Retry Attempt */}
+          {feedback && !capturedRetry && !isDiagnosticMode && (
+            <section className={card}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Step 5
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Retry attempt
+                </h2>
+              </div>
+              <div className={cardBody}>
+                <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-3">
+                  <p className={labelClass}>Retry task</p>
+                  <p className="whitespace-pre-wrap break-words text-sm text-[var(--brand-ink)]">
+                    {feedback.retryTask}
+                  </p>
+                </div>
+
+                <div className="mt-5">
+                  <label htmlFor="retry-transcript" className={labelClass}>
+                    Retry transcript
+                  </label>
+                  <textarea
+                    id="retry-transcript"
+                    value={retryTranscript}
+                    onChange={(e) => setRetryTranscript(e.target.value)}
+                    rows={8}
+                    placeholder="Type or paste your retry attempt here..."
+                    className={`${inputClass} resize-y leading-6`}
+                  />
+                </div>
+
+                <div className="mt-5">
                   <button
                     type="button"
-                    onClick={handleApplyRecommendedLevel}
-                    className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
+                    onClick={handleSubmitRetry}
+                    disabled={!canSubmitRetry}
+                    className={`${buttonPrimary} w-full sm:w-auto`}
                   >
-                    Apply Recommended Level
+                    Submit Retry
                   </button>
                 </div>
               </div>
-            )}
-          </section>
-        )}
+            </section>
+          )}
 
-        {/* Retry Attempt */}
-        {feedback && !capturedRetry && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={6} title="Retry attempt" />
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
-                Retry task
-              </p>
-              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-neutral-100">
-                {feedback.retryTask}
-              </p>
-            </div>
-
-            <div className="mt-6">
-              <label
-                htmlFor="retry-transcript"
-                className="mb-2 block text-sm font-medium text-neutral-300"
-              >
-                Retry transcript
-              </label>
-              <textarea
-                id="retry-transcript"
-                value={retryTranscript}
-                onChange={(e) => setRetryTranscript(e.target.value)}
-                rows={8}
-                placeholder="Type or paste your retry attempt here..."
-                className="w-full resize-y rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm leading-6 text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600"
-              />
-            </div>
-
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleSubmitRetry}
-                disabled={!canSubmitRetry}
-                className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
-              >
-                Submit Retry
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Retry Captured */}
-        {capturedRetry && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={7} title="Retry captured" />
-
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
-              <SummaryRow
-                label="Retry transcript preview"
-                value={capturedRetry.transcript}
-                multiline
-              />
-            </dl>
-
-            <p className="mt-6 rounded-lg border border-dashed border-neutral-700 bg-neutral-950/60 px-4 py-3 text-sm text-neutral-400">
-              Retry saved. You can now end the session.
-            </p>
-
-            {!sessionSummary && (
-              <div className="mt-6">
-                <button
-                  type="button"
-                  onClick={handleEndSession}
-                  className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950"
-                >
-                  End Session
-                </button>
+          {/* Retry Captured */}
+          {capturedRetry && !isDiagnosticMode && (
+            <section className={card}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Step 6
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Retry captured
+                </h2>
               </div>
-            )}
-          </section>
-        )}
+              <div className={cardBody}>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-4">
+                  <SummaryCell
+                    label="Retry transcript preview"
+                    value={capturedRetry.transcript}
+                    multiline
+                  />
+                </dl>
+                <p className="mt-5 rounded-lg border border-[var(--brand-gold)]/40 bg-[var(--brand-gold-soft)] px-4 py-3 text-sm text-[var(--brand-ink)]">
+                  Retry saved. You can now end the session.
+                </p>
+                {!sessionSummary && (
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={handleEndSession}
+                      className={`${buttonPrimary} w-full sm:w-auto`}
+                    >
+                      End Session
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
-        {/* Session Summary */}
-        {sessionSummary && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <StepHeader step={8} title="Session summary" />
-            <p className="mb-6 text-sm text-neutral-400">
-              CSV row generated. Score columns are placeholders for the MVP.
-            </p>
+          {/* Session Summary */}
+          {sessionSummary && !isDiagnosticMode && (
+            <section className={card}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Step 7
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Session summary
+                </h2>
+                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                  CSV row generated. Score columns use AI-generated 1-5 values
+                  (with safe fallback to 3 when missing).
+                </p>
+              </div>
+              <div className={cardBody}>
+                <pre className="overflow-x-auto rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-mono text-xs leading-6 text-[var(--brand-ink)]">
+                  {sessionSummary.csv}
+                </pre>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCopyCsv}
+                    className={buttonSecondary}
+                  >
+                    Copy CSV
+                  </button>
+                  {csvCopied && (
+                    <span
+                      role="status"
+                      className="text-xs font-medium text-[var(--brand-teal-ink)]"
+                    >
+                      Copied to clipboard
+                    </span>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
 
-            <pre className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950 p-4 font-mono text-xs leading-6 text-neutral-100">
-              {sessionSummary.csv}
-            </pre>
-
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleCopyCsv}
-                className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
-              >
-                Copy CSV
-              </button>
-              {csvCopied && (
-                <span
-                  role="status"
-                  className="text-xs font-medium text-emerald-300"
-                >
-                  Copied to clipboard
-                </span>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Recent Sessions (history) */}
-        {sessions.length > 0 && (
-          <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950 font-mono text-xs text-neutral-300">
-                  9
-                </span>
+          {/* Recent Sessions */}
+          {sessions.length > 0 && (
+            <section id="history" className={card}>
+              <div className={`${cardHeader} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
                 <div>
-                  <h2 className="text-lg font-medium text-neutral-200">
+                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                    History
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
                     Recent sessions
                   </h2>
-                  <p className="mt-1 text-xs text-neutral-500">
+                  <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
                     Showing the {Math.min(sessions.length, 5)} most recent of{" "}
                     {sessions.length} stored.
                   </p>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleCopyLastCsv}
-                  className="rounded-lg border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-neutral-100 transition-colors hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-500"
-                >
-                  Copy Last CSV
-                </button>
-                {lastCsvCopied && (
-                  <span
-                    role="status"
-                    className="text-xs font-medium text-emerald-300"
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCopyLastCsv}
+                    className={buttonSecondary}
                   >
-                    Copied
-                  </span>
-                )}
+                    Copy Last CSV
+                  </button>
+                  {lastCsvCopied && (
+                    <span
+                      role="status"
+                      className="text-xs font-medium text-[var(--brand-teal-ink)]"
+                    >
+                      Copied
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
+              <div className={cardBody}>
+                <ul className="flex flex-col gap-3">
+                  {sessions.slice(0, 5).map((s) => (
+                    <li
+                      key={s.id}
+                      className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-[var(--brand-ink-soft)]">
+                        <span className="font-mono text-[var(--brand-ink)]">
+                          {s.date}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                        <span>{s.level}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{s.mode}</span>
+                      </div>
+                      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                        <SummaryCell
+                          label="Main Weakness"
+                          value={s.mainWeakness}
+                          multiline
+                        />
+                        <SummaryCell
+                          label="Next Target"
+                          value={s.retryTask}
+                          multiline
+                        />
+                      </dl>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          )}
 
-            <ul className="flex flex-col gap-3">
-              {sessions.slice(0, 5).map((s) => (
-                <li
-                  key={s.id}
-                  className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4"
-                >
-                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-neutral-400">
-                    <span className="font-mono text-neutral-300">{s.date}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{s.level}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{s.mode}</span>
-                  </div>
-                  <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
-                    <SummaryRow
-                      label="Main Weakness"
-                      value={s.mainWeakness}
-                      multiline
-                    />
-                    <SummaryRow
-                      label="Next Target"
-                      value={s.retryTask}
-                      multiline
-                    />
-                  </dl>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <footer className="text-center text-xs text-neutral-500">
-          Adaptive Academic Speaking App · Local-only practice tool
-        </footer>
-      </main>
+          <footer
+            id="system"
+            className="mt-2 text-center text-xs text-[var(--brand-muted)]"
+          >
+            fonetik · AI-Powered academic speaking practice · Local-only practice tool
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }
@@ -2076,20 +2269,17 @@ function SelectField({ label, value, options, onChange }: SelectFieldProps) {
   const id = `field-${label.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div className="flex flex-col">
-      <label
-        htmlFor={id}
-        className="mb-2 text-sm font-medium text-neutral-300"
-      >
+      <label htmlFor={id} className={labelClass}>
         {label}
       </label>
       <select
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+        className={inputClass}
       >
         {options.map((option) => (
-          <option key={option} value={option} className="bg-neutral-950">
+          <option key={option} value={option}>
             {option}
           </option>
         ))}
@@ -2098,46 +2288,34 @@ function SelectField({ label, value, options, onChange }: SelectFieldProps) {
   );
 }
 
-type SummaryRowProps = {
+type SummaryCellProps = {
   label: string;
   value: string;
   multiline?: boolean;
+  mono?: boolean;
 };
 
-function SummaryRow({ label, value, multiline = false }: SummaryRowProps) {
+function SummaryCell({
+  label,
+  value,
+  multiline = false,
+  mono = false,
+}: SummaryCellProps) {
   return (
     <div className="flex flex-col gap-1">
-      <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+      <dt className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
         {label}
       </dt>
       <dd
         className={
-          multiline
-            ? "whitespace-pre-wrap break-words text-sm text-neutral-100"
-            : "text-sm text-neutral-100"
+          (multiline
+            ? "whitespace-pre-wrap break-words text-sm text-[var(--brand-ink)]"
+            : "text-sm text-[var(--brand-ink)]") +
+          (mono ? " font-mono tabular-nums" : "")
         }
       >
         {value}
       </dd>
-    </div>
-  );
-}
-
-// Small step badge + heading row for the main flow panels.
-// Uses a numbered chip on the left to make the flow easy to follow.
-type StepHeaderProps = {
-  step: number;
-  title: string;
-  className?: string;
-};
-
-function StepHeader({ step, title, className }: StepHeaderProps) {
-  return (
-    <div className={`mb-6 flex items-center gap-3 ${className ?? ""}`}>
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950 font-mono text-xs text-neutral-300">
-        {step}
-      </span>
-      <h2 className="text-lg font-medium text-neutral-200">{title}</h2>
     </div>
   );
 }

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Adaptive Academic Speaking App",
-  description: "AI-powered deliberate speaking practice app",
+  title: "fonetik",
+  description: "AI-Powered academic speaking practice",
 };
 
 export default function RootLayout({
@@ -27,7 +27,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-[var(--brand-bg)] text-[var(--brand-ink)]">
+        {children}
+      </body>
     </html>
   );
 }

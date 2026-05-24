@@ -1,6 +1,9 @@
-# Adaptive Academic Speaking App
+# fonetik
 
-A personal AI-powered deliberate speaking practice web app.
+Speak Better — AI-Powered academic speaking practice.
+
+(Repository name: `adaptive-academic-speaking-app`. Product name in the UI:
+**fonetik**.)
 
 The app runs entirely on your machine. There is no backend database, no auth,
 and no cloud sync. Sessions are saved in your browser's localStorage. AI
