@@ -210,8 +210,9 @@ async function callGemini(
   system: string,
   user: string,
 ): Promise<string> {
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" +
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=` +
     encodeURIComponent(apiKey);
 
   const res = await fetch(url, {
@@ -229,6 +230,18 @@ async function callGemini(
 
   if (!res.ok) {
     const errText = await res.text();
+    // Surface a friendly, actionable message for the common model-not-found case
+    // (HTTP 404 or the API's "is not found / not supported" wording).
+    const isModelError =
+      res.status === 404 ||
+      /not found for API version|is not supported for generateContent|models\//i.test(
+        errText,
+      );
+    if (isModelError) {
+      throw new Error(
+        "Gemini model not available. Check GEMINI_MODEL in .env.local.",
+      );
+    }
     throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 300)}`);
   }
 
