@@ -85,7 +85,63 @@ type FeedbackResult = {
   betterPhrase: string;
   retryTask: string;
   providerUsed: string;
+  scores: FeedbackScores;
 };
+
+// Score dimensions per level. Order in arrays matches CSV column order.
+const FOUNDATION_SCORE_KEYS = ["fluency", "coherence"] as const;
+const BEGINNER_SCORE_KEYS = ["fluency", "grammar", "coherence"] as const;
+const ADVANCED_SCORE_KEYS = [
+  "fluency",
+  "grammar",
+  "vocabulary",
+  "coherence",
+  "argument",
+  "academicTone",
+] as const;
+
+type ScoreKey =
+  | (typeof FOUNDATION_SCORE_KEYS)[number]
+  | (typeof BEGINNER_SCORE_KEYS)[number]
+  | (typeof ADVANCED_SCORE_KEYS)[number];
+
+// Scores arrive as a partial map keyed by dimension name. The frontend uses
+// a permissive shape so it can accept any of the three level shapes; the
+// API has already normalized values to integers in [1, 5].
+type FeedbackScores = Partial<Record<ScoreKey, number>>;
+
+function scoreKeysForLevel(level: Level): readonly ScoreKey[] {
+  if (level === "Foundation") return FOUNDATION_SCORE_KEYS;
+  if (level === "Beginner") return BEGINNER_SCORE_KEYS;
+  return ADVANCED_SCORE_KEYS;
+}
+
+// Human-friendly label for each score key.
+const SCORE_LABELS: Record<ScoreKey, string> = {
+  fluency: "Fluency",
+  grammar: "Grammar",
+  vocabulary: "Vocabulary",
+  coherence: "Coherence",
+  argument: "Argument",
+  academicTone: "Academic Tone",
+};
+
+// Clamp to 1-5 integer with a 3 fallback. Mirrors the server-side logic so
+// stored history stays consistent if a record predates a backend change.
+function safeScore(value: unknown): number {
+  const FALLBACK = 3;
+  const n =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(n)) return FALLBACK;
+  const r = Math.round(n);
+  if (r < 1) return 1;
+  if (r > 5) return 5;
+  return r;
+}
 
 type CapturedRetry = {
   transcript: string;
@@ -206,7 +262,13 @@ function buildCsv(
   feedback: FeedbackResult,
 ): string {
   const date = todayISODate();
-  const score = "3"; // MVP placeholder; real scoring is a future batch.
+  const scores = feedback.scores ?? {};
+  const fluency = String(safeScore(scores.fluency));
+  const grammar = String(safeScore(scores.grammar));
+  const vocabulary = String(safeScore(scores.vocabulary));
+  const coherence = String(safeScore(scores.coherence));
+  const argument = String(safeScore(scores.argument));
+  const academicTone = String(safeScore(scores.academicTone));
 
   if (level === "Foundation") {
     const header = [
@@ -223,8 +285,8 @@ function buildCsv(
       date,
       level,
       mode,
-      score,
-      score,
+      fluency,
+      coherence,
       feedback.mainWeakness,
       feedback.evidence,
       feedback.retryTask,
@@ -248,9 +310,9 @@ function buildCsv(
       date,
       level,
       mode,
-      score,
-      score,
-      score,
+      fluency,
+      grammar,
+      coherence,
       feedback.mainWeakness,
       feedback.evidence,
       feedback.retryTask,
@@ -277,12 +339,12 @@ function buildCsv(
     date,
     level,
     mode,
-    score,
-    score,
-    score,
-    score,
-    score,
-    score,
+    fluency,
+    grammar,
+    vocabulary,
+    coherence,
+    argument,
+    academicTone,
     feedback.mainWeakness,
     feedback.evidence,
     feedback.retryTask,
@@ -610,7 +672,17 @@ export default function Home() {
         return;
       }
 
-      setFeedback(result);
+      // Defensive normalization: even though the server clamps, we guard
+      // against an older route or a hand-tested response shape.
+      const rawScores =
+        result.scores && typeof result.scores === "object" ? result.scores : {};
+      const safeScores: FeedbackScores = {};
+      for (const key of scoreKeysForLevel(activeSession.level)) {
+        safeScores[key] = safeScore(
+          (rawScores as Record<string, unknown>)[key],
+        );
+      }
+      setFeedback({ ...result, scores: safeScores });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Network error while contacting the API.";
@@ -1060,6 +1132,29 @@ export default function Home() {
                     value={feedback.providerUsed}
                   />
                 </dl>
+
+                {activeSession && (
+                  <div className="mt-5 border-t border-neutral-800 pt-4">
+                    <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                      Scores
+                    </p>
+                    <ul className="grid grid-cols-2 gap-x-8 gap-y-2 sm:grid-cols-3">
+                      {scoreKeysForLevel(activeSession.level).map((key) => (
+                        <li
+                          key={key}
+                          className="flex items-baseline justify-between text-sm"
+                        >
+                          <span className="text-neutral-400">
+                            {SCORE_LABELS[key]}
+                          </span>
+                          <span className="font-mono tabular-nums text-neutral-100">
+                            {safeScore(feedback.scores?.[key])}/5
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </section>

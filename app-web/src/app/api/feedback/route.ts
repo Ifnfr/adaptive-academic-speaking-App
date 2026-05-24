@@ -26,7 +26,51 @@ type QuickFeedback = {
   retryTask: string;
 };
 
-type FeedbackResponse = QuickFeedback & { providerUsed: Provider };
+// Scores are level-specific. Keys match the casing used by the frontend.
+type FoundationScores = { fluency: number; coherence: number };
+type BeginnerScores = {
+  fluency: number;
+  grammar: number;
+  coherence: number;
+};
+type AdvancedScores = {
+  fluency: number;
+  grammar: number;
+  vocabulary: number;
+  coherence: number;
+  argument: number;
+  academicTone: number;
+};
+type Scores = FoundationScores | BeginnerScores | AdvancedScores;
+
+type FeedbackResponse = QuickFeedback & {
+  providerUsed: Provider;
+  scores: Scores;
+};
+
+// Score dimensions per level. Keys are camelCase to match the JSON shape.
+const FOUNDATION_KEYS = ["fluency", "coherence"] as const;
+const BEGINNER_KEYS = ["fluency", "grammar", "coherence"] as const;
+const ADVANCED_KEYS = [
+  "fluency",
+  "grammar",
+  "vocabulary",
+  "coherence",
+  "argument",
+  "academicTone",
+] as const;
+
+type ScoreKey =
+  | (typeof FOUNDATION_KEYS)[number]
+  | (typeof BEGINNER_KEYS)[number]
+  | (typeof ADVANCED_KEYS)[number];
+
+function scoreKeysForLevel(level: string): readonly ScoreKey[] {
+  if (level === "Foundation") return FOUNDATION_KEYS;
+  if (level === "Beginner") return BEGINNER_KEYS;
+  // Intermediate, Advanced, Expert all use the full set.
+  return ADVANCED_KEYS;
+}
 
 // ---------- Prompt building ----------
 
@@ -39,11 +83,21 @@ function buildSystemPrompt(level: string): string {
           "- Do NOT judge vocabulary choice.",
           "- Do NOT judge argument strength or academic tone.",
           "- Focus ONLY on speaking continuity, clarity, and basic coherence.",
+          '- The "scores" object MUST contain exactly: fluency, coherence.',
+          "- Do NOT include grammar, vocabulary, argument, or academicTone keys.",
         ].join("\n")
-      : [
-          "LEVEL RULE:",
-          "- Evaluate based on the learner's level. Be specific and academic.",
-        ].join("\n");
+      : level === "Beginner"
+        ? [
+            "LEVEL RULE (Beginner):",
+            "- Evaluate fluency, grammar, and coherence only.",
+            '- The "scores" object MUST contain exactly: fluency, grammar, coherence.',
+            "- Do NOT include vocabulary, argument, or academicTone keys.",
+          ].join("\n")
+        : [
+            "LEVEL RULE:",
+            "- Evaluate fluency, grammar, vocabulary, coherence, argument, and academicTone.",
+            '- The "scores" object MUST contain exactly: fluency, grammar, vocabulary, coherence, argument, academicTone.',
+          ].join("\n");
 
   return [
     "You are an academic speaking coach for deliberate practice.",
@@ -56,16 +110,24 @@ function buildSystemPrompt(level: string): string {
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
     "- No markdown, no code fences, no commentary outside JSON.",
-    "- The JSON object MUST have exactly these keys:",
-    '  "mainWeakness", "evidence", "betterPhrase", "retryTask".',
-    "- All values are short strings (1-3 sentences each).",
+    "- The JSON object MUST have exactly these top-level keys:",
+    '  "mainWeakness", "evidence", "betterPhrase", "retryTask", "scores".',
+    "- mainWeakness, evidence, betterPhrase, retryTask are short strings (1-3 sentences each).",
     "- evidence must quote or paraphrase a specific moment from the transcript.",
     "- betterPhrase must be a stronger academic phrase or sentence the learner could have said.",
     "- retryTask must be one direct, doable instruction for the next attempt.",
+    "- scores is an object whose values are integers from 1 to 5 (5 is best).",
+    "- Use the exact score keys required by the level rule above.",
   ].join("\n");
 }
 
 function buildUserPrompt(req: FeedbackRequest): string {
+  const keys = scoreKeysForLevel(req.level);
+  const scoresExample = keys
+    .map((k, idx) => `"${k}": ${idx === 0 ? 4 : 3}`)
+    .join(", ");
+  const exampleJson = `{"mainWeakness": "...", "evidence": "...", "betterPhrase": "...", "retryTask": "...", "scores": {${scoresExample}}}`;
+
   return [
     "SESSION CONFIG:",
     `- Level: ${req.level}`,
@@ -83,8 +145,10 @@ function buildUserPrompt(req: FeedbackRequest): string {
     "2. Cite one specific sentence or moment from the transcript as evidence.",
     "3. Provide one stronger academic phrase or sentence.",
     "4. Give one direct retry task.",
+    `5. Score the attempt on these dimensions only: ${keys.join(", ")}.`,
+    "   Each score is an integer from 1 (very weak) to 5 (strong).",
     "",
-    'Return ONLY the JSON object: {"mainWeakness": "...", "evidence": "...", "betterPhrase": "...", "retryTask": "..."}',
+    `Return ONLY the JSON object: ${exampleJson}`,
   ].join("\n");
 }
 
@@ -111,12 +175,16 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
-function parseFeedback(raw: string): QuickFeedback | null {
+function parseFeedback(
+  raw: string,
+): { feedback: QuickFeedback; rawScores: unknown } | null {
   const jsonText = extractJsonObject(raw);
   if (!jsonText) return null;
 
   try {
-    const data = JSON.parse(jsonText) as Partial<QuickFeedback>;
+    const data = JSON.parse(jsonText) as Partial<QuickFeedback> & {
+      scores?: unknown;
+    };
     if (
       typeof data.mainWeakness === "string" &&
       typeof data.evidence === "string" &&
@@ -124,16 +192,51 @@ function parseFeedback(raw: string): QuickFeedback | null {
       typeof data.retryTask === "string"
     ) {
       return {
-        mainWeakness: data.mainWeakness.trim(),
-        evidence: data.evidence.trim(),
-        betterPhrase: data.betterPhrase.trim(),
-        retryTask: data.retryTask.trim(),
+        feedback: {
+          mainWeakness: data.mainWeakness.trim(),
+          evidence: data.evidence.trim(),
+          betterPhrase: data.betterPhrase.trim(),
+          retryTask: data.retryTask.trim(),
+        },
+        rawScores: data.scores,
       };
     }
     return null;
   } catch {
     return null;
   }
+}
+
+// Clamp a single score to an integer in [1, 5]. Falls back to 3 when the
+// value is missing, non-finite, or otherwise unreadable.
+function clampScore(value: unknown): number {
+  const FALLBACK = 3;
+  let n: number;
+  if (typeof value === "number") {
+    n = value;
+  } else if (typeof value === "string") {
+    n = Number(value);
+  } else {
+    return FALLBACK;
+  }
+  if (!Number.isFinite(n)) return FALLBACK;
+  const rounded = Math.round(n);
+  if (rounded < 1) return 1;
+  if (rounded > 5) return 5;
+  return rounded;
+}
+
+// Build a level-correct scores object, ignoring any extra keys the model
+// might have included and filling missing keys with the fallback.
+function normalizeScores(level: string, raw: unknown): Scores {
+  const keys = scoreKeysForLevel(level);
+  const source =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const result = {} as Record<ScoreKey, number>;
+  for (const key of keys) {
+    result[key] = clampScore(source[key]);
+  }
+  return result as Scores;
 }
 
 // ---------- Provider callers ----------
@@ -341,8 +444,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const feedback = parseFeedback(raw);
-  if (!feedback) {
+  const parsedFeedback = parseFeedback(raw);
+  if (!parsedFeedback) {
     return NextResponse.json(
       {
         error:
@@ -353,8 +456,9 @@ export async function POST(request: Request) {
   }
 
   const response: FeedbackResponse = {
-    ...feedback,
+    ...parsedFeedback.feedback,
     providerUsed: validated.provider,
+    scores: normalizeScores(validated.level, parsedFeedback.rawScores),
   };
   return NextResponse.json(response);
 }
