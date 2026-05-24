@@ -31,6 +31,14 @@ type CapturedAttempt = {
   durationSeconds: number;
 };
 
+type FeedbackResult = {
+  mainWeakness: string;
+  evidence: string;
+  betterPhrase: string;
+  retryTask: string;
+  providerUsed: string;
+};
+
 function formatTime(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
   const minutes = Math.floor(safe / 60);
@@ -63,6 +71,11 @@ export default function Home() {
     null,
   );
 
+  // --- AI feedback state ---
+  const [feedback, setFeedback] = useState<FeedbackResult | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
   // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
   useEffect(() => {
     if (!isTimerRunning) return;
@@ -93,6 +106,9 @@ export default function Home() {
     setElapsedSeconds(0);
     setIsTimerRunning(false);
     setCapturedAttempt(null);
+    setFeedback(null);
+    setFeedbackError(null);
+    setFeedbackLoading(false);
   };
 
   const handleStartTimer = () => setIsTimerRunning(true);
@@ -112,6 +128,65 @@ export default function Home() {
       transcript: trimmedTranscript,
       durationSeconds: elapsedSeconds,
     });
+    setFeedback(null);
+    setFeedbackError(null);
+  };
+
+  const handleGetFeedback = async () => {
+    if (!activeSession || !capturedAttempt) return;
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+    setFeedback(null);
+
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          level: activeSession.level,
+          mode: activeSession.mode,
+          feedbackType: activeSession.feedbackType,
+          sessionType: activeSession.sessionType,
+          provider: activeSession.aiProvider,
+          todayTarget: activeSession.target,
+          transcript: capturedAttempt.transcript,
+          durationSeconds: capturedAttempt.durationSeconds,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | (FeedbackResult & { error?: string })
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !data || ("error" in data && data.error)) {
+        const message =
+          (data && "error" in data && data.error) ||
+          `Request failed with status ${res.status}.`;
+        setFeedbackError(message);
+        return;
+      }
+
+      const result = data as FeedbackResult;
+      if (
+        !result.mainWeakness ||
+        !result.evidence ||
+        !result.betterPhrase ||
+        !result.retryTask ||
+        !result.providerUsed
+      ) {
+        setFeedbackError("Feedback response was incomplete. Try again.");
+        return;
+      }
+
+      setFeedback(result);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Network error while contacting the API.";
+      setFeedbackError(message);
+    } finally {
+      setFeedbackLoading(false);
+    }
   };
 
   return (
@@ -336,6 +411,60 @@ export default function Home() {
             <p className="mt-6 rounded-lg border border-dashed border-neutral-700 bg-neutral-950/60 px-4 py-3 text-sm text-neutral-400">
               AI feedback will be added in the next batch.
             </p>
+
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleGetFeedback}
+                disabled={feedbackLoading}
+                className="w-full rounded-lg bg-neutral-100 px-4 py-3 text-base font-medium text-neutral-900 transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
+              >
+                {feedbackLoading ? "Generating feedback..." : "Get AI Feedback"}
+              </button>
+            </div>
+
+            {feedbackError && (
+              <div
+                role="alert"
+                className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200"
+              >
+                {feedbackError}
+              </div>
+            )}
+
+            {feedback && (
+              <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950/60 p-5">
+                <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-neutral-400">
+                  Quick feedback
+                </h3>
+                <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
+                  <SummaryRow
+                    label="Main Weakness"
+                    value={feedback.mainWeakness}
+                    multiline
+                  />
+                  <SummaryRow
+                    label="Evidence"
+                    value={feedback.evidence}
+                    multiline
+                  />
+                  <SummaryRow
+                    label="Better Phrase"
+                    value={feedback.betterPhrase}
+                    multiline
+                  />
+                  <SummaryRow
+                    label="Retry Task"
+                    value={feedback.retryTask}
+                    multiline
+                  />
+                  <SummaryRow
+                    label="Provider Used"
+                    value={feedback.providerUsed}
+                  />
+                </dl>
+              </div>
+            )}
           </section>
         )}
 
