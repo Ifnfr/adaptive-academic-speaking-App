@@ -254,6 +254,25 @@ function formatTime(totalSeconds: number): string {
   return `${mm}:${ss}`;
 }
 
+// Trim long upstream provider errors and strip stack-trace-like noise so the UI
+// stays short and readable. Friendly route-level messages (no colon, short)
+// pass through as-is.
+function sanitizeErrorMessage(raw: string): string {
+  if (!raw) return "Something went wrong. Please try again.";
+  // Remove JSON-looking blobs, line breaks, and excess whitespace.
+  let cleaned = raw.replace(/\s+/g, " ").trim();
+  // If the message looks like "Provider API error 4xx: { ... }", keep just the
+  // human-readable head so we don't dump JSON into the UI.
+  const colonIdx = cleaned.indexOf(":");
+  if (colonIdx !== -1 && cleaned.length > 140) {
+    cleaned = cleaned.slice(0, colonIdx).trim();
+  }
+  if (cleaned.length > 200) {
+    cleaned = `${cleaned.slice(0, 200)}…`;
+  }
+  return cleaned;
+}
+
 export default function Home() {
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
@@ -399,10 +418,10 @@ export default function Home() {
         | null;
 
       if (!res.ok || !data || ("error" in data && data.error)) {
-        const message =
+        const rawMessage =
           (data && "error" in data && data.error) ||
           `Request failed with status ${res.status}.`;
-        setFeedbackError(message);
+        setFeedbackError(sanitizeErrorMessage(rawMessage));
         return;
       }
 
@@ -422,7 +441,7 @@ export default function Home() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Network error while contacting the API.";
-      setFeedbackError(message);
+      setFeedbackError(sanitizeErrorMessage(message));
     } finally {
       setFeedbackLoading(false);
     }
@@ -523,9 +542,7 @@ export default function Home() {
 
         {/* Setup panel */}
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-          <h2 className="mb-6 text-lg font-medium text-neutral-200">
-            Session setup
-          </h2>
+          <StepHeader step={1} title="Session setup" />
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <SelectField
@@ -582,6 +599,12 @@ export default function Home() {
 
           {/* Start button */}
           <div className="mt-8">
+            {!previousSession && (
+              <p className="mb-4 text-xs text-neutral-500">
+                No previous weakness yet. Complete one session to activate
+                weakness repetition.
+              </p>
+            )}
             <button
               type="button"
               onClick={handleStart}
@@ -620,9 +643,7 @@ export default function Home() {
         {/* Active Session Summary */}
         {activeSession && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-6 text-lg font-medium text-neutral-200">
-              Active session
-            </h2>
+            <StepHeader step={2} title="Active session" />
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
               <SummaryRow label="Level" value={activeSession.level} />
               <SummaryRow label="Mode" value={activeSession.mode} />
@@ -664,9 +685,7 @@ export default function Home() {
         {/* Speaking Attempt */}
         {activeSession && !capturedAttempt && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-6 text-lg font-medium text-neutral-200">
-              Speaking attempt
-            </h2>
+            <StepHeader step={3} title="Speaking attempt" />
 
             {/* Timer */}
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -738,9 +757,7 @@ export default function Home() {
         {/* Captured Attempt */}
         {capturedAttempt && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-6 text-lg font-medium text-neutral-200">
-              Attempt captured
-            </h2>
+            <StepHeader step={4} title="Attempt captured" />
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
               <SummaryRow
                 label="Duration"
@@ -819,9 +836,7 @@ export default function Home() {
         {/* Retry Attempt */}
         {feedback && !capturedRetry && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-6 text-lg font-medium text-neutral-200">
-              Retry attempt
-            </h2>
+            <StepHeader step={5} title="Retry attempt" />
 
             <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -865,9 +880,7 @@ export default function Home() {
         {/* Retry Captured */}
         {capturedRetry && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-6 text-lg font-medium text-neutral-200">
-              Retry captured
-            </h2>
+            <StepHeader step={6} title="Retry captured" />
 
             <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
               <SummaryRow
@@ -898,11 +911,9 @@ export default function Home() {
         {/* Session Summary */}
         {sessionSummary && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
-            <h2 className="mb-2 text-lg font-medium text-neutral-200">
-              Session summary
-            </h2>
+            <StepHeader step={7} title="Session summary" />
             <p className="mb-6 text-sm text-neutral-400">
-              CSV row generated. Scores are placeholder values for the MVP.
+              CSV row generated. Score columns are placeholders for the MVP.
             </p>
 
             <pre className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950 p-4 font-mono text-xs leading-6 text-neutral-100">
@@ -933,14 +944,19 @@ export default function Home() {
         {sessions.length > 0 && (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-6 shadow-sm sm:p-8">
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-medium text-neutral-200">
-                  Recent sessions
-                </h2>
-                <p className="mt-1 text-xs text-neutral-500">
-                  Showing the {Math.min(sessions.length, 5)} most recent of{" "}
-                  {sessions.length} stored.
-                </p>
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950 font-mono text-xs text-neutral-300">
+                  8
+                </span>
+                <div>
+                  <h2 className="text-lg font-medium text-neutral-200">
+                    Recent sessions
+                  </h2>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Showing the {Math.min(sessions.length, 5)} most recent of{" "}
+                    {sessions.length} stored.
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -993,7 +1009,7 @@ export default function Home() {
         )}
 
         <footer className="text-center text-xs text-neutral-500">
-          MVP build · Local state only
+          Adaptive Academic Speaking App · Local-only practice tool
         </footer>
       </main>
     </div>
@@ -1056,6 +1072,25 @@ function SummaryRow({ label, value, multiline = false }: SummaryRowProps) {
       >
         {value}
       </dd>
+    </div>
+  );
+}
+
+// Small step badge + heading row for the main flow panels.
+// Uses a numbered chip on the left to make the flow easy to follow.
+type StepHeaderProps = {
+  step: number;
+  title: string;
+  className?: string;
+};
+
+function StepHeader({ step, title, className }: StepHeaderProps) {
+  return (
+    <div className={`mb-6 flex items-center gap-3 ${className ?? ""}`}>
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950 font-mono text-xs text-neutral-300">
+        {step}
+      </span>
+      <h2 className="text-lg font-medium text-neutral-200">{title}</h2>
     </div>
   );
 }
