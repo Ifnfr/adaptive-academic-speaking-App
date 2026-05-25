@@ -24,6 +24,7 @@ import {
   MentalModelView,
   type MentalModelResult,
 } from "./components/MentalModelView";
+import { SessionLogView } from "./components/SessionLogView";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -2222,91 +2223,13 @@ export default function Home() {
 
           {/* ===================== Session Log view ===================== */}
           {view === "session-log" && (
-            <section className={card}>
-              <div className={`${cardHeader} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                    History
-                  </p>
-                  <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                    Session Log
-                  </h2>
-                  <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                    {sessions.length === 0
-                      ? "No sessions stored yet. Complete one from Active Session to populate this log."
-                      : `Showing the ${Math.min(sessions.length, 5)} most recent of ${sessions.length} stored.`}
-                  </p>
-                </div>
-                {sessions.length > 0 && (
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleCopyLastCsv}
-                      className={buttonSecondary}
-                    >
-                      Copy Last CSV
-                    </button>
-                    {lastCsvCopied && (
-                      <span
-                        role="status"
-                        className="text-xs font-medium text-[var(--brand-teal-ink)]"
-                      >
-                        Copied
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className={cardBody}>
-                {sessions.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center">
-                    <p className="text-sm text-[var(--brand-ink-soft)]">
-                      Your completed sessions will appear here.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setView("active")}
-                      className={`${buttonSecondary} mt-4`}
-                    >
-                      Go to Active Session
-                    </button>
-                  </div>
-                ) : (
-                  <ul className="flex flex-col gap-3">
-                    {sessions.slice(0, 5).map((s) => (
-                      <li
-                        key={s.id}
-                        className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
-                      >
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-[var(--brand-ink-soft)]">
-                          <span className="font-mono text-[var(--brand-ink)]">
-                            {s.date}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>{s.level}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{s.mode}</span>
-                        </div>
-                        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                          <SummaryCell
-                            label="Main Weakness"
-                            value={s.mainWeakness}
-                            multiline
-                          />
-                          <SummaryCell
-                            label="Next Target"
-                            value={s.retryTask}
-                            multiline
-                          />
-                        </dl>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </section>
+            <SessionLogView
+              sessions={sessions}
+              lastCsvCopied={lastCsvCopied}
+              onCopyLastCsv={handleCopyLastCsv}
+              onGoToActiveSession={() => setView("active")}
+            />
           )}
-
           {/* ===================== Progress view ===================== */}
           {view === "progress" && (
             <section className={card}>
