@@ -132,6 +132,16 @@ type WeeklyReviewResult = {
   warnings: string[];
 };
 
+type MentalModelResult = {
+  coreStandard: string;
+  qualityCriteria: string[];
+  weakPattern: string;
+  strongPattern: string;
+  selfCheckQuestions: string[];
+  microDrill: string;
+  referenceModel: string;
+};
+
 // Score dimensions per level. Order in arrays matches CSV column order.
 const FOUNDATION_SCORE_KEYS = ["fluency", "coherence"] as const;
 const BEGINNER_SCORE_KEYS = ["fluency", "grammar", "coherence"] as const;
@@ -1273,6 +1283,13 @@ export default function Home() {
     null,
   );
 
+  // --- Mental Model Session state ---
+  const [mentalModelFocus, setMentalModelFocus] = useState("");
+  const [mentalModelResult, setMentalModelResult] =
+    useState<MentalModelResult | null>(null);
+  const [mentalModelLoading, setMentalModelLoading] = useState(false);
+  const [mentalModelError, setMentalModelError] = useState<string | null>(null);
+
   // --- Retry loop state ---
   const [retryTranscript, setRetryTranscript] = useState("");
   const [capturedRetry, setCapturedRetry] = useState<CapturedRetry | null>(null);
@@ -1317,6 +1334,13 @@ export default function Home() {
   // from session history and the currently selected level. No AI call.
   const coachRecommendation = buildCoachRecommendation(sessions, level);
   const levelUpCheck = buildLevelUpCheck(sessions, level);
+  const mentalModelDefaultFocus =
+    target.trim() ||
+    previousSession?.retryTask?.trim() ||
+    previousSession?.mainWeakness?.trim() ||
+    "Build a clearer academic speaking response";
+  const effectiveMentalModelFocus =
+    mentalModelFocus.trim() || mentalModelDefaultFocus;
 
   const handleUseRecommendation = () => {
     setMode(coachRecommendation.recommendedMode);
@@ -1712,6 +1736,68 @@ export default function Home() {
       setWeeklyReviewError(sanitizeErrorMessage(message));
     } finally {
       setWeeklyReviewLoading(false);
+    }
+  };
+
+  const handleGenerateMentalModel = async () => {
+    const focus = effectiveMentalModelFocus.trim();
+    if (focus.length === 0) return;
+
+    setMentalModelLoading(true);
+    setMentalModelError(null);
+    setMentalModelResult(null);
+    setMentalModelFocus(focus);
+
+    try {
+      const res = await fetch("/api/mental-model", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: aiProvider,
+          level,
+          mode,
+          focus,
+          latestWeakness: previousSession?.mainWeakness ?? "",
+          latestRetryTask: previousSession?.retryTask ?? "",
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | (MentalModelResult & { error?: string })
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !data || ("error" in data && data.error)) {
+        const rawMessage =
+          (data && "error" in data && data.error) ||
+          `Request failed with status ${res.status}.`;
+        setMentalModelError(sanitizeErrorMessage(rawMessage));
+        return;
+      }
+
+      const result = data as MentalModelResult;
+      if (
+        !result.coreStandard ||
+        !Array.isArray(result.qualityCriteria) ||
+        !result.weakPattern ||
+        !result.strongPattern ||
+        !Array.isArray(result.selfCheckQuestions) ||
+        !result.microDrill ||
+        !result.referenceModel
+      ) {
+        setMentalModelError("Mental Model response was incomplete. Try again.");
+        return;
+      }
+
+      setMentalModelResult(result);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Network error while contacting the API.";
+      setMentalModelError(sanitizeErrorMessage(message));
+    } finally {
+      setMentalModelLoading(false);
     }
   };
 
@@ -3083,25 +3169,146 @@ export default function Home() {
             </section>
           )}
 
-          {/* ===================== Mental Model (placeholder) ===================== */}
+          {/* ===================== Mental Model ===================== */}
           {view === "mental-model" && (
-            <section className={`${card} opacity-90`}>
+            <section className={card}>
               <div className={cardHeader}>
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-                  Coming soon
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  AI teaching
                 </p>
                 <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
                   Mental Model
                 </h2>
                 <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                  Notes about your speaking habits will live here in a future
-                  batch.
+                  Use this before practice to understand quality standards and
+                  response patterns. It is not a memorized answer generator.
                 </p>
               </div>
-              <div className={cardBody}>
-                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center text-sm text-[var(--brand-ink-soft)]">
-                  Not implemented yet.
+              <div className={`${cardBody} flex flex-col gap-5`}>
+                <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <SummaryCell label="Level" value={level} />
+                    <SummaryCell label="Mode" value={mode} />
+                    <div className="sm:col-span-2">
+                      <label htmlFor="mental-model-focus" className={labelClass}>
+                        Focus / Weakness
+                      </label>
+                      <textarea
+                        id="mental-model-focus"
+                        rows={3}
+                        value={mentalModelFocus}
+                        onChange={(event) =>
+                          setMentalModelFocus(event.target.value)
+                        }
+                        placeholder={mentalModelDefaultFocus}
+                        className={`${inputClass} resize-y leading-6`}
+                      />
+                      <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                        Leave blank to use the current target or latest practice
+                        weakness.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-[var(--brand-ink-soft)]">
+                      The request sends setup context and recent weakness text
+                      only, not transcripts.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleGenerateMentalModel}
+                      disabled={mentalModelLoading}
+                      className={`${buttonPrimary} w-full sm:w-auto`}
+                    >
+                      {mentalModelLoading
+                        ? "Generating mental model..."
+                        : "Generate Mental Model"}
+                    </button>
+                  </div>
                 </div>
+
+                {mentalModelError && (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
+                  >
+                    <p>{mentalModelError}</p>
+                    <p className="mt-1 text-xs opacity-80">
+                      You can try again, wait a moment, or switch provider.
+                    </p>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={handleGenerateMentalModel}
+                        disabled={mentalModelLoading}
+                        className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {mentalModelLoading ? "Trying again..." : "Try Again"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {mentalModelResult && (
+                  <div className="rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+                    <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                      Mental model result
+                    </h3>
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                      <SummaryCell
+                        label="Core Standard"
+                        value={mentalModelResult.coreStandard}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Micro Drill"
+                        value={mentalModelResult.microDrill}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Weak Pattern"
+                        value={mentalModelResult.weakPattern}
+                        multiline
+                      />
+                      <SummaryCell
+                        label="Strong Pattern"
+                        value={mentalModelResult.strongPattern}
+                        multiline
+                      />
+                    </dl>
+
+                    <div className="mt-5 grid grid-cols-1 gap-5 border-t border-[var(--brand-border)] pt-4 lg:grid-cols-2">
+                      <div>
+                        <p className={labelClass}>Quality Criteria</p>
+                        <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
+                          {mentalModelResult.qualityCriteria.map((item) => (
+                            <li key={item} className="break-words">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className={labelClass}>Self-Check Questions</p>
+                        <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
+                          {mentalModelResult.selfCheckQuestions.map((item) => (
+                            <li key={item} className="break-words">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
+                      <p className={labelClass}>Reference Model</p>
+                      <p className="whitespace-pre-wrap break-words text-sm text-[var(--brand-ink)]">
+                        {mentalModelResult.referenceModel}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           )}

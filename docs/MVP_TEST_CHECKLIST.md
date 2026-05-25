@@ -173,3 +173,17 @@ verify the behavior.
 - [ ] Warnings appear only when the response includes non-empty warnings
 - [ ] Provider errors and malformed JSON responses show friendly retryable errors without raw upstream JSON
 - [ ] Running Weekly Review does NOT change localStorage history, CSV data, feedback, diagnostic, retry, or speech input behavior
+
+## 14. Mental Model Session
+
+> Note: Mental Model is an AI teaching feature. It sends setup context plus
+> latest weakness/retry text only, and it does not store results.
+
+- [ ] Mental Model opens from the sidebar and does not auto-run
+- [ ] The view shows current Level, current Mode, and an editable Focus / Weakness field
+- [ ] Blank focus falls back to current target, latest retry task, latest weakness, or a generic academic response focus
+- [ ] Generate Mental Model sends provider, level, mode, focus, latestWeakness, and latestRetryTask only
+- [ ] Successful result shows Core Standard, Quality Criteria, Weak Pattern, Strong Pattern, Self-Check Questions, Micro Drill, and Reference Model
+- [ ] The route rejects malformed JSON, invalid criteria/question counts, or an overly long reference model with a friendly error
+- [ ] The UI does not provide a copy/use-as-answer action for the reference model
+- [ ] Running Mental Model does NOT change localStorage history, CSV data, feedback, diagnostic, weekly review, retry, or speech input behavior
