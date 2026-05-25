@@ -25,6 +25,7 @@ import {
 } from "./components/MentalModelView";
 import { SessionLogView } from "./components/SessionLogView";
 import { Sidebar, type SidebarView } from "./components/Sidebar";
+import { Topbar } from "./components/Topbar";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -1220,33 +1221,14 @@ export default function Home() {
         {/* Main */}
         <main className="flex min-w-0 flex-1 flex-col gap-6">
           {/* Topbar */}
-          <header
-            className={`${card} sticky top-2 z-10 flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between`}
-          >
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                fonetik · {viewSubtitle(view)}
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
-                {viewTitle(view)}
-              </h1>
-              <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                {view === "active" ? subtitle : viewDescription(view)}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
-                {activeSession ? "Session active" : "Idle"}
-              </span>
-              <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
-                {mode}
-              </span>
-              <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
-                {level}
-              </span>
-            </div>
-          </header>
+          <Topbar
+            subtitle={viewSubtitle(view)}
+            title={viewTitle(view)}
+            description={view === "active" ? subtitle : viewDescription(view)}
+            hasActiveSession={Boolean(activeSession)}
+            mode={mode}
+            level={level}
+          />
 
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
