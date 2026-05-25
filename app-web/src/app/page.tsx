@@ -26,6 +26,7 @@ import {
 import { SessionLogView } from "./components/SessionLogView";
 import { Sidebar, type SidebarView } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
+import { SessionSetup } from "./components/SessionSetup";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -1279,127 +1280,28 @@ export default function Home() {
           )}
 
           {/* Session Setup (hidden visually demoted while active but kept for restart) */}
-          <section className={card}>
-            <div className={cardHeader}>
-              <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                Step 1
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                Session setup
-              </h2>
-              <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                Pick your mode visibly, set the rest, then start.
-              </p>
-            </div>
-            <div className={cardBody}>
-              {/* Mode cards (replaces the old dropdown) */}
-              <fieldset>
-                <legend className={labelClass}>Mode</legend>
-                <div
-                  role="radiogroup"
-                  aria-label="Practice mode"
-                  className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
-                >
-                  {MODES.map((m) => {
-                    const selected = mode === m;
-                    const isDiagnostic = m === "Diagnostic";
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setMode(m)}
-                        className={
-                          "flex flex-col items-start gap-1 rounded-xl border p-3 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
-                          (selected
-                            ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
-                            : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-surface)]")
-                        }
-                      >
-                        <span className="font-medium">{m}</span>
-                        <span className="text-xs text-[var(--brand-ink-soft)]">
-                          {isDiagnostic
-                            ? "Baseline assessment"
-                            : m === "Fluency Sprint"
-                              ? "Speak without stopping"
-                              : m === "Argument Drill"
-                                ? "Defend a position"
-                                : m === "Reading-to-Speaking"
-                                  ? "Explain an excerpt"
-                                  : "Make a debatable claim"}
-                        </span>
-                        {isDiagnostic && (
-                          <span className="mt-1 inline-flex items-center rounded-full border border-[var(--brand-gold)]/50 bg-[var(--brand-gold-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--brand-ink)]">
-                            Assessment
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-
-              {/* Other controls */}
-              <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
-                <SelectField
-                  label="Level"
-                  value={level}
-                  options={LEVELS}
-                  onChange={(v) => setLevel(v as Level)}
-                />
-                <SelectField
-                  label="Feedback Type"
-                  value={feedbackType}
-                  options={FEEDBACK_TYPES}
-                  onChange={(v) => setFeedbackType(v as FeedbackType)}
-                />
-                <SelectField
-                  label="Session Type"
-                  value={sessionType}
-                  options={SESSION_TYPES}
-                  onChange={(v) => setSessionType(v as SessionType)}
-                />
-                <SelectField
-                  label="AI Provider"
-                  value={aiProvider}
-                  options={AI_PROVIDERS}
-                  onChange={(v) => setAiProvider(v as AIProvider)}
-                />
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="target" className={labelClass}>
-                    Today&apos;s Target
-                  </label>
-                  <textarea
-                    id="target"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                    rows={3}
-                    placeholder="What do you want to improve in this session?"
-                    className={`${inputClass} resize-y`}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6">
-                {!previousSession && (
-                  <p className="mb-3 text-xs text-[var(--brand-ink-soft)]">
-                    No previous weakness yet. Complete one session to activate
-                    weakness repetition.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={handleStart}
-                  className={`${buttonPrimary} w-full sm:w-auto`}
-                >
-                  {activeSession ? "Restart Session" : "Start Session"}
-                </button>
-              </div>
-            </div>
-          </section>
-
+          <SessionSetup
+            level={level}
+            mode={mode}
+            feedbackType={feedbackType}
+            sessionType={sessionType}
+            aiProvider={aiProvider}
+            target={target}
+            hasActiveSession={Boolean(activeSession)}
+            hasPreviousSession={Boolean(previousSession)}
+            levels={LEVELS}
+            modes={MODES}
+            feedbackTypes={FEEDBACK_TYPES}
+            sessionTypes={SESSION_TYPES}
+            aiProviders={AI_PROVIDERS}
+            onLevelChange={(value) => setLevel(value as Level)}
+            onModeChange={(value) => setMode(value as Mode)}
+            onFeedbackTypeChange={(value) => setFeedbackType(value as FeedbackType)}
+            onSessionTypeChange={(value) => setSessionType(value as SessionType)}
+            onAiProviderChange={(value) => setAiProvider(value as AIProvider)}
+            onTargetChange={setTarget}
+            onStartSession={handleStart}
+          />
           {/* Coach + Previous Weakness (only before a session is active) */}
           {!activeSession && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -2163,36 +2065,6 @@ export default function Home() {
 }
 
 // --- Reusable bits kept in the same file ---
-
-type SelectFieldProps = {
-  label: string;
-  value: string;
-  options: readonly string[];
-  onChange: (value: string) => void;
-};
-
-function SelectField({ label, value, options, onChange }: SelectFieldProps) {
-  const id = `field-${label.toLowerCase().replace(/\s+/g, "-")}`;
-  return (
-    <div className="flex flex-col">
-      <label htmlFor={id} className={labelClass}>
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClass}
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
 
 type SummaryCellProps = {
   label: string;
