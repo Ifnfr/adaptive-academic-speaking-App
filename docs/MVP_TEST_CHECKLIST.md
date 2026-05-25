@@ -159,3 +159,17 @@ verify the behavior.
 - [ ] Expert shows Max level reached and no Apply Next Level button
 - [ ] Apply Next Level appears only when status is Ready and updates only Level, Today's Target, and view
 - [ ] Applying the next level does NOT change localStorage history or CSV data
+
+## 13. Weekly Review Agent
+
+> Note: Weekly Review is an AI feature. It sends only compact recent session
+> summaries to `/api/weekly-review` and does not store review results.
+
+- [ ] Weekly Review opens from the sidebar without starting automatically
+- [ ] With fewer than 4 sessions, the view shows "Weekly Review requires at least 4 completed practice sessions."
+- [ ] With 4+ sessions, Run Weekly Review is enabled and shows a loading state while running
+- [ ] The request sends only the latest 4 to 7 session summaries, not full transcripts or retry transcripts
+- [ ] Successful review shows Summary, Recurring Weakness, Best Improvement, Score Trend, Next Week Focus, and a 7-Day Recommended Plan
+- [ ] Warnings appear only when the response includes non-empty warnings
+- [ ] Provider errors and malformed JSON responses show friendly retryable errors without raw upstream JSON
+- [ ] Running Weekly Review does NOT change localStorage history, CSV data, feedback, diagnostic, retry, or speech input behavior
