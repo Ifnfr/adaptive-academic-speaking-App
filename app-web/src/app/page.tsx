@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -724,6 +730,83 @@ function buildCoachRecommendation(
   };
 }
 
+// ---------- Level metadata + day-streak helpers ----------
+// Pure helpers used by the sidebar Current Level card and the Day Streak
+// card. No new state, no new storage. Keeps logic small and inspectable.
+
+const LEVEL_PHASE: Record<Level, string> = {
+  Foundation: "Phase 1 · Build volume",
+  Beginner: "Phase 2 · Simple structure",
+  Intermediate: "Phase 3 · Clarity & transitions",
+  Advanced: "Phase 4 · Argument defense",
+  Expert: "Phase 5 · Academic rigor",
+};
+
+function nextLevelHint(level: Level): string | null {
+  const idx = LEVELS.indexOf(level);
+  const next = LEVELS[idx + 1];
+  return next ? `Next up: ${next}` : null;
+}
+
+// Parse a YYYY-MM-DD date string from a stored session into a local Date at
+// midnight. Returns null on malformed input so the streak calculation never
+// throws on legacy or hand-edited storage.
+function parseISODateLocal(value: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+function dayDiff(a: Date, b: Date): number {
+  const ms = a.getTime() - b.getTime();
+  return Math.round(ms / (1000 * 60 * 60 * 24));
+}
+
+// Compute a "current day streak" from session history. A streak is a run of
+// consecutive calendar days, ending today or yesterday, that have at least
+// one stored session each. Returns 0 when there is no history or when the
+// most recent session is older than yesterday.
+function computeDayStreak(sessions: SessionRecord[]): number {
+  if (sessions.length === 0) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Collect unique session dates (newest sessions first per existing order),
+  // dedupe via a Set keyed by ISO string.
+  const uniqueDates = new Set<string>();
+  for (const s of sessions) {
+    if (s.date) uniqueDates.add(s.date);
+  }
+
+  // Sort dates descending.
+  const dates = Array.from(uniqueDates)
+    .map(parseISODateLocal)
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => b.getTime() - a.getTime());
+
+  if (dates.length === 0) return 0;
+
+  // The most recent session must be today or yesterday for the streak to be
+  // "alive". Anything older breaks the streak.
+  const gap = dayDiff(today, dates[0]);
+  if (gap > 1) return 0;
+
+  let streak = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const diff = dayDiff(dates[i - 1], dates[i]);
+    if (diff === 1) streak += 1;
+    else if (diff === 0) continue; // Same day, ignore (already deduped, but safe).
+    else break;
+  }
+  return streak;
+}
+
 // Trim long upstream provider errors and strip stack-trace-like noise so the UI
 // stays short and readable. Friendly route-level messages (no colon, short)
 // pass through as-is.
@@ -747,7 +830,7 @@ function sanitizeErrorMessage(raw: string): string {
 // Centralized so every panel reads the same way and we can tweak the look
 // in one place. Used as plain string concatenations.
 const card =
-  "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm";
+  "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
 const cardHeader =
   "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
 const cardBody = "p-6";
@@ -856,7 +939,23 @@ export default function Home() {
   );
   const [lastCsvCopied, setLastCsvCopied] = useState(false);
 
+  // --- Sidebar navigation view ---
+  // Lightweight local view state. No router, no real new routes. The Active
+  // Session view shows the full practice flow; other views are anchor-style
+  // sub-pages that reuse existing data.
+  type View =
+    | "active"
+    | "session-log"
+    | "progress"
+    | "weekly-review"
+    | "diagnostic"
+    | "mental-model"
+    | "settings";
+  const [view, setView] = useState<View>("active");
+
   const previousSession = sessions[0] ?? null;
+  // Lightweight day-streak derived from session.date strings. No new storage.
+  const dayStreak = computeDayStreak(sessions);
 
   // Local Coach Engine: deterministic, rule-based recommendation derived
   // from session history and the currently selected level. No AI call.
@@ -1187,6 +1286,13 @@ export default function Home() {
     setTarget(diagnosticResult.mainBottleneck);
   };
 
+  // Selecting "Diagnostic" from the sidebar pre-selects the diagnostic mode
+  // and routes the user back to the active practice view so they can run it.
+  const handleSelectDiagnostic = () => {
+    setMode("Diagnostic");
+    setView("active");
+  };
+
   const trimmedRetryTranscript = retryTranscript.trim();
   const canSubmitRetry =
     trimmedRetryTranscript.length > 0 && capturedRetry === null;
@@ -1267,26 +1373,31 @@ export default function Home() {
 
   const isDiagnosticMode = activeSession?.mode === "Diagnostic";
   const subtitle = activeSession
-    ? "Session in progress. Work the prompt, then submit your transcript for AI feedback."
+    ? isDiagnosticMode
+      ? "Complete the diagnostic transcript, then run baseline assessment."
+      : "Session in progress. Work the prompt, then submit your transcript for AI feedback."
     : "Configure a session, choose a mode, and start practicing.";
 
   return (
     <div className="min-h-screen w-full">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10">
         {/* Sidebar */}
-        <aside className="lg:w-72 lg:flex-shrink-0">
-          <div className="flex flex-col gap-5 lg:sticky lg:top-6">
+        <aside className="lg:w-[252px] lg:flex-shrink-0">
+          <div className="flex flex-col gap-4 lg:sticky lg:top-6">
             {/* Brand */}
             <div className={card}>
               <div className="flex flex-col items-start gap-3 p-5">
+                {/* Horizontal PNG wordmark. Width-based sizing keeps the
+                    aspect ratio intact regardless of the file's pixel
+                    dimensions. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/fonetik_logo_website.svg"
+                  src="/fonetik_logo.png"
                   alt="fonetik logo"
-                  className="h-9 w-auto"
+                  className="block h-auto w-full max-w-[220px] object-contain"
                 />
                 <div>
-                  <p className="text-sm font-medium text-[var(--brand-teal-ink)]">
+                  <p className="text-sm font-semibold tracking-tight text-[var(--brand-teal-ink)]">
                     Speak Better
                   </p>
                   <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
@@ -1297,40 +1408,116 @@ export default function Home() {
             </div>
 
             {/* Current level */}
-            <div className={card}>
-              <div className="px-5 py-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+            <div className="overflow-hidden rounded-2xl border border-[var(--brand-teal-ink)] bg-[var(--brand-teal-ink)] text-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
                   Current Level
                 </p>
-                <p className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                  {level}
+                <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
+                  {sessions.length === 0 ? "Day 1" : `${sessions.length} sessions`}
+                </span>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-2xl font-semibold tracking-tight">{level}</p>
+                <p className="mt-1 text-xs text-white/70">
+                  {LEVEL_PHASE[level]}
                 </p>
-                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                {nextLevelHint(level) && (
+                  <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-white/85">
+                    {nextLevelHint(level)}
+                  </p>
+                )}
+                <p className="mt-3 text-[11px] text-white/60">
                   Adjust in Session setup.
                 </p>
               </div>
             </div>
 
-            {/* Nav anchors (visual only for now) */}
+            {/* Grouped nav */}
             <nav className={card} aria-label="Sections">
-              <ul className="flex flex-col py-2 text-sm">
-                {[
-                  { href: "#practice", label: "Practice" },
-                  { href: "#history", label: "History" },
-                  { href: "#progress", label: "Progress" },
-                  { href: "#system", label: "System" },
-                ].map((item) => (
-                  <li key={item.href}>
-                    <a
-                      href={item.href}
-                      className="block px-5 py-2 text-[var(--brand-ink-soft)] transition-colors hover:bg-[var(--brand-surface-2)] hover:text-[var(--brand-teal-ink)]"
-                    >
-                      {item.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+              <SidebarGroup label="Practice">
+                <SidebarItem
+                  active={view === "active"}
+                  onClick={() => setView("active")}
+                >
+                  Active Session
+                </SidebarItem>
+                <SidebarItem
+                  active={view === "session-log"}
+                  onClick={() => setView("session-log")}
+                >
+                  Session Log
+                </SidebarItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="Analytics">
+                <SidebarItem
+                  active={view === "progress"}
+                  onClick={() => setView("progress")}
+                >
+                  Progress
+                </SidebarItem>
+                <SidebarItem
+                  active={view === "weekly-review"}
+                  onClick={() => setView("weekly-review")}
+                >
+                  Weekly Review
+                </SidebarItem>
+                <SidebarItem
+                  active={view === "diagnostic" || (view === "active" && mode === "Diagnostic")}
+                  onClick={handleSelectDiagnostic}
+                >
+                  Diagnostic
+                </SidebarItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="System">
+                <SidebarItem
+                  active={view === "mental-model"}
+                  onClick={() => setView("mental-model")}
+                >
+                  Mental Model
+                </SidebarItem>
+                <SidebarItem
+                  active={view === "settings"}
+                  onClick={() => setView("settings")}
+                >
+                  Settings
+                </SidebarItem>
+              </SidebarGroup>
             </nav>
+
+            {/* Day Streak (motivational, sidebar lower area) */}
+            <div className={card}>
+              <div className="px-5 py-4">
+                <div className="flex items-baseline justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
+                    Day Streak
+                  </p>
+                  <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
+                    Local
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <p className="font-mono text-3xl font-semibold tabular-nums text-[var(--brand-ink)]">
+                    {dayStreak}
+                  </p>
+                  <p className="text-xs text-[var(--brand-ink-soft)]">
+                    {dayStreak === 1 ? "day" : "days"}
+                  </p>
+                </div>
+                <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                  {dayStreak === 0
+                    ? "Complete a session today to start a streak."
+                    : "Don't break the chain. Keep practicing daily."}
+                </p>
+                <p className="mt-3 text-[11px] text-[var(--brand-muted)]">
+                  {sessions.length}{" "}
+                  {sessions.length === 1 ? "session" : "sessions"} stored
+                  locally · max 20
+                </p>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -1338,21 +1525,40 @@ export default function Home() {
         <main className="flex min-w-0 flex-1 flex-col gap-6">
           {/* Topbar */}
           <header
-            id="practice"
-            className={`${card} flex flex-col gap-1 px-6 py-5`}
+            className={`${card} sticky top-2 z-10 flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between`}
           >
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-              fonetik · Active Practice
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight text-[var(--brand-ink)] sm:text-3xl">
-              Active Practice
-            </h1>
-            <p className="text-sm text-[var(--brand-ink-soft)]">{subtitle}</p>
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                fonetik · {viewSubtitle(view)}
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
+                {viewTitle(view)}
+              </h1>
+              <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                {view === "active" ? subtitle : viewDescription(view)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
+                {activeSession ? "Session active" : "Idle"}
+              </span>
+              <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
+                {mode}
+              </span>
+              <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
+                {level}
+              </span>
+            </div>
           </header>
+
+          {/* ===================== Active Session view ===================== */}
+          {view === "active" && (
+            <>
 
           {/* Active Session Hero (only when active) */}
           {activeSession && (
-            <section className={`${card} overflow-hidden`}>
+            <section className={`${card} overflow-hidden border-l-4 border-l-[var(--brand-teal)]`}>
               <div className={cardHeader}>
                 <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
                   Active session
@@ -2175,71 +2381,193 @@ export default function Home() {
             </section>
           )}
 
-          {/* Recent Sessions */}
-          {sessions.length > 0 && (
-            <section id="history" className={card}>
+            </>
+          )}
+
+          {/* ===================== Session Log view ===================== */}
+          {view === "session-log" && (
+            <section className={card}>
               <div className={`${cardHeader} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
                     History
                   </p>
                   <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                    Recent sessions
+                    Session Log
                   </h2>
                   <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                    Showing the {Math.min(sessions.length, 5)} most recent of{" "}
-                    {sessions.length} stored.
+                    {sessions.length === 0
+                      ? "No sessions stored yet. Complete one from Active Session to populate this log."
+                      : `Showing the ${Math.min(sessions.length, 5)} most recent of ${sessions.length} stored.`}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleCopyLastCsv}
-                    className={buttonSecondary}
-                  >
-                    Copy Last CSV
-                  </button>
-                  {lastCsvCopied && (
-                    <span
-                      role="status"
-                      className="text-xs font-medium text-[var(--brand-teal-ink)]"
+                {sessions.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCopyLastCsv}
+                      className={buttonSecondary}
                     >
-                      Copied
-                    </span>
-                  )}
-                </div>
+                      Copy Last CSV
+                    </button>
+                    {lastCsvCopied && (
+                      <span
+                        role="status"
+                        className="text-xs font-medium text-[var(--brand-teal-ink)]"
+                      >
+                        Copied
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className={cardBody}>
-                <ul className="flex flex-col gap-3">
-                  {sessions.slice(0, 5).map((s) => (
-                    <li
-                      key={s.id}
-                      className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
+                {sessions.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center">
+                    <p className="text-sm text-[var(--brand-ink-soft)]">
+                      Your completed sessions will appear here.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setView("active")}
+                      className={`${buttonSecondary} mt-4`}
                     >
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-[var(--brand-ink-soft)]">
-                        <span className="font-mono text-[var(--brand-ink)]">
-                          {s.date}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span>{s.level}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{s.mode}</span>
-                      </div>
-                      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                        <SummaryCell
-                          label="Main Weakness"
-                          value={s.mainWeakness}
-                          multiline
-                        />
-                        <SummaryCell
-                          label="Next Target"
-                          value={s.retryTask}
-                          multiline
-                        />
-                      </dl>
-                    </li>
-                  ))}
-                </ul>
+                      Go to Active Session
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="flex flex-col gap-3">
+                    {sessions.slice(0, 5).map((s) => (
+                      <li
+                        key={s.id}
+                        className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
+                      >
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-[var(--brand-ink-soft)]">
+                          <span className="font-mono text-[var(--brand-ink)]">
+                            {s.date}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span>{s.level}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{s.mode}</span>
+                        </div>
+                        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                          <SummaryCell
+                            label="Main Weakness"
+                            value={s.mainWeakness}
+                            multiline
+                          />
+                          <SummaryCell
+                            label="Next Target"
+                            value={s.retryTask}
+                            multiline
+                          />
+                        </dl>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* ===================== Progress view ===================== */}
+          {view === "progress" && (
+            <section className={card}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  Analytics
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Progress
+                </h2>
+                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                  Simple counts based on the sessions stored in your browser.
+                </p>
+              </div>
+              <div className={cardBody}>
+                {sessions.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center">
+                    <p className="text-sm text-[var(--brand-ink-soft)]">
+                      Complete at least one session to see progress.
+                    </p>
+                  </div>
+                ) : (
+                  <ProgressView sessions={sessions} dayStreak={dayStreak} />
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* ===================== Weekly Review (placeholder) ===================== */}
+          {view === "weekly-review" && (
+            <section className={`${card} opacity-90`}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+                  Coming soon
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Weekly Review
+                </h2>
+                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                  A weekly digest is planned for a future batch. Until then, use
+                  Session Log and Progress.
+                </p>
+              </div>
+              <div className={cardBody}>
+                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center text-sm text-[var(--brand-ink-soft)]">
+                  Not implemented yet.
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ===================== Mental Model (placeholder) ===================== */}
+          {view === "mental-model" && (
+            <section className={`${card} opacity-90`}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+                  Coming soon
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Mental Model
+                </h2>
+                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                  Notes about your speaking habits will live here in a future
+                  batch.
+                </p>
+              </div>
+              <div className={cardBody}>
+                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center text-sm text-[var(--brand-ink-soft)]">
+                  Not implemented yet.
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ===================== Settings (placeholder) ===================== */}
+          {view === "settings" && (
+            <section className={`${card} opacity-90`}>
+              <div className={cardHeader}>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+                  Coming soon
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+                  Settings
+                </h2>
+                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                  Provider keys are configured in{" "}
+                  <code className="rounded bg-[var(--brand-surface-2)] px-1 py-0.5 font-mono text-xs">
+                    .env.local
+                  </code>
+                  . A UI for non-secret preferences is planned for a future
+                  batch.
+                </p>
+              </div>
+              <div className={cardBody}>
+                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center text-sm text-[var(--brand-ink-soft)]">
+                  Not implemented yet.
+                </div>
               </div>
             </section>
           )}
@@ -2316,6 +2644,220 @@ function SummaryCell({
       >
         {value}
       </dd>
+    </div>
+  );
+}
+
+// ---------- Sidebar helpers ----------
+
+type SidebarGroupProps = {
+  label: string;
+  children: ReactNode;
+};
+
+function SidebarGroup({ label, children }: SidebarGroupProps) {
+  return (
+    <div className="px-2 py-2">
+      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+        {label}
+      </p>
+      <ul className="flex flex-col">{children}</ul>
+    </div>
+  );
+}
+
+type SidebarItemProps = {
+  active?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+};
+
+function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
+  const base =
+    "w-full rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]";
+  const activeClass =
+    "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-medium";
+  const idleClass =
+    "text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface-2)] hover:text-[var(--brand-ink)]";
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-current={active ? "page" : undefined}
+        className={`${base} ${active ? activeClass : idleClass}`}
+      >
+        {children}
+      </button>
+    </li>
+  );
+}
+
+// ---------- Topbar copy helpers ----------
+// Pure functions used by the topbar; defined at module scope so they don't
+// rebuild on every render.
+function viewTitle(view: string): string {
+  switch (view) {
+    case "active":
+      return "Active Practice";
+    case "session-log":
+      return "Session Log";
+    case "progress":
+      return "Progress";
+    case "weekly-review":
+      return "Weekly Review";
+    case "diagnostic":
+      return "Diagnostic";
+    case "mental-model":
+      return "Mental Model";
+    case "settings":
+      return "Settings";
+    default:
+      return "fonetik";
+  }
+}
+
+function viewSubtitle(view: string): string {
+  switch (view) {
+    case "active":
+      return "Active Session";
+    case "session-log":
+      return "Session Log";
+    case "progress":
+      return "Progress";
+    case "weekly-review":
+      return "Weekly Review";
+    case "diagnostic":
+      return "Diagnostic";
+    case "mental-model":
+      return "Mental Model";
+    case "settings":
+      return "Settings";
+    default:
+      return "fonetik";
+  }
+}
+
+function viewDescription(view: string): string {
+  switch (view) {
+    case "session-log":
+      return "Review your most recent practice sessions.";
+    case "progress":
+      return "Lightweight overview based on stored session history.";
+    case "weekly-review":
+      return "Reserved for a future batch.";
+    case "mental-model":
+      return "Reserved for a future batch.";
+    case "settings":
+      return "Reserved for a future batch.";
+    default:
+      return "";
+  }
+}
+
+// ---------- Progress view ----------
+// Pure rendering helper. Reads only what is already in `sessions` state and
+// draws simple CSS bars for mode counts. No charting libraries.
+type ProgressViewProps = {
+  sessions: SessionRecord[];
+  dayStreak: number;
+};
+
+function ProgressView({ sessions, dayStreak }: ProgressViewProps) {
+  const total = sessions.length;
+  const modeCounts = sessions.reduce<Record<string, number>>((acc, s) => {
+    acc[s.mode] = (acc[s.mode] ?? 0) + 1;
+    return acc;
+  }, {});
+  const levelCounts = sessions.reduce<Record<string, number>>((acc, s) => {
+    acc[s.level] = (acc[s.level] ?? 0) + 1;
+    return acc;
+  }, {});
+  const maxModeCount = Math.max(1, ...Object.values(modeCounts));
+  const maxLevelCount = Math.max(1, ...Object.values(levelCounts));
+
+  return (
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+          Sessions completed
+        </p>
+        <p className="font-mono text-3xl font-semibold tabular-nums text-[var(--brand-ink)]">
+          {total}
+        </p>
+        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+          Stored locally · max 20
+        </p>
+      </div>
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
+          Day Streak
+        </p>
+        <p className="font-mono text-3xl font-semibold tabular-nums text-[var(--brand-ink)]">
+          {dayStreak}
+        </p>
+        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+          {dayStreak === 0
+            ? "Practice today to start"
+            : "Consecutive practice days"}
+        </p>
+      </div>
+      <div>
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+          Latest session
+        </p>
+        <p className="text-sm text-[var(--brand-ink)]">
+          {sessions[0]
+            ? `${sessions[0].date} · ${sessions[0].mode}`
+            : "No data"}
+        </p>
+      </div>
+
+      <div className="sm:col-span-3">
+        <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+          Sessions by mode
+        </p>
+        <ul className="space-y-2">
+          {Object.entries(modeCounts).map(([mode, count]) => (
+            <li key={mode} className="flex items-center gap-3 text-sm">
+              <span className="w-36 shrink-0 text-[var(--brand-ink)]">
+                {mode}
+              </span>
+              <span
+                aria-hidden="true"
+                className="h-2 rounded-full bg-[var(--brand-teal)]/70"
+                style={{ width: `${(count / maxModeCount) * 60}%` }}
+              />
+              <span className="ml-auto font-mono text-xs tabular-nums text-[var(--brand-ink-soft)]">
+                {count}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="sm:col-span-3">
+        <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+          Sessions by level
+        </p>
+        <ul className="space-y-2">
+          {Object.entries(levelCounts).map(([level, count]) => (
+            <li key={level} className="flex items-center gap-3 text-sm">
+              <span className="w-36 shrink-0 text-[var(--brand-ink)]">
+                {level}
+              </span>
+              <span
+                aria-hidden="true"
+                className="h-2 rounded-full bg-[var(--brand-gold)]/70"
+                style={{ width: `${(count / maxLevelCount) * 60}%` }}
+              />
+              <span className="ml-auto font-mono text-xs tabular-nums text-[var(--brand-ink-soft)]">
+                {count}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
