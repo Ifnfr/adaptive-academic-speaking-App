@@ -146,3 +146,16 @@ verify the behavior.
 - [ ] Diagnostic Mode does NOT add a new entry to localStorage `adaptive-speaking-app:sessions`
 - [ ] Recent Sessions and Previous Weakness panels are unaffected by running a diagnostic
 - [ ] Provider errors (rate limit, key rejected, model unavailable) show short friendly messages, never raw JSON
+
+## 12. Level-Up Check
+
+> Note: Level-Up Check is a deterministic, local rule-based feature. It reads
+> only existing session CSV strings from localStorage and does not call AI.
+
+- [ ] Level-Up Check appears in the Analytics sidebar and opens the Progress view
+- [ ] Progress shows Current Level, Next Level, Status, Evidence, Missing requirements, and Recommended next action
+- [ ] Malformed or incomplete session CSV entries are ignored without crashing
+- [ ] Almost ready appears only when enough valid sessions exist and averages are close to the thresholds
+- [ ] Expert shows Max level reached and no Apply Next Level button
+- [ ] Apply Next Level appears only when status is Ready and updates only Level, Today's Target, and view
+- [ ] Applying the next level does NOT change localStorage history or CSV data
