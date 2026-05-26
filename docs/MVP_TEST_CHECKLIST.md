@@ -45,6 +45,7 @@ verify the behavior.
 - [ ] If the model returns a missing or out-of-range score, the UI shows 3/5 for that dimension (server-side clamp + fallback)
 - [ ] Evidence references a moment from the user's transcript (not generic)
 - [ ] Foundation level does NOT receive grammar or vocabulary corrections
+- [ ] Foundation feedback uses simple, concrete guidance; the Better Phrase is short/repeatable and the Retry Task is doable in 30-60 seconds
 
 ## 4. Retry Loop
 
@@ -191,5 +192,6 @@ verify the behavior.
 - [ ] Successful result shows Core Standard, Quality Criteria, Weak Pattern, Strong Pattern, Self-Check Questions, Micro Drill, and Reference Model
 - [ ] The route rejects malformed JSON, invalid criteria/question counts, or an overly long reference model with a friendly error
 - [ ] Mental Model accepts valid JSON returned inside markdown code fences or short surrounding provider text
+- [ ] Foundation Mental Model output uses simple speaking standards and avoids abstract theory, counterarguments, advanced vocabulary lists, and essay-like structure
 - [ ] The UI does not provide a copy/use-as-answer action for the reference model
 - [ ] Running Mental Model does NOT change localStorage history, CSV data, feedback, diagnostic, weekly review, retry, or speech input behavior

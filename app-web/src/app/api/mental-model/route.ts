@@ -63,7 +63,19 @@ function buildSystemPrompt(): string {
   ].join("\n");
 }
 
+function levelGuidance(level: Level): string {
+  if (level !== "Foundation") return "";
+  return [
+    "FOUNDATION GUIDANCE:",
+    "- Use simple wording that a beginner can understand.",
+    "- Teach simple speaking standards: one clear topic sentence, one idea at a time, subject + verb clarity, a simple reason using \"because\", a simple example, a 30-60 second speaking target, and a clear ending sentence.",
+    "- Avoid abstract academic theory, counterarguments, complex evidence evaluation, advanced academic vocabulary lists, long reference models, and essay-like structure.",
+    "- The referenceModel must be short, generic, and only a pattern sample. It must not sound like a polished full answer.",
+  ].join("\n");
+}
+
 function buildUserPrompt(req: MentalModelRequest): string {
+  const guidance = levelGuidance(req.level);
   return [
     "LEARNER CONTEXT:",
     `- Level: ${req.level}`,
@@ -72,6 +84,7 @@ function buildUserPrompt(req: MentalModelRequest): string {
     `- Latest weakness: ${req.latestWeakness || "(not available)"}`,
     `- Latest retry task: ${req.latestRetryTask || "(not available)"}`,
     "",
+    ...(guidance ? [guidance, ""] : []),
     "TASK:",
     "1. Explain the core standard for this level/mode/focus.",
     "2. Give 3-5 quality criteria the learner should listen for.",

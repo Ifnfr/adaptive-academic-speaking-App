@@ -83,6 +83,11 @@ function buildSystemPrompt(level: string): string {
           "- Do NOT judge vocabulary choice.",
           "- Do NOT judge argument strength or academic tone.",
           "- Focus ONLY on speaking continuity, clarity, and basic coherence.",
+          "- Keep feedback simple, concrete, and repeatable.",
+          "- Focus on clarity, complete simple sentences, simple structure, basic fluency, and one correction at a time.",
+          "- betterPhrase must be simple, repeatable, not overly academic, and not longer than necessary.",
+          "- retryTask must be doable in 30-60 seconds and give one clear speaking instruction.",
+          "- Do NOT ask for complex argument, research, evidence-heavy work, counterarguments, abstract academic framing, advanced vocabulary upgrades, complex grammar explanations, or long polished paragraph rewrites.",
           '- The "scores" object MUST contain exactly: fluency, coherence.',
           "- Do NOT include grammar, vocabulary, argument, or academicTone keys.",
         ].join("\n")
