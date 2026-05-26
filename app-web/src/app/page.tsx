@@ -380,6 +380,24 @@ function normalizeArticlePracticeSourceUrl(value: string): string {
   }
 }
 
+function buildArticleSpeakingTarget(result: ArticlePracticeResult): string {
+  const vocabularyWords = result.usefulVocabulary
+    .map((item) => item.word.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  return [
+    `Article speaking task: ${result.speakingTask.title}`,
+    `Source: ${result.sourceTitle} (${result.sourceDomain})`,
+    `Instruction: ${result.speakingTask.instruction}`,
+    `Target structure: ${result.speakingTask.targetStructure.join(" -> ")}`,
+    `Useful vocabulary to try: ${
+      vocabularyWords.length > 0 ? vocabularyWords.join(", ") : "none suggested"
+    }`,
+    `Open the original article if you need to reread it: ${result.sourceUrl}`,
+  ].join("\n");
+}
+
 function createEarnedBadge(definition: BadgeDefinition): Badge {
   return {
     version: 1,
@@ -753,6 +771,8 @@ export default function Home() {
   const [articlePracticeError, setArticlePracticeError] = useState<
     string | null
   >(null);
+  const [articlePracticeBridgeMessage, setArticlePracticeBridgeMessage] =
+    useState<string | null>(null);
 
   // --- Retry loop state ---
   const [retryTranscript, setRetryTranscript] = useState("");
@@ -1155,6 +1175,7 @@ export default function Home() {
     setMode(coachRecommendation.recommendedMode);
     setSessionType(coachRecommendation.recommendedSessionType);
     setTarget(coachRecommendation.focus);
+    setArticlePracticeBridgeMessage(null);
   };
 
   const handleApplyLevelUp = () => {
@@ -1165,6 +1186,7 @@ export default function Home() {
     setTarget(
       `Start ${levelUpCheck.nextLevel} practice with clear structure and steady evidence.`,
     );
+    setArticlePracticeBridgeMessage(null);
     setView("active");
     awardGamificationEvent(
       "level_up_applied",
@@ -1197,6 +1219,22 @@ export default function Home() {
     };
   }, [isTimerRunning]);
 
+  const handleTargetChange = (value: string) => {
+    setTarget(value);
+    setArticlePracticeBridgeMessage(null);
+  };
+
+  const handlePracticeArticleSpeakingTask = (result: ArticlePracticeResult) => {
+    setTarget(buildArticleSpeakingTarget(result));
+    setMode("Reading-to-Speaking");
+    setView("active");
+    setArticlePracticeBridgeMessage(
+      activeSession
+        ? "Article speaking task copied to Session setup. Click Restart Session when you are ready to switch tasks."
+        : "Article speaking task copied to Session setup. Click Start Session when ready.",
+    );
+  };
+
   const handleStart = () => {
     const userTypedTarget = target.trim();
     const fallbackTarget = previousSession?.retryTask?.trim() ?? "";
@@ -1204,6 +1242,7 @@ export default function Home() {
       userTypedTarget.length === 0 && fallbackTarget.length > 0;
     const finalTarget = shouldAutoFill ? fallbackTarget : target;
 
+    setArticlePracticeBridgeMessage(null);
     setActiveSession({
       level,
       mode,
@@ -1742,6 +1781,7 @@ export default function Home() {
     if (!diagnosticResult) return;
     setLevel(diagnosticResult.recommendedLevel);
     setTarget(diagnosticResult.mainBottleneck);
+    setArticlePracticeBridgeMessage(null);
   };
 
   // Selecting "Diagnostic" from the sidebar pre-selects the diagnostic mode
@@ -1932,6 +1972,14 @@ export default function Home() {
           )}
 
           {/* Session Setup (hidden visually demoted while active but kept for restart) */}
+          {articlePracticeBridgeMessage && (
+            <div
+              role="status"
+              className="rounded-xl border border-[var(--brand-teal)]/30 bg-[var(--brand-teal-soft)] px-4 py-3 text-sm text-[var(--brand-teal-ink)]"
+            >
+              {articlePracticeBridgeMessage}
+            </div>
+          )}
           <SessionSetup
             level={level}
             mode={mode}
@@ -1951,7 +1999,7 @@ export default function Home() {
             onFeedbackTypeChange={(value) => setFeedbackType(value as FeedbackType)}
             onSessionTypeChange={(value) => setSessionType(value as SessionType)}
             onAiProviderChange={(value) => setAiProvider(value as AIProvider)}
-            onTargetChange={setTarget}
+            onTargetChange={handleTargetChange}
             onStartSession={handleStart}
           />
           {/* Coach + Previous Weakness (only before a session is active) */}
@@ -2126,6 +2174,7 @@ export default function Home() {
               onArticleUrlChange={setArticleUrl}
               onArticleFocusChange={setArticleFocus}
               onGenerateArticlePractice={handleGenerateArticlePractice}
+              onPracticeSpeakingTask={handlePracticeArticleSpeakingTask}
               onSaveVocabularyCandidate={handleSaveArticleVocabularyCandidate}
             />
           )}

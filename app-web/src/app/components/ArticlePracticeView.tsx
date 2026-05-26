@@ -37,6 +37,7 @@ type ArticlePracticeViewProps = {
   onArticleUrlChange: (value: string) => void;
   onArticleFocusChange: (value: string) => void;
   onGenerateArticlePractice: () => void;
+  onPracticeSpeakingTask: (result: ArticlePracticeResult) => void;
   onSaveVocabularyCandidate: (candidate: {
     word: string;
     meaning: string;
@@ -85,6 +86,7 @@ export function ArticlePracticeView({
   onArticleUrlChange,
   onArticleFocusChange,
   onGenerateArticlePractice,
+  onPracticeSpeakingTask,
   onSaveVocabularyCandidate,
 }: ArticlePracticeViewProps) {
   const isWordSaved = (word: string): boolean => {
@@ -332,6 +334,19 @@ export function ArticlePracticeView({
                     ),
                   )}
                 </ul>
+              </div>
+              <div className="mt-5 flex flex-col gap-2 border-t border-[var(--brand-border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-[var(--brand-ink-soft)]">
+                  Send this task to Active Session. You will still start the
+                  session yourself.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onPracticeSpeakingTask(articlePracticeResult)}
+                  className={`${buttonPrimary} w-full sm:w-auto`}
+                >
+                  Practice This Speaking Task
+                </button>
               </div>
             </div>
 
