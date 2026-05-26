@@ -1,63 +1,74 @@
-# Setup Guide
+# fonetik Setup Guide
 
-A step-by-step walkthrough for getting the Adaptive Academic Speaking App
-running on your own machine. Aimed at first-time setup.
+This guide walks through running fonetik locally for the first time.
 
-## 1. Install Node.js LTS
+Product name: **fonetik**  
+Tagline: **Speak Better**  
+Description: **AI-Powered academic speaking practice**
 
-Download and install the current LTS version from https://nodejs.org/. After
-installation, open a new terminal and verify:
+## 1. Install Node.js
+
+Install the current Node.js LTS version from:
+
+```text
+https://nodejs.org/
+```
+
+Open a new terminal and check:
 
 ```bash
 node --version
 npm --version
 ```
 
-Both commands should print a version number. If they don't, restart the
-terminal (or your machine) and try again.
+Both commands should print version numbers.
 
-## 2. Open the project
+## 2. Open the Project
 
-Open the project folder (`adaptive-academic-speaking-app`) in your editor:
+Open the repository folder:
 
-- **VS Code**: File → Open Folder → select the folder.
-- **Kiro**: File → Open Folder → select the folder.
+```text
+adaptive-academic-speaking-app
+```
 
-You should see `app-web/`, `docs/`, and `README.md` at the top level.
+You should see:
 
-## 3. Move into the `app-web` folder
+- `app-web/`
+- `docs/`
+- `README.md`
 
-All commands below assume you are inside `app-web`. Open a terminal at the
-project root and run:
+The app itself lives in `app-web`.
+
+## 3. Install Dependencies
+
+From the project root:
 
 ```bash
 cd app-web
-```
-
-## 4. Install dependencies
-
-```bash
 npm install
 ```
 
-This downloads everything listed in `app-web/package.json` into
-`app-web/node_modules`. It only needs to run once, or whenever dependencies
-change.
+This creates `app-web/node_modules/`.
 
-## 5. Create `.env.local`
+## 4. Create `.env.local`
 
-The app reads API keys from environment variables. Copy the example file:
+Still inside `app-web`, copy the example env file.
+
+Windows cmd:
 
 ```bash
-# Windows (cmd)
 copy .env.example .env.local
+```
 
-# macOS / Linux
+macOS or Linux:
+
+```bash
 cp .env.example .env.local
 ```
 
-Open `app-web/.env.local` in your editor and fill the keys for the providers
-you want to use. Leave the others blank.
+Open `app-web/.env.local` and add the provider keys you have.
+
+Use placeholders like this:
 
 ```env
 CLAUDE_API_KEY=
@@ -66,29 +77,12 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.0-flash
 ```
 
-You only need one key to use the app. Pick the provider you have access to.
+You only need one provider key to test AI features. Leave providers you do not
+use blank.
 
-## 6. Add a Gemini API key (example)
+Do not use real keys in documentation, screenshots, commits, or issue reports.
 
-If you don't already have one:
-
-1. Go to https://aistudio.google.com/app/apikey.
-2. Sign in with your Google account.
-3. Click **Create API key** and copy the value (starts with `AIza`).
-4. Paste it into `app-web/.env.local`:
-
-   ```env
-   GEMINI_API_KEY=AIza...your-key...
-   GEMINI_MODEL=gemini-2.0-flash
-   ```
-
-5. Save the file.
-
-The same general flow works for Claude (https://console.anthropic.com/) and
-DeepSeek (https://platform.deepseek.com/). Use the variable name that matches
-your provider.
-
-## 7. Run the dev server
+## 5. Run the App
 
 From inside `app-web`:
 
@@ -96,80 +90,125 @@ From inside `app-web`:
 npm run dev
 ```
 
-You should see output similar to:
+Open:
 
+```text
+http://localhost:3000
 ```
-- Local:        http://localhost:3000
-- Ready in ...
-```
 
-Open http://localhost:3000 in your browser.
+If you edit `.env.local`, stop the dev server with `Ctrl+C`, then run
+`npm run dev` again.
 
-If you change `.env.local` later, **stop and restart** `npm run dev`.
-Environment variables are not hot-reloaded.
+## 6. Turbopack or Cache Fallback
 
-## 8. Test the app
-
-A short manual run-through:
-
-1. Pick a Level, Mode, Feedback Type, Session Type, and AI Provider.
-2. Optionally type a Today's Target. Click **Start Session**.
-3. Click **Start Timer** and speak (or just watch the clock advance).
-4. Type or paste your transcript and click **Submit Attempt**.
-5. Click **Get AI Feedback**. The Quick Feedback panel should appear.
-6. Type a retry transcript and click **Submit Retry**.
-7. Click **End Session**. The CSV row appears. Click **Copy CSV** to verify.
-8. Reload the page. The Recent Sessions panel and Previous Weakness panel
-   should still show your last session.
-
-For the full checklist see [`MVP_TEST_CHECKLIST.md`](MVP_TEST_CHECKLIST.md).
-
-## 9. Common errors
-
-### `npm run dev` fails with `ENOENT package.json`
-
-You're in the wrong folder. Run `cd app-web` first.
-
-### Error banner: `Missing API key for selected provider. Add it to .env.local.`
-
-Either no key is set for the selected provider, or `.env.local` was edited
-without restarting the dev server. Stop the server (Ctrl+C), confirm the key
-is in `app-web/.env.local`, then run `npm run dev` again.
-
-### Error banner: `Gemini model not available. Check GEMINI_MODEL in .env.local.`
-
-The model name in `GEMINI_MODEL` is not enabled for your key, or it's
-misspelled. Try `gemini-2.0-flash` or `gemini-1.5-flash-latest`. To list models
-your key can use:
+If the dev server has Turbopack/cache problems, try:
 
 ```bash
-curl "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_KEY"
+npm run dev -- --webpack
 ```
 
-Restart the dev server after editing `.env.local`.
+If the problem continues, stop the server, remove the generated `.next` cache,
+and start again. Do not commit `.next`.
 
-### `.env.local` is set but the app still says the key is missing
+## 7. Quick Smoke Test
 
-This almost always means the dev server was not restarted after the file was
-saved. Stop with Ctrl+C, run `npm run dev` again. Confirm the file is named
-exactly `.env.local` (not `.env.local.txt`) and that it lives in
-`app-web/.env.local`, not the project root.
+1. Choose a Level, Mode, Feedback Type, Session Type, and AI Provider.
+2. Add a short Today's Target.
+3. Click **Start Session**.
+4. Use the local Speaking Prompt.
+5. Start the timer, speak, then type or use browser speech-to-text.
+6. Submit the attempt.
+7. Click **Get AI Feedback**.
+8. Submit a Retry.
+9. End the session and copy the CSV.
+10. Open Session Log and confirm the session appears.
 
-### Port 3000 is already in use
+For the full QA list, see [MVP_TEST_CHECKLIST.md](MVP_TEST_CHECKLIST.md).
 
-Another `next dev` is probably still running. Either close that terminal, or
-let Next.js pick the next free port (it usually offers `3001`).
+## Common Errors
 
-### PowerShell refuses to run `npm` with a script policy error
+### Missing API key
 
-Run npm via `cmd` instead:
+Message:
+
+```text
+Missing API key for selected provider. Add it to .env.local.
+```
+
+Check:
+
+- The selected provider has a key in `app-web/.env.local`.
+- The file is named exactly `.env.local`.
+- The file is inside `app-web`, not the project root.
+- The dev server was restarted after editing `.env.local`.
+
+### Provider model unavailable
+
+Message:
+
+```text
+Gemini model not available. Check GEMINI_MODEL in .env.local.
+```
+
+Check:
+
+- `GEMINI_MODEL` is spelled correctly.
+- Your key has access to that model.
+- The dev server was restarted after changing `.env.local`.
+
+You can leave `GEMINI_MODEL` as the documented placeholder unless you know you
+need a different model.
+
+### Port 3000 already used
+
+Another dev server may already be running.
+
+Options:
+
+- Stop the other server with `Ctrl+C`.
+- Use the alternate port that Next.js offers.
+- Start manually on another port:
+
+```bash
+npm run dev -- -p 3001
+```
+
+### `.next` cache or OneDrive issues
+
+If the app behaves strangely, especially inside OneDrive folders:
+
+1. Stop the dev server.
+2. Delete `app-web/.next`.
+3. Run `npm run dev` again.
+4. If needed, try `npm run dev -- --webpack`.
+
+Do not commit `.next`.
+
+### PowerShell execution policy
+
+If PowerShell blocks npm or npx scripts, use the `.cmd` shims:
+
+```powershell
+npm.cmd run dev
+npm.cmd install
+npx.cmd tsc --noEmit
+```
+
+You can also run through cmd:
 
 ```bash
 cmd /c npm run dev
 ```
 
-Or change PowerShell execution policy for the current user (one time):
+### Browser speech input unavailable
 
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
+Speech input depends on the browser. If the browser does not support it, fonetik
+shows a safe fallback message and you can type or paste the transcript manually.
+
+## Security Reminders
+
+- Do not commit `.env.local`.
+- Do not share real API keys in screenshots.
+- Do not add provider keys with `NEXT_PUBLIC_`.
+- Provider keys stay server-side in Next.js API routes.
+- The app stores session history in browser localStorage, not in a cloud database.

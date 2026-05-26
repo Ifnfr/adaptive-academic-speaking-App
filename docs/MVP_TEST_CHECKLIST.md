@@ -1,21 +1,46 @@
-# MVP Test Checklist
+# fonetik MVP Test Checklist
 
-Manual checks to run before declaring the MVP stable. Tick each box as you
-verify the behavior.
+Manual checks to run before declaring the local MVP stable.
 
-## 1. Session Setup
+## 1. App Shell and Navigation
 
-- [ ] User can select Level (Foundation, Beginner, Intermediate, Advanced, Expert)
-- [ ] User can select Mode (Fluency Sprint, Argument Drill, Reading-to-Speaking, Debate, Diagnostic)
-- [ ] User can select Feedback Type (Quick, Deep)
-- [ ] User can select Session Type (Micro, Standard, Deep)
-- [ ] User can select AI Provider (Claude, DeepSeek, Gemini)
+- [ ] Sidebar renders the fonetik logo, Speak Better tagline, Current Level card, nav groups, and Day Streak card
+- [ ] Topbar title, subtitle, active/idle chip, mode chip, and level chip update correctly
+- [ ] Active Session opens from the sidebar
+- [ ] Session Log opens from the sidebar
+- [ ] Progress opens from the sidebar
+- [ ] Level-Up Check opens the Progress view
+- [ ] Weekly Review opens from the sidebar
+- [ ] Diagnostic shortcut selects Diagnostic mode and opens Active Session
+- [ ] Mental Model opens from the sidebar
+- [ ] Settings placeholder opens from the sidebar
+- [ ] Article Practice is not shown as an implemented feature
+
+## 2. Session Setup
+
+- [ ] User can select Level: Foundation, Beginner, Intermediate, Advanced, Expert
+- [ ] User can select Mode: Fluency Sprint, Argument Drill, Reading-to-Speaking, Debate, Diagnostic
+- [ ] Diagnostic mode card is visible and clearly marked as assessment
+- [ ] User can select Feedback Type: Quick, Deep
+- [ ] User can select Session Type: Micro, Standard, Deep
+- [ ] User can select AI Provider: Claude, DeepSeek, Gemini
 - [ ] User can type a Today's Target
-- [ ] Start Session button is visible and labelled correctly
+- [ ] Start Session button is visible
 - [ ] After Start Session, the button becomes Restart Session
-- [ ] If no history exists, the empty-state note about weakness repetition is shown
+- [ ] Current setup values remain controlled when navigating away and back
 
-## 2. Speaking Attempt
+## 3. Prompt Generation
+
+- [ ] Normal modes render a local Speaking Prompt after Start Session
+- [ ] Speaking Prompt shows task, constraints, target structure, and time limit
+- [ ] Diagnostic mode renders the A/B/C diagnostic prompt
+- [ ] Diagnostic prompt does not include sample answers
+- [ ] Regenerate Local Prompt works
+- [ ] Regenerate Local Prompt does not clear the transcript
+- [ ] Regenerate Local Prompt does not reset the timer
+- [ ] Local prompt generation does not call an AI API
+
+## 4. Speaking Attempt and Speech Input
 
 - [ ] Active Session panel shows the chosen setup values
 - [ ] Timer starts at 00:00 and counts up
@@ -23,175 +48,173 @@ verify the behavior.
 - [ ] Stop Timer pauses the count
 - [ ] Reset Timer returns to 00:00
 - [ ] User can type or paste a transcript
+- [ ] Speech input controls appear when the browser supports speech recognition
+- [ ] Start Speech Input begins listening and appends recognized text to the transcript
+- [ ] Stop Speech Input stops listening
+- [ ] Unsupported browsers show a safe fallback and manual transcript input still works
+- [ ] Speech errors show a short friendly message
 - [ ] Submit Attempt is disabled when transcript is empty or whitespace only
 - [ ] Submit Attempt becomes enabled after typing real text
-- [ ] After submit, the Speaking attempt panel disappears
+- [ ] Captured Attempt shows duration, word count, and transcript preview
 
-## 3. AI Feedback
+## 5. AI Feedback
 
-> Note: only Quick Feedback is implemented. The "Deep" Feedback Type option in
-> Session setup is accepted by the UI but routes through the same Quick
-> Feedback prompt; a dedicated deep-analysis mode is a future batch.
+> Quick Feedback is implemented. The Deep Feedback setup option currently uses
+> the same Quick Feedback route; dedicated Deep Feedback is future work.
 
-- [ ] Attempt Captured panel shows duration and transcript preview
-- [ ] Get AI Feedback button is visible and enabled after capture
+- [ ] Get AI Feedback button appears after capturing a normal attempt
 - [ ] While loading, button is disabled and reads "Generating feedback..."
-- [ ] Successful response shows Main Weakness, Evidence, Better Phrase, Retry Task, Provider Used
-- [ ] Successful response also shows a Scores section in the Quick Feedback panel
+- [ ] Successful response shows Main Weakness, Evidence, Better Phrase, Retry Task, Provider Used, and Scores
 - [ ] Foundation Scores show only Fluency and Coherence
 - [ ] Beginner Scores show Fluency, Grammar, and Coherence
-- [ ] Intermediate / Advanced / Expert Scores show all six dimensions (Fluency, Grammar, Vocabulary, Coherence, Argument, Academic Tone)
+- [ ] Intermediate, Advanced, and Expert Scores show all six dimensions
 - [ ] Each score is an integer between 1 and 5
-- [ ] If the model returns a missing or out-of-range score, the UI shows 3/5 for that dimension (server-side clamp + fallback)
-- [ ] Evidence references a moment from the user's transcript (not generic)
-- [ ] Foundation level does NOT receive grammar or vocabulary corrections
-- [ ] Foundation feedback uses simple, concrete guidance; the Better Phrase is short/repeatable and the Retry Task is doable in 30-60 seconds
+- [ ] Missing or invalid scores fall back safely to 3 for that dimension
+- [ ] Evidence references a real moment from the transcript
+- [ ] Foundation feedback does not correct grammar or vocabulary directly
+- [ ] Foundation Better Phrase is short, simple, and repeatable
+- [ ] Foundation Retry Task is doable in 30-60 seconds
 
-## 4. Retry Loop
+## 6. Retry Loop
 
 - [ ] Retry Attempt panel appears after feedback
 - [ ] Retry task from feedback is shown above the textarea
 - [ ] Submit Retry is disabled when retry transcript is empty
 - [ ] After Submit Retry, Retry Captured panel appears
-- [ ] Retry Captured shows the transcript preview and the message "Retry saved. You can now end the session."
+- [ ] Retry Captured shows transcript preview and "Retry saved" copy
 - [ ] No second AI call is triggered on retry submission
 
-## 5. End Session CSV
+## 7. End Session CSV
 
-- [ ] End Session button is visible in Retry Captured
+- [ ] End Session button appears in Retry Captured
 - [ ] Clicking End Session generates the Session Summary panel
-- [ ] CSV block contains both header line and data row
-- [ ] Date cell uses today's date in YYYY-MM-DD
-- [ ] Foundation CSV uses 8 columns (no Grammar/Vocabulary/Argument/AcademicTone)
-- [ ] Beginner CSV uses 9 columns (adds Grammar)
-- [ ] Intermediate / Advanced / Expert CSV uses 12 columns
-- [ ] Score columns are integers between 1 and 5, taken from the AI feedback (not a hardcoded placeholder)
-- [ ] Score values in the CSV match what the Quick Feedback panel displayed
-- [ ] If a score was missing or invalid in the API response, the corresponding CSV cell is `3` (safe fallback)
-- [ ] Main_Weakness, Evidence, and Next_Target match the AI feedback
-- [ ] Copy CSV button copies the full CSV to clipboard
-- [ ] Copy confirmation appears briefly after a successful copy
+- [ ] CSV block contains header line and data row
+- [ ] Date cell uses YYYY-MM-DD
+- [ ] Foundation CSV uses no Grammar, Vocabulary, Argument, or AcademicTone score columns
+- [ ] Beginner CSV adds Grammar
+- [ ] Intermediate, Advanced, and Expert CSV include all six score columns
+- [ ] Score columns match the Quick Feedback panel
+- [ ] Missing or invalid API score values become `3` in CSV
+- [ ] Main_Weakness, Evidence, and Next_Target match AI feedback
+- [ ] Copy CSV copies the full CSV
+- [ ] Copy confirmation appears briefly
 
-## 6. localStorage History
+## 8. localStorage History and Session Log
 
-- [ ] After End Session, a new entry is saved to localStorage key `adaptive-speaking-app:sessions`
+- [ ] Normal End Session saves a new entry to `adaptive-speaking-app:sessions`
 - [ ] Refresh keeps Recent Sessions visible
-- [ ] Recent Sessions shows up to 5 latest items
-- [ ] Each item displays date, level, mode, Main Weakness, and Next Target
-- [ ] After 6+ sessions, only the latest 5 are visible but the count "of N stored" reflects the total
+- [ ] Session Log shows up to 5 latest items in newest-first order
+- [ ] Session Log count reflects total stored sessions
 - [ ] Total stored entries never exceeds 20
-- [ ] Restart Session does NOT delete saved history
-- [ ] Copy Last CSV button copies the latest session's CSV
-- [ ] Corrupted localStorage value (invalid JSON) does not crash the page
+- [ ] Each item displays date, level, mode, Main Weakness, and Next Target
+- [ ] Copy Last CSV copies the newest session CSV
+- [ ] Restart Session does not delete saved history
+- [ ] Corrupted localStorage JSON does not crash the page
 
-## 7. Weakness Activation
+## 9. Progress, Day Streak, and Level-Up Check
 
-- [ ] Previous Weakness panel appears after at least one completed session
+- [ ] Progress view renders total sessions, current streak, latest level, and recent activity
+- [ ] Day Streak card renders in the sidebar
+- [ ] Day Streak is 0 when there are no completed sessions
+- [ ] Day Streak is derived from local session dates without new storage
+- [ ] Level-Up Check shows Current Level, Next Level, Status, Evidence, Missing requirements, and Recommended next action
+- [ ] Malformed or incomplete session CSV entries are ignored safely
+- [ ] Almost ready appears only when enough valid sessions exist and averages are close
+- [ ] Expert shows Max level reached and no Apply Next Level button
+- [ ] Apply Next Level appears only when status is Ready and updates only Level, Today's Target, and view
+- [ ] Apply Next Level does not modify localStorage history or CSV data
+
+## 10. Coach Recommendation and Previous Weakness
+
+> Coach Recommendation is deterministic and local. It reads existing session
+> history and does not call an AI model.
+
+- [ ] Coach Recommendation appears before a session is active
+- [ ] Coach Recommendation hides once a session is active
+- [ ] With no history, recommendation suggests a beginner-friendly starting point
+- [ ] With history, focus uses latest retryTask or mainWeakness
+- [ ] Use Recommendation updates Mode, Session Type, and Today's Target
+- [ ] Recommendation never auto-applies
+- [ ] Previous Weakness appears after at least one completed session
 - [ ] Previous Weakness shows Main Weakness and Next Target from the latest session
-- [ ] If Today's Target is empty, Start Session uses the previous retry task as the active target
-- [ ] Active Session shows "Today we target: [previous retry task]" when auto-filled
-- [ ] If Today's Target is filled manually, the user's text is preserved (not overwritten)
-
-## 8. Error Handling
-
-- [ ] Missing API key for selected provider shows a clear, short error
-- [ ] Wrong Gemini model shows: "Gemini model not available. Check GEMINI_MODEL in .env.local."
-- [ ] Network failure shows a short error, not a stack trace
-- [ ] Empty transcript cannot be submitted
-- [ ] Empty retry transcript cannot be submitted
-- [ ] Long upstream error messages are truncated in the UI
-
-## 9. Security Checks
-
-- [ ] `.env.local` is not tracked by Git (`git status` does not list it)
-- [ ] API keys do not appear in browser request bodies (DevTools → Network → request payload)
-- [ ] API keys do not appear in the JS bundle (DevTools → Sources → search for partial key)
-- [ ] No `NEXT_PUBLIC_` prefixed provider keys exist
-- [ ] Provider HTTP errors do not leak full upstream JSON to the UI
-- [ ] No real keys committed in `.env.example`, README, or any docs file
-
-## 10. Coach Recommendation
-
-> Note: this is a deterministic, local rule-based scaffold. It reads only
-> what is already in localStorage history. It does not call any AI model.
-
-- [ ] Coach Recommendation panel appears between Previous Weakness and Active Session
-- [ ] Panel hides automatically once a session is active (after Start Session)
-- [ ] With no history, panel shows: focus "Build speaking volume", Mode "Fluency Sprint", Session Type "Micro", and a message that one session is needed to personalize
-- [ ] With at least one stored session, focus uses the latest retryTask (or mainWeakness if retryTask is missing)
-- [ ] Recommended Session Type is Micro for Foundation/Beginner, Standard for Intermediate, Deep for Advanced/Expert
-- [ ] Recommended Mode reflects the latest weakness/retryTask keywords (Fluency Sprint for fluency/pause/hesitation; Argument Drill for argument/evidence/coherence; vocabulary/academic-tone keywords map to Argument Drill)
-- [ ] Reason text references the date of the last session and names the recommended Mode
-- [ ] Use Recommendation button updates Mode, Session Type, and Today's Target in Session setup
-- [ ] User can still manually override Level, Mode, Session Type, and Today's Target after using the recommendation
-- [ ] Recommendation never auto-applies without the user clicking Use Recommendation
+- [ ] Empty Today's Target auto-fills from previous retry task when starting a session
+- [ ] Manually filled Today's Target is preserved
 
 ## 11. Diagnostic Mode
 
-> Note: Diagnostic Mode is a standalone assessment. It uses a separate API
-> route (`/api/diagnostic`) and does not produce Quick Feedback, Retry, CSV,
-> or history entries.
+> Diagnostic Mode is a standalone assessment through `/api/diagnostic`. It does
+> not produce Retry, CSV, or history entries.
 
-- [ ] Diagnostic appears as an option in the Mode selector
-- [ ] When Mode is Diagnostic, the Speaking Prompt panel shows three sections (A, B, C) instead of the normal mode prompt
-- [ ] Diagnostic prompt does NOT include any sample answers
-- [ ] After submitting the transcript, the Captured panel shows "Run Diagnostic" instead of "Get AI Feedback"
-- [ ] Run Diagnostic button is disabled and reads "Running diagnostic..." while loading
-- [ ] On success, a Diagnostic Result panel appears with Recommended Level, Main Bottleneck, Summary, six 1-5 Scores, and a 7-Day Focus Plan
-- [ ] Diagnostic 7-Day Focus Plan is calibrated to the Recommended Level
-- [ ] Foundation Diagnostic plans use simple 10-20 minute speaking drills and do not recommend journal abstracts, academic papers, or advanced research tasks
-- [ ] Each score is an integer between 1 and 5
-- [ ] Recommended Level is one of: Foundation, Beginner, Intermediate, Advanced, Expert
-- [ ] If the model returns an unknown level, the result falls back to "Foundation"
-- [ ] If the model returns missing or invalid scores, each missing dimension falls back to 3
-- [ ] Apply Recommended Level button updates the Level selector and Today's Target in Session setup
-- [ ] Diagnostic Mode does NOT show Quick Feedback, Retry attempt, Retry captured, or Session summary panels
-- [ ] Diagnostic Mode does NOT add a new entry to localStorage `adaptive-speaking-app:sessions`
-- [ ] Recent Sessions and Previous Weakness panels are unaffected by running a diagnostic
-- [ ] Provider errors (rate limit, key rejected, model unavailable) show short friendly messages, never raw JSON
+- [ ] Diagnostic appears as a Mode option
+- [ ] Diagnostic prompt shows three sections: A, B, C
+- [ ] Captured panel shows Run Diagnostic instead of Get AI Feedback
+- [ ] Run Diagnostic loading state works
+- [ ] Diagnostic Result shows Recommended Level, Main Bottleneck, Summary, Scores, and 7-Day Focus Plan
+- [ ] Recommended Level is Foundation, Beginner, Intermediate, Advanced, or Expert
+- [ ] Missing or invalid diagnostic scores fall back to 3
+- [ ] Apply Recommended Level updates Level and Today's Target
+- [ ] Diagnostic does not show Retry, CSV, or Session Summary panels
+- [ ] Diagnostic does not add a localStorage history entry
+- [ ] Foundation diagnostic plan uses simple 10-20 minute speaking drills
+- [ ] Foundation diagnostic plan does not recommend journal abstracts, academic papers, or advanced research tasks
 
-## 12. Level-Up Check
+## 12. Weekly Review Agent
 
-> Note: Level-Up Check is a deterministic, local rule-based feature. It reads
-> only existing session CSV strings from localStorage and does not call AI.
+> Weekly Review sends compact recent session summaries to `/api/weekly-review`.
+> It does not store review results.
 
-- [ ] Level-Up Check appears in the Analytics sidebar and opens the Progress view
-- [ ] Progress shows Current Level, Next Level, Status, Evidence, Missing requirements, and Recommended next action
-- [ ] Malformed or incomplete session CSV entries are ignored without crashing
-- [ ] Almost ready appears only when enough valid sessions exist and averages are close to the thresholds
-- [ ] Expert shows Max level reached and no Apply Next Level button
-- [ ] Apply Next Level appears only when status is Ready and updates only Level, Today's Target, and view
-- [ ] Applying the next level does NOT change localStorage history or CSV data
+- [ ] Weekly Review opens without auto-running
+- [ ] With fewer than 4 sessions, the requirement message appears
+- [ ] With 4+ sessions, Run Weekly Review is enabled
+- [ ] Request sends latest 4 to 7 session summaries, not full transcripts or retry transcripts
+- [ ] Successful review shows Summary, Recurring Weakness, Best Improvement, Score Trend, Next Week Focus, and 7-Day Recommended Plan
+- [ ] Warnings appear only when non-empty warnings are returned
+- [ ] Foundation Weekly Review plan is simple, practical, and speaking-drill based
+- [ ] Weekly Review accepts valid JSON inside markdown fences or short surrounding provider text
+- [ ] Weekly Review provider errors are friendly and do not expose raw upstream JSON
+- [ ] Running Weekly Review does not change localStorage history, CSV data, feedback, diagnostic, retry, or speech input behavior
 
-## 13. Weekly Review Agent
+## 13. Mental Model Session
 
-> Note: Weekly Review is an AI feature. It sends only compact recent session
-> summaries to `/api/weekly-review` and does not store review results.
+> Mental Model sends setup context plus latest weakness/retry text to
+> `/api/mental-model`. It does not store results.
 
-- [ ] Weekly Review opens from the sidebar without starting automatically
-- [ ] With fewer than 4 sessions, the view shows "Weekly Review requires at least 4 completed practice sessions."
-- [ ] With 4+ sessions, Run Weekly Review is enabled and shows a loading state while running
-- [ ] The request sends only the latest 4 to 7 session summaries, not full transcripts or retry transcripts
-- [ ] Successful review shows Summary, Recurring Weakness, Best Improvement, Score Trend, Next Week Focus, and a 7-Day Recommended Plan
-- [ ] The 7-Day Recommended Plan is appropriate for the latest submitted session level
-- [ ] Foundation Weekly Review plans use simple 10-20 minute speaking drills and do not recommend journal abstracts, academic papers, or advanced research tasks
-- [ ] Weekly Review accepts valid provider JSON when wrapped in markdown code fences or small surrounding text
-- [ ] Warnings appear only when the response includes non-empty warnings
-- [ ] Provider errors and malformed JSON responses show friendly retryable errors without raw upstream JSON
-- [ ] Running Weekly Review does NOT change localStorage history, CSV data, feedback, diagnostic, retry, or speech input behavior
-
-## 14. Mental Model Session
-
-> Note: Mental Model is an AI teaching feature. It sends setup context plus
-> latest weakness/retry text only, and it does not store results.
-
-- [ ] Mental Model opens from the sidebar and does not auto-run
-- [ ] The view shows current Level, current Mode, and an editable Focus / Weakness field
-- [ ] Blank focus falls back to current target, latest retry task, latest weakness, or a generic academic response focus
-- [ ] Generate Mental Model sends provider, level, mode, focus, latestWeakness, and latestRetryTask only
+- [ ] Mental Model opens without auto-running
+- [ ] View shows current Level, current Mode, and editable Focus / Weakness
+- [ ] Blank focus falls back to current target, latest retry task, latest weakness, or generic academic response focus
+- [ ] Request sends provider, level, mode, focus, latestWeakness, and latestRetryTask only
 - [ ] Successful result shows Core Standard, Quality Criteria, Weak Pattern, Strong Pattern, Self-Check Questions, Micro Drill, and Reference Model
-- [ ] The route rejects malformed JSON, invalid criteria/question counts, or an overly long reference model with a friendly error
-- [ ] Mental Model accepts valid JSON returned inside markdown code fences or short surrounding provider text
-- [ ] Foundation Mental Model output uses simple speaking standards and avoids abstract theory, counterarguments, advanced vocabulary lists, and essay-like structure
-- [ ] The UI does not provide a copy/use-as-answer action for the reference model
-- [ ] Running Mental Model does NOT change localStorage history, CSV data, feedback, diagnostic, weekly review, retry, or speech input behavior
+- [ ] Invalid criteria/question counts or overly long reference model are rejected with friendly errors
+- [ ] Mental Model accepts valid JSON inside markdown fences or short surrounding provider text
+- [ ] Foundation Mental Model uses simple speaking standards and avoids abstract theory, counterarguments, advanced vocabulary lists, and essay-like structure
+- [ ] UI does not provide a copy/use-as-answer action for the reference model
+- [ ] Running Mental Model does not change localStorage history, CSV data, feedback, diagnostic, weekly review, retry, or speech input behavior
+
+## 14. Provider Errors and Security
+
+- [ ] Missing API key shows a clear short error
+- [ ] Rejected API key shows a friendly message, not raw provider JSON
+- [ ] Rate limit shows a friendly retry/wait message
+- [ ] Model unavailable shows a provider-specific friendly message
+- [ ] Network failure shows a short error, not a stack trace
+- [ ] `.env.local` is not tracked by Git
+- [ ] No real API keys appear in docs, `.env.example`, request bodies, or JS bundles
+- [ ] No provider key uses `NEXT_PUBLIC_`
+- [ ] Provider calls happen only through server-side API routes
+- [ ] No database, auth, or cloud sync is implied by UI or docs
+
+## 15. Foundation Calibration
+
+- [ ] Foundation Feedback avoids advanced vocabulary upgrades, counterarguments, complex evidence tasks, and long polished rewrites
+- [ ] Foundation Diagnostic plans are concrete speaking drills
+- [ ] Foundation Weekly Review plans are practical 10-20 minute speaking drills
+- [ ] Foundation Mental Model teaches simple pattern recognition, not essay-like standards
+- [ ] Foundation outputs do not recommend journal abstracts, academic papers, or advanced research tasks
+
+## 16. Performance and UX
+
+- [ ] Page scroll remains lightweight on desktop and mobile widths
+- [ ] UI text remains readable over the light grid/card texture
+- [ ] No chart library, canvas, heavy animation, or blur/backdrop-filter is required
+- [ ] No polling or background intervals run beyond timer/copy-status behavior
+- [ ] Cards and buttons remain usable at mobile widths

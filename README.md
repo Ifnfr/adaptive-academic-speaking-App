@@ -1,43 +1,45 @@
 # fonetik
 
-Speak Better — AI-Powered academic speaking practice.
+**Speak Better**  
+AI-Powered academic speaking practice.
 
-(Repository name: `adaptive-academic-speaking-app`. Product name in the UI:
-**fonetik**.)
+fonetik is a local-first academic speaking practice app. It helps learners set
+up short speaking sessions, generate local practice prompts, get AI feedback,
+retry the same weakness, and review progress from browser-stored history.
 
-The app runs entirely on your machine. There is no backend database, no auth,
-and no cloud sync. Sessions are saved in your browser's localStorage. AI
-feedback is requested through a Next.js API route on the server side, so your
-provider keys never reach the browser.
+The repository is named `adaptive-academic-speaking-app`, but the product name
+shown in the UI is **fonetik**.
 
-## MVP features
+## MVP Features
 
-- Session setup (level, mode, feedback type, session type, AI provider, today's target)
-- Local Coach Recommendation scaffold (rule-based, reads localStorage history; no AI call)
-- Local Speaking Prompt generator (no AI call) per level/mode/session type
-- Diagnostic Mode: a baseline assessment that returns a recommended level, the main bottleneck, a profile summary, six 1-5 scores, and a 7-day focus plan
-- Manual transcript input
-- Browser speech-to-text input (Web Speech API; audio is processed by the browser, never recorded or uploaded)
-- Timer (start, stop, reset)
-- AI Quick Feedback (one main weakness, one piece of evidence, a stronger phrase, and a retry task)
-- AI-generated 1-5 scores per level (Foundation: fluency, coherence; Beginner: + grammar; Intermediate/Advanced/Expert: + vocabulary, argument, academic tone)
-- Retry loop (the user must retry after feedback)
-- CSV generation per session, using the real AI scores
-- localStorage history (latest 20 sessions, newest first)
-- Weakness activation (last session's retry task auto-fills the next session's target)
-- Multi-provider support: Claude, DeepSeek, Gemini
+- Light fonetik dashboard UI with sidebar navigation and topbar status chips
+- Active Session flow with Session Setup, mode cards, level selection, provider selection, and Today's Target
+- Local Speaking Prompt generation by level, mode, and session type
+- Browser speech-to-text input plus manual transcript input
+- Timer with start, stop, and reset controls
+- AI Feedback with main weakness, evidence, better phrase, retry task, and level-specific 1-5 scores
+- Retry Loop before ending a normal feedback session
+- End Session CSV, Copy CSV, Session Log, and Copy Last CSV
+- Browser localStorage history under `adaptive-speaking-app:sessions`
+- Progress view with local stats, Day Streak, and Level-Up Check
+- Diagnostic Mode with recommended level, bottleneck, score profile, and 7-day focus plan
+- Weekly Review Agent using compact recent session summaries
+- Mental Model Session for learning response standards and patterns before practice
+- Friendly provider errors for missing keys, rejected keys, rate limits, and model availability
+- Foundation-level calibration for Feedback, Diagnostic, Weekly Review, and Mental Model outputs
+- Robust JSON parsing for Weekly Review and Mental Model provider responses
 
-## Tech stack
+## Tech Stack
 
-- Next.js (App Router)
+- Next.js App Router
+- React
 - TypeScript
 - Tailwind CSS
-- localStorage
-- Claude API
-- DeepSeek API
-- Gemini API
+- Browser localStorage
+- Web Speech API for browser speech-to-text
+- Server-side API routes for Claude, DeepSeek, and Gemini
 
-## How to run locally
+## Local Setup
 
 ```bash
 cd app-web
@@ -45,23 +47,33 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:3000.
+Then open:
 
-For a longer beginner walkthrough, see [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md).
+```text
+http://localhost:3000
+```
 
-## Environment variables
+For a beginner walkthrough, see [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md).
 
-The API route reads provider keys from environment variables on the server.
-Copy the example file and fill only the providers you actually plan to use.
+## Environment Variables
+
+Provider keys are read only on the server from `app-web/.env.local`.
+
+Copy the example file:
 
 ```bash
 cd app-web
-copy .env.example .env.local      # Windows cmd
-# or
-cp .env.example .env.local         # macOS / Linux
+copy .env.example .env.local
 ```
 
-Open `app-web/.env.local` and set the keys you have:
+On macOS or Linux:
+
+```bash
+cd app-web
+cp .env.example .env.local
+```
+
+Use placeholders like these. Fill only the providers you plan to use:
 
 ```env
 CLAUDE_API_KEY=
@@ -70,45 +82,74 @@ GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.0-flash
 ```
 
-`GEMINI_MODEL` is optional. If unset, the app defaults to `gemini-2.0-flash`.
-You can change it to any Gemini model your key can access (for example
-`gemini-2.5-flash` or `gemini-1.5-flash-latest`).
+`GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
+Restart `npm run dev` after editing `.env.local`; environment variables are not
+hot-reloaded.
 
-Restart `npm run dev` after editing `.env.local` so the server picks up the
-new values. Environment variables are not hot-reloaded.
+## API Routes
 
-## Security notes
+- `POST /api/feedback`  
+  Generates Quick Feedback, retry task, and level-specific scores.
 
-- Never commit `.env.local`. The Next.js default `.gitignore` already excludes it.
-- Never expose API keys in client code. Provider calls happen only inside `app-web/src/app/api/feedback/route.ts` and `app-web/src/app/api/diagnostic/route.ts`.
-- Do not prefix provider keys with `NEXT_PUBLIC_`. That prefix would expose them to the browser.
-- Treat the values you paste in `.env.local` as secrets. Rotate them if you suspect a leak.
+- `POST /api/diagnostic`  
+  Runs a diagnostic assessment and returns a recommended level, bottleneck,
+  scores, and 7-day focus plan.
 
-## MVP limitations
+- `POST /api/weekly-review`  
+  Reviews the latest 4 to 7 completed session summaries. It does not store the
+  review result.
 
-- Browser speech-to-text only. Audio is processed by the browser's native speech engine in real time. The app does not record, save, or upload audio files at any point.
-- Speech support depends on the browser. Chromium-based browsers and Safari work; Firefox shows a fallback message and the user types or pastes manually.
-- Manual transcript input still works alongside speech-to-text. The textarea remains fully editable.
-- No cloud database yet (history lives in localStorage only)
-- No authentication yet
-- Quick Feedback is implemented end-to-end. Deep Feedback exists as a UI option in Session setup but currently routes through the same Quick Feedback prompt; a dedicated deep-analysis mode is not implemented yet.
-- The Coach Recommendation panel is a deterministic rule-based scaffold built from your local session history. It does not call any AI model and does not infer anything beyond keywords found in the latest session's main weakness and retry task.
-- Diagnostic Mode is a standalone assessment. It does not produce a Retry attempt, does not generate a session CSV, and does not write to localStorage history yet.
-- One feedback round per attempt; there is no second AI feedback on the retry transcript yet.
-- Scoring is generated by the AI on a 1-5 integer scale per level. If the model returns a missing or out-of-range score, the server clamps it to the 1-5 range and falls back to 3 for that single dimension.
+- `POST /api/mental-model`  
+  Generates teaching guidance about response quality standards. It does not
+  store the result and does not receive full transcripts.
 
-## Project layout
+## Security Notes
 
-```
+- Keep provider keys in `app-web/.env.local`.
+- Do not commit `.env.local`.
+- Do not use `NEXT_PUBLIC_` for provider API keys.
+- Do not put provider keys in browser code.
+- Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
+- Session history is stored locally in the user's browser, not in a database.
+
+## Current Limitations
+
+- No authentication.
+- No database, cloud sync, or deployment workflow.
+- Session history is local to the browser and capped by the app.
+- Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
+- Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.
+- Diagnostic Mode does not create Retry, CSV, or localStorage history entries.
+- Weekly Review and Mental Model results are shown in the UI but not persisted.
+- Retry transcripts are saved in the session summary, but there is no second AI feedback pass on retry yet.
+- Article Practice is not implemented yet.
+
+## Roadmap
+
+- Article Practice for reading-to-speaking workflows
+- Dedicated Deep Feedback mode
+- Optional persisted review history
+- Stronger browser QA coverage
+- Import/export tools for local practice history
+- Optional auth, database, or cloud sync in a later product phase
+
+## Project Layout
+
+```text
 adaptive-academic-speaking-app/
-├── app-web/                      # Next.js app
-│   ├── src/app/page.tsx          # Single-page UI
-│   ├── src/app/api/feedback/     # Server-side AI feedback route
-│   ├── src/app/api/diagnostic/route.ts # Server-side diagnostic route
-│   ├── .env.example              # Copy to .env.local and fill
+├── app-web/
+│   ├── src/app/page.tsx
+│   ├── src/app/components/
+│   ├── src/app/lib/
+│   ├── src/app/api/feedback/
+│   ├── src/app/api/diagnostic/
+│   ├── src/app/api/weekly-review/
+│   ├── src/app/api/mental-model/
+│   ├── .env.example
 │   └── package.json
 ├── docs/
-│   ├── SETUP_GUIDE.md            # Step-by-step beginner setup
-│   └── MVP_TEST_CHECKLIST.md     # Manual test checklist
-└── README.md                     # This file
+│   ├── SETUP_GUIDE.md
+│   ├── MVP_TEST_CHECKLIST.md
+│   └── PROJECT_CONTEXT.md
+└── README.md
 ```
