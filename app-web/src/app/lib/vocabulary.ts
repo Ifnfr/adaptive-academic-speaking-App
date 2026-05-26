@@ -14,11 +14,29 @@ export type VocabLevel =
   | "Advanced"
   | "Expert";
 
+export type VocabCorrectionStatus =
+  | "natural"
+  | "understandable"
+  | "awkward"
+  | "incorrect";
+
+export type VocabSentenceCorrection = {
+  status: VocabCorrectionStatus;
+  explanation: string;
+  correctedSentence: string;
+  collocationTip: string;
+  retryInstruction: string;
+  warnings: string[];
+  checkedAt: string;
+  providerUsed: string;
+};
+
 export type VocabUserSentence = {
   id: string;
   sentence: string;
   containsWord: boolean;
   createdAt: string;
+  correction?: VocabSentenceCorrection;
 };
 
 export type VocabItem = {
@@ -75,6 +93,17 @@ export type AddUserSentenceResult = {
   item: VocabItem | null;
 };
 
+export type SaveSentenceCorrectionInput = {
+  status: VocabCorrectionStatus;
+  explanation: string;
+  correctedSentence: string;
+  collocationTip: string;
+  retryInstruction: string;
+  warnings?: string[];
+  checkedAt?: string;
+  providerUsed: string;
+};
+
 export const VOCABULARY_STORAGE_KEY = "adaptive-speaking-app:vocabulary";
 
 const STORAGE_VERSION = 1;
@@ -101,6 +130,13 @@ const VOCAB_LEVELS: readonly VocabLevel[] = [
   "Intermediate",
   "Advanced",
   "Expert",
+];
+
+const VOCAB_CORRECTION_STATUSES: readonly VocabCorrectionStatus[] = [
+  "natural",
+  "understandable",
+  "awkward",
+  "incorrect",
 ];
 
 export function normalizeVocabulary(value: unknown): VocabItem[] {
@@ -322,6 +358,49 @@ export function addUserSentence(
   };
 }
 
+export function saveSentenceCorrection(
+  items: ReadonlyArray<VocabItem>,
+  itemId: string,
+  sentenceId: string,
+  correction: SaveSentenceCorrectionInput,
+): VocabItem[] {
+  const normalizedItems = normalizeVocabulary(items);
+  const safeItemId = itemId.trim();
+  const safeSentenceId = sentenceId.trim();
+  const normalizedCorrection = normalizeCorrection({
+    ...correction,
+    checkedAt: correction.checkedAt ?? new Date().toISOString(),
+  });
+
+  if (!normalizedCorrection) return normalizedItems;
+
+  return normalizedItems.map((item) => {
+    if (item.id !== safeItemId) return item;
+
+    let foundSentence = false;
+    const userSentences = item.userSentences.map((sentence) => {
+      if (sentence.id !== safeSentenceId) return sentence;
+
+      foundSentence = true;
+      return {
+        ...sentence,
+        correction: normalizedCorrection,
+      };
+    });
+
+    if (!foundSentence) return item;
+
+    return {
+      ...item,
+      userSentences,
+      correctUseCount: userSentences.filter((sentence) =>
+        isSuccessfulCorrection(sentence.correction?.status),
+      ).length,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+}
+
 export function computeVocabularyStats(
   items: ReadonlyArray<VocabItem>,
 ): VocabStats {
@@ -370,10 +449,37 @@ function normalizeUserSentences(value: unknown): VocabUserSentence[] {
       createdAt: isIsoDateTimeString(source.createdAt)
         ? source.createdAt
         : new Date().toISOString(),
+      correction: normalizeCorrection(source.correction),
     });
   }
 
   return sentences.slice(-MAX_USER_SENTENCES_PER_ITEM);
+}
+
+function normalizeCorrection(value: unknown): VocabSentenceCorrection | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const source = value as Record<string, unknown>;
+  if (!isVocabCorrectionStatus(source.status)) return undefined;
+  if (!isNonEmptyString(source.explanation)) return undefined;
+  if (!isNonEmptyString(source.correctedSentence)) return undefined;
+  if (!isNonEmptyString(source.collocationTip)) return undefined;
+  if (!isNonEmptyString(source.retryInstruction)) return undefined;
+  if (!isIsoDateTimeString(source.checkedAt)) return undefined;
+  if (!isNonEmptyString(source.providerUsed)) return undefined;
+
+  return {
+    status: source.status,
+    explanation: source.explanation.trim(),
+    correctedSentence: source.correctedSentence.trim(),
+    collocationTip: source.collocationTip.trim(),
+    retryInstruction: source.retryInstruction.trim(),
+    warnings: normalizeStringList(source.warnings),
+    checkedAt: source.checkedAt,
+    providerUsed: source.providerUsed.trim(),
+  };
 }
 
 function normalizeStringList(value: unknown): string[] {
@@ -450,4 +556,19 @@ function isVocabSource(value: unknown): value is VocabSource {
 
 function isVocabLevel(value: unknown): value is VocabLevel {
   return typeof value === "string" && VOCAB_LEVELS.includes(value as VocabLevel);
+}
+
+function isVocabCorrectionStatus(
+  value: unknown,
+): value is VocabCorrectionStatus {
+  return (
+    typeof value === "string" &&
+    VOCAB_CORRECTION_STATUSES.includes(value as VocabCorrectionStatus)
+  );
+}
+
+function isSuccessfulCorrection(
+  status: VocabCorrectionStatus | undefined,
+): boolean {
+  return status === "natural" || status === "understandable";
 }

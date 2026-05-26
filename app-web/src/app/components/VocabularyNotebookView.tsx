@@ -1,6 +1,7 @@
 import type {
   VocabItem,
   VocabLevel,
+  VocabSentenceCorrection,
   VocabSource,
   VocabStats,
   VocabStatus,
@@ -23,6 +24,8 @@ type VocabularyNotebookViewProps = {
   selectedItemId: string | null;
   sentenceDraft: string;
   message: VocabularyMessage | null;
+  correctionLoadingId: string | null;
+  correctionError: { sentenceId: string; text: string } | null;
   onFormWordChange: (value: string) => void;
   onFormMeaningChange: (value: string) => void;
   onFormLevelChange: (value: VocabLevel) => void;
@@ -35,6 +38,7 @@ type VocabularyNotebookViewProps = {
   onSelectPracticeItem: (id: string) => void;
   onSentenceDraftChange: (value: string) => void;
   onSubmitSentence: () => void;
+  onCheckSentence: (itemId: string, sentenceId: string) => void;
 };
 
 const VOCAB_LEVELS: readonly VocabLevel[] = [
@@ -75,6 +79,23 @@ function sourceLabel(source: VocabSource): string {
   return "Mental Model";
 }
 
+function correctionStatusLabel(status: VocabSentenceCorrection["status"]): string {
+  if (status === "natural") return "Natural";
+  if (status === "understandable") return "Understandable";
+  if (status === "awkward") return "Awkward";
+  return "Incorrect";
+}
+
+function correctionStatusClass(status: VocabSentenceCorrection["status"]): string {
+  if (status === "natural" || status === "understandable") {
+    return "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]";
+  }
+  if (status === "awkward") {
+    return "bg-[var(--brand-gold-soft)] text-[var(--brand-gold-ink)]";
+  }
+  return "bg-[var(--brand-coral-soft)] text-[var(--brand-ink)]";
+}
+
 export function VocabularyNotebookView({
   items,
   stats,
@@ -87,6 +108,8 @@ export function VocabularyNotebookView({
   selectedItemId,
   sentenceDraft,
   message,
+  correctionLoadingId,
+  correctionError,
   onFormWordChange,
   onFormMeaningChange,
   onFormLevelChange,
@@ -99,6 +122,7 @@ export function VocabularyNotebookView({
   onSelectPracticeItem,
   onSentenceDraftChange,
   onSubmitSentence,
+  onCheckSentence,
 }: VocabularyNotebookViewProps) {
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
@@ -374,19 +398,96 @@ export function VocabularyNotebookView({
                 {selectedItem.userSentences.length > 0 && (
                   <div className="mt-5">
                     <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-                      Recent sentences
+                      Saved sentences
                     </p>
                     <ul className="mt-2 space-y-2">
                       {selectedItem.userSentences
                         .slice()
                         .reverse()
-                        .slice(0, 3)
                         .map((sentence) => (
                           <li
                             key={sentence.id}
-                            className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)]"
+                            className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-3 text-sm text-[var(--brand-ink)]"
                           >
-                            {sentence.sentence}
+                            <p>{sentence.sentence}</p>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onCheckSentence(selectedItem.id, sentence.id)
+                                }
+                                disabled={correctionLoadingId !== null}
+                                className={buttonSecondary}
+                              >
+                                {correctionLoadingId === sentence.id
+                                  ? "Checking..."
+                                  : "Check Usage"}
+                              </button>
+                              {sentence.correction && (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${correctionStatusClass(
+                                    sentence.correction.status,
+                                  )}`}
+                                >
+                                  {correctionStatusLabel(
+                                    sentence.correction.status,
+                                  )}
+                                </span>
+                              )}
+                            </div>
+
+                            {correctionError?.sentenceId === sentence.id && (
+                              <p className="mt-3 rounded-lg border border-[var(--brand-coral)]/30 bg-[var(--brand-coral-soft)] px-3 py-2 text-xs text-[var(--brand-ink)]">
+                                {correctionError.text}
+                              </p>
+                            )}
+
+                            {sentence.correction && (
+                              <div className="mt-3 space-y-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3 text-xs text-[var(--brand-ink-soft)]">
+                                <p>
+                                  <span className="font-semibold text-[var(--brand-ink)]">
+                                    Explanation:
+                                  </span>{" "}
+                                  {sentence.correction.explanation}
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-[var(--brand-ink)]">
+                                    Corrected sentence:
+                                  </span>{" "}
+                                  {sentence.correction.correctedSentence}
+                                </p>
+                                <p className="text-[var(--brand-muted)]">
+                                  Use this to improve your next attempt. Do not
+                                  replace your original sentence automatically.
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-[var(--brand-ink)]">
+                                    Collocation tip:
+                                  </span>{" "}
+                                  {sentence.correction.collocationTip}
+                                </p>
+                                <p>
+                                  <span className="font-semibold text-[var(--brand-ink)]">
+                                    Retry:
+                                  </span>{" "}
+                                  {sentence.correction.retryInstruction}
+                                </p>
+                                {sentence.correction.warnings.length > 0 && (
+                                  <div>
+                                    <p className="font-semibold text-[var(--brand-ink)]">
+                                      Warnings
+                                    </p>
+                                    <ul className="mt-1 list-disc space-y-1 pl-4">
+                                      {sentence.correction.warnings.map(
+                                        (warning) => (
+                                          <li key={warning}>{warning}</li>
+                                        ),
+                                      )}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </li>
                         ))}
                     </ul>

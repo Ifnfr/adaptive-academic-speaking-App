@@ -20,9 +20,11 @@ import {
   createVocabItem,
   deleteVocabItem,
   loadVocabulary,
+  saveSentenceCorrection,
   saveVocabulary,
   updateVocabStatus,
   type VocabItem,
+  type VocabSentenceCorrection,
   type VocabLevel,
   type VocabSource,
   type VocabStatus,
@@ -177,6 +179,11 @@ type WeeklyReviewSessionSummary = {
   retryTask: string;
   csv: string;
 };
+
+type VocabularyCorrectionResult = Omit<
+  VocabSentenceCorrection,
+  "checkedAt" | "providerUsed"
+>;
 
 // Score dimensions per level. Order in arrays matches CSV column order.
 const FOUNDATION_SCORE_KEYS = ["fluency", "coherence"] as const;
@@ -742,6 +749,12 @@ export default function Home() {
     tone: "success" | "error" | "info";
     text: string;
   } | null>(null);
+  const [vocabularyCorrectionLoadingId, setVocabularyCorrectionLoadingId] =
+    useState<string | null>(null);
+  const [vocabularyCorrectionError, setVocabularyCorrectionError] = useState<{
+    sentenceId: string;
+    text: string;
+  } | null>(null);
 
   // --- Session history (localStorage) ---
   // Sessions are an external value (localStorage). We read them via
@@ -846,6 +859,7 @@ export default function Home() {
       setSelectedVocabItemId(nextItems[0]?.id ?? null);
       setVocabSentenceDraft("");
     }
+    setVocabularyCorrectionError(null);
     setVocabMessage({ tone: "info", text: "Vocabulary item deleted." });
   };
 
@@ -861,6 +875,7 @@ export default function Home() {
   const handleSelectVocabularyPracticeItem = (id: string) => {
     setSelectedVocabItemId(id);
     setVocabSentenceDraft("");
+    setVocabularyCorrectionError(null);
     setVocabMessage({
       tone: "info",
       text: "Write one simple sentence using this word.",
@@ -885,6 +900,7 @@ export default function Home() {
       persistVocabulary(result.items);
       setSelectedVocabItemId(result.item?.id ?? selectedVocabItem.id);
       setVocabSentenceDraft("");
+      setVocabularyCorrectionError(null);
       setVocabMessage({ tone: "success", text: result.reason });
       const savedSentence = result.item?.userSentences.at(-1);
       if (result.item && savedSentence) {
@@ -899,6 +915,102 @@ export default function Home() {
     }
 
     setVocabMessage({ tone: "error", text: result.reason });
+  };
+
+  const handleCheckVocabularySentence = async (
+    itemId: string,
+    sentenceId: string,
+  ) => {
+    if (vocabularyCorrectionLoadingId) return;
+
+    const item = vocabularyItems.find((candidate) => candidate.id === itemId);
+    const sentence = item?.userSentences.find(
+      (candidate) => candidate.id === sentenceId,
+    );
+
+    if (!item || !sentence) {
+      setVocabularyCorrectionError({
+        sentenceId,
+        text: "Sentence was not found. Refresh the notebook and try again.",
+      });
+      return;
+    }
+
+    setVocabularyCorrectionLoadingId(sentenceId);
+    setVocabularyCorrectionError(null);
+
+    try {
+      const res = await fetch("/api/vocabulary-correction", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: aiProvider,
+          level: item.level,
+          word: item.word,
+          meaning: item.meaning,
+          sentence: sentence.sentence,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | (VocabularyCorrectionResult & { error?: string })
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !data || ("error" in data && data.error)) {
+        const rawMessage =
+          (data && "error" in data && data.error) ||
+          `Request failed with status ${res.status}.`;
+        setVocabularyCorrectionError({
+          sentenceId,
+          text: sanitizeErrorMessage(rawMessage),
+        });
+        return;
+      }
+
+      const result = data as VocabularyCorrectionResult;
+      if (
+        !result.status ||
+        !result.explanation ||
+        !result.correctedSentence ||
+        !result.collocationTip ||
+        !result.retryInstruction ||
+        !Array.isArray(result.warnings)
+      ) {
+        setVocabularyCorrectionError({
+          sentenceId,
+          text: "Vocabulary correction response was incomplete. Try again.",
+        });
+        return;
+      }
+
+      const nextItems = saveSentenceCorrection(
+        vocabularyItems,
+        item.id,
+        sentence.id,
+        {
+          ...result,
+          checkedAt: new Date().toISOString(),
+          providerUsed: aiProvider,
+        },
+      );
+      persistVocabulary(nextItems);
+      setVocabMessage({
+        tone: "success",
+        text: "Usage checked. Use the feedback to improve your next attempt.",
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Network error while contacting the API.";
+      setVocabularyCorrectionError({
+        sentenceId,
+        text: sanitizeErrorMessage(message),
+      });
+    } finally {
+      setVocabularyCorrectionLoadingId(null);
+    }
   };
 
   const updateBadges = (
@@ -1740,6 +1852,8 @@ export default function Home() {
               selectedItemId={selectedVocabItem?.id ?? null}
               sentenceDraft={vocabSentenceDraft}
               message={vocabMessage}
+              correctionLoadingId={vocabularyCorrectionLoadingId}
+              correctionError={vocabularyCorrectionError}
               onFormWordChange={setVocabFormWord}
               onFormMeaningChange={setVocabFormMeaning}
               onFormLevelChange={setVocabFormLevel}
@@ -1752,6 +1866,7 @@ export default function Home() {
               onSelectPracticeItem={handleSelectVocabularyPracticeItem}
               onSentenceDraftChange={setVocabSentenceDraft}
               onSubmitSentence={handleSubmitVocabularySentence}
+              onCheckSentence={handleCheckVocabularySentence}
             />
           )}
 

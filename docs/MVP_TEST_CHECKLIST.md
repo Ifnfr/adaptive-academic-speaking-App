@@ -253,12 +253,16 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Recent saved sentences appear for the selected vocabulary item
 - [ ] Accepted vocabulary sentences award deterministic `vocab_sentence_submitted` pending XP
 - [ ] Rejected vocabulary sentences do not award XP
+- [ ] Saved vocabulary sentences can be checked with AI correction after the user writes them
+- [ ] Correction results save locally on the sentence without replacing the original user sentence
+- [ ] Natural or understandable correction increments `correctUseCount` once per sentence
+- [ ] Checking/correcting vocabulary usage does not award XP
 - [ ] `vocab_reused` remains reserved and is not wired yet
-- [ ] Vocabulary Notebook does not call AI/API routes, modify session history, or change CSV data
+- [ ] Vocabulary Notebook does not modify session history or CSV data
 
 ## 19. Vocabulary Correction API
 
-> Vocabulary Correction checks one learner-written sentence. It has no UI or storage integration yet.
+> Vocabulary Correction checks one learner-written sentence and saves short feedback locally in Vocabulary Notebook.
 
 - [ ] `/api/vocabulary-correction` rejects invalid provider, level, empty word, and empty sentence
 - [ ] Sentence must include the target vocabulary word or phrase before provider call
@@ -266,4 +270,5 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Route accepts raw, fenced, or surrounded JSON provider output
 - [ ] Corrected sentence is one short sentence, not a paragraph or multiple alternatives
 - [ ] Foundation correction uses simple wording and one main correction
-- [ ] Route does not modify vocabulary storage, XP, session history, CSV data, or Article Practice behavior
+- [ ] UI does not auto-replace the user's original sentence or provide a copy-as-answer flow
+- [ ] Route does not modify XP, session history, CSV data, or Article Practice behavior
