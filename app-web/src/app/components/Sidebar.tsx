@@ -17,6 +17,9 @@ type SidebarProps = {
   dayStreak: number;
   levelPhase: string;
   nextLevel: string | null;
+  speakerLevel: number;
+  speakerLevelName: string;
+  totalXp: number;
   onSelectView: (view: SidebarView) => void;
   onSelectDiagnostic: () => void;
 };
@@ -72,6 +75,9 @@ export function Sidebar({
   dayStreak,
   levelPhase,
   nextLevel,
+  speakerLevel,
+  speakerLevelName,
+  totalXp,
   onSelectView,
   onSelectDiagnostic,
 }: SidebarProps) {
@@ -126,6 +132,32 @@ export function Sidebar({
             )}
             <p className="mt-3 text-[11px] text-white/60">
               Adjust in Session setup.
+            </p>
+          </div>
+        </div>
+
+        {/* Speaker level */}
+        <div className={card}>
+          <div className="px-5 py-4">
+            <div className="flex items-baseline justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
+                Speaker Level
+              </p>
+              <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
+                XP
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
+              Level {speakerLevel}
+            </p>
+            <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+              {speakerLevelName}
+            </p>
+            <p className="mt-3 font-mono text-xs tabular-nums text-[var(--brand-muted)]">
+              {totalXp} total XP
+            </p>
+            <p className="mt-2 text-[11px] text-[var(--brand-muted)]">
+              Separate from English Level.
             </p>
           </div>
         </div>

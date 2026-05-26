@@ -14,6 +14,18 @@ import {
   buildSpeakingPrompt,
   type SpeakingPrompt,
 } from "./lib/speaking-prompt";
+import {
+  claimXp,
+  getLocalDateString,
+  getSpeakerLevelProgress,
+  loadBadges,
+  loadXpEvents,
+  loadXpProfile,
+  saveXpProfile,
+  type Badge,
+  type XpEvent,
+  type XpProfile,
+} from "./lib/gamification";
 import { ProgressView } from "./components/ProgressView";
 import {
   WeeklyReviewView,
@@ -599,6 +611,11 @@ export default function Home() {
   );
   const [csvCopied, setCsvCopied] = useState(false);
 
+  // --- Gamification state (local, deterministic, no AI) ---
+  const [xpProfile, setXpProfile] = useState<XpProfile>(() => loadXpProfile());
+  const [xpEvents] = useState<XpEvent[]>(() => loadXpEvents());
+  const [badges] = useState<Badge[]>(() => loadBadges());
+
   // --- Session history (localStorage) ---
   // Sessions are an external value (localStorage). We read them via
   // useSyncExternalStore so the initial value is loaded SSR-safely without
@@ -610,6 +627,10 @@ export default function Home() {
     getSessionsServer,
   );
   const [lastCsvCopied, setLastCsvCopied] = useState(false);
+
+  useEffect(() => {
+    saveXpProfile(xpProfile);
+  }, [xpProfile]);
 
   // --- Sidebar navigation view ---
   // Lightweight local view state. No router, no real new routes. The Active
@@ -633,6 +654,14 @@ export default function Home() {
     "Build a clearer academic speaking response";
   const effectiveMentalModelFocus =
     mentalModelFocus.trim() || mentalModelDefaultFocus;
+  const currentLocalDate = getLocalDateString();
+  const speakerProgress = getSpeakerLevelProgress(xpProfile.totalXp);
+  const claimableXp =
+    xpProfile.pendingDailyXp + xpProfile.unclaimedPreviousXp;
+  const alreadyClaimedToday = xpProfile.lastClaimedDate === currentLocalDate;
+  const earnedBadgesCount = badges.filter(
+    (badge) => badge.status === "earned",
+  ).length;
 
   const handleUseRecommendation = () => {
     setMode(coachRecommendation.recommendedMode);
@@ -647,6 +676,12 @@ export default function Home() {
       `Start ${levelUpCheck.nextLevel} practice with clear structure and steady evidence.`,
     );
     setView("active");
+  };
+
+  const handleClaimXp = () => {
+    const claimed = claimXp(xpProfile, getLocalDateString());
+    setXpProfile(claimed.profile);
+    saveXpProfile(claimed.profile);
   };
 
   // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
@@ -1203,6 +1238,9 @@ export default function Home() {
           dayStreak={dayStreak}
           levelPhase={LEVEL_PHASE[level]}
           nextLevel={nextLevelHint(level)}
+          speakerLevel={speakerProgress.currentLevel.level}
+          speakerLevelName={speakerProgress.currentLevel.name}
+          totalXp={xpProfile.totalXp}
           onSelectView={setView}
           onSelectDiagnostic={handleSelectDiagnostic}
         />
@@ -1387,7 +1425,14 @@ export default function Home() {
                   sessions={sessions}
                   dayStreak={dayStreak}
                   levelUpCheck={levelUpCheck}
+                  xpProfile={xpProfile}
+                  speakerProgress={speakerProgress}
+                  claimableXp={claimableXp}
+                  alreadyClaimedToday={alreadyClaimedToday}
+                  xpEventsCount={xpEvents.length}
+                  badgesCount={earnedBadgesCount}
                   onApplyNextLevel={handleApplyLevelUp}
+                  onClaimXp={handleClaimXp}
                 />
               </div>
             </section>

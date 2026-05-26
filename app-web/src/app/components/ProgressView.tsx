@@ -1,4 +1,6 @@
 import type { LevelUpCheckResult } from "../lib/level-up";
+import type { SpeakerLevelProgress, XpProfile } from "../lib/gamification";
+import { GamificationPanel } from "./GamificationPanel";
 import { LevelUpCheckPanel } from "./LevelUpCheckPanel";
 
 type SessionForProgress = {
@@ -11,14 +13,28 @@ type ProgressViewProps = {
   sessions: SessionForProgress[];
   dayStreak: number;
   levelUpCheck: LevelUpCheckResult;
+  xpProfile: XpProfile;
+  speakerProgress: SpeakerLevelProgress;
+  claimableXp: number;
+  alreadyClaimedToday: boolean;
+  xpEventsCount: number;
+  badgesCount: number;
   onApplyNextLevel: () => void;
+  onClaimXp: () => void;
 };
 
 export function ProgressView({
   sessions,
   dayStreak,
   levelUpCheck,
+  xpProfile,
+  speakerProgress,
+  claimableXp,
+  alreadyClaimedToday,
+  xpEventsCount,
+  badgesCount,
   onApplyNextLevel,
+  onClaimXp,
 }: ProgressViewProps) {
   const total = sessions.length;
   const modeCounts = sessions.reduce<Record<string, number>>((acc, s) => {
@@ -34,6 +50,18 @@ export function ProgressView({
 
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="sm:col-span-3">
+        <GamificationPanel
+          profile={xpProfile}
+          progress={speakerProgress}
+          claimableXp={claimableXp}
+          alreadyClaimedToday={alreadyClaimedToday}
+          xpEventsCount={xpEventsCount}
+          badgesCount={badgesCount}
+          onClaimXp={onClaimXp}
+        />
+      </div>
+
       <div className="sm:col-span-3">
         <LevelUpCheckPanel
           result={levelUpCheck}

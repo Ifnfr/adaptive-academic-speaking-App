@@ -221,10 +221,15 @@ Manual checks to run before declaring the local MVP stable.
 
 ## 17. Gamification Foundation
 
-> Gamification helpers are deterministic and local. They are not connected to
-> the app UI or session flow until the next implementation phase.
+> Gamification helpers are deterministic and local. The first UI layer is
+> visible, but XP awards are not connected to session actions until the next
+> implementation phase.
 
 - [ ] XP helpers do not modify existing session history or CSV data
 - [ ] Malformed gamification localStorage values normalize safely
 - [ ] XP amounts come only from `XP_RULES`, never from AI output
 - [ ] Claim XP is blocked after one claim per local day
+- [ ] Sidebar shows Speaker Level separately from English Level
+- [ ] Progress view shows total XP, pending XP, previous unclaimed XP, and claim state
+- [ ] No fake/test XP buttons are present
+- [ ] Completing sessions, retries, diagnostics, weekly reviews, mental models, and level-up actions does not award XP yet
