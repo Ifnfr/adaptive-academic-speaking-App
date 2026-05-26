@@ -65,6 +65,10 @@ import { SpeakingAttemptCard } from "./components/SpeakingAttemptCard";
 import { AttemptResultPanels } from "./components/AttemptResultPanels";
 import { RetryAndSummaryPanels } from "./components/RetryAndSummaryPanels";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
+import {
+  ArticlePracticeView,
+  type ArticlePracticeResult,
+} from "./components/ArticlePracticeView";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -715,6 +719,16 @@ export default function Home() {
   const [mentalModelLoading, setMentalModelLoading] = useState(false);
   const [mentalModelError, setMentalModelError] = useState<string | null>(null);
 
+  // --- Article Practice state ---
+  const [articleUrl, setArticleUrl] = useState("");
+  const [articleFocus, setArticleFocus] = useState("");
+  const [articlePracticeResult, setArticlePracticeResult] =
+    useState<ArticlePracticeResult | null>(null);
+  const [articlePracticeLoading, setArticlePracticeLoading] = useState(false);
+  const [articlePracticeError, setArticlePracticeError] = useState<
+    string | null
+  >(null);
+
   // --- Retry loop state ---
   const [retryTranscript, setRetryTranscript] = useState("");
   const [capturedRetry, setCapturedRetry] = useState<CapturedRetry | null>(null);
@@ -794,6 +808,9 @@ export default function Home() {
     "Build a clearer academic speaking response";
   const effectiveMentalModelFocus =
     mentalModelFocus.trim() || mentalModelDefaultFocus;
+  const articleFocusPlaceholder =
+    target.trim() || "Use the article for academic speaking practice";
+  const effectiveArticleFocus = articleFocus.trim() || articleFocusPlaceholder;
   const currentLocalDate = getLocalDateString();
   const speakerProgress = getSpeakerLevelProgress(xpProfile.totalXp);
   const claimableXp =
@@ -1553,6 +1570,80 @@ export default function Home() {
     }
   };
 
+  const handleGenerateArticlePractice = async () => {
+    const url = articleUrl.trim();
+    if (url.length === 0) {
+      setArticlePracticeError("Paste an article URL before generating practice.");
+      return;
+    }
+
+    const focus = effectiveArticleFocus.trim();
+    setArticlePracticeLoading(true);
+    setArticlePracticeError(null);
+    setArticlePracticeResult(null);
+    setArticleUrl(url);
+
+    try {
+      const res = await fetch("/api/article-practice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: aiProvider,
+          url,
+          level,
+          mode,
+          focus,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as
+        | (ArticlePracticeResult & { error?: string })
+        | { error?: string }
+        | null;
+
+      if (!res.ok || !data || ("error" in data && data.error)) {
+        const rawMessage =
+          (data && "error" in data && data.error) ||
+          `Request failed with status ${res.status}.`;
+        setArticlePracticeError(sanitizeErrorMessage(rawMessage));
+        return;
+      }
+
+      const result = data as ArticlePracticeResult;
+      if (
+        !result.sourceTitle ||
+        !result.sourceUrl ||
+        !result.sourceDomain ||
+        !result.articleBrief ||
+        !result.mainIdea ||
+        !Array.isArray(result.keyPoints) ||
+        !Array.isArray(result.usefulVocabulary) ||
+        !Array.isArray(result.comprehensionChecks) ||
+        !result.speakingTask ||
+        !result.speakingTask.title ||
+        !result.speakingTask.instruction ||
+        !Array.isArray(result.speakingTask.targetStructure) ||
+        !Array.isArray(result.followUpQuestions) ||
+        !Array.isArray(result.warnings)
+      ) {
+        setArticlePracticeError(
+          "Article Practice response was incomplete. Try again.",
+        );
+        return;
+      }
+
+      setArticlePracticeResult(result);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Network error while contacting the API.";
+      setArticlePracticeError(sanitizeErrorMessage(message));
+    } finally {
+      setArticlePracticeLoading(false);
+    }
+  };
+
   const handleApplyRecommendedLevel = () => {
     if (!diagnosticResult) return;
     setLevel(diagnosticResult.recommendedLevel);
@@ -1924,6 +2015,24 @@ export default function Home() {
             />
           )}
 
+          {/* ===================== Article Practice ===================== */}
+          {view === "article-practice" && (
+            <ArticlePracticeView
+              articleUrl={articleUrl}
+              articleFocus={articleFocus}
+              focusPlaceholder={articleFocusPlaceholder}
+              provider={aiProvider}
+              level={level}
+              mode={mode}
+              articlePracticeResult={articlePracticeResult}
+              articlePracticeLoading={articlePracticeLoading}
+              articlePracticeError={articlePracticeError}
+              onArticleUrlChange={setArticleUrl}
+              onArticleFocusChange={setArticleFocus}
+              onGenerateArticlePractice={handleGenerateArticlePractice}
+            />
+          )}
+
           {/* ===================== Mental Model ===================== */}
           {view === "mental-model" && (
             <MentalModelView
@@ -2021,6 +2130,8 @@ function viewTitle(view: string): string {
       return "Active Practice";
     case "vocabulary":
       return "Vocabulary Notebook";
+    case "article-practice":
+      return "Article Practice";
     case "session-log":
       return "Session Log";
     case "progress":
@@ -2044,6 +2155,8 @@ function viewSubtitle(view: string): string {
       return "Active Session";
     case "vocabulary":
       return "Vocabulary Notebook";
+    case "article-practice":
+      return "Article Practice";
     case "session-log":
       return "Session Log";
     case "progress":
@@ -2065,6 +2178,8 @@ function viewDescription(view: string): string {
   switch (view) {
     case "vocabulary":
       return "Save useful words and practice using them in your own sentences.";
+    case "article-practice":
+      return "Turn a real article URL into copyright-safe speaking practice.";
     case "session-log":
       return "Review your most recent practice sessions.";
     case "progress":

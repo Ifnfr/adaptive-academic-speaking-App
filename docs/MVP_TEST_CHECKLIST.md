@@ -14,7 +14,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Diagnostic shortcut selects Diagnostic mode and opens Active Session
 - [ ] Mental Model opens from the sidebar
 - [ ] Settings placeholder opens from the sidebar
-- [ ] Article Practice is not shown as an implemented feature
+- [ ] Article Practice opens from the sidebar
 
 ## 2. Session Setup
 
@@ -273,9 +273,9 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] UI does not auto-replace the user's original sentence or provide a copy-as-answer flow
 - [ ] Route does not modify XP, session history, CSV data, or Article Practice behavior
 
-## 20. Article Practice API
+## 20. Article Practice
 
-> Article Practice turns a user-provided article URL into copyright-safe speaking practice. UI integration is future work.
+> Article Practice turns a user-provided article URL into copyright-safe speaking practice.
 
 - [ ] `/api/article-practice` accepts only HTTP/HTTPS article URLs
 - [ ] Obvious local/private hosts are rejected before server-side fetch
@@ -284,4 +284,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Result contains article snapshot, brief, main idea, key points, vocabulary, checks, speaking task, follow-up questions, and warnings
 - [ ] Foundation speaking tasks stay simple, 30-60 seconds, and avoid research/counterargument/evidence-evaluation tasks
 - [ ] Provider JSON parsing handles raw, fenced, or surrounded JSON while keeping schema validation strict
-- [ ] Article Practice does not add localStorage history, XP, vocabulary saving, speaking attempts, or Article Practice UI yet
+- [ ] Article Practice UI requires a URL before request
+- [ ] Article Practice UI displays source title, domain, and URL, but never full article text
+- [ ] Article Practice result clears on refresh because it is React state only
+- [ ] Article Practice does not add localStorage history, XP, vocabulary saving, or speaking attempts
