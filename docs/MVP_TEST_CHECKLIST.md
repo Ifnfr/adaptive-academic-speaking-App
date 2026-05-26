@@ -251,4 +251,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Sentences without the target word or phrase are rejected
 - [ ] Accepted sentences increment reuse count and move `new` items to `practicing`
 - [ ] Recent saved sentences appear for the selected vocabulary item
-- [ ] Vocabulary Notebook does not call AI/API routes, award XP, modify session history, or change CSV data
+- [ ] Accepted vocabulary sentences award deterministic `vocab_sentence_submitted` pending XP
+- [ ] Rejected vocabulary sentences do not award XP
+- [ ] `vocab_reused` remains reserved and is not wired yet
+- [ ] Vocabulary Notebook does not call AI/API routes, modify session history, or change CSV data

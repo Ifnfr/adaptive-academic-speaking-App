@@ -886,6 +886,15 @@ export default function Home() {
       setSelectedVocabItemId(result.item?.id ?? selectedVocabItem.id);
       setVocabSentenceDraft("");
       setVocabMessage({ tone: "success", text: result.reason });
+      const savedSentence = result.item?.userSentences.at(-1);
+      if (result.item && savedSentence) {
+        awardGamificationEvent(
+          "vocab_sentence_submitted",
+          `${result.item.id}-${savedSentence.id}`,
+          "vocabulary",
+          "Submitted a valid vocabulary practice sentence.",
+        );
+      }
       return;
     }
 
