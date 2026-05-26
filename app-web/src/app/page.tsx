@@ -356,6 +356,29 @@ function stableTextKey(text: string): string {
   return hash.toString(36);
 }
 
+function normalizeArticlePracticeSourceUrl(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.protocol = parsed.protocol.toLowerCase();
+    parsed.hostname = parsed.hostname.toLowerCase();
+    parsed.hash = "";
+
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
+      parsed.pathname = parsed.pathname.slice(0, -1);
+    }
+
+    return parsed.toString();
+  } catch {
+    return trimmed.toLowerCase();
+  }
+}
+
 function createEarnedBadge(definition: BadgeDefinition): Badge {
   return {
     version: 1,
@@ -1669,15 +1692,9 @@ export default function Home() {
       setArticlePracticeResult(result);
 
       // Award XP for successful article practice generation.
-      // sourceId is deterministic: URL + local date to prevent repeated
-      // farming from the same article on the same day.
+      // sourceId is deterministic: normalized URL + local date only.
       try {
-        let normalizedUrl = url.trim();
-        try {
-          normalizedUrl = new URL(normalizedUrl).href;
-        } catch {
-          // fallback if invalid URL
-        }
+        const normalizedUrl = normalizeArticlePracticeSourceUrl(url);
         const articleSourceId = [
           "article",
           getLocalDateString(),

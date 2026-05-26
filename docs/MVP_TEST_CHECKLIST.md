@@ -235,7 +235,8 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Completing a normal session awards deterministic pending XP once per session
 - [ ] Completing a valid retry, diagnostic, weekly review, mental model, or level-up awards deterministic pending XP with daily caps
 - [ ] Diagnostic sessions do not create normal session history XP
-- [ ] Article Practice and Vocabulary XP event types remain reserved and are not wired yet
+- [ ] Article Practice XP uses local date + normalized source URL for duplicate protection
+- [ ] Vocabulary sentence XP is awarded only after an accepted saved sentence
 - [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP
 
 ## 18. Vocabulary Notebook
@@ -287,4 +288,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Article Practice UI requires a URL before request
 - [ ] Article Practice UI displays source title, domain, and URL, but never full article text
 - [ ] Article Practice result clears on refresh because it is React state only
-- [ ] Article Practice does not add localStorage history, XP, vocabulary saving, or speaking attempts
+- [ ] Regenerating the same Article Practice URL on the same local day does not award XP twice
+- [ ] Different Article Practice URLs can earn XP, subject to daily caps
+- [ ] Saving article vocabulary candidates does not award XP
+- [ ] Article Practice does not add localStorage history or speaking attempts
