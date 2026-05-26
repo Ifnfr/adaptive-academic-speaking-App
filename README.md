@@ -28,6 +28,11 @@ shown in the UI is **fonetik**.
 - Friendly provider errors for missing keys, rejected keys, rate limits, and model availability
 - Foundation-level calibration for Feedback, Diagnostic, Weekly Review, and Mental Model outputs
 - Robust JSON parsing for Weekly Review and Mental Model provider responses
+- **Vocabulary Notebook**: Save academic vocabulary items manually or from articles, track status, level, source, and reuse counts. Complete sentence practice and run AI-based usage corrections (`/api/vocabulary-correction`) to check naturalness/correctness (incrementing `correctUseCount` once per sentence).
+- **Gamification Engine**: Local XP tracking based on `XP_RULES`. Award pending daily XP for completing sessions, diagnostic tests, weekly reviews, mental models, level-ups, vocabulary sentence practice, and article practice, with a daily claim mechanism and capped limits.
+- **Article Practice**: Paste an article URL to extract text server-side and generate copyright-safe academic speaking practice (snapshot, brief, main idea, key points, useful vocabulary candidates, comprehension checks, speaking task, follow-up questions, and warnings).
+- **Article Vocabulary Save**: Save useful vocabulary candidates directly to the Vocabulary Notebook with the source set to `"article"`, carrying over the word, meaning, selected level, and usage examples from the article context (duplicate-safe).
+- **Article Practice → Active Session Bridge**: Click "Practice This Speaking Task" in the Article Practice result to switch views, set mode to "Reading-to-Speaking", and populate Today's Target with a compact prompt containing task details, source, instructions, structure, vocabulary, and URL, without auto-starting the session.
 
 ## Tech Stack
 
@@ -103,6 +108,12 @@ hot-reloaded.
   Generates teaching guidance about response quality standards. It does not
   store the result and does not receive full transcripts.
 
+- `POST /api/vocabulary-correction`  
+  Checks a user's practice sentence for vocabulary naturalness, grammar correctness, and collocations.
+
+- `POST /api/article-practice`  
+  Extracts text from a URL and generates a structured, copyright-safe speaking task.
+
 ## Security Notes
 
 - Keep provider keys in `app-web/.env.local`.
@@ -115,18 +126,19 @@ hot-reloaded.
 ## Current Limitations
 
 - No authentication.
-- No database, cloud sync, or deployment workflow.
+- No database, cloud sync, or deployment workflow (Clerk / Supabase are not used).
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.
 - Diagnostic Mode does not create Retry, CSV, or localStorage history entries.
 - Weekly Review and Mental Model results are shown in the UI but not persisted.
 - Retry transcripts are saved in the session summary, but there is no second AI feedback pass on retry yet.
-- Article Practice is not implemented yet.
+- Article Practice results are stored in React state only (no article history or full article body storage yet).
+- No save-all vocabulary button (words must be saved individually).
+- No article-specific CSV fields or feedback context.
 
 ## Roadmap
 
-- Article Practice for reading-to-speaking workflows
 - Dedicated Deep Feedback mode
 - Optional persisted review history
 - Stronger browser QA coverage

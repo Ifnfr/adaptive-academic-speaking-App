@@ -66,7 +66,9 @@ macOS or Linux:
 cp .env.example .env.local
 ```
 
-Open `app-web/.env.local` and add the provider keys you have.
+Open `app-web/.env.local` and add the provider keys you have. These keys remain strictly server-side in Next.js API routes; browser code never accesses them directly (no `NEXT_PUBLIC_` variables are used).
+
+Features like Quick Feedback, Diagnostic Mode, Weekly Review, Mental Model, Vocabulary Correction, and Article Practice require at least one active provider key.
 
 Use placeholders like this:
 
@@ -74,11 +76,10 @@ Use placeholders like this:
 CLAUDE_API_KEY=
 DEEPSEEK_API_KEY=
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-You only need one provider key to test AI features. Leave providers you do not
-use blank.
+You only need one provider key to test AI features. Leave providers you do not use blank. Always restart the dev server after editing `.env.local` for the changes to take effect.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
@@ -158,6 +159,12 @@ Check:
 
 You can leave `GEMINI_MODEL` as the documented placeholder unless you know you
 need a different model.
+
+### Gemini output truncation or incomplete JSON responses
+
+If Gemini responses are cut off or incomplete during Article Practice generation:
+- The backend API route `/api/article-practice` is configured with a high output budget (`maxOutputTokens: 8192`) and thinking is disabled if supported to prevent truncation issues.
+- If you still experience issues, check that your API key is active and try regenerating, or try switching provider if you have Claude or DeepSeek keys.
 
 ### Port 3000 already used
 

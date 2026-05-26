@@ -221,9 +221,7 @@ Manual checks to run before declaring the local MVP stable.
 
 ## 17. Gamification Foundation
 
-> Gamification helpers are deterministic and local. The first UI layer is
-> visible, but XP awards are not connected to session actions until the next
-> implementation phase.
+> Gamification helpers are deterministic and local, fully integrated with session actions, vocabulary practice, and article practice.
 
 - [ ] XP helpers do not modify existing session history or CSV data
 - [ ] Malformed gamification localStorage values normalize safely
@@ -232,16 +230,16 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Sidebar shows Speaker Level separately from English Level
 - [ ] Progress view shows total XP, pending XP, previous unclaimed XP, and claim state
 - [ ] No fake/test XP buttons are present
-- [ ] Completing a normal session awards deterministic pending XP once per session
+- [ ] Completing a normal session awards deterministic pending XP once per session (40 XP)
 - [ ] Completing a valid retry, diagnostic, weekly review, mental model, or level-up awards deterministic pending XP with daily caps
 - [ ] Diagnostic sessions do not create normal session history XP
-- [ ] Article Practice XP uses local date + normalized source URL for duplicate protection
-- [ ] Vocabulary sentence XP is awarded only after an accepted saved sentence
+- [ ] Article Practice XP uses deterministic local date + normalized source URL (`article-{localDate}-{stableHash(normalizedUrl)}`) for duplicate protection
+- [ ] Vocabulary sentence XP is awarded only after an accepted saved sentence (5 XP)
 - [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP
 
 ## 18. Vocabulary Notebook
 
-> Vocabulary Notebook is local, deterministic, and not connected to AI or XP yet.
+> Vocabulary Notebook is local and deterministic, integrated with AI sentence correction and XP rules.
 
 - [ ] Vocabulary helpers use only `adaptive-speaking-app:vocabulary`
 - [ ] Malformed vocabulary localStorage values normalize safely
@@ -252,11 +250,12 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Sentences without the target word or phrase are rejected
 - [ ] Accepted sentences increment reuse count and move `new` items to `practicing`
 - [ ] Recent saved sentences appear for the selected vocabulary item
-- [ ] Accepted vocabulary sentences award deterministic `vocab_sentence_submitted` pending XP
+- [ ] Accepted vocabulary sentences award deterministic `vocab_sentence_submitted` pending XP (5 XP)
 - [ ] Rejected vocabulary sentences do not award XP
 - [ ] Saved vocabulary sentences can be checked with AI correction after the user writes them
+- [ ] AI correction is called via Check Usage, invoking `/api/vocabulary-correction`
 - [ ] Correction results save locally on the sentence without replacing the original user sentence
-- [ ] Natural or understandable correction increments `correctUseCount` once per sentence
+- [ ] Natural or understandable correction status increments `correctUseCount` once per sentence
 - [ ] Checking/correcting vocabulary usage does not award XP
 - [ ] `vocab_reused` remains reserved and is not wired yet
 - [ ] Vocabulary Notebook does not modify session history or CSV data
@@ -274,21 +273,45 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] UI does not auto-replace the user's original sentence or provide a copy-as-answer flow
 - [ ] Route does not modify XP, session history, CSV data, or Article Practice behavior
 
-## 20. Article Practice
+## 20. Article Practice and Bridge
 
-> Article Practice turns a user-provided article URL into copyright-safe speaking practice.
+> Article Practice turns a user-provided article URL into copyright-safe speaking practice, and allows bridging speaking tasks to Active Session.
 
+### Article Practice API
 - [ ] `/api/article-practice` accepts only HTTP/HTTPS article URLs
 - [ ] Obvious local/private hosts are rejected before server-side fetch
 - [ ] Non-HTML, oversized, blocked, dynamic, or paywalled pages return friendly errors
-- [ ] Full article text is never returned to the client or stored
-- [ ] Result contains article snapshot, brief, main idea, key points, vocabulary, checks, speaking task, follow-up questions, and warnings
+- [ ] Full article text is never returned to the client or stored (complying with copyright policies)
+- [ ] Result contains article snapshot (title, domain, URL), brief, main idea, key points, useful vocabulary candidates, comprehension checks, speaking task, follow-up questions, and warnings
 - [ ] Foundation speaking tasks stay simple, 30-60 seconds, and avoid research/counterargument/evidence-evaluation tasks
 - [ ] Provider JSON parsing handles raw, fenced, or surrounded JSON while keeping schema validation strict
-- [ ] Article Practice UI requires a URL before request
-- [ ] Article Practice UI displays source title, domain, and URL, but never full article text
-- [ ] Article Practice result clears on refresh because it is React state only
-- [ ] Regenerating the same Article Practice URL on the same local day does not award XP twice
-- [ ] Different Article Practice URLs can earn XP, subject to daily caps
-- [ ] Saving article vocabulary candidates does not award XP
-- [ ] Article Practice does not add localStorage history or speaking attempts
+
+### Article Practice UI
+- [ ] Article Practice UI requires a URL before request, displaying validation error on empty submit
+- [ ] Article Practice UI displays source title, domain, and URL, but never the full extracted article body
+- [ ] Article Practice result clears on page refresh (state is React only)
+
+### Save Article Vocabulary Candidates
+- [ ] Cards in the Useful Vocabulary section show a "Save to Notebook" button
+- [ ] Clicking "Save to Notebook" creates a `VocabItem` in Vocabulary Notebook with `source: "article"`
+- [ ] Saved vocabulary candidate matches the active English Level, meaning is saved, and example uses `whyUseful`
+- [ ] Clicking "Save to Notebook" updates the button text to `"Saved ✓"` synchronously
+- [ ] Re-entering Article Practice shows already-saved words as `"Saved ✓"` (case-insensitive and trimmed)
+- [ ] Duplicate words are not added again to the notebook, and saving does not award XP
+
+### Article Practice XP Integration
+- [ ] Successfully generating an Article Practice result awards 25 XP (pending daily XP)
+- [ ] Same URL generated on the same day produces the identical `sourceId` and is blocked from earning duplicate XP
+- [ ] Different URLs generated on the same day are eligible for XP, subject to the daily cap of 3 completions per day
+
+### Article Practice to Active Session Bridge
+- [ ] Result displays a "Practice This Speaking Task" button
+- [ ] Clicking "Practice This Speaking Task" automatically switches view to Active Session setup
+- [ ] Sets active session practice mode to `"Reading-to-Speaking"`
+- [ ] Populates Today's Target with a compact, structured summary of the task:
+  - Task title, source details (title, domain), instructions, target structures, suggested vocabulary words (up to 5), and source URL
+- [ ] Today's Target does NOT include the article brief, key points, or full article text
+- [ ] Active session is NOT auto-started, and recording does not begin automatically
+- [ ] Bridge button click awards 0 XP
+- [ ] If an active session is already running, clicking the bridge button updates the setup/target but does not reset the session prematurely (displays active session bridge warning: "Article speaking task copied to Session setup. Click Restart Session when you are ready to switch tasks.")
+- [ ] Manually editing Today's Target or starting/restarting a session clears the bridge status message
