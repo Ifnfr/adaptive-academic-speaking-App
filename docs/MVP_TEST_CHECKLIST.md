@@ -237,3 +237,14 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Diagnostic sessions do not create normal session history XP
 - [ ] Article Practice and Vocabulary XP event types remain reserved and are not wired yet
 - [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP
+
+## 18. Vocabulary Notebook Foundation
+
+> Vocabulary helpers are local, deterministic, and not connected to UI, AI, or XP yet.
+
+- [ ] Vocabulary helpers use only `adaptive-speaking-app:vocabulary`
+- [ ] Malformed vocabulary localStorage values normalize safely
+- [ ] Empty vocabulary practice sentences are rejected
+- [ ] Sentences without the target word or phrase are rejected
+- [ ] Accepted sentences increment reuse count and move `new` items to `practicing`
+- [ ] Vocabulary helpers do not modify UI, API routes, XP events, session history, or CSV data
