@@ -218,3 +218,13 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] No chart library, canvas, heavy animation, or blur/backdrop-filter is required
 - [ ] No polling or background intervals run beyond timer/copy-status behavior
 - [ ] Cards and buttons remain usable at mobile widths
+
+## 17. Gamification Foundation
+
+> Gamification helpers are deterministic and local. They are not connected to
+> the app UI or session flow until the next implementation phase.
+
+- [ ] XP helpers do not modify existing session history or CSV data
+- [ ] Malformed gamification localStorage values normalize safely
+- [ ] XP amounts come only from `XP_RULES`, never from AI output
+- [ ] Claim XP is blocked after one claim per local day
