@@ -1669,15 +1669,19 @@ export default function Home() {
       setArticlePracticeResult(result);
 
       // Award XP for successful article practice generation.
-      // sourceId is deterministic: URL + local date + stable hash of
-      // title and mainIdea to prevent repeated farming from the same
-      // article on the same day.
+      // sourceId is deterministic: URL + local date to prevent repeated
+      // farming from the same article on the same day.
       try {
+        let normalizedUrl = url.trim();
+        try {
+          normalizedUrl = new URL(normalizedUrl).href;
+        } catch {
+          // fallback if invalid URL
+        }
         const articleSourceId = [
           "article",
           getLocalDateString(),
-          stableTextKey(url),
-          stableTextKey(result.sourceTitle + result.mainIdea),
+          stableTextKey(normalizedUrl),
         ].join("-");
         awardGamificationEvent(
           "article_practice_completed",
