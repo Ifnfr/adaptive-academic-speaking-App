@@ -137,6 +137,8 @@ verify the behavior.
 - [ ] After submitting the transcript, the Captured panel shows "Run Diagnostic" instead of "Get AI Feedback"
 - [ ] Run Diagnostic button is disabled and reads "Running diagnostic..." while loading
 - [ ] On success, a Diagnostic Result panel appears with Recommended Level, Main Bottleneck, Summary, six 1-5 Scores, and a 7-Day Focus Plan
+- [ ] Diagnostic 7-Day Focus Plan is calibrated to the Recommended Level
+- [ ] Foundation Diagnostic plans use simple 10-20 minute speaking drills and do not recommend journal abstracts, academic papers, or advanced research tasks
 - [ ] Each score is an integer between 1 and 5
 - [ ] Recommended Level is one of: Foundation, Beginner, Intermediate, Advanced, Expert
 - [ ] If the model returns an unknown level, the result falls back to "Foundation"

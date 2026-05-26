@@ -60,6 +60,27 @@ function buildSystemPrompt(): string {
     "biggest bottleneck holding them back, then propose a focused 7-day plan.",
     "Be specific. Reference the transcript when possible. Never invent",
     "transcript details.",
+    "Use the diagnostic recommendedLevel as the basis for the 7-day focus plan.",
+    "The 7-day focus plan must be level-appropriate practical speaking drills, not reading or research homework only.",
+    "Every plan item must include a concrete speaking action the learner can do.",
+    "",
+    "LEVEL-SPECIFIC PLAN GUIDANCE:",
+    "Foundation:",
+    "- The plan must be simple, concrete, beginner-safe, and easy to understand.",
+    "- Each day should be doable in 10-20 minutes.",
+    "- Each day must include a concrete speaking action.",
+    "- Focus on clear topic sentence, subject + verb clarity, one idea per sentence, simple reason using \"because\", 30-60 seconds of continuous speaking, reducing informal phrasing, and repeating a simple academic template.",
+    "- Do NOT suggest journal abstracts, academic papers, research tasks, complex writing tasks, counterarguments, advanced academic vocabulary drills, or long essay planning.",
+    "Beginner:",
+    "- Use simple academic structure: position, reason, simple example, short conclusion.",
+    "- Avoid advanced research tasks.",
+    "Intermediate:",
+    "- Allow structured argument drills, examples, coherence, and basic evidence.",
+    "- Keep tasks manageable.",
+    "Advanced:",
+    "- Allow counterargument, nuance, evidence quality, academic tone, and stronger structure.",
+    "Expert:",
+    "- Allow refinement, precision, nuance, argument depth, and advanced academic speaking standards.",
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -73,7 +94,7 @@ function buildSystemPrompt(): string {
     "- scores is an object with integer values from 1 (very weak) to 5 (strong) for:",
     '  fluency, grammar, vocabulary, coherence, argument, academicTone.',
     '- sevenDayFocusPlan is an array of 7 strings, each starting with "Day N: ".',
-    "- Each plan item is one short, specific practice instruction.",
+    "- Each plan item is one short, specific, level-appropriate speaking practice instruction.",
   ].join("\n");
 }
 
@@ -94,7 +115,7 @@ function buildUserPrompt(req: DiagnosticRequest): string {
     "2. Name the single biggest bottleneck.",
     "3. Write a 2-4 sentence summary of their current profile.",
     "4. Rate them on six dimensions, each as an integer from 1 to 5.",
-    "5. Produce a 7-day focus plan, one short instruction per day.",
+    "5. Produce a 7-day focus plan calibrated to the recommendedLevel, one short speaking instruction per day.",
     "",
     'Return ONLY the JSON object: {"recommendedLevel": "...", "mainBottleneck": "...", "summary": "...", "scores": {"fluency": 3, "grammar": 3, "vocabulary": 3, "coherence": 3, "argument": 3, "academicTone": 3}, "sevenDayFocusPlan": ["Day 1: ...", "Day 2: ...", "Day 3: ...", "Day 4: ...", "Day 5: ...", "Day 6: ...", "Day 7: ..."]}',
   ].join("\n");
@@ -176,6 +197,23 @@ function normalizePlan(raw: unknown): string[] {
   return base;
 }
 
+function isFoundationPlanItemAllowed(item: string): boolean {
+  const lower = item.toLowerCase();
+  const banned =
+    /journal abstract|academic paper|research task|research|counterargument|counter-argument|advanced academic vocabulary|vocabulary drill|essay plan|essay planning|long essay|literature review|scholarly article|peer-reviewed|paper abstract/.test(
+      lower,
+    );
+  if (banned) return false;
+
+  return /\b(speak|say|talk|record|repeat|describe|answer|explain|tell|present|read aloud|practice saying|explain aloud|answer aloud|summarize aloud)\b/.test(
+    lower,
+  );
+}
+
+function isFoundationPlanAllowed(plan: string[]): boolean {
+  return plan.every(isFoundationPlanItemAllowed);
+}
+
 function parseDiagnostic(raw: string): {
   recommendedLevel: Level;
   mainBottleneck: string;
@@ -192,12 +230,21 @@ function parseDiagnostic(raw: string): {
     const summary =
       typeof data.summary === "string" ? data.summary.trim() : "";
     if (!mainBottleneck || !summary) return null;
+    const recommendedLevel = normalizeLevel(data.recommendedLevel);
+    const sevenDayFocusPlan = normalizePlan(data.sevenDayFocusPlan);
+    if (
+      recommendedLevel === "Foundation" &&
+      !isFoundationPlanAllowed(sevenDayFocusPlan)
+    ) {
+      return null;
+    }
+
     return {
-      recommendedLevel: normalizeLevel(data.recommendedLevel),
+      recommendedLevel,
       mainBottleneck,
       summary,
       scores: normalizeScores(data.scores),
-      sevenDayFocusPlan: normalizePlan(data.sevenDayFocusPlan),
+      sevenDayFocusPlan,
     };
   } catch {
     return null;
