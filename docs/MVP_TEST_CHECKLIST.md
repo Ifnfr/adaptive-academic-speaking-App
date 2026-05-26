@@ -238,13 +238,17 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Article Practice and Vocabulary XP event types remain reserved and are not wired yet
 - [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP
 
-## 18. Vocabulary Notebook Foundation
+## 18. Vocabulary Notebook
 
-> Vocabulary helpers are local, deterministic, and not connected to UI, AI, or XP yet.
+> Vocabulary Notebook is local, deterministic, and not connected to AI or XP yet.
 
 - [ ] Vocabulary helpers use only `adaptive-speaking-app:vocabulary`
 - [ ] Malformed vocabulary localStorage values normalize safely
+- [ ] Sidebar opens Vocabulary Notebook from the Practice section
+- [ ] Add Vocabulary form saves word, meaning, level, source, optional example, and collocations
+- [ ] Saved vocabulary list shows status, level, source, reuse count, Practice, and Delete controls
 - [ ] Empty vocabulary practice sentences are rejected
 - [ ] Sentences without the target word or phrase are rejected
 - [ ] Accepted sentences increment reuse count and move `new` items to `practicing`
-- [ ] Vocabulary helpers do not modify UI, API routes, XP events, session history, or CSV data
+- [ ] Recent saved sentences appear for the selected vocabulary item
+- [ ] Vocabulary Notebook does not call AI/API routes, award XP, modify session history, or change CSV data

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 export type SidebarView =
   | "active"
+  | "vocabulary"
   | "session-log"
   | "progress"
   | "weekly-review"
@@ -170,6 +171,12 @@ export function Sidebar({
               onClick={() => onSelectView("active")}
             >
               Active Session
+            </SidebarItem>
+            <SidebarItem
+              active={view === "vocabulary"}
+              onClick={() => onSelectView("vocabulary")}
+            >
+              Vocabulary Notebook
             </SidebarItem>
             <SidebarItem
               active={view === "session-log"}

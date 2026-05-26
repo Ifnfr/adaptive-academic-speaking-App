@@ -15,6 +15,19 @@ import {
   type SpeakingPrompt,
 } from "./lib/speaking-prompt";
 import {
+  addUserSentence,
+  computeVocabularyStats,
+  createVocabItem,
+  deleteVocabItem,
+  loadVocabulary,
+  saveVocabulary,
+  updateVocabStatus,
+  type VocabItem,
+  type VocabLevel,
+  type VocabSource,
+  type VocabStatus,
+} from "./lib/vocabulary";
+import {
   awardXpEvent,
   claimXp,
   createXpEvent,
@@ -49,6 +62,7 @@ import { SpeakingPromptCard } from "./components/SpeakingPromptCard";
 import { SpeakingAttemptCard } from "./components/SpeakingAttemptCard";
 import { AttemptResultPanels } from "./components/AttemptResultPanels";
 import { RetryAndSummaryPanels } from "./components/RetryAndSummaryPanels";
+import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -709,6 +723,26 @@ export default function Home() {
   const [xpEvents, setXpEvents] = useState<XpEvent[]>(() => loadXpEvents());
   const [badges, setBadges] = useState<Badge[]>(() => loadBadges());
 
+  // --- Vocabulary Notebook state (local, deterministic, no AI) ---
+  const [vocabularyItems, setVocabularyItems] = useState<VocabItem[]>(() =>
+    loadVocabulary(),
+  );
+  const [vocabFormWord, setVocabFormWord] = useState("");
+  const [vocabFormMeaning, setVocabFormMeaning] = useState("");
+  const [vocabFormLevel, setVocabFormLevel] = useState<VocabLevel>(level);
+  const [vocabFormSource, setVocabFormSource] =
+    useState<VocabSource>("manual");
+  const [vocabFormExample, setVocabFormExample] = useState("");
+  const [vocabFormCollocations, setVocabFormCollocations] = useState("");
+  const [selectedVocabItemId, setSelectedVocabItemId] = useState<string | null>(
+    null,
+  );
+  const [vocabSentenceDraft, setVocabSentenceDraft] = useState("");
+  const [vocabMessage, setVocabMessage] = useState<{
+    tone: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
+
   // --- Session history (localStorage) ---
   // Sessions are an external value (localStorage). We read them via
   // useSyncExternalStore so the initial value is loaded SSR-safely without
@@ -758,6 +792,105 @@ export default function Home() {
   const earnedBadgeLabels = badges
     .filter((badge) => badge.status === "earned")
     .map((badge) => badge.label);
+  const vocabularyStats = computeVocabularyStats(vocabularyItems);
+  const selectedVocabItem =
+    vocabularyItems.find((item) => item.id === selectedVocabItemId) ??
+    vocabularyItems[0] ??
+    null;
+
+  const persistVocabulary = (nextItems: VocabItem[]) => {
+    setVocabularyItems(nextItems);
+    saveVocabulary(nextItems);
+  };
+
+  const handleAddVocabularyItem = () => {
+    const word = vocabFormWord.trim();
+    const meaning = vocabFormMeaning.trim();
+    if (!word || !meaning) {
+      setVocabMessage({
+        tone: "error",
+        text: "Add both a word and a short meaning first.",
+      });
+      return;
+    }
+
+    const item = createVocabItem({
+      word,
+      meaning,
+      level: vocabFormLevel,
+      source: vocabFormSource,
+      example: vocabFormExample,
+      collocations: vocabFormCollocations
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    });
+    const nextItems = [item, ...vocabularyItems];
+    persistVocabulary(nextItems);
+    setSelectedVocabItemId(item.id);
+    setVocabSentenceDraft("");
+    setVocabFormWord("");
+    setVocabFormMeaning("");
+    setVocabFormExample("");
+    setVocabFormCollocations("");
+    setVocabMessage({
+      tone: "success",
+      text: "Vocabulary saved. Practice it with one simple sentence.",
+    });
+  };
+
+  const handleDeleteVocabularyItem = (id: string) => {
+    const nextItems = deleteVocabItem(vocabularyItems, id);
+    persistVocabulary(nextItems);
+    if (selectedVocabItemId === id) {
+      setSelectedVocabItemId(nextItems[0]?.id ?? null);
+      setVocabSentenceDraft("");
+    }
+    setVocabMessage({ tone: "info", text: "Vocabulary item deleted." });
+  };
+
+  const handleUpdateVocabularyStatus = (
+    id: string,
+    status: VocabStatus,
+  ) => {
+    const nextItems = updateVocabStatus(vocabularyItems, id, status);
+    persistVocabulary(nextItems);
+    setVocabMessage({ tone: "success", text: "Vocabulary status updated." });
+  };
+
+  const handleSelectVocabularyPracticeItem = (id: string) => {
+    setSelectedVocabItemId(id);
+    setVocabSentenceDraft("");
+    setVocabMessage({
+      tone: "info",
+      text: "Write one simple sentence using this word.",
+    });
+  };
+
+  const handleSubmitVocabularySentence = () => {
+    if (!selectedVocabItem) {
+      setVocabMessage({
+        tone: "error",
+        text: "Select a vocabulary item before saving a sentence.",
+      });
+      return;
+    }
+
+    const result = addUserSentence(
+      vocabularyItems,
+      selectedVocabItem.id,
+      vocabSentenceDraft,
+    );
+    if (result.accepted) {
+      persistVocabulary(result.items);
+      setSelectedVocabItemId(result.item?.id ?? selectedVocabItem.id);
+      setVocabSentenceDraft("");
+      setVocabMessage({ tone: "success", text: result.reason });
+      return;
+    }
+
+    setVocabMessage({ tone: "error", text: result.reason });
+  };
 
   const updateBadges = (
     eventType: XpEventType | null,
@@ -1584,6 +1717,35 @@ export default function Home() {
             </>
           )}
 
+          {/* ===================== Vocabulary Notebook view ===================== */}
+          {view === "vocabulary" && (
+            <VocabularyNotebookView
+              items={vocabularyItems}
+              stats={vocabularyStats}
+              formWord={vocabFormWord}
+              formMeaning={vocabFormMeaning}
+              formLevel={vocabFormLevel}
+              formSource={vocabFormSource}
+              formExample={vocabFormExample}
+              formCollocations={vocabFormCollocations}
+              selectedItemId={selectedVocabItem?.id ?? null}
+              sentenceDraft={vocabSentenceDraft}
+              message={vocabMessage}
+              onFormWordChange={setVocabFormWord}
+              onFormMeaningChange={setVocabFormMeaning}
+              onFormLevelChange={setVocabFormLevel}
+              onFormSourceChange={setVocabFormSource}
+              onFormExampleChange={setVocabFormExample}
+              onFormCollocationsChange={setVocabFormCollocations}
+              onAddItem={handleAddVocabularyItem}
+              onDeleteItem={handleDeleteVocabularyItem}
+              onStatusChange={handleUpdateVocabularyStatus}
+              onSelectPracticeItem={handleSelectVocabularyPracticeItem}
+              onSentenceDraftChange={setVocabSentenceDraft}
+              onSubmitSentence={handleSubmitVocabularySentence}
+            />
+          )}
+
           {/* ===================== Session Log view ===================== */}
           {view === "session-log" && (
             <SessionLogView
@@ -1733,6 +1895,8 @@ function viewTitle(view: string): string {
   switch (view) {
     case "active":
       return "Active Practice";
+    case "vocabulary":
+      return "Vocabulary Notebook";
     case "session-log":
       return "Session Log";
     case "progress":
@@ -1754,6 +1918,8 @@ function viewSubtitle(view: string): string {
   switch (view) {
     case "active":
       return "Active Session";
+    case "vocabulary":
+      return "Vocabulary Notebook";
     case "session-log":
       return "Session Log";
     case "progress":
@@ -1773,6 +1939,8 @@ function viewSubtitle(view: string): string {
 
 function viewDescription(view: string): string {
   switch (view) {
+    case "vocabulary":
+      return "Save useful words and practice using them in your own sentences.";
     case "session-log":
       return "Review your most recent practice sessions.";
     case "progress":
