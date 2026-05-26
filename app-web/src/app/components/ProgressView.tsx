@@ -19,6 +19,7 @@ type ProgressViewProps = {
   alreadyClaimedToday: boolean;
   xpEventsCount: number;
   badgesCount: number;
+  earnedBadgeLabels: string[];
   onApplyNextLevel: () => void;
   onClaimXp: () => void;
 };
@@ -33,6 +34,7 @@ export function ProgressView({
   alreadyClaimedToday,
   xpEventsCount,
   badgesCount,
+  earnedBadgeLabels,
   onApplyNextLevel,
   onClaimXp,
 }: ProgressViewProps) {
@@ -58,6 +60,7 @@ export function ProgressView({
           alreadyClaimedToday={alreadyClaimedToday}
           xpEventsCount={xpEventsCount}
           badgesCount={badgesCount}
+          earnedBadgeLabels={earnedBadgeLabels}
           onClaimXp={onClaimXp}
         />
       </div>

@@ -8,6 +8,7 @@ type GamificationPanelProps = {
   alreadyClaimedToday: boolean;
   xpEventsCount: number;
   badgesCount: number;
+  earnedBadgeLabels: string[];
   onClaimXp: () => void;
 };
 
@@ -18,6 +19,7 @@ export function GamificationPanel({
   alreadyClaimedToday,
   xpEventsCount,
   badgesCount,
+  earnedBadgeLabels,
   onClaimXp,
 }: GamificationPanelProps) {
   const percent = Math.round(progress.progressRatio * 100);
@@ -77,6 +79,24 @@ export function GamificationPanel({
         <StatCard label="Reward Events" value={String(xpEventsCount)} />
         <StatCard label="Badges" value={String(badgesCount)} />
       </div>
+
+      {earnedBadgeLabels.length > 0 && (
+        <div className="mt-5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
+            Earned Badges
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {earnedBadgeLabels.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-[var(--brand-gold)]/40 bg-[var(--brand-gold)]/10 px-3 py-1 text-xs font-medium text-[var(--brand-ink)]"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-5">
         <XpClaimCard

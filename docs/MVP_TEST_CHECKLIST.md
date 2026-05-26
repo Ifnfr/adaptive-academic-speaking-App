@@ -232,4 +232,8 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Sidebar shows Speaker Level separately from English Level
 - [ ] Progress view shows total XP, pending XP, previous unclaimed XP, and claim state
 - [ ] No fake/test XP buttons are present
-- [ ] Completing sessions, retries, diagnostics, weekly reviews, mental models, and level-up actions does not award XP yet
+- [ ] Completing a normal session awards deterministic pending XP once per session
+- [ ] Completing a valid retry, diagnostic, weekly review, mental model, or level-up awards deterministic pending XP with daily caps
+- [ ] Diagnostic sessions do not create normal session history XP
+- [ ] Article Practice and Vocabulary XP event types remain reserved and are not wired yet
+- [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP

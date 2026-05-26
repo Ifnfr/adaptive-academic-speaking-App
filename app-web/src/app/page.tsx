@@ -15,15 +15,20 @@ import {
   type SpeakingPrompt,
 } from "./lib/speaking-prompt";
 import {
+  awardXpEvent,
   claimXp,
+  createXpEvent,
   getLocalDateString,
   getSpeakerLevelProgress,
   loadBadges,
   loadXpEvents,
   loadXpProfile,
+  saveBadges,
+  saveXpEvents,
   saveXpProfile,
   type Badge,
   type XpEvent,
+  type XpEventType,
   type XpProfile,
 } from "./lib/gamification";
 import { ProgressView } from "./components/ProgressView";
@@ -232,6 +237,59 @@ type SessionRecord = {
   csv: string;
 };
 
+type BadgeDefinition = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+const BADGE_DEFINITIONS: Record<string, BadgeDefinition> = {
+  first_session: {
+    id: "first_session",
+    label: "First Session",
+    description: "Completed your first normal speaking session.",
+  },
+  first_retry: {
+    id: "first_retry",
+    label: "First Retry",
+    description: "Completed your first retry attempt.",
+  },
+  first_diagnostic: {
+    id: "first_diagnostic",
+    label: "First Diagnostic",
+    description: "Completed your first diagnostic assessment.",
+  },
+  first_weekly_review: {
+    id: "first_weekly_review",
+    label: "First Weekly Review",
+    description: "Generated your first weekly review.",
+  },
+  first_mental_model: {
+    id: "first_mental_model",
+    label: "First Mental Model",
+    description: "Generated your first mental model session.",
+  },
+  first_level_up: {
+    id: "first_level_up",
+    label: "First Level-Up",
+    description: "Applied your first level-up recommendation.",
+  },
+  speaker_level_5: {
+    id: "speaker_level_5",
+    label: "Structured Speaker",
+    description: "Reached Speaker Level 5.",
+  },
+};
+
+const BADGE_BY_EVENT: Partial<Record<XpEventType, string>> = {
+  normal_session_completed: "first_session",
+  retry_completed: "first_retry",
+  diagnostic_completed: "first_diagnostic",
+  weekly_review_completed: "first_weekly_review",
+  mental_model_completed: "first_mental_model",
+  level_up_applied: "first_level_up",
+};
+
 const SESSIONS_STORAGE_KEY = "adaptive-speaking-app:sessions";
 const MAX_STORED_SESSIONS = 20;
 
@@ -257,6 +315,41 @@ function isSessionRecord(value: unknown): value is SessionRecord {
     typeof r.retryTranscript === "string" &&
     typeof r.csv === "string"
   );
+}
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function stableTextKey(text: string): string {
+  const trimmed = text.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < trimmed.length; i += 1) {
+    hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+function createEarnedBadge(definition: BadgeDefinition): Badge {
+  return {
+    version: 1,
+    id: definition.id,
+    label: definition.label,
+    description: definition.description,
+    status: "earned",
+    earnedAt: new Date().toISOString(),
+  };
+}
+
+function withEarnedBadge(
+  badges: ReadonlyArray<Badge>,
+  badgeId: string,
+): Badge[] {
+  const definition = BADGE_DEFINITIONS[badgeId];
+  if (!definition || badges.some((badge) => badge.id === badgeId)) {
+    return [...badges];
+  }
+  return [...badges, createEarnedBadge(definition)];
 }
 
 function loadSessions(): SessionRecord[] {
@@ -613,8 +706,8 @@ export default function Home() {
 
   // --- Gamification state (local, deterministic, no AI) ---
   const [xpProfile, setXpProfile] = useState<XpProfile>(() => loadXpProfile());
-  const [xpEvents] = useState<XpEvent[]>(() => loadXpEvents());
-  const [badges] = useState<Badge[]>(() => loadBadges());
+  const [xpEvents, setXpEvents] = useState<XpEvent[]>(() => loadXpEvents());
+  const [badges, setBadges] = useState<Badge[]>(() => loadBadges());
 
   // --- Session history (localStorage) ---
   // Sessions are an external value (localStorage). We read them via
@@ -662,6 +755,55 @@ export default function Home() {
   const earnedBadgesCount = badges.filter(
     (badge) => badge.status === "earned",
   ).length;
+  const earnedBadgeLabels = badges
+    .filter((badge) => badge.status === "earned")
+    .map((badge) => badge.label);
+
+  const updateBadges = (
+    eventType: XpEventType | null,
+    profile: XpProfile,
+  ) => {
+    let nextBadges = [...badges];
+    const eventBadgeId = eventType ? BADGE_BY_EVENT[eventType] : undefined;
+    if (eventBadgeId) {
+      nextBadges = withEarnedBadge(nextBadges, eventBadgeId);
+    }
+    if (getSpeakerLevelProgress(profile.totalXp).currentLevel.level >= 5) {
+      nextBadges = withEarnedBadge(nextBadges, "speaker_level_5");
+    }
+
+    if (nextBadges.length !== badges.length) {
+      setBadges(nextBadges);
+      saveBadges(nextBadges);
+    }
+  };
+
+  const awardGamificationEvent = (
+    type: XpEventType,
+    sourceId: string,
+    sourceKind: XpEvent["sourceKind"],
+    reason: string,
+  ) => {
+    try {
+      const candidate = createXpEvent({
+        type,
+        sourceId,
+        sourceKind,
+        reason,
+      });
+      const awarded = awardXpEvent(xpProfile, xpEvents, candidate);
+      setXpProfile(awarded.profile);
+      setXpEvents(awarded.events);
+      saveXpProfile(awarded.profile);
+      saveXpEvents(awarded.events);
+
+      if (awarded.result.allowed) {
+        updateBadges(type, awarded.profile);
+      }
+    } catch {
+      // Gamification is optional; it should never block the practice flow.
+    }
+  };
 
   const handleUseRecommendation = () => {
     setMode(coachRecommendation.recommendedMode);
@@ -671,17 +813,26 @@ export default function Home() {
 
   const handleApplyLevelUp = () => {
     if (levelUpCheck.status !== "Ready" || !levelUpCheck.nextLevel) return;
+    const oldLevel = level;
+    const nextLevel = levelUpCheck.nextLevel;
     setLevel(levelUpCheck.nextLevel);
     setTarget(
       `Start ${levelUpCheck.nextLevel} practice with clear structure and steady evidence.`,
     );
     setView("active");
+    awardGamificationEvent(
+      "level_up_applied",
+      `${oldLevel}-to-${nextLevel}-${getLocalDateString()}`,
+      "level-up",
+      "Applied a ready Level-Up Check recommendation.",
+    );
   };
 
   const handleClaimXp = () => {
     const claimed = claimXp(xpProfile, getLocalDateString());
     setXpProfile(claimed.profile);
     saveXpProfile(claimed.profile);
+    updateBadges(null, claimed.profile);
   };
 
   // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
@@ -986,6 +1137,14 @@ export default function Home() {
         return;
       }
       setDiagnosticResult(result);
+      if (countWords(capturedAttempt.transcript) >= 30) {
+        awardGamificationEvent(
+          "diagnostic_completed",
+          `diagnostic-${getLocalDateString()}-${capturedAttempt.durationSeconds}-${stableTextKey(capturedAttempt.transcript)}`,
+          "diagnostic",
+          "Completed a diagnostic assessment.",
+        );
+      }
     } catch (err) {
       const message =
         err instanceof Error
@@ -1055,6 +1214,12 @@ export default function Home() {
       }
 
       setWeeklyReviewResult(result);
+      awardGamificationEvent(
+        "weekly_review_completed",
+        `weekly-review-${getLocalDateString()}-${sessions[0]?.id ?? "no-session"}-${sessions.length}`,
+        "weekly-review",
+        "Generated a weekly review.",
+      );
     } catch (err) {
       const message =
         err instanceof Error
@@ -1117,6 +1282,12 @@ export default function Home() {
       }
 
       setMentalModelResult(result);
+      awardGamificationEvent(
+        "mental_model_completed",
+        `mental-model-${getLocalDateString()}-${level}-${mode}-${stableTextKey(focus)}`,
+        "mental-model",
+        "Generated a mental model session.",
+      );
     } catch (err) {
       const message =
         err instanceof Error
@@ -1148,6 +1319,14 @@ export default function Home() {
   const handleSubmitRetry = () => {
     if (!canSubmitRetry) return;
     setCapturedRetry({ transcript: trimmedRetryTranscript });
+    if (activeSession && capturedAttempt && countWords(trimmedRetryTranscript) >= 8) {
+      awardGamificationEvent(
+        "retry_completed",
+        `retry-${activeSession.level}-${activeSession.mode}-${capturedAttempt.durationSeconds}-${stableTextKey(trimmedRetryTranscript)}`,
+        "retry",
+        "Completed a retry attempt with enough speaking content.",
+      );
+    }
   };
 
   const handleEndSession = () => {
@@ -1180,6 +1359,14 @@ export default function Home() {
     // Persist + notify subscribers via the external store helper.
     const next = [record, ...sessions].slice(0, MAX_STORED_SESSIONS);
     updateSessions(next);
+    if (activeSession.mode !== "Diagnostic") {
+      awardGamificationEvent(
+        "normal_session_completed",
+        record.id,
+        "session",
+        "Completed a normal speaking session.",
+      );
+    }
   };
 
   const handleCopyCsv = async () => {
@@ -1431,6 +1618,7 @@ export default function Home() {
                   alreadyClaimedToday={alreadyClaimedToday}
                   xpEventsCount={xpEvents.length}
                   badgesCount={earnedBadgesCount}
+                  earnedBadgeLabels={earnedBadgeLabels}
                   onApplyNextLevel={handleApplyLevelUp}
                   onClaimXp={handleClaimXp}
                 />
