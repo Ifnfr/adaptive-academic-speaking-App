@@ -22,6 +22,7 @@ type SidebarProps = {
   speakerLevel: number;
   speakerLevelName: string;
   totalXp: number;
+  gamificationReady: boolean;
   onSelectView: (view: SidebarView) => void;
   onSelectDiagnostic: () => void;
 };
@@ -80,6 +81,7 @@ export function Sidebar({
   speakerLevel,
   speakerLevelName,
   totalXp,
+  gamificationReady,
   onSelectView,
   onSelectDiagnostic,
 }: SidebarProps) {
@@ -150,13 +152,13 @@ export function Sidebar({
               </span>
             </div>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
-              Level {speakerLevel}
+              {gamificationReady ? `Level ${speakerLevel}` : "Level -"}
             </p>
             <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-              {speakerLevelName}
+              {gamificationReady ? speakerLevelName : "Loading speaker progress"}
             </p>
             <p className="mt-3 font-mono text-xs tabular-nums text-[var(--brand-muted)]">
-              {totalXp} total XP
+              {gamificationReady ? `${totalXp} total XP` : "- total XP"}
             </p>
             <p className="mt-2 text-[11px] text-[var(--brand-muted)]">
               Separate from English Level.

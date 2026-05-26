@@ -33,6 +33,7 @@ import {
 import {
   awardXpEvent,
   claimXp,
+  createDefaultXpProfile,
   createXpEvent,
   getLocalDateString,
   getSpeakerLevelProgress,
@@ -764,9 +765,12 @@ export default function Home() {
   const [csvCopied, setCsvCopied] = useState(false);
 
   // --- Gamification state (local, deterministic, no AI) ---
-  const [xpProfile, setXpProfile] = useState<XpProfile>(() => loadXpProfile());
-  const [xpEvents, setXpEvents] = useState<XpEvent[]>(() => loadXpEvents());
-  const [badges, setBadges] = useState<Badge[]>(() => loadBadges());
+  const [xpProfile, setXpProfile] = useState<XpProfile>(() =>
+    createDefaultXpProfile(),
+  );
+  const [xpEvents, setXpEvents] = useState<XpEvent[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [gamificationReady, setGamificationReady] = useState(false);
 
   // --- Vocabulary Notebook state (local, deterministic, no AI) ---
   const [vocabularyItems, setVocabularyItems] = useState<VocabItem[]>(() =>
@@ -807,8 +811,22 @@ export default function Home() {
   const [lastCsvCopied, setLastCsvCopied] = useState(false);
 
   useEffect(() => {
+    const loadGamificationTimer = window.setTimeout(() => {
+      const loadedProfile = loadXpProfile();
+      setXpProfile(loadedProfile);
+      setXpEvents(loadXpEvents());
+      setBadges(loadBadges());
+      saveXpProfile(loadedProfile);
+      setGamificationReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(loadGamificationTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!gamificationReady) return;
     saveXpProfile(xpProfile);
-  }, [xpProfile]);
+  }, [gamificationReady, xpProfile]);
 
   // --- Sidebar navigation view ---
   // Lightweight local view state. No router, no real new routes. The Active
@@ -1849,6 +1867,7 @@ export default function Home() {
           speakerLevel={speakerProgress.currentLevel.level}
           speakerLevelName={speakerProgress.currentLevel.name}
           totalXp={xpProfile.totalXp}
+          gamificationReady={gamificationReady}
           onSelectView={setView}
           onSelectDiagnostic={handleSelectDiagnostic}
         />
