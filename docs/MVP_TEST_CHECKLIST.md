@@ -272,3 +272,16 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Foundation correction uses simple wording and one main correction
 - [ ] UI does not auto-replace the user's original sentence or provide a copy-as-answer flow
 - [ ] Route does not modify XP, session history, CSV data, or Article Practice behavior
+
+## 20. Article Practice API
+
+> Article Practice turns a user-provided article URL into copyright-safe speaking practice. UI integration is future work.
+
+- [ ] `/api/article-practice` accepts only HTTP/HTTPS article URLs
+- [ ] Obvious local/private hosts are rejected before server-side fetch
+- [ ] Non-HTML, oversized, blocked, dynamic, or paywalled pages return friendly errors
+- [ ] Full article text is never returned to the client or stored
+- [ ] Result contains article snapshot, brief, main idea, key points, vocabulary, checks, speaking task, follow-up questions, and warnings
+- [ ] Foundation speaking tasks stay simple, 30-60 seconds, and avoid research/counterargument/evidence-evaluation tasks
+- [ ] Provider JSON parsing handles raw, fenced, or surrounded JSON while keeping schema validation strict
+- [ ] Article Practice does not add localStorage history, XP, vocabulary saving, speaking attempts, or Article Practice UI yet
