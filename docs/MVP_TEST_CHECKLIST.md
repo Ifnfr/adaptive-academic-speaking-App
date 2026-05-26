@@ -255,3 +255,15 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Rejected vocabulary sentences do not award XP
 - [ ] `vocab_reused` remains reserved and is not wired yet
 - [ ] Vocabulary Notebook does not call AI/API routes, modify session history, or change CSV data
+
+## 19. Vocabulary Correction API
+
+> Vocabulary Correction checks one learner-written sentence. It has no UI or storage integration yet.
+
+- [ ] `/api/vocabulary-correction` rejects invalid provider, level, empty word, and empty sentence
+- [ ] Sentence must include the target vocabulary word or phrase before provider call
+- [ ] Provider keys stay server-side and missing keys return friendly errors
+- [ ] Route accepts raw, fenced, or surrounded JSON provider output
+- [ ] Corrected sentence is one short sentence, not a paragraph or multiple alternatives
+- [ ] Foundation correction uses simple wording and one main correction
+- [ ] Route does not modify vocabulary storage, XP, session history, CSV data, or Article Practice behavior
