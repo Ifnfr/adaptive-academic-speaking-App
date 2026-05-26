@@ -190,5 +190,6 @@ verify the behavior.
 - [ ] Generate Mental Model sends provider, level, mode, focus, latestWeakness, and latestRetryTask only
 - [ ] Successful result shows Core Standard, Quality Criteria, Weak Pattern, Strong Pattern, Self-Check Questions, Micro Drill, and Reference Model
 - [ ] The route rejects malformed JSON, invalid criteria/question counts, or an overly long reference model with a friendly error
+- [ ] Mental Model accepts valid JSON returned inside markdown code fences or short surrounding provider text
 - [ ] The UI does not provide a copy/use-as-answer action for the reference model
 - [ ] Running Mental Model does NOT change localStorage history, CSV data, feedback, diagnostic, weekly review, retry, or speech input behavior

@@ -36,6 +36,10 @@ type MentalModelResponse = {
   referenceModel: string;
 };
 
+type MentalModelParseResult =
+  | { ok: true; value: MentalModelResponse }
+  | { ok: false; reason: "parse" | "validation" };
+
 // ---------- Prompt building ----------
 
 function buildSystemPrompt(): string {
@@ -119,12 +123,71 @@ function wordCount(value: string): number {
   return value.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function parseMentalModel(raw: string): MentalModelResponse | null {
+function stripCodeFence(raw: string): string {
   const trimmed = raw.trim();
-  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1].trim() : trimmed;
+}
+
+function extractBalancedJsonObject(raw: string): string | null {
+  const text = stripCodeFence(raw);
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (start === -1) {
+      if (char === "{") {
+        start = i;
+        depth = 1;
+      }
+      continue;
+    }
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseMentalModel(raw: string): MentalModelParseResult {
+  const jsonText = extractBalancedJsonObject(raw);
+  if (!jsonText) return { ok: false, reason: "parse" };
 
   try {
-    const data = JSON.parse(trimmed) as Record<string, unknown>;
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, reason: "validation" };
+    }
+
+    const data = parsed as Record<string, unknown>;
     const coreStandard = normalizeRequiredString(data.coreStandard);
     const qualityCriteria = normalizeShortList(data.qualityCriteria);
     const weakPattern = normalizeRequiredString(data.weakPattern);
@@ -142,23 +205,26 @@ function parseMentalModel(raw: string): MentalModelResponse | null {
       !microDrill ||
       !referenceModel
     ) {
-      return null;
+      return { ok: false, reason: "validation" };
     }
     if (referenceModel.length > 800 || wordCount(referenceModel) > 120) {
-      return null;
+      return { ok: false, reason: "validation" };
     }
 
     return {
-      coreStandard,
-      qualityCriteria,
-      weakPattern,
-      strongPattern,
-      selfCheckQuestions,
-      microDrill,
-      referenceModel,
+      ok: true,
+      value: {
+        coreStandard,
+        qualityCriteria,
+        weakPattern,
+        strongPattern,
+        selfCheckQuestions,
+        microDrill,
+        referenceModel,
+      },
     };
   } catch {
-    return null;
+    return { ok: false, reason: "parse" };
   }
 }
 
@@ -397,16 +463,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const result = parseMentalModel(raw);
-  if (!result) {
+  const parsedMentalModel = parseMentalModel(raw);
+  if (!parsedMentalModel.ok) {
+    const error =
+      parsedMentalModel.reason === "validation"
+        ? "Provider JSON did not match the Mental Model schema. Try again or switch provider."
+        : "Provider response could not be parsed as JSON. Try again or switch provider.";
     return NextResponse.json(
-      {
-        error:
-          "Provider response could not be parsed as JSON. Try again or switch provider.",
-      },
+      { error },
       { status: 502 },
     );
   }
 
-  return NextResponse.json(result);
+  return NextResponse.json(parsedMentalModel.value);
 }
