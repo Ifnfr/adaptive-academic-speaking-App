@@ -29,6 +29,7 @@ import { Topbar } from "./components/Topbar";
 import { SessionSetup } from "./components/SessionSetup";
 import { CoachPanels } from "./components/CoachPanels";
 import { SpeakingPromptCard } from "./components/SpeakingPromptCard";
+import { SpeakingAttemptCard } from "./components/SpeakingAttemptCard";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -1323,138 +1324,22 @@ export default function Home() {
 
           {/* Speaking Attempt */}
           {activeSession && !capturedAttempt && (
-            <section className={card}>
-              <div className={cardHeader}>
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                  Step 3
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                  Speaking attempt
-                </h2>
-              </div>
-              <div className={cardBody}>
-                {/* Timer */}
-                <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div
-                    aria-live="polite"
-                    className="font-mono text-5xl tabular-nums text-[var(--brand-ink)]"
-                  >
-                    {formatTime(elapsedSeconds)}
-                  </div>
-                  <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                    <button
-                      type="button"
-                      onClick={handleStartTimer}
-                      disabled={isTimerRunning}
-                      className={buttonSecondary}
-                    >
-                      Start Timer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleStopTimer}
-                      disabled={!isTimerRunning}
-                      className={buttonSecondary}
-                    >
-                      Stop Timer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleResetTimer}
-                      className={buttonSecondary}
-                    >
-                      Reset Timer
-                    </button>
-                  </div>
-                </div>
-
-                {/* Speech Input */}
-                <div className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 sm:p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--brand-ink)]">
-                        Speech input
-                      </h3>
-                      <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                        Browser speech-to-text. Audio stays on your device.
-                      </p>
-                    </div>
-                    {speechSupported ? (
-                      <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                        <button
-                          type="button"
-                          onClick={handleStartSpeechInput}
-                          disabled={isListening}
-                          className={buttonSecondary}
-                        >
-                          Start Speech Input
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleStopSpeechInput}
-                          disabled={!isListening}
-                          className={buttonSecondary}
-                        >
-                          Stop Speech Input
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {speechSupported ? (
-                    <p
-                      aria-live="polite"
-                      className="mt-3 text-xs text-[var(--brand-ink-soft)]"
-                    >
-                      {isListening
-                        ? "Listening… speak clearly. Recognized text will be appended below."
-                        : "Speech input accuracy depends on your browser and microphone. You can edit the transcript before submitting."}
-                    </p>
-                  ) : (
-                    <p className="mt-3 text-xs text-[var(--brand-ink-soft)]">
-                      Speech input is not supported in this browser. Please type
-                      or paste your transcript manually.
-                    </p>
-                  )}
-
-                  {speechError && (
-                    <p
-                      role="alert"
-                      className="mt-3 rounded-lg border border-[var(--brand-coral)]/40 bg-[var(--brand-coral-soft)] px-3 py-2 text-xs text-[var(--brand-coral)]"
-                    >
-                      {speechError}
-                    </p>
-                  )}
-                </div>
-
-                {/* Transcript */}
-                <div className="mt-6">
-                  <label htmlFor="transcript" className={labelClass}>
-                    Transcript
-                  </label>
-                  <textarea
-                    id="transcript"
-                    value={transcript}
-                    onChange={(e) => setTranscript(e.target.value)}
-                    rows={8}
-                    placeholder="Type or paste what you said during the attempt..."
-                    className={`${inputClass} resize-y leading-6`}
-                  />
-                </div>
-
-                {/* Submit */}
-                <div className="mt-5">
-                  <button
-                    type="button"
-                    onClick={handleSubmitAttempt}
-                    disabled={!canSubmit}
-                    className={`${buttonPrimary} w-full sm:w-auto`}
-                  >
-                    Submit Attempt
-                  </button>
-                </div>
-              </div>
-            </section>
+            <SpeakingAttemptCard
+              transcript={transcript}
+              displayTime={formatTime(elapsedSeconds)}
+              isTimerRunning={isTimerRunning}
+              speechSupported={speechSupported}
+              isListening={isListening}
+              speechError={speechError}
+              canSubmit={canSubmit}
+              onTranscriptChange={setTranscript}
+              onStartTimer={handleStartTimer}
+              onStopTimer={handleStopTimer}
+              onResetTimer={handleResetTimer}
+              onStartSpeechInput={handleStartSpeechInput}
+              onStopSpeechInput={handleStopSpeechInput}
+              onSubmitAttempt={handleSubmitAttempt}
+            />
           )}
 
           {/* Captured Attempt + Feedback / Diagnostic */}
