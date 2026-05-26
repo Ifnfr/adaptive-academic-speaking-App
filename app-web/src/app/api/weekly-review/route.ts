@@ -7,10 +7,16 @@ export const runtime = "nodejs";
 // ---------- Types ----------
 
 type Provider = "Claude" | "DeepSeek" | "Gemini";
+type LearnerLevel =
+  | "Foundation"
+  | "Beginner"
+  | "Intermediate"
+  | "Advanced"
+  | "Expert";
 
 type WeeklyReviewSession = {
   date: string;
-  level: string;
+  level: LearnerLevel;
   mode: string;
   durationSeconds: number;
   mainWeakness: string;
@@ -21,6 +27,7 @@ type WeeklyReviewSession = {
 
 type WeeklyReviewRequest = {
   provider: Provider;
+  learnerLevel: LearnerLevel;
   sessions: WeeklyReviewSession[];
 };
 
@@ -34,6 +41,10 @@ type WeeklyReviewResponse = {
   warnings: string[];
 };
 
+type WeeklyReviewParseResult =
+  | { ok: true; value: WeeklyReviewResponse }
+  | { ok: false; reason: "parse" | "validation" };
+
 // ---------- Prompt building ----------
 
 function buildSystemPrompt(): string {
@@ -42,6 +53,8 @@ function buildSystemPrompt(): string {
     "Use only the provided completed practice session summaries.",
     "Do not invent sessions, transcripts, scores, or evidence.",
     "Focus on recurring patterns, visible improvements, score trends from CSV rows, and one practical plan for next week.",
+    "The 7-day recommended plan must be level-appropriate practical speaking drills, not reading or research homework only.",
+    "Every recommendedPlan item must include a concrete speaking action the learner can do.",
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -52,6 +65,45 @@ function buildSystemPrompt(): string {
     '- recommendedPlan is an array of exactly 7 non-empty strings, each starting with "Day N: ".',
     "- warnings is an array of strings. Use [] if there are no warnings.",
   ].join("\n");
+}
+
+function levelGuidance(level: LearnerLevel): string {
+  switch (level) {
+    case "Foundation":
+      return [
+        "LEVEL GUIDANCE FOR FOUNDATION:",
+        "- The plan must be simple, beginner-safe, concrete, and easy to understand.",
+        "- Each day must be doable in 10-20 minutes.",
+        "- Each day must include a speaking action.",
+        "- Focus on basic speaking habits: clear topic sentence, subject + verb clarity, one idea per sentence, simple reason using \"because\", 30-60 seconds of continuous speaking, reducing informal phrasing, and repeating a simple academic template.",
+        "- Do NOT suggest journal abstracts, academic papers, research tasks, complex writing tasks, counterarguments, advanced academic vocabulary drills, or long essay planning.",
+      ].join("\n");
+    case "Beginner":
+      return [
+        "LEVEL GUIDANCE FOR BEGINNER:",
+        "- Use simple academic structure: position, reason, simple example, short conclusion.",
+        "- Keep tasks short and concrete.",
+        "- Avoid advanced research tasks.",
+      ].join("\n");
+    case "Intermediate":
+      return [
+        "LEVEL GUIDANCE FOR INTERMEDIATE:",
+        "- Allow structured argument drills, examples, coherence, and basic evidence.",
+        "- Keep tasks manageable and focused on speaking practice.",
+      ].join("\n");
+    case "Advanced":
+      return [
+        "LEVEL GUIDANCE FOR ADVANCED:",
+        "- Allow counterargument, nuance, evidence quality, academic tone, and stronger structure.",
+        "- Keep each task as a practical speaking drill.",
+      ].join("\n");
+    case "Expert":
+      return [
+        "LEVEL GUIDANCE FOR EXPERT:",
+        "- Allow refinement, precision, nuance, argument depth, and advanced academic speaking standards.",
+        "- Keep each task as a practical speaking drill.",
+      ].join("\n");
+  }
 }
 
 function buildUserPrompt(req: WeeklyReviewRequest): string {
@@ -73,6 +125,11 @@ function buildUserPrompt(req: WeeklyReviewRequest): string {
     .join("\n\n");
 
   return [
+    `PRIMARY LEARNER LEVEL: ${req.learnerLevel}`,
+    "Use the most recent submitted session level above as the main calibration level for the plan.",
+    "",
+    levelGuidance(req.learnerLevel),
+    "",
     "RECENT COMPLETED PRACTICE SESSIONS:",
     sessionsText,
     "",
@@ -82,7 +139,7 @@ function buildUserPrompt(req: WeeklyReviewRequest): string {
     "3. Identify the best visible improvement, if any.",
     "4. Describe the score trend using only CSV score data.",
     "5. Choose one next-week focus.",
-    "6. Produce a 7-day recommended plan with one concrete practice task per day.",
+    "6. Produce a 7-day recommended plan with one concrete, level-appropriate speaking practice task per day.",
     "7. Add warnings only when data is thin, inconsistent, or missing.",
     "",
     'Return ONLY this JSON shape: {"summary":"...","recurringWeakness":"...","bestImprovement":"...","scoreTrend":"...","nextWeekFocus":"...","recommendedPlan":["Day 1: ...","Day 2: ...","Day 3: ...","Day 4: ...","Day 5: ...","Day 6: ...","Day 7: ..."],"warnings":[]}',
@@ -101,6 +158,24 @@ function normalizeString(value: unknown, maxLength: number): string {
   return typeof value === "string" ? limitText(value, maxLength) : "";
 }
 
+function normalizeLevel(value: unknown): LearnerLevel | null {
+  if (typeof value !== "string") return null;
+  switch (value.trim()) {
+    case "Foundation":
+      return "Foundation";
+    case "Beginner":
+      return "Beginner";
+    case "Intermediate":
+      return "Intermediate";
+    case "Advanced":
+      return "Advanced";
+    case "Expert":
+      return "Expert";
+    default:
+      return null;
+  }
+}
+
 function normalizeDuration(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.floor(value));
@@ -109,9 +184,12 @@ function normalizeDuration(value: unknown): number {
 function normalizeSession(value: unknown): WeeklyReviewSession | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Record<string, unknown>;
+  const level = normalizeLevel(source.level);
+  if (!level) return null;
+
   return {
     date: normalizeString(source.date, 24),
-    level: normalizeString(source.level, 40),
+    level,
     mode: normalizeString(source.mode, 80),
     durationSeconds: normalizeDuration(source.durationSeconds),
     mainWeakness: normalizeString(source.mainWeakness, 500),
@@ -127,14 +205,39 @@ function normalizeRequiredString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizePlan(raw: unknown): string[] | null {
+function isFoundationPlanItemAllowed(item: string): boolean {
+  const lower = item.toLowerCase();
+  const banned =
+    /journal abstract|academic paper|research task|research|counterargument|counter-argument|advanced academic vocabulary|vocabulary drill|essay plan|essay planning|long essay|literature review|scholarly article|peer-reviewed|paper abstract/.test(
+      lower,
+    );
+  if (banned) return false;
+
+  return /\b(speak|say|talk|record|repeat|describe|answer|explain|tell|present|read aloud|practice saying|explain aloud|answer aloud|summarize aloud)\b/.test(
+    lower,
+  );
+}
+
+function normalizePlan(
+  raw: unknown,
+  learnerLevel: LearnerLevel,
+): string[] | null {
   if (!Array.isArray(raw) || raw.length !== 7) return null;
 
   const out: string[] = [];
   for (let i = 0; i < 7; i++) {
     const item = normalizeRequiredString(raw[i]);
     if (!item) return null;
-    out.push(/^day\s*\d\s*:/i.test(item) ? item : `Day ${i + 1}: ${item}`);
+    const normalized = /^day\s*\d\s*:/i.test(item)
+      ? item
+      : `Day ${i + 1}: ${item}`;
+    if (
+      learnerLevel === "Foundation" &&
+      !isFoundationPlanItemAllowed(normalized)
+    ) {
+      return null;
+    }
+    out.push(normalized);
   }
   return out;
 }
@@ -147,18 +250,80 @@ function normalizeWarnings(raw: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
-function parseWeeklyReview(raw: string): WeeklyReviewResponse | null {
+function stripCodeFence(raw: string): string {
   const trimmed = raw.trim();
-  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1].trim() : trimmed;
+}
+
+function extractBalancedJsonObject(raw: string): string | null {
+  const text = stripCodeFence(raw);
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (start === -1) {
+      if (char === "{") {
+        start = i;
+        depth = 1;
+      }
+      continue;
+    }
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseWeeklyReview(
+  raw: string,
+  learnerLevel: LearnerLevel,
+): WeeklyReviewParseResult {
+  const jsonText = extractBalancedJsonObject(raw);
+  if (!jsonText) return { ok: false, reason: "parse" };
 
   try {
-    const data = JSON.parse(trimmed) as Record<string, unknown>;
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, reason: "validation" };
+    }
+
+    const data = parsed as Record<string, unknown>;
     const summary = normalizeRequiredString(data.summary);
     const recurringWeakness = normalizeRequiredString(data.recurringWeakness);
     const bestImprovement = normalizeRequiredString(data.bestImprovement);
     const scoreTrend = normalizeRequiredString(data.scoreTrend);
     const nextWeekFocus = normalizeRequiredString(data.nextWeekFocus);
-    const recommendedPlan = normalizePlan(data.recommendedPlan);
+    const recommendedPlan = normalizePlan(data.recommendedPlan, learnerLevel);
 
     if (
       !summary ||
@@ -168,20 +333,23 @@ function parseWeeklyReview(raw: string): WeeklyReviewResponse | null {
       !nextWeekFocus ||
       !recommendedPlan
     ) {
-      return null;
+      return { ok: false, reason: "validation" };
     }
 
     return {
-      summary,
-      recurringWeakness,
-      bestImprovement,
-      scoreTrend,
-      nextWeekFocus,
-      recommendedPlan,
-      warnings: normalizeWarnings(data.warnings),
+      ok: true,
+      value: {
+        summary,
+        recurringWeakness,
+        bestImprovement,
+        scoreTrend,
+        nextWeekFocus,
+        recommendedPlan,
+        warnings: normalizeWarnings(data.warnings),
+      },
     };
   } catch {
-    return null;
+    return { ok: false, reason: "parse" };
   }
 }
 
@@ -216,7 +384,9 @@ function validateRequest(body: unknown): WeeklyReviewRequest | string {
     return "Weekly Review requires at least 4 valid completed practice sessions.";
   }
 
-  return { provider, sessions };
+  const learnerLevel = sessions[0].level;
+
+  return { provider, learnerLevel, sessions };
 }
 
 // ---------- Provider error mapping ----------
@@ -421,16 +591,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const result = parseWeeklyReview(raw);
-  if (!result) {
+  const parsedReview = parseWeeklyReview(raw, validated.learnerLevel);
+  if (!parsedReview.ok) {
+    const error =
+      parsedReview.reason === "validation"
+        ? "Provider JSON did not match the Weekly Review schema. Try again or switch provider."
+        : "Provider response could not be parsed as JSON. Try again or switch provider.";
     return NextResponse.json(
-      {
-        error:
-          "Provider response could not be parsed as JSON. Try again or switch provider.",
-      },
+      { error },
       { status: 502 },
     );
   }
 
-  return NextResponse.json(result);
+  return NextResponse.json(parsedReview.value);
 }

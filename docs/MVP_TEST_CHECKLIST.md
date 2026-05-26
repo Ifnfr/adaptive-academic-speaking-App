@@ -170,6 +170,9 @@ verify the behavior.
 - [ ] With 4+ sessions, Run Weekly Review is enabled and shows a loading state while running
 - [ ] The request sends only the latest 4 to 7 session summaries, not full transcripts or retry transcripts
 - [ ] Successful review shows Summary, Recurring Weakness, Best Improvement, Score Trend, Next Week Focus, and a 7-Day Recommended Plan
+- [ ] The 7-Day Recommended Plan is appropriate for the latest submitted session level
+- [ ] Foundation Weekly Review plans use simple 10-20 minute speaking drills and do not recommend journal abstracts, academic papers, or advanced research tasks
+- [ ] Weekly Review accepts valid provider JSON when wrapped in markdown code fences or small surrounding text
 - [ ] Warnings appear only when the response includes non-empty warnings
 - [ ] Provider errors and malformed JSON responses show friendly retryable errors without raw upstream JSON
 - [ ] Running Weekly Review does NOT change localStorage history, CSV data, feedback, diagnostic, retry, or speech input behavior
