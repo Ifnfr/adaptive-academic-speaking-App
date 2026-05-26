@@ -1,3 +1,5 @@
+
+
 export type ArticlePracticeResult = {
   sourceTitle: string;
   sourceUrl: string;
@@ -31,9 +33,15 @@ type ArticlePracticeViewProps = {
   articlePracticeResult: ArticlePracticeResult | null;
   articlePracticeLoading: boolean;
   articlePracticeError: string | null;
+  savedVocabularyWords: ReadonlySet<string>;
   onArticleUrlChange: (value: string) => void;
   onArticleFocusChange: (value: string) => void;
   onGenerateArticlePractice: () => void;
+  onSaveVocabularyCandidate: (candidate: {
+    word: string;
+    meaning: string;
+    whyUseful: string;
+  }) => void;
 };
 
 function SummaryCell({
@@ -73,10 +81,24 @@ export function ArticlePracticeView({
   articlePracticeResult,
   articlePracticeLoading,
   articlePracticeError,
+  savedVocabularyWords,
   onArticleUrlChange,
   onArticleFocusChange,
   onGenerateArticlePractice,
+  onSaveVocabularyCandidate,
 }: ArticlePracticeViewProps) {
+  const isWordSaved = (word: string): boolean => {
+    return savedVocabularyWords.has(word.trim().toLowerCase());
+  };
+
+  const handleSaveWord = (candidate: {
+    word: string;
+    meaning: string;
+    whyUseful: string;
+  }) => {
+    if (isWordSaved(candidate.word)) return;
+    onSaveVocabularyCandidate(candidate);
+  };
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -148,8 +170,8 @@ export function ArticlePracticeView({
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-[var(--brand-ink-soft)]">
-              No article history, vocabulary saving, XP, or speaking attempt is
-              created in this MVP view.
+              No article history or speaking attempt is created in this view.
+              Vocabulary can be saved to Notebook and XP is awarded on success.
             </p>
             <button
               type="button"
@@ -249,22 +271,42 @@ export function ArticlePracticeView({
             <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
               <p className={labelClass}>Useful Vocabulary</p>
               <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {articlePracticeResult.usefulVocabulary.map((item) => (
-                  <li
-                    key={`${item.word}-${item.meaning}`}
-                    className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3"
-                  >
-                    <p className="text-sm font-semibold text-[var(--brand-ink)]">
-                      {item.word}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                      {item.meaning}
-                    </p>
-                    <p className="mt-2 text-xs text-[var(--brand-muted)]">
-                      {item.whyUseful}
-                    </p>
-                  </li>
-                ))}
+                {articlePracticeResult.usefulVocabulary.map((item) => {
+                  const saved = isWordSaved(item.word);
+                  return (
+                    <li
+                      key={`${item.word}-${item.meaning}`}
+                      className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3"
+                    >
+                      <p className="text-sm font-semibold text-[var(--brand-ink)]">
+                        {item.word}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                        {item.meaning}
+                      </p>
+                      <p className="mt-2 text-xs text-[var(--brand-muted)]">
+                        {item.whyUseful}
+                      </p>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <p className="text-[10px] leading-tight text-[var(--brand-muted)]">
+                          Save this word, then practice using it in your own sentence.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={saved}
+                          onClick={() => handleSaveWord(item)}
+                          className={
+                            saved
+                              ? "shrink-0 rounded-md border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-2.5 py-1 text-xs text-[var(--brand-muted)] cursor-default"
+                              : "shrink-0 rounded-md border border-[var(--brand-teal)]/50 bg-[var(--brand-teal)]/10 px-2.5 py-1 text-xs font-medium text-[var(--brand-teal-ink)] transition-colors hover:bg-[var(--brand-teal)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]"
+                          }
+                        >
+                          {saved ? "Saved ✓" : "Save to Notebook"}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 

@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -823,6 +824,13 @@ export default function Home() {
     .filter((badge) => badge.status === "earned")
     .map((badge) => badge.label);
   const vocabularyStats = computeVocabularyStats(vocabularyItems);
+  const savedVocabularyWords = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of vocabularyItems) {
+      set.add(item.word.trim().toLowerCase());
+    }
+    return set;
+  }, [vocabularyItems]);
   const selectedVocabItem =
     vocabularyItems.find((item) => item.id === selectedVocabItemId) ??
     vocabularyItems[0] ??
@@ -831,6 +839,32 @@ export default function Home() {
   const persistVocabulary = (nextItems: VocabItem[]) => {
     setVocabularyItems(nextItems);
     saveVocabulary(nextItems);
+  };
+
+  const handleSaveArticleVocabularyCandidate = (candidate: {
+    word: string;
+    meaning: string;
+    whyUseful: string;
+  }) => {
+    const trimmedWord = candidate.word.trim().toLowerCase();
+    // Duplicate check: case-insensitive, trimmed.
+    if (
+      vocabularyItems.some(
+        (item) => item.word.trim().toLowerCase() === trimmedWord,
+      )
+    ) {
+      return;
+    }
+    const item = createVocabItem({
+      word: candidate.word,
+      meaning: candidate.meaning,
+      source: "article" as const,
+      level: level as VocabLevel,
+      example: candidate.whyUseful || "",
+      collocations: [],
+    });
+    const nextItems = [item, ...vocabularyItems];
+    persistVocabulary(nextItems);
   };
 
   const handleAddVocabularyItem = () => {
@@ -1633,6 +1667,27 @@ export default function Home() {
       }
 
       setArticlePracticeResult(result);
+
+      // Award XP for successful article practice generation.
+      // sourceId is deterministic: URL + local date + stable hash of
+      // title and mainIdea to prevent repeated farming from the same
+      // article on the same day.
+      try {
+        const articleSourceId = [
+          "article",
+          getLocalDateString(),
+          stableTextKey(url),
+          stableTextKey(result.sourceTitle + result.mainIdea),
+        ].join("-");
+        awardGamificationEvent(
+          "article_practice_completed",
+          articleSourceId,
+          "article-practice",
+          "Generated article practice from a valid URL.",
+        );
+      } catch {
+        // XP is optional; never block the result from rendering.
+      }
     } catch (err) {
       const message =
         err instanceof Error
@@ -2027,9 +2082,11 @@ export default function Home() {
               articlePracticeResult={articlePracticeResult}
               articlePracticeLoading={articlePracticeLoading}
               articlePracticeError={articlePracticeError}
+              savedVocabularyWords={savedVocabularyWords}
               onArticleUrlChange={setArticleUrl}
               onArticleFocusChange={setArticleFocus}
               onGenerateArticlePractice={handleGenerateArticlePractice}
+              onSaveVocabularyCandidate={handleSaveArticleVocabularyCandidate}
             />
           )}
 
