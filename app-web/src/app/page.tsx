@@ -30,6 +30,7 @@ import { SessionSetup } from "./components/SessionSetup";
 import { CoachPanels } from "./components/CoachPanels";
 import { SpeakingPromptCard } from "./components/SpeakingPromptCard";
 import { SpeakingAttemptCard } from "./components/SpeakingAttemptCard";
+import { AttemptResultPanels } from "./components/AttemptResultPanels";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -172,16 +173,6 @@ function scoreKeysForLevel(level: Level): readonly ScoreKey[] {
   if (level === "Beginner") return BEGINNER_SCORE_KEYS;
   return ADVANCED_SCORE_KEYS;
 }
-
-// Human-friendly label for each score key.
-const SCORE_LABELS: Record<ScoreKey, string> = {
-  fluency: "Fluency",
-  grammar: "Grammar",
-  vocabulary: "Vocabulary",
-  coherence: "Coherence",
-  argument: "Argument",
-  academicTone: "Academic Tone",
-};
 
 // Clamp to 1-5 integer with a 3 fallback. Mirrors the server-side logic so
 // stored history stays consistent if a record predates a backend change.
@@ -1344,239 +1335,21 @@ export default function Home() {
 
           {/* Captured Attempt + Feedback / Diagnostic */}
           {capturedAttempt && (
-            <section className={card}>
-              <div className={cardHeader}>
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                  Step 4
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                  Attempt captured
-                </h2>
-              </div>
-              <div className={cardBody}>
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                  <SummaryCell
-                    label="Duration"
-                    value={formatTime(capturedAttempt.durationSeconds)}
-                  />
-                  <SummaryCell
-                    label="Words"
-                    value={String(
-                      capturedAttempt.transcript
-                        .split(/\s+/)
-                        .filter(Boolean).length,
-                    )}
-                  />
-                  <div className="sm:col-span-2">
-                    <SummaryCell
-                      label="Transcript preview"
-                      value={capturedAttempt.transcript}
-                      multiline
-                    />
-                  </div>
-                </dl>
-
-                <div className="mt-6">
-                  {isDiagnosticMode ? (
-                    <button
-                      type="button"
-                      onClick={handleRunDiagnostic}
-                      disabled={diagnosticLoading}
-                      className={`${buttonPrimary} w-full sm:w-auto`}
-                    >
-                      {diagnosticLoading
-                        ? "Running diagnostic..."
-                        : "Run Diagnostic"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleGetFeedback}
-                      disabled={feedbackLoading}
-                      className={`${buttonPrimary} w-full sm:w-auto`}
-                    >
-                      {feedbackLoading
-                        ? "Generating feedback..."
-                        : "Get AI Feedback"}
-                    </button>
-                  )}
-                </div>
-
-                {feedbackError && (
-                  <div
-                    role="alert"
-                    className="mt-4 rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
-                  >
-                    <p>{feedbackError}</p>
-                    <p className="mt-1 text-xs opacity-80">
-                      You can try again, wait a moment, or switch provider
-                      before starting a new session.
-                    </p>
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={handleGetFeedback}
-                        disabled={feedbackLoading}
-                        className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {feedbackLoading ? "Trying again..." : "Try Again"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {feedback && (
-                  <div className="mt-6 rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
-                    <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                      Quick feedback
-                    </h3>
-                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4">
-                      <SummaryCell
-                        label="Main Weakness"
-                        value={feedback.mainWeakness}
-                        multiline
-                      />
-                      <SummaryCell
-                        label="Evidence"
-                        value={feedback.evidence}
-                        multiline
-                      />
-                      <SummaryCell
-                        label="Better Phrase"
-                        value={feedback.betterPhrase}
-                        multiline
-                      />
-                      <SummaryCell
-                        label="Retry Task"
-                        value={feedback.retryTask}
-                        multiline
-                      />
-                      <SummaryCell
-                        label="Provider Used"
-                        value={feedback.providerUsed}
-                      />
-                    </dl>
-
-                    {activeSession && (
-                      <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-                        <p className={labelClass}>Scores</p>
-                        <ul className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
-                          {scoreKeysForLevel(activeSession.level).map((key) => (
-                            <li
-                              key={key}
-                              className="flex items-baseline justify-between text-sm"
-                            >
-                              <span className="text-[var(--brand-ink-soft)]">
-                                {SCORE_LABELS[key]}
-                              </span>
-                              <span className="font-mono tabular-nums text-[var(--brand-ink)]">
-                                {safeScore(feedback.scores?.[key])}/5
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {isDiagnosticMode && diagnosticError && (
-                  <div
-                    role="alert"
-                    className="mt-4 rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
-                  >
-                    <p>{diagnosticError}</p>
-                    <p className="mt-1 text-xs opacity-80">
-                      You can try again, wait a moment, or switch provider.
-                    </p>
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={handleRunDiagnostic}
-                        disabled={diagnosticLoading}
-                        className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {diagnosticLoading ? "Trying again..." : "Try Again"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {isDiagnosticMode && diagnosticResult && (
-                  <div className="mt-6 rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
-                    <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                      Diagnostic result
-                    </h3>
-                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                      <SummaryCell
-                        label="Recommended Level"
-                        value={diagnosticResult.recommendedLevel}
-                      />
-                      <SummaryCell
-                        label="Main Bottleneck"
-                        value={diagnosticResult.mainBottleneck}
-                        multiline
-                      />
-                      <div className="sm:col-span-2">
-                        <SummaryCell
-                          label="Summary"
-                          value={diagnosticResult.summary}
-                          multiline
-                        />
-                      </div>
-                    </dl>
-                    <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-                      <p className={labelClass}>Scores</p>
-                      <ul className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
-                        {(
-                          [
-                            "fluency",
-                            "grammar",
-                            "vocabulary",
-                            "coherence",
-                            "argument",
-                            "academicTone",
-                          ] as const
-                        ).map((key) => (
-                          <li
-                            key={key}
-                            className="flex items-baseline justify-between text-sm"
-                          >
-                            <span className="text-[var(--brand-ink-soft)]">
-                              {SCORE_LABELS[key]}
-                            </span>
-                            <span className="font-mono tabular-nums text-[var(--brand-ink)]">
-                              {diagnosticResult.scores[key]}/5
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-                      <p className={labelClass}>7-Day Focus Plan</p>
-                      <ol className="list-none space-y-1 text-sm text-[var(--brand-ink)]">
-                        {diagnosticResult.sevenDayFocusPlan.map((item, i) => (
-                          <li key={i} className="break-words">
-                            {item}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                    <div className="mt-5">
-                      <button
-                        type="button"
-                        onClick={handleApplyRecommendedLevel}
-                        className={buttonSecondary}
-                      >
-                        Apply Recommended Level
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            <AttemptResultPanels
+              capturedAttempt={capturedAttempt}
+              activeLevel={activeSession?.level ?? null}
+              isDiagnosticMode={isDiagnosticMode}
+              feedback={feedback}
+              feedbackLoading={feedbackLoading}
+              feedbackError={feedbackError}
+              diagnosticResult={diagnosticResult}
+              diagnosticLoading={diagnosticLoading}
+              diagnosticError={diagnosticError}
+              onGetFeedback={handleGetFeedback}
+              onRunDiagnostic={handleRunDiagnostic}
+              onApplyRecommendedLevel={handleApplyRecommendedLevel}
+            />
           )}
-
           {/* Retry Attempt */}
           {feedback && !capturedRetry && !isDiagnosticMode && (
             <section className={card}>
