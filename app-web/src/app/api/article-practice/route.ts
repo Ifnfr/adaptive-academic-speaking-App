@@ -12,6 +12,13 @@ import {
   estimateTokensFromJson,
   estimateAiCost,
 } from "../../lib/cache/ai-usage";
+import {
+  isValidIdempotencyKey,
+  computeHash,
+  getArticlePracticeRequestHash,
+  getExistingIdempotencyRecord,
+  saveIdempotencyRecord,
+} from "../../lib/cache/ai-idempotency";
 
 // Runs on the Node.js runtime so article fetching and provider keys stay server-side.
 export const runtime = "nodejs";
@@ -946,6 +953,56 @@ export async function POST(request: Request) {
 
   const resolvedModel = resolveProviderModel(validated.provider);
 
+  const rawIdempotencyKey = request.headers.get("x-fonetik-idempotency-key");
+  const idempotencyKeyValid = isValidIdempotencyKey(rawIdempotencyKey);
+  let idempotencyKeyHash = "";
+  let requestHash = "";
+
+  if (idempotencyKeyValid && rawIdempotencyKey) {
+    idempotencyKeyHash = computeHash(rawIdempotencyKey);
+    requestHash = getArticlePracticeRequestHash(validated);
+
+    try {
+      const existing = await getExistingIdempotencyRecord(
+        "global:article-practice",
+        idempotencyKeyHash
+      );
+      if (
+        existing &&
+        existing.request_status === "succeeded" &&
+        existing.response_json
+      ) {
+        recordAiUsageEvent({
+          feature: "article-practice",
+          provider: validated.provider,
+          model: resolvedModel,
+          promptVersion: PROMPT_VERSIONS.articlePractice,
+          cached: true,
+          requestStatus: "cache_hit",
+          estimatedInputTokens: null,
+          estimatedOutputTokens: estimateTokensFromJson(existing.response_json),
+          estimatedCostUsd: 0,
+        }).catch(() => {});
+
+        return NextResponse.json(existing.response_json);
+      }
+    } catch {
+      // Non-blocking
+    }
+
+    try {
+      await saveIdempotencyRecord({
+        scopeKey: "global:article-practice",
+        feature: "article-practice",
+        idempotencyKeyHash,
+        requestHash,
+        requestStatus: "in_progress",
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
   // Check global cache
   const cacheKey = getArticlePracticeCacheKey(
     validated.url,
@@ -969,6 +1026,18 @@ export async function POST(request: Request) {
         estimatedOutputTokens: estimateTokensFromJson(cached),
         estimatedCostUsd: 0,
       }).catch(() => {});
+
+      if (idempotencyKeyValid) {
+        saveIdempotencyRecord({
+          scopeKey: "global:article-practice",
+          feature: "article-practice",
+          idempotencyKeyHash,
+          requestHash,
+          requestStatus: "succeeded",
+          responseJson: cached,
+        }).catch(() => {});
+      }
+
       return NextResponse.json(cached);
     }
   } catch {
@@ -992,11 +1061,34 @@ export async function POST(request: Request) {
       requestStatus: "article_fetch_failed",
       errorCode: message.slice(0, 200),
     }).catch(() => {});
+
+    if (idempotencyKeyValid) {
+      saveIdempotencyRecord({
+        scopeKey: "global:article-practice",
+        feature: "article-practice",
+        idempotencyKeyHash,
+        requestHash,
+        requestStatus: "failed",
+        errorCode: "article_fetch_failed",
+      }).catch(() => {});
+    }
+
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
   const apiKey = getApiKey(validated.provider);
   if (!apiKey) {
+    if (idempotencyKeyValid) {
+      saveIdempotencyRecord({
+        scopeKey: "global:article-practice",
+        feature: "article-practice",
+        idempotencyKeyHash,
+        requestHash,
+        requestStatus: "failed",
+        errorCode: "missing_api_key",
+      }).catch(() => {});
+    }
+
     return NextResponse.json(
       { error: "Missing API key for selected provider. Add it to .env.local." },
       { status: 400 },
@@ -1029,6 +1121,18 @@ export async function POST(request: Request) {
       estimatedInputTokens,
       errorCode: message.slice(0, 200),
     }).catch(() => {});
+
+    if (idempotencyKeyValid) {
+      saveIdempotencyRecord({
+        scopeKey: "global:article-practice",
+        feature: "article-practice",
+        idempotencyKeyHash,
+        requestHash,
+        requestStatus: "failed",
+        errorCode: "provider_failed",
+      }).catch(() => {});
+    }
+
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
@@ -1057,6 +1161,18 @@ export async function POST(request: Request) {
       }),
       errorCode: parsedPractice.reason,
     }).catch(() => {});
+
+    if (idempotencyKeyValid) {
+      saveIdempotencyRecord({
+        scopeKey: "global:article-practice",
+        feature: "article-practice",
+        idempotencyKeyHash,
+        requestHash,
+        requestStatus: "failed",
+        errorCode: parsedPractice.reason || "parse_failed",
+      }).catch(() => {});
+    }
+
     return NextResponse.json({ error }, { status: 502 });
   }
 
@@ -1083,6 +1199,21 @@ export async function POST(request: Request) {
     await saveGlobalCachedResponse(cacheKey, "article-practice", parsedPractice.value);
   } catch {
     // Non-blocking: ignore write errors
+  }
+
+  if (idempotencyKeyValid) {
+    try {
+      await saveIdempotencyRecord({
+        scopeKey: "global:article-practice",
+        feature: "article-practice",
+        idempotencyKeyHash,
+        requestHash,
+        requestStatus: "succeeded",
+        responseJson: parsedPractice.value,
+      });
+    } catch {
+      // Non-blocking
+    }
   }
 
   return NextResponse.json(parsedPractice.value);

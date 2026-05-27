@@ -344,3 +344,19 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Missing `SUPABASE_SERVICE_ROLE_KEY` silently disables usage logging without errors
 - [ ] Usage ledger is currently scoped to `/api/article-practice` only; personal routes do not have usage logging yet
 - [ ] No API response shapes changed by usage logging
+
+### AI Request Idempotency (Article Practice)
+- [ ] Idempotency is enabled only for `/api/article-practice` when `X-Fonetik-Idempotency-Key` is provided
+- [ ] Header key is trimmed and validated (must be between 8 and 128 characters)
+- [ ] Valid key is hashed using SHA-256 (`idempotency_key_hash`)
+- [ ] Request parameters are deterministically hashed to compute `request_hash`
+- [ ] If an unexpired succeeded row exists, it replays the stored `response_json` without calling the AI provider
+- [ ] If a row is missing, expired, or has in_progress or failed status, the request proceeds normally
+- [ ] Successful AI generation saves the result to `ai_request_idempotency` with status `succeeded` and `response_json`
+- [ ] Prior failed attempts or client errors write status `failed` to the table but do not block future requests or replay as success
+- [ ] Missing database configurations, service role keys, or network connection failures fail open safely
+- [ ] The `ai_request_idempotency` table has RLS enabled with no public select/insert/update/delete policies
+- [ ] All database actions use the server-only `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] No raw article text, HTML, transcripts, user sentences, CSV, or personal content is stored in idempotency rows
+- [ ] Personal/semi-personal AI routes are not globally cached or idempotent
+
