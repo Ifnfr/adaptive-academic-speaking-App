@@ -68,6 +68,7 @@ import {
   ArticlePracticeView,
   type ArticlePracticeResult,
 } from "./components/ArticlePracticeView";
+import { CloudSyncStatusPanel } from "./components/CloudSyncStatusPanel";
 import { storage } from "./lib/storage";
 import {
   DISABLED_SESSION_CLOUD_AUTH,
@@ -2185,6 +2186,10 @@ export default function Home() {
                 <AuthStatus />
               </>
             }
+          />
+
+          <CloudSyncStatusPanel
+            result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
           />
 
           {/* ===================== Active Session view ===================== */}
