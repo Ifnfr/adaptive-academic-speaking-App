@@ -94,7 +94,14 @@ import {
   isSupabaseConfigured,
   createBrowserSupabaseClient,
 } from "./lib/supabase";
-import { bootstrapProfile } from "./lib/storage/supabase-profile-adapter";
+import {
+  bootstrapProfile,
+  loadSupabaseProfile,
+  updateSupabaseProfilePreferences,
+  type UserProfile,
+  type UserProfilePreferencesPatch,
+} from "./lib/storage/supabase-profile-adapter";
+import { ProfileSettingsView } from "./components/ProfileSettingsView";
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
 
@@ -679,6 +686,14 @@ export default function Home() {
   const [clerkUser, setClerkUser] = useState<ClerkUserType>(null);
   const [isClerkUserLoaded, setIsClerkUserLoaded] = useState(false);
 
+  // --- Owner profile state (Supabase, non-blocking) ---
+  const [ownerProfile, setOwnerProfile] = useState<UserProfile | null>(null);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+  const [profileSaveStatus, setProfileSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
   const [mode, setMode] = useState<Mode>("Fluency Sprint");
@@ -992,6 +1007,90 @@ export default function Home() {
       cancelled = true;
     };
   }, [cloudAuthState, clerkUser, isClerkUserLoaded]);
+
+  // --- Owner profile load (after bootstrap, non-blocking) ---
+  useEffect(() => {
+    if (CLERK_ENABLED && !isClerkUserLoaded) return;
+    if (!cloudAuthState.isLoaded) return;
+    if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) return;
+    if (!isSupabaseConfigured()) return;
+
+    let cancelled = false;
+
+    async function runLoadProfile() {
+      if (!cloudAuthState.userId || !cloudAuthState.getToken) return;
+      try {
+        const token = await cloudAuthState.getToken();
+        if (!token || cancelled) return;
+        const supabaseClient = createBrowserSupabaseClient({
+          accessToken: async () => {
+            try {
+              return (await cloudAuthState.getToken?.()) ?? token;
+            } catch {
+              return token;
+            }
+          },
+        });
+        if (!supabaseClient || cancelled) return;
+        const p = await loadSupabaseProfile(cloudAuthState.userId, supabaseClient);
+        if (!cancelled) setOwnerProfile(p);
+      } catch {
+        if (!cancelled) setProfileLoadError("Could not load profile.");
+      }
+    }
+
+    void runLoadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudAuthState, isClerkUserLoaded]);
+
+  // --- Profile save handler ---
+  async function handleSaveProfilePreferences(
+    patch: UserProfilePreferencesPatch,
+  ) {
+    if (!cloudAuthState.userId || !cloudAuthState.getToken) return;
+    setProfileSaveStatus("saving");
+    setProfileSaveError(null);
+    try {
+      const token = await cloudAuthState.getToken();
+      if (!token) throw new Error("No auth token");
+      const supabaseClient = createBrowserSupabaseClient({
+        accessToken: async () => {
+          try {
+            return (await cloudAuthState.getToken?.()) ?? token;
+          } catch {
+            return token;
+          }
+        },
+      });
+      if (!supabaseClient) throw new Error("No Supabase client");
+      await updateSupabaseProfilePreferences(
+        cloudAuthState.userId,
+        patch,
+        supabaseClient,
+      );
+      setOwnerProfile((prev): UserProfile | null => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          displayName: patch.displayName ?? prev.displayName,
+          bio: patch.bio ?? prev.bio,
+          publicProfileEnabled:
+            patch.publicProfileEnabled ?? prev.publicProfileEnabled,
+          leaderboardOptIn: patch.leaderboardOptIn ?? prev.leaderboardOptIn,
+          avatarUrl: patch.avatarUrl !== undefined ? patch.avatarUrl : prev.avatarUrl,
+        };
+      });
+      setProfileSaveStatus("saved");
+    } catch {
+      setProfileSaveStatus("error");
+      setProfileSaveError(
+        "Save failed. Your local learning data is not affected.",
+      );
+    }
+  }
 
   const handleConfirmCloudRestore = async (): Promise<CloudRestoreActionResult> => {
     if (
@@ -2678,31 +2777,31 @@ export default function Home() {
             />
           )}
 
-          {/* ===================== Settings (placeholder) ===================== */}
+          {/* ===================== Profile & Settings ===================== */}
           {view === "settings" && (
-            <section className={`${card} opacity-90`}>
-              <div className={cardHeader}>
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-                  Coming soon
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                  Settings
-                </h2>
-                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                  Provider keys are configured in{" "}
-                  <code className="rounded bg-[var(--brand-surface-2)] px-1 py-0.5 font-mono text-xs">
-                    .env.local
-                  </code>
-                  . A UI for non-secret preferences is planned for a future
-                  batch.
-                </p>
-              </div>
-              <div className={cardBody}>
-                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center text-sm text-[var(--brand-ink-soft)]">
-                  Not implemented yet.
-                </div>
-              </div>
-            </section>
+            <ProfileSettingsView
+              isSignedIn={cloudAuthState.isSignedIn}
+              profile={ownerProfile}
+              profileLoadError={profileLoadError}
+              profileSaveStatus={profileSaveStatus}
+              profileSaveError={profileSaveError}
+              totalXp={xpProfile.totalXp}
+              speakerLevel={speakerProgress.currentLevel.level}
+              speakerLevelName={speakerProgress.currentLevel.name}
+              dayStreak={dayStreak}
+              totalSessions={sessions.length}
+              vocabularyCount={vocabularyItems.length}
+              earnedBadgeCount={badges.filter((b) => b.status === "earned").length}
+              articlePracticeCount={
+                xpEvents.filter((e) => e.type === "article_practice_completed").length
+              }
+              activeRecallCount={
+                xpEvents.filter(
+                  (e) => e.type === "vocab_recall_session_completed",
+                ).length
+              }
+              onSavePreferences={handleSaveProfilePreferences}
+            />
           )}
 
           <footer
@@ -3041,7 +3140,7 @@ function viewTitle(view: string): string {
     case "mental-model":
       return "Mental Model";
     case "settings":
-      return "Settings";
+      return "Profile & Settings";
     default:
       return "fonetik";
   }
@@ -3066,7 +3165,7 @@ function viewSubtitle(view: string): string {
     case "mental-model":
       return "Mental Model";
     case "settings":
-      return "Settings";
+      return "Profile & Settings";
     default:
       return "fonetik";
   }
@@ -3087,7 +3186,7 @@ function viewDescription(view: string): string {
     case "mental-model":
       return "Reserved for a future batch.";
     case "settings":
-      return "Reserved for a future batch.";
+      return "Owner-only profile and preferences.";
     default:
       return "";
   }

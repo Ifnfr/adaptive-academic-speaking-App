@@ -233,7 +233,7 @@ export function Sidebar({
               active={view === "settings"}
               onClick={() => onSelectView("settings")}
             >
-              Settings
+              Profile & Settings
             </SidebarItem>
           </SidebarGroup>
         </nav>
