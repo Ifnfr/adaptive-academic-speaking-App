@@ -8,6 +8,10 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.locator("aside")).toContainText("Active Session");
     await expect(page.locator("aside")).toContainText("Vocabulary Notebook");
     await expect(page.locator("aside")).toContainText("Article Practice");
+    await expect(page.locator("header")).toContainText("Local only");
+    await expect(
+      page.getByRole("button", { name: /restore cloud data|import cloud data/i }),
+    ).toHaveCount(0);
   });
 
   // Test B: Active Session basic flow

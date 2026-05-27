@@ -74,6 +74,10 @@ import {
   writeCompletedSessionToCloud,
   type SessionCloudAuthState,
 } from "./lib/storage/session-cloud-runtime";
+import {
+  loadCloudSnapshotPlan,
+  type CloudSnapshotRuntimeResult,
+} from "./lib/storage/cloud-snapshot-runtime";
 import { writeVocabularyChangesToCloud } from "./lib/storage/vocab-cloud-runtime";
 import {
   writeXpProfileToCloud,
@@ -650,6 +654,12 @@ export default function Home() {
   const sessionCloudAuthRef = useRef<SessionCloudAuthState>(
     DISABLED_SESSION_CLOUD_AUTH,
   );
+  const [cloudAuthState, setCloudAuthState] = useState<SessionCloudAuthState>(
+    DISABLED_SESSION_CLOUD_AUTH,
+  );
+  const [cloudSnapshotResult, setCloudSnapshotResult] =
+    useState<CloudSnapshotRuntimeResult | null>(null);
+  const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
 
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
@@ -848,6 +858,62 @@ export default function Home() {
       profile: xpProfile,
     });
   }, [gamificationReady, xpProfile]);
+
+  const cloudSnapshotLocalKey = useMemo(
+    () =>
+      [
+        sessions.map((session) => session.id).join("|"),
+        vocabularyItems
+          .map((item) => `${item.id}:${item.updatedAt}:${item.userSentences.length}`)
+          .join("|"),
+        xpProfile.updatedAt,
+        xpEvents.map((event) => `${event.type}:${event.sourceId}`).join("|"),
+        badges.map((badge) => `${badge.id}:${badge.status}:${badge.earnedAt ?? ""}`).join("|"),
+      ].join("::"),
+    [badges, sessions, vocabularyItems, xpEvents, xpProfile.updatedAt],
+  );
+
+  useEffect(() => {
+    if (!gamificationReady) return;
+    if (!cloudAuthState.isLoaded) return;
+    if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) {
+      cloudSnapshotCheckKeyRef.current = null;
+      return;
+    }
+
+    const checkKey = `${cloudAuthState.userId}::${cloudSnapshotLocalKey}`;
+    if (cloudSnapshotCheckKeyRef.current === checkKey) return;
+    cloudSnapshotCheckKeyRef.current = checkKey;
+
+    let cancelled = false;
+    void loadCloudSnapshotPlan({
+      auth: cloudAuthState,
+      local: {
+        sessions,
+        vocabulary: vocabularyItems,
+        xpProfile,
+        xpEvents,
+        badges,
+      },
+    }).then((result) => {
+      if (!cancelled) {
+        setCloudSnapshotResult(result);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    badges,
+    cloudAuthState,
+    cloudSnapshotLocalKey,
+    gamificationReady,
+    sessions,
+    vocabularyItems,
+    xpEvents,
+    xpProfile,
+  ]);
 
   // --- Sidebar navigation view ---
   // Lightweight local view state. No router, no real new routes. The Active
@@ -2077,7 +2143,10 @@ export default function Home() {
   return (
     <div className="min-h-screen w-full">
       {CLERK_ENABLED && (
-        <SessionCloudAuthBridge authRef={sessionCloudAuthRef} />
+        <SessionCloudAuthBridge
+          authRef={sessionCloudAuthRef}
+          onAuthStateChange={setCloudAuthState}
+        />
       )}
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10">
         {/* Sidebar */}
@@ -2106,7 +2175,16 @@ export default function Home() {
             hasActiveSession={Boolean(activeSession)}
             mode={mode}
             level={level}
-            authSlot={<AuthStatus />}
+            authSlot={
+              <>
+                <CloudSnapshotStatusBadge
+                  result={
+                    cloudAuthState.isSignedIn ? cloudSnapshotResult : null
+                  }
+                />
+                <AuthStatus />
+              </>
+            }
           />
 
           {/* ===================== Active Session view ===================== */}
@@ -2441,25 +2519,86 @@ export default function Home() {
 
 type SessionCloudAuthBridgeProps = {
   authRef: MutableRefObject<SessionCloudAuthState>;
+  onAuthStateChange: (auth: SessionCloudAuthState) => void;
 };
 
-function SessionCloudAuthBridge({ authRef }: SessionCloudAuthBridgeProps) {
+function SessionCloudAuthBridge({
+  authRef,
+  onAuthStateChange,
+}: SessionCloudAuthBridgeProps) {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth();
 
   useEffect(() => {
-    authRef.current = {
+    const nextAuth = {
       isLoaded,
       isSignedIn: isSignedIn === true,
       userId: userId ?? null,
       getToken: () => getToken(),
     };
+    authRef.current = nextAuth;
+    onAuthStateChange(nextAuth);
 
     return () => {
       authRef.current = DISABLED_SESSION_CLOUD_AUTH;
+      onAuthStateChange(DISABLED_SESSION_CLOUD_AUTH);
     };
-  }, [authRef, getToken, isLoaded, isSignedIn, userId]);
+  }, [authRef, getToken, isLoaded, isSignedIn, onAuthStateChange, userId]);
 
   return null;
+}
+
+type CloudSnapshotStatusBadgeProps = {
+  result: CloudSnapshotRuntimeResult | null;
+};
+
+function CloudSnapshotStatusBadge({ result }: CloudSnapshotStatusBadgeProps) {
+  const label = cloudSnapshotStatusLabel(result);
+  const tone =
+    result?.status === "failed"
+      ? "border-amber-300 bg-amber-50 text-amber-800"
+      : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink-soft)]";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] ${tone}`}
+      title="Read-only cloud status. Local data remains the source of truth."
+    >
+      {label}
+    </span>
+  );
+}
+
+function cloudSnapshotStatusLabel(
+  result: CloudSnapshotRuntimeResult | null,
+): string {
+  if (!result) return "Local only";
+
+  switch (result.status) {
+    case "loaded":
+      if (result.plan.status === "restore-available") {
+        return "Cloud restore available";
+      }
+      if (result.plan.status === "import-available") {
+        return "Cloud import available";
+      }
+      return "Cloud backup active";
+    case "failed":
+      return "Cloud check failed - local data safe";
+    case "skipped-auth-loading":
+      return "Local only";
+    case "skipped-signed-out":
+      return "Local only";
+    case "skipped-missing-user":
+      return "Local only";
+    case "skipped-missing-config":
+      return "Local only";
+    case "skipped-missing-token":
+      return "Local only";
+    case "skipped-missing-client":
+      return "Local only";
+    default:
+      return "Local only";
+  }
 }
 
 type SummaryCellProps = {
