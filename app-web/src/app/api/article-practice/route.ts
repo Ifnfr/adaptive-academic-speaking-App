@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  getArticlePracticeCacheKey,
+  getGlobalCachedResponse,
+  saveGlobalCachedResponse,
+} from "../../lib/cache/ai-cache";
 
 // Runs on the Node.js runtime so article fetching and provider keys stay server-side.
 export const runtime = "nodejs";
@@ -931,6 +936,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validated }, { status: 400 });
   }
 
+  // Check global cache
+  const cacheKey = getArticlePracticeCacheKey(
+    validated.url,
+    validated.level,
+    validated.provider,
+    validated.mode,
+    validated.focus
+  );
+  try {
+    const cached = await getGlobalCachedResponse(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+  } catch {
+    // Non-blocking: ignore read errors
+  }
+
   let article: ExtractedArticle;
   try {
     article = await fetchArticle(validated.url);
@@ -974,6 +996,13 @@ export async function POST(request: Request) {
         ? "Provider JSON did not match the Article Practice schema. Try again or switch provider."
         : "Provider response could not be parsed as JSON. Try again or switch provider.";
     return NextResponse.json({ error }, { status: 502 });
+  }
+
+  // Save successful result to global cache
+  try {
+    await saveGlobalCachedResponse(cacheKey, "article-practice", parsedPractice.value);
+  } catch {
+    // Non-blocking: ignore write errors
   }
 
   return NextResponse.json(parsedPractice.value);
