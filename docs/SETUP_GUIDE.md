@@ -91,7 +91,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
-Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions and vocabulary modifications (including sentences and corrections) to Supabase. However, localStorage remains the source of truth, and no local data is cleared.
+Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. However, localStorage remains the source of truth, and no local data is cleared.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
@@ -235,7 +235,7 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Never expose a Supabase service-role key or database password in browser code.
 - Enable Clerk's native Supabase integration in the Clerk and Supabase dashboards before future cloud persistence work.
 - Provider keys stay server-side in Next.js API routes.
-- The app stores session history and vocabulary primarily in browser localStorage.
+- The app stores session history, vocabulary, and gamification data primarily in browser localStorage.
 - Do not add real database credentials to Supabase migration files.
 
 ## Supabase Schema & Hybrid Cloud Status
@@ -245,11 +245,10 @@ The `supabase/migrations/` folder contains Postgres schema and Row Level Securit
 
 Current status:
 
-- Best-effort cloud session and vocabulary writing is active: completed normal sessions and vocabulary changes (items, user sentences, and corrections) are upserted to Supabase on the client when the user is signed in and Supabase environment variables are present.
-- Browser `localStorage` remains the runtime source of truth. The app does not load sessions or vocabulary from the cloud, nor does it sync local backlogs.
+- Best-effort cloud session, vocabulary, and gamification writing is active: completed normal sessions, vocabulary changes (items, user sentences, and corrections), and gamification updates (XP profile, events, and badges) are upserted to Supabase on the client when the user is signed in and Supabase environment variables are present.
+- Browser `localStorage` remains the runtime source of truth. The app does not load sessions, vocabulary, or gamification data from the cloud, nor does it sync local backlogs.
 - The migration files define tables, RLS policies, indexes, and triggers.
 - RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.
-- XP gamification data still utilizes `localStorage` only.
 
 To apply these migrations later, you will need a Supabase project and the
 Supabase CLI:

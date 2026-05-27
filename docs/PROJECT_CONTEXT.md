@@ -63,17 +63,19 @@ small coaching features.
   - `adaptive-speaking-app:xp-profile` (total/pending/streak gamification status)
   - `adaptive-speaking-app:xp-events` (history of XP events for caps & diagnostics)
   - `adaptive-speaking-app:badges` (locked/earned badge lists)
-- Clerk auth and Supabase client integration is active as a best-effort, non-blocking write path for completed sessions and vocabulary notebook changes.
+- Clerk auth and Supabase client integration is active as a best-effort, non-blocking write path for completed sessions, vocabulary notebook changes, and gamification data (XP profile, XP events, badges).
 - Hybrid local-first migration is in progress: `localStorage` remains the local source of truth.
 
 ## Database Schema & Cloud Status
 
 - Supabase Postgres schema and RLS policies exist in `supabase/migrations/`.
 - Supabase client integration exists under `app-web/src/app/lib/supabase/`.
-- The app writes newly completed normal sessions and vocabulary changes (items, sentences, and corrections) to Supabase as a best-effort, non-blocking cloud save when Clerk is signed in and Supabase is configured.
-- Vocabulary deletions in the cloud are calculated by comparing the previous and next state (diff-based deletions). The deletion does not execute when the previous state is empty.
+- The app writes newly completed normal sessions, vocabulary changes, and gamification updates to Supabase as a best-effort, non-blocking cloud save when Clerk is signed in and Supabase is configured.
+- Vocabulary deletions in the cloud are diff-based. Gamification events are also diffed to only upload newly added events.
+- Cloud duplicate XP prevention relies on a unique database constraint on `(owner_id, type, source_id)` for `xp_events`.
+- XP rules remain local and deterministic. AI never decides XP values.
 - Database cascade deletes automatically clean up child sentences and corrections for deleted vocabulary items.
-- The app does NOT load sessions or vocabulary from the cloud yet, nor does it sync existing local records, clear local history, or handle cloud merge conflicts.
+- The app does NOT load sessions, vocabulary, or gamification data from the cloud yet, nor does it sync existing local records, clear local history, or handle cloud merge conflicts.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
 - Clerk's native Supabase integration is used to verify database operations.
 - No database credentials should be committed.
@@ -82,11 +84,10 @@ small coaching features.
   `badges`, `article_practice_records`.
 - The `article_practice_records` table does **not** store raw HTML or full
   article bodies — only structured speaking-task metadata.
-- XP gamification data still utilizes `localStorage` only.
 
 ## Not In Current MVP
 
-- Cloud sync (schema/client helpers exist but app uses local `localStorage` only)
+- Cloud load, full synchronization, or merge conflict resolution (Clerk and Supabase are configured for best-effort cloud writes only; browser localStorage remains the source of truth)
 - Deployment workflow
 - Mobile app
 - Dedicated Deep Feedback mode (currently routes to Quick Feedback)
@@ -94,7 +95,7 @@ small coaching features.
 - Persisted Weekly Review or Mental Model history
 - Pronunciation scoring or audio recording exports
 - Article Practice history or article-specific metadata in CSV
-- Advanced Spaced Repetition / SM-2 (uses Active Recall Practice prioritization queue instead)
+- Advanced Active Recall Practice algorithm / SM-2 (uses Active Recall Practice prioritization queue instead)
 - Bulk AI classification or tagging of vocabulary items
 - Automated "Generate Sentence" or auto-answer templates (users must supply original sentences)
 

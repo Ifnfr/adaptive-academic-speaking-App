@@ -94,7 +94,7 @@ GEMINI_MODEL=gemini-2.0-flash
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 
-# Optional Supabase client setup for session cloud persistence.
+# Optional Supabase client setup for session, vocabulary, and gamification cloud persistence.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
@@ -102,7 +102,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 `GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
 Clerk keys are optional for the current local MVP; when omitted, the app shows
 Local mode and keeps using browser storage only.
-Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions and vocabulary modifications (including user sentences and corrections) to Supabase (non-blocking, fallback-safe).
+Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including user sentences and corrections), and gamification updates (XP profile, XP events, and badges) to Supabase (non-blocking, fallback-safe).
 Restart `npm run dev` after editing `.env.local`; environment variables are not
 hot-reloaded.
 
@@ -141,13 +141,13 @@ hot-reloaded.
 - Clerk's native Supabase integration must be configured in Clerk and Supabase dashboards so RLS can compare `owner_id` with `auth.jwt()->>'sub'`.
 - Do not put provider keys in browser code.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
-- Session history and vocabulary are stored primarily in the user's browser, with newly completed normal sessions and vocabulary changes best-effort copied to the cloud database.
+- Session history, vocabulary, and gamification data are stored primarily in the user's browser, with newly completed normal sessions, vocabulary changes, and gamification updates best-effort copied to the cloud database.
 
 ## Current Limitations
 
-- **Hybrid local-first migration in progress**: Completed normal sessions and vocabulary changes are best-effort written to Supabase as a non-blocking cloud save, but the app does NOT load sessions or vocabulary from the cloud yet, nor does it import/sync existing local history, handle merge conflicts, or clear local storage.
+- **Hybrid local-first migration in progress**: Completed normal sessions, vocabulary changes, and gamification updates (XP profile, XP events, and badges) are best-effort written to Supabase as a non-blocking cloud save when the user is signed in and Supabase is configured. However, the app does NOT load sessions, vocabulary, or gamification data from the cloud yet, nor does it import/sync existing local history, handle merge conflicts, or clear local storage.
 - LocalStorage remains the runtime source of truth for all app data.
-- XP gamification data utilizes `localStorage` only.
+- XP rules remain local and deterministic, and cloud write failures do not affect local XP behavior or progression.
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.
@@ -158,7 +158,7 @@ hot-reloaded.
 - No save-all vocabulary button (words must be saved individually).
 - No article-specific CSV fields or feedback context.
 - Vocabulary Notebook 2.0 limitations:
-  - No advanced spaced repetition algorithm (uses a simple recency-based prioritization).
+  - No advanced Active Recall Practice algorithm (uses a simple recency-based prioritization).
   - No bulk AI classification or automatic tagging of vocabulary.
   - No automated "Generate Sentence" or auto-answer templates (users must write their own sentences).
   - No pronunciation scoring or audio recording exports yet.
