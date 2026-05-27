@@ -21,10 +21,8 @@ import {
   computeVocabularyStats,
   createVocabItem,
   deleteVocabItem,
-  loadVocabulary,
   markVocabularyPracticed,
   saveSentenceCorrection,
-  saveVocabulary,
   updateVocabStatus,
   type VocabItem,
   type VocabSentenceCorrection,
@@ -761,7 +759,7 @@ export default function Home() {
 
   // --- Vocabulary Notebook state (local, deterministic, no AI) ---
   const [vocabularyItems, setVocabularyItems] = useState<VocabItem[]>(() =>
-    loadVocabulary(),
+    storage.loadVocabulary(),
   );
   const [vocabFormWord, setVocabFormWord] = useState("");
   const [vocabFormMeaning, setVocabFormMeaning] = useState("");
@@ -892,7 +890,7 @@ export default function Home() {
 
   const persistVocabulary = (nextItems: VocabItem[]) => {
     setVocabularyItems(nextItems);
-    saveVocabulary(nextItems);
+    storage.saveVocabulary(nextItems);
   };
 
   const handleSaveArticleVocabularyCandidate = (candidate: {
