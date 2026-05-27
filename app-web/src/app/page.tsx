@@ -37,12 +37,6 @@ import {
   createXpEvent,
   getLocalDateString,
   getSpeakerLevelProgress,
-  loadBadges,
-  loadXpEvents,
-  loadXpProfile,
-  saveBadges,
-  saveXpEvents,
-  saveXpProfile,
   type Badge,
   type XpEvent,
   type XpEventType,
@@ -817,11 +811,11 @@ export default function Home() {
 
   useEffect(() => {
     const loadGamificationTimer = window.setTimeout(() => {
-      const loadedProfile = loadXpProfile();
+      const loadedProfile = storage.loadXpProfile();
       setXpProfile(loadedProfile);
-      setXpEvents(loadXpEvents());
-      setBadges(loadBadges());
-      saveXpProfile(loadedProfile);
+      setXpEvents(storage.loadXpEvents());
+      setBadges(storage.loadBadges());
+      storage.saveXpProfile(loadedProfile);
       setGamificationReady(true);
     }, 0);
 
@@ -830,7 +824,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!gamificationReady) return;
-    saveXpProfile(xpProfile);
+    storage.saveXpProfile(xpProfile);
   }, [gamificationReady, xpProfile]);
 
   // --- Sidebar navigation view ---
@@ -1283,7 +1277,7 @@ export default function Home() {
 
     if (nextBadges.length !== badges.length) {
       setBadges(nextBadges);
-      saveBadges(nextBadges);
+      storage.saveBadges(nextBadges);
     }
   };
 
@@ -1303,8 +1297,8 @@ export default function Home() {
       const awarded = awardXpEvent(xpProfile, xpEvents, candidate);
       setXpProfile(awarded.profile);
       setXpEvents(awarded.events);
-      saveXpProfile(awarded.profile);
-      saveXpEvents(awarded.events);
+      storage.saveXpProfile(awarded.profile);
+      storage.saveXpEvents(awarded.events);
 
       if (awarded.result.allowed) {
         updateBadges(type, awarded.profile);
@@ -1344,7 +1338,7 @@ export default function Home() {
   const handleClaimXp = () => {
     const claimed = claimXp(xpProfile, getLocalDateString());
     setXpProfile(claimed.profile);
-    saveXpProfile(claimed.profile);
+    storage.saveXpProfile(claimed.profile);
     updateBadges(null, claimed.profile);
   };
 
