@@ -44,6 +44,7 @@ small coaching features.
 - **Article Practice**: paste URL, server-side fetch, and generate copyright-safe academic speaking task results
 - **Article Vocabulary Save**: save useful vocab cards directly to Vocabulary Notebook (duplicate-safe)
 - **Article Practice → Active Session Bridge**: "Practice This Speaking Task" copies details to Today's Target, switches mode to "Reading-to-Speaking", and switches view to Active Session setup without auto-starting the session.
+- **Profile & Settings**: owner-only profile/settings view replacing the old Settings placeholder. Signed-out users see a local-only profile card plus safe local stats; signed-in users see account/profile details, private account email, avatar, display name, bio, privacy toggles, local stat summaries, and coming-soon language preference placeholders.
 
 ## API Routes
 
@@ -77,6 +78,8 @@ small coaching features.
 - Database cascade deletes automatically clean up child sentences and corrections for deleted vocabulary items.
 - The app supports loading a cloud snapshot preview. Signed-in users can trigger a user-confirmed cloud restore (available only if local browser data is empty) or cloud import (if local data exists, using a conservative merge plan and compatibility guard).
 - During restore/import, local storage is never cleared, no cloud data is deleted or mutated, and no XP recalculations occur. CSV payloads, nested vocabulary relationships, and XP source details are preserved exactly. XP events are deduped on import using type and sourceId.
+- Profile & Settings loads and saves owner-scoped profile preferences when signed in. `public_profile_enabled` and `leaderboard_opt_in` default to false. The profile view is not public, no leaderboard/public profile read surface exists yet, and learning stats shown there are derived from local browser state only.
+- Profile saves are limited to display name, bio, public profile enabled, and leaderboard opt-in. The UI does not write learning data to localStorage and does not expose transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, CSV/session raw content, XP event source IDs, or private notes.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
 - Clerk's native Supabase integration is used to verify database operations.
 - No database credentials should be committed.
@@ -92,6 +95,8 @@ small coaching features.
 ## Not In Current MVP
 
 - Automated background sync or advanced interactive conflict resolution UI (Clerk and Supabase are configured for best-effort writes, read-only snapshot previews, and user-initiated restore/import; the app is not fully cloud-first yet)
+- Public profile pages and leaderboard surfaces (profile privacy toggles exist and default off, but they are future-facing only)
+- Editable language preference behavior (Profile & Settings shows language preference placeholders only)
 - Deployment workflow
 - Mobile app
 - Dedicated Deep Feedback mode (currently routes to Quick Feedback)

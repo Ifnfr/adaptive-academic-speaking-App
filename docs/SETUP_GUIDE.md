@@ -93,6 +93,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
 Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. It also supports reading cloud snapshots for user-confirmed restore (when local is empty) and import (using conservative compatibility guards when local data exists). Browser localStorage remains the runtime source of truth, and no local data is cleared or deleted during these actions.
+With Clerk and Supabase configured, signed-in users also get the owner-only Profile & Settings view. Profile preferences are separate from learning data: the UI can save display name, bio, public profile enabled, and leaderboard opt-in, while localStorage remains the source of truth for learning stats. Public profile and leaderboard surfaces are not implemented yet, and both toggles default off.
 `SUPABASE_SERVICE_ROLE_KEY` is a server-only service role key used for administrative actions (global AI response cache writes, AI usage event logging, and AI request idempotency registry writes). It must never be prefixed with `NEXT_PUBLIC` or exposed client-side. If omitted, global cache writes, usage logging, and request idempotency are silently disabled.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
@@ -137,6 +138,7 @@ and start again. Do not commit `.next`.
 8. Submit a Retry.
 9. End the session and copy the CSV.
 10. Open Session Log and confirm the session appears.
+11. Open Profile & Settings and confirm local-only mode shows a local profile card plus count-based stats.
 
 For the full QA list, see [MVP_TEST_CHECKLIST.md](MVP_TEST_CHECKLIST.md).
 
@@ -238,6 +240,7 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Enable Clerk's native Supabase integration in the Clerk and Supabase dashboards before future cloud persistence work.
 - Provider keys stay server-side in Next.js API routes.
 - The app stores session history, vocabulary, and gamification data primarily in browser localStorage.
+- Profile & Settings is owner-only. It is not a public profile page or leaderboard surface, and it does not publish transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, CSV/session raw content, XP event source IDs, or private notes.
 - Do not add real database credentials to Supabase migration files.
 
 ## Supabase Schema & Hybrid Cloud Status
@@ -249,6 +252,7 @@ Current status:
 
 - Best-effort cloud session, vocabulary, and gamification writing is active: completed normal sessions, vocabulary changes (items, user sentences, and corrections), and gamification updates (XP profile, events, and badges) are upserted to Supabase on the client when the user is signed in and Supabase environment variables are present.
 - Browser `localStorage` remains the runtime source of truth. Users can load cloud snapshot previews and trigger manual user-confirmed restore or import actions, but the app does not run automatic background syncs, nor does it automatically clear local data.
+- Profile & Settings uses the profile row for signed-in account/preferences only. Email is shown as private/account-only, privacy toggles default off, language preferences are coming-soon placeholders, and learning stats are local count summaries.
 - The migration files define tables, RLS policies, indexes, and triggers.
 - RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.
 

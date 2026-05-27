@@ -13,7 +13,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Weekly Review opens from the sidebar
 - [ ] Diagnostic shortcut selects Diagnostic mode and opens Active Session
 - [ ] Mental Model opens from the sidebar
-- [ ] Settings placeholder opens from the sidebar
+- [ ] Profile & Settings opens from the sidebar
 - [ ] Article Practice opens from the sidebar
 
 ## 2. Session Setup
@@ -219,7 +219,30 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] No polling or background intervals run beyond timer/copy-status behavior
 - [ ] Cards and buttons remain usable at mobile widths
 
-## 17. Gamification Foundation
+## 17. Profile & Settings
+
+> Profile & Settings is owner-only. It replaces the old Settings placeholder but
+> does not create public profile pages, leaderboard pages, or public profile links.
+
+- [ ] Sidebar opens Profile & Settings from the System section
+- [ ] Signed-out mode shows a local-only profile card
+- [ ] Signed-out mode shows no cloud profile controls and no privacy toggles
+- [ ] Signed-out copy explains learning data remains local to the browser
+- [ ] Local stats are counts/summaries only: XP, speaker level, streak, sessions, vocabulary, badges, active recall, and article practice
+- [ ] Signed-in mode shows account/profile card with avatar, display name, bio, and joined date when available
+- [ ] Signed-in email is labeled private/account-only
+- [ ] Language preferences are visible as coming-soon placeholders only
+- [ ] `public_profile_enabled` defaults false
+- [ ] `leaderboard_opt_in` defaults false
+- [ ] Toggle copy says no public profile page or leaderboard exists yet
+- [ ] Privacy copy says transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, session CSV content, XP event source IDs, and private notes are not published
+- [ ] Save sends only displayName, bio, publicProfileEnabled, and leaderboardOptIn
+- [ ] Save failure shows a non-blocking message and does not affect local learning data
+- [ ] Profile UI does not write learning data to localStorage
+- [ ] No public profile route, leaderboard route, public profile link, or leaderboard link is visible
+- [ ] Known minor polish: empty display name/bio normalization can be improved later
+
+## 18. Gamification Foundation
 
 > Gamification helpers are deterministic and local, fully integrated with session actions, vocabulary practice, and article practice.
 
@@ -237,7 +260,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Vocabulary sentence XP is awarded only after an accepted saved sentence (5 XP)
 - [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP
 
-### 18. Vocabulary Notebook 2.0
+### 19. Vocabulary Notebook 2.0
 
 > Vocabulary Notebook is local and deterministic, integrated with AI sentence correction and XP rules.
 
@@ -263,7 +286,7 @@ Manual checks to run before declaring the local MVP stable.
   - [ ] AI correction status of natural/understandable increments `correctUseCount` exactly once per sentence (deduplicated on re-checks)
   - [ ] Usage checking does not award XP or modify CSV summaries
 
-## 19. Vocabulary Correction API
+## 20. Vocabulary Correction API
 
 > Vocabulary Correction checks one learner-written sentence and saves short feedback locally in Vocabulary Notebook.
 
@@ -278,7 +301,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] UI does not auto-replace the user's original sentence or provide a copy-as-answer flow
 - [ ] Route does not modify XP, session history, CSV data, or Article Practice behavior
 
-## 20. Article Practice and Bridge
+## 21. Article Practice and Bridge
 
 > Article Practice turns a user-provided article URL into copyright-safe speaking practice, and allows bridging speaking tasks to Active Session.
 
@@ -359,4 +382,3 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] All database actions use the server-only `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] No raw article text, HTML, transcripts, user sentences, CSV, or personal content is stored in idempotency rows
 - [ ] Personal/semi-personal AI routes are not globally cached or idempotent
-
