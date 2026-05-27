@@ -56,30 +56,31 @@ small coaching features.
 
 ## Local Data
 
-- Stored entirely in browser `localStorage`.
+- Stored primarily in browser `localStorage`.
 - Storage keys:
   - `adaptive-speaking-app:sessions` (practice session log)
   - `adaptive-speaking-app:vocabulary` (notebook words & usage history)
   - `adaptive-speaking-app:xp-profile` (total/pending/streak gamification status)
   - `adaptive-speaking-app:xp-events` (history of XP events for caps & diagnostics)
   - `adaptive-speaking-app:badges` (locked/earned badge lists)
-- Clerk auth shell and Supabase client helpers are optional preparation only.
-- There is no cloud data sync in the current local-first MVP.
+- Clerk auth and Supabase client integration is active as a best-effort, non-blocking write path for completed sessions.
+- Hybrid local-first migration is in progress: `localStorage` remains the local source of truth.
 
-## Database Schema (Prepared)
+## Database Schema & Cloud Status
 
 - Supabase Postgres schema and RLS policies exist in `supabase/migrations/`.
-- Supabase client helpers exist under `app-web/src/app/lib/supabase/`.
-- The app does not read from or write to Supabase yet.
-- localStorage remains the only source of truth at runtime.
+- Supabase client integration exists under `app-web/src/app/lib/supabase/`.
+- The app writes newly completed normal sessions to Supabase as a best-effort, non-blocking cloud save when Clerk is signed in and Supabase is configured.
+- The app does NOT load sessions from the cloud yet, nor does it sync existing local sessions, clear local history, or handle cloud merge conflicts.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
-- Future cloud persistence should use Clerk's native Supabase integration.
-- No real database credentials should be committed.
-- Tables prepared: `profiles`, `speaking_sessions`, `vocabulary_items`,
+- Clerk's native Supabase integration is used to verify database operations.
+- No database credentials should be committed.
+- Tables prepared/defined: `profiles`, `speaking_sessions`, `vocabulary_items`,
   `vocabulary_sentences`, `vocabulary_corrections`, `xp_profiles`, `xp_events`,
   `badges`, `article_practice_records`.
 - The `article_practice_records` table does **not** store raw HTML or full
   article bodies — only structured speaking-task metadata.
+- Vocabulary and XP gamification data still utilize `localStorage` only.
 
 ## Not In Current MVP
 

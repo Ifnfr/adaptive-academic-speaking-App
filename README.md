@@ -94,7 +94,7 @@ GEMINI_MODEL=gemini-2.0-flash
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 
-# Optional Supabase client setup for future cloud adapters.
+# Optional Supabase client setup for session cloud persistence.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
@@ -102,7 +102,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 `GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
 Clerk keys are optional for the current local MVP; when omitted, the app shows
 Local mode and keeps using browser storage only.
-Supabase keys are optional and are not connected to app data yet.
+Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions to Supabase (non-blocking, fallback-safe).
 Restart `npm run dev` after editing `.env.local`; environment variables are not
 hot-reloaded.
 
@@ -138,16 +138,16 @@ hot-reloaded.
 - Keep `CLERK_SECRET_KEY` server-side only.
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is allowed for Supabase only with RLS enabled and tested.
 - Never expose a Supabase service-role key, database password, or provider AI key to browser code.
-- Before future cloud persistence tasks, enable Clerk's native Supabase integration so RLS can compare `owner_id` with `auth.jwt()->>'sub'`.
+- Clerk's native Supabase integration must be configured in Clerk and Supabase dashboards so RLS can compare `owner_id` with `auth.jwt()->>'sub'`.
 - Do not put provider keys in browser code.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
-- Session history is stored locally in the user's browser, not in a database.
+- Session history is stored primarily in the user's browser, with newly completed normal sessions best-effort copied to the cloud database.
 
 ## Current Limitations
 
-- Clerk authentication shell is optional and does not sync, import, or persist data yet.
-- Supabase schema, RLS policies, and client helpers exist, but the app does not read or write Supabase data yet.
-- LocalStorage is still the runtime source of truth for app data.
+- **Hybrid local-first migration in progress**: Completed normal sessions are best-effort written to Supabase as a non-blocking cloud save, but the app does NOT load sessions from the cloud yet, nor does it import/sync existing local history, handle merge conflicts, or clear local storage.
+- LocalStorage remains the runtime source of truth for all app data.
+- Vocabulary and XP gamification data utilize `localStorage` only.
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.

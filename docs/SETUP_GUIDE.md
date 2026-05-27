@@ -91,7 +91,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
-Supabase keys are optional preparation for future cloud persistence. The current app still uses localStorage even when these placeholders are filled.
+Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions to Supabase. However, localStorage remains the source of truth, and no local data is cleared.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
@@ -235,21 +235,21 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Never expose a Supabase service-role key or database password in browser code.
 - Enable Clerk's native Supabase integration in the Clerk and Supabase dashboards before future cloud persistence work.
 - Provider keys stay server-side in Next.js API routes.
-- The app stores session history in browser localStorage, not in a cloud database.
+- The app stores session history primarily in browser localStorage.
 - Do not add real database credentials to Supabase migration files.
 
-## Supabase Schema (Prepared)
+## Supabase Schema & Hybrid Cloud Status
 
 The `supabase/migrations/` folder contains Postgres schema and Row Level Security
-(RLS) policy SQL files. These are **schema-only preparation** for future cloud
-persistence.
+(RLS) policy SQL files.
 
 Current status:
 
-- Supabase client helpers exist, but no app data is read from or written to Supabase yet.
-- Browser `localStorage` remains the only data source.
+- Best-effort cloud session writing is active: completed normal sessions are upserted to Supabase on the client when the user is signed in and Supabase environment variables are present.
+- Browser `localStorage` remains the runtime source of truth. The app does not load sessions from the cloud or sync local backlogs.
 - The migration files define tables, RLS policies, indexes, and triggers.
 - RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.
+- Vocabulary and XP gamification data still utilize `localStorage` only.
 
 To apply these migrations later, you will need a Supabase project and the
 Supabase CLI:
