@@ -16,7 +16,6 @@ export type SidebarView =
 type SidebarProps = {
   view: SidebarView;
   level: string;
-  mode: string;
   sessionsCount: number;
   dayStreak: number;
   levelPhase: string;
@@ -27,7 +26,6 @@ type SidebarProps = {
   gamificationReady: boolean;
   appLanguage?: AppLanguage | null;
   onSelectView: (view: SidebarView) => void;
-  onSelectDiagnostic: () => void;
 };
 
 type SidebarGroupProps = {
@@ -76,7 +74,6 @@ function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
 export function Sidebar({
   view,
   level,
-  mode,
   sessionsCount,
   dayStreak,
   levelPhase,
@@ -87,7 +84,6 @@ export function Sidebar({
   gamificationReady,
   appLanguage,
   onSelectView,
-  onSelectDiagnostic,
 }: SidebarProps) {
   const { t } = useI18n(appLanguage);
   const card =
@@ -208,22 +204,10 @@ export function Sidebar({
               Progress
             </SidebarItem>
             <SidebarItem
-              active={view === "progress"}
-              onClick={() => onSelectView("progress")}
-            >
-              Level-Up Check
-            </SidebarItem>
-            <SidebarItem
               active={view === "weekly-review"}
               onClick={() => onSelectView("weekly-review")}
             >
               Weekly Review
-            </SidebarItem>
-            <SidebarItem
-              active={view === "diagnostic" || (view === "active" && mode === "Diagnostic")}
-              onClick={onSelectDiagnostic}
-            >
-              Diagnostic
             </SidebarItem>
           </SidebarGroup>
 

@@ -1211,6 +1211,21 @@ export default function Home() {
   type View = SidebarView;
   const [view, setView] = useState<View>("active");
 
+  // Fallback for invalid or old selected view states (e.g. diagnostic, level-up-check)
+  useEffect(() => {
+    if (view === "diagnostic") {
+      const timer = setTimeout(() => {
+        setView("active");
+      }, 0);
+      return () => clearTimeout(timer);
+    } else if ((view as string) === "level-up-check") {
+      const timer = setTimeout(() => {
+        setView("progress");
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [view]);
+
   const previousSession = sessions[0] ?? null;
   // Lightweight day-streak derived from session.date strings. No new storage.
   const dayStreak = computeDayStreak(sessions);
@@ -2323,12 +2338,7 @@ export default function Home() {
     setArticlePracticeBridgeMessage(null);
   };
 
-  // Selecting "Diagnostic" from the sidebar pre-selects the diagnostic mode
-  // and routes the user back to the active practice view so they can run it.
-  const handleSelectDiagnostic = () => {
-    setMode("Diagnostic");
-    setView("active");
-  };
+
 
   const trimmedRetryTranscript = retryTranscript.trim();
   const canSubmitRetry =
@@ -2457,7 +2467,6 @@ export default function Home() {
         <Sidebar
           view={view}
           level={level}
-          mode={mode}
           sessionsCount={sessions.length}
           dayStreak={dayStreak}
           levelPhase={LEVEL_PHASE[level]}
@@ -2468,7 +2477,6 @@ export default function Home() {
           gamificationReady={gamificationReady}
           appLanguage={appLanguage}
           onSelectView={setView}
-          onSelectDiagnostic={handleSelectDiagnostic}
         />
         {/* Main */}
         <main className="flex min-w-0 flex-1 flex-col gap-6">
