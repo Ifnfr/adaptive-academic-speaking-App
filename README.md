@@ -102,7 +102,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 `GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
 Clerk keys are optional for the current local MVP; when omitted, the app shows
 Local mode and keeps using browser storage only.
-Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions to Supabase (non-blocking, fallback-safe).
+Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions and vocabulary modifications (including user sentences and corrections) to Supabase (non-blocking, fallback-safe).
 Restart `npm run dev` after editing `.env.local`; environment variables are not
 hot-reloaded.
 
@@ -141,13 +141,13 @@ hot-reloaded.
 - Clerk's native Supabase integration must be configured in Clerk and Supabase dashboards so RLS can compare `owner_id` with `auth.jwt()->>'sub'`.
 - Do not put provider keys in browser code.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
-- Session history is stored primarily in the user's browser, with newly completed normal sessions best-effort copied to the cloud database.
+- Session history and vocabulary are stored primarily in the user's browser, with newly completed normal sessions and vocabulary changes best-effort copied to the cloud database.
 
 ## Current Limitations
 
-- **Hybrid local-first migration in progress**: Completed normal sessions are best-effort written to Supabase as a non-blocking cloud save, but the app does NOT load sessions from the cloud yet, nor does it import/sync existing local history, handle merge conflicts, or clear local storage.
+- **Hybrid local-first migration in progress**: Completed normal sessions and vocabulary changes are best-effort written to Supabase as a non-blocking cloud save, but the app does NOT load sessions or vocabulary from the cloud yet, nor does it import/sync existing local history, handle merge conflicts, or clear local storage.
 - LocalStorage remains the runtime source of truth for all app data.
-- Vocabulary and XP gamification data utilize `localStorage` only.
+- XP gamification data utilizes `localStorage` only.
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.

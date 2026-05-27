@@ -63,15 +63,17 @@ small coaching features.
   - `adaptive-speaking-app:xp-profile` (total/pending/streak gamification status)
   - `adaptive-speaking-app:xp-events` (history of XP events for caps & diagnostics)
   - `adaptive-speaking-app:badges` (locked/earned badge lists)
-- Clerk auth and Supabase client integration is active as a best-effort, non-blocking write path for completed sessions.
+- Clerk auth and Supabase client integration is active as a best-effort, non-blocking write path for completed sessions and vocabulary notebook changes.
 - Hybrid local-first migration is in progress: `localStorage` remains the local source of truth.
 
 ## Database Schema & Cloud Status
 
 - Supabase Postgres schema and RLS policies exist in `supabase/migrations/`.
 - Supabase client integration exists under `app-web/src/app/lib/supabase/`.
-- The app writes newly completed normal sessions to Supabase as a best-effort, non-blocking cloud save when Clerk is signed in and Supabase is configured.
-- The app does NOT load sessions from the cloud yet, nor does it sync existing local sessions, clear local history, or handle cloud merge conflicts.
+- The app writes newly completed normal sessions and vocabulary changes (items, sentences, and corrections) to Supabase as a best-effort, non-blocking cloud save when Clerk is signed in and Supabase is configured.
+- Vocabulary deletions in the cloud are calculated by comparing the previous and next state (diff-based deletions). The deletion does not execute when the previous state is empty.
+- Database cascade deletes automatically clean up child sentences and corrections for deleted vocabulary items.
+- The app does NOT load sessions or vocabulary from the cloud yet, nor does it sync existing local records, clear local history, or handle cloud merge conflicts.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
 - Clerk's native Supabase integration is used to verify database operations.
 - No database credentials should be committed.
@@ -80,7 +82,7 @@ small coaching features.
   `badges`, `article_practice_records`.
 - The `article_practice_records` table does **not** store raw HTML or full
   article bodies — only structured speaking-task metadata.
-- Vocabulary and XP gamification data still utilize `localStorage` only.
+- XP gamification data still utilizes `localStorage` only.
 
 ## Not In Current MVP
 
@@ -92,7 +94,7 @@ small coaching features.
 - Persisted Weekly Review or Mental Model history
 - Pronunciation scoring or audio recording exports
 - Article Practice history or article-specific metadata in CSV
-- Advanced spaced repetition algorithm (uses simple recency/underuse queue prioritizer instead)
+- Advanced Spaced Repetition / SM-2 (uses Active Recall Practice prioritization queue instead)
 - Bulk AI classification or tagging of vocabulary items
 - Automated "Generate Sentence" or auto-answer templates (users must supply original sentences)
 

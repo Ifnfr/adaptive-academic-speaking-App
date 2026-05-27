@@ -201,7 +201,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] No real API keys appear in docs, `.env.example`, request bodies, or JS bundles
 - [ ] No provider key uses `NEXT_PUBLIC_`
 - [ ] Provider calls happen only through server-side API routes
-- [ ] LocalStorage remains source of truth, and optional Clerk/Supabase connection works in a best-effort cloud-save-only manner (no cloud load/sync/conflict resolution yet)
+- [ ] LocalStorage remains source of truth, and optional Clerk/Supabase connection works in a best-effort cloud-save-only manner for sessions and vocabulary (no cloud load/sync/conflict resolution yet)
 
 ## 15. Foundation Calibration
 
