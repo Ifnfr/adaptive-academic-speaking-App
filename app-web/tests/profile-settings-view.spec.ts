@@ -1,8 +1,12 @@
 import { test, expect } from "@playwright/test";
 import {
+  applyProfilePreferencesPatchToProfile,
   mapProfilePreferencesPatchToSupabaseUpdate,
 } from "../src/app/lib/storage/supabase-profile-adapter";
-import type { UserProfilePreferencesPatch } from "../src/app/lib/storage/supabase-profile-adapter";
+import type {
+  UserProfile,
+  UserProfilePreferencesPatch,
+} from "../src/app/lib/storage/supabase-profile-adapter";
 
 // ---------------------------------------------------------------------------
 // ProfileSettingsView — unit tests for the preference patch mapper
@@ -22,6 +26,24 @@ const PRIVATE_CONTENT_PATTERNS = [
   "session_id",
   "source_id",
 ];
+
+const baseProfile: UserProfile = {
+  ownerId: "user_123",
+  email: "private@example.com",
+  displayName: "Previous Name",
+  learnerLevel: null,
+  preferredProvider: null,
+  preferredMode: null,
+  avatarUrl: "https://example.com/avatar.png",
+  bio: "Previous bio.",
+  publicProfileEnabled: false,
+  leaderboardOptIn: false,
+  preferredAppLanguage: null,
+  feedbackLanguage: null,
+  targetLanguage: null,
+  createdAt: "2026-05-27T00:00:00.000Z",
+  updatedAt: "2026-05-27T00:00:00.000Z",
+};
 
 test.describe("ProfileSettingsView preference patch — allowed fields only", () => {
   test("patch with all allowed fields maps only allowed columns", () => {
@@ -83,6 +105,42 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
     const patch: UserProfilePreferencesPatch = { displayName: "   " };
     const update = mapProfilePreferencesPatchToSupabaseUpdate(patch);
     expect(update.display_name).toBeNull();
+  });
+
+  test("clearing bio updates optimistic profile state to empty string", () => {
+    const next = applyProfilePreferencesPatchToProfile(baseProfile, {
+      bio: null,
+      publicProfileEnabled: false,
+      leaderboardOptIn: false,
+    });
+    expect(next.bio).toBe("");
+    expect(next.displayName).toBe("Previous Name");
+  });
+
+  test("clearing displayName does not preserve stale custom value", () => {
+    const next = applyProfilePreferencesPatchToProfile(baseProfile, {
+      displayName: null,
+      publicProfileEnabled: false,
+      leaderboardOptIn: false,
+    });
+    expect(next.displayName).toBe("");
+    expect(next.bio).toBe("Previous bio.");
+  });
+
+  test("optimistic profile patch does not overwrite email, avatar, or language placeholders", () => {
+    const next = applyProfilePreferencesPatchToProfile(baseProfile, {
+      displayName: "",
+      bio: "",
+      publicProfileEnabled: true,
+      leaderboardOptIn: true,
+    });
+    expect(next.email).toBe(baseProfile.email);
+    expect(next.avatarUrl).toBe(baseProfile.avatarUrl);
+    expect(next.preferredAppLanguage).toBe(baseProfile.preferredAppLanguage);
+    expect(next.feedbackLanguage).toBe(baseProfile.feedbackLanguage);
+    expect(next.targetLanguage).toBe(baseProfile.targetLanguage);
+    expect(next.publicProfileEnabled).toBe(true);
+    expect(next.leaderboardOptIn).toBe(true);
   });
 });
 

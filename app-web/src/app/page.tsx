@@ -96,6 +96,7 @@ import {
 } from "./lib/supabase";
 import {
   bootstrapProfile,
+  applyProfilePreferencesPatchToProfile,
   loadSupabaseProfile,
   updateSupabaseProfilePreferences,
   type UserProfile,
@@ -1073,15 +1074,7 @@ export default function Home() {
       );
       setOwnerProfile((prev): UserProfile | null => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          displayName: patch.displayName ?? prev.displayName,
-          bio: patch.bio ?? prev.bio,
-          publicProfileEnabled:
-            patch.publicProfileEnabled ?? prev.publicProfileEnabled,
-          leaderboardOptIn: patch.leaderboardOptIn ?? prev.leaderboardOptIn,
-          avatarUrl: patch.avatarUrl !== undefined ? patch.avatarUrl : prev.avatarUrl,
-        };
+        return applyProfilePreferencesPatchToProfile(prev, patch);
       });
       setProfileSaveStatus("saved");
     } catch {

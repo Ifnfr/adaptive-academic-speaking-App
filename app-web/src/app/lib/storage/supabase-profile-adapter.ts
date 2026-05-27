@@ -176,6 +176,23 @@ export function mapProfilePreferencesPatchToSupabaseUpdate(
   return row;
 }
 
+export function applyProfilePreferencesPatchToProfile(
+  profile: UserProfile,
+  patch: UserProfilePreferencesPatch,
+): UserProfile {
+  return {
+    ...profile,
+    displayName:
+      patch.displayName === undefined
+        ? profile.displayName
+        : normalizeNullableString(patch.displayName) ?? "",
+    bio: patch.bio === undefined ? profile.bio : normalizeNullableString(patch.bio) ?? "",
+    publicProfileEnabled:
+      patch.publicProfileEnabled ?? profile.publicProfileEnabled,
+    leaderboardOptIn: patch.leaderboardOptIn ?? profile.leaderboardOptIn,
+  };
+}
+
 export async function loadSupabaseProfile(
   ownerId: string,
   supabaseClient: FonetikSupabaseClient,
