@@ -237,31 +237,31 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Vocabulary sentence XP is awarded only after an accepted saved sentence (5 XP)
 - [ ] First-action badges and Speaker Level 5 badge are visual only and do not award XP
 
-## 18. Vocabulary Notebook
+### 18. Vocabulary Notebook 2.0
 
 > Vocabulary Notebook is local and deterministic, integrated with AI sentence correction and XP rules.
 
 - [ ] Vocabulary helpers use only `adaptive-speaking-app:vocabulary`
 - [ ] Malformed vocabulary localStorage values normalize safely
 - [ ] Old vocabulary records without `partOfSpeech` load with an `other` fallback
-- [ ] Vocabulary practice queue prioritizes underused, new/practicing, and older-practiced items without random shuffle
-- [ ] Practice recency helper updates only `lastPracticedAt`, not reuse/correct counts or XP
 - [ ] Sidebar opens Vocabulary Notebook from the Practice section
+- [ ] Main view displays **Recent Vocabulary** containing only the 5 most recently added items to prevent cluttering
 - [ ] Add Vocabulary form saves word, meaning, level, source, optional example, and collocations
-- [ ] Saved vocabulary list shows status, level, source, reuse count, Practice, and Delete controls
-- [ ] Empty vocabulary practice sentences are rejected
-- [ ] Sentences without the target word or phrase are rejected
-- [ ] Accepted sentences increment reuse count and move `new` items to `practicing`
-- [ ] Recent saved sentences appear for the selected vocabulary item
-- [ ] Accepted vocabulary sentences award deterministic `vocab_sentence_submitted` pending XP (5 XP)
-- [ ] Rejected vocabulary sentences do not award XP
-- [ ] Saved vocabulary sentences can be checked with AI correction after the user writes them
-- [ ] AI correction is called via Check Usage, invoking `/api/vocabulary-correction`
-- [ ] Correction results save locally on the sentence without replacing the original user sentence
-- [ ] Natural or understandable correction status increments `correctUseCount` once per sentence
-- [ ] Checking/correcting vocabulary usage does not award XP
-- [ ] `vocab_reused` remains reserved and is not wired yet
-- [ ] Vocabulary Notebook does not modify session history or CSV data
+- [ ] **View All / Dictionary Mode** opens to show the entire list of saved vocabulary items with comprehensive metadata, sentence histories, status updates, and delete controls
+- [ ] **Active Recall Practice** constructs a 5-card queue prioritizing underused/new/practicing items, excluding paused ones
+- [ ] Cards display step progress (e.g. Card 1 of 5)
+- [ ] Hints are hidden by default, revealing meaning, POS, example, and collocations on disclosure
+- [ ] Practice sentence submission rejects empty or target-vocab-omitted sentences
+- [ ] Practice sentence submission accepts correct usage sentences, incrementing reuse count, saving history, and transitioning items from `new` to `practicing`
+- [ ] **Skip Card** advances practice, calling recency updating behavior but bypassing XP rewards, reuse counts, and correct use counts
+- [ ] **XP Recall Completion** awards 20 XP (`vocab_recall_session_completed`) only for a 5-card session completed with 0 skips
+- [ ] Same practice queue completed on the same day is blocked from duplicate XP via date-plus-queue-hash event `sourceId` checks
+- [ ] Daily cap of 2 recall completed sessions (40 XP) is enforced
+* **Vocabulary Correction and Usage Check**:
+  - [ ] Sentence history displays a Check Usage button, calling `/api/vocabulary-correction`
+  - [ ] AI correction saves results locally in the notebook sentence history without modifying the user's input
+  - [ ] AI correction status of natural/understandable increments `correctUseCount` exactly once per sentence (deduplicated on re-checks)
+  - [ ] Usage checking does not award XP or modify CSV summaries
 
 ## 19. Vocabulary Correction API
 
@@ -272,6 +272,8 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Provider keys stay server-side and missing keys return friendly errors
 - [ ] Route accepts raw, fenced, or surrounded JSON provider output
 - [ ] Corrected sentence is one short sentence, not a paragraph or multiple alternatives
+- [ ] Optional `targetUsageRole` explaining the word's function is returned and displays safely in the UI
+- [ ] Old correction records missing `targetUsageRole` display safely without crash
 - [ ] Foundation correction uses simple wording and one main correction
 - [ ] UI does not auto-replace the user's original sentence or provide a copy-as-answer flow
 - [ ] Route does not modify XP, session history, CSV data, or Article Practice behavior

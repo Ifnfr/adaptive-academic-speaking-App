@@ -38,9 +38,9 @@ small coaching features.
 - Friendly provider errors (handling missing keys, rate limits, model availability)
 - Foundation-level calibration for simple outputs
 - Robust JSON parsing for Weekly Review and Mental Model
-- **Vocabulary Notebook**: tracks status, level, source, and reuse counts with practice sentence input
-- **AI Vocabulary Correction**: `/api/vocabulary-correction` API to check naturalness/correctness of practice sentences
-- **Gamification Engine**: local XP events, pending XP tracking, and Speaker Levels with daily claims
+- **Vocabulary Notebook 2.0**: Recent Vocabulary Preview (showing 5 newest items) + View All / Dictionary Mode (detailing POS, collocations, sentence history, and delete/status actions) + Active Recall Practice (5-card queue prioritized by recency/underuse, with skip support, card progress, and input verification).
+- **AI Vocabulary Correction**: `/api/vocabulary-correction` API checking user sentences, returning targetUsageRole explanations, and incrementing correctUseCount for natural sentences (no auto-replacing).
+- **Gamification Engine**: Local XP events, pending XP tracking, Speaker Levels, and daily claims (includes 20 XP vocab_recall_session_completed reward capped at 2 per day, duplicate-protected).
 - **Article Practice**: paste URL, server-side fetch, and generate copyright-safe academic speaking task results
 - **Article Vocabulary Save**: save useful vocab cards directly to Vocabulary Notebook (duplicate-safe)
 - **Article Practice → Active Session Bridge**: "Practice This Speaking Task" copies details to Today's Target, switches mode to "Reading-to-Speaking", and switches view to Active Session setup without auto-starting the session.
@@ -68,7 +68,7 @@ small coaching features.
 ## Not In Current MVP
 
 - Authentication (Supabase / Clerk)
-- Database or cloud sync
+- Database or cloud sync (stored strictly in local browser `localStorage`)
 - Deployment workflow
 - Mobile app
 - Dedicated Deep Feedback mode (currently routes to Quick Feedback)
@@ -76,6 +76,9 @@ small coaching features.
 - Persisted Weekly Review or Mental Model history
 - Pronunciation scoring or audio recording exports
 - Article Practice history or article-specific metadata in CSV
+- Advanced spaced repetition algorithm (uses simple recency/underuse queue prioritizer instead)
+- Bulk AI classification or tagging of vocabulary items
+- Automated "Generate Sentence" or auto-answer templates (users must supply original sentences)
 
 ## Working Notes
 

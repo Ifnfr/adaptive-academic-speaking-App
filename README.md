@@ -28,8 +28,12 @@ shown in the UI is **fonetik**.
 - Friendly provider errors for missing keys, rejected keys, rate limits, and model availability
 - Foundation-level calibration for Feedback, Diagnostic, Weekly Review, and Mental Model outputs
 - Robust JSON parsing for Weekly Review and Mental Model provider responses
-- **Vocabulary Notebook**: Save academic vocabulary items manually or from articles, track status, level, source, and reuse counts. Complete sentence practice and run AI-based usage corrections (`/api/vocabulary-correction`) to check naturalness/correctness (incrementing `correctUseCount` once per sentence).
-- **Gamification Engine**: Local XP tracking based on `XP_RULES`. Award pending daily XP for completing sessions, diagnostic tests, weekly reviews, mental models, level-ups, vocabulary sentence practice, and article practice, with a daily claim mechanism and capped limits.
+- **Vocabulary Notebook 2.0**: A local-first notebook featuring:
+  - **Recent Vocabulary Preview**: Displays only the 5 most recently added items on the dashboard to prevent overcrowding.
+  - **View All / Dictionary Mode**: Shows all saved vocabulary items and displays comprehensive metadata (part of speech, level, source, example, usage note/collocations, reuse counts, correct use counts, saved date, last practiced date, and sentence history), with delete and status controls.
+  - **Active Recall Practice**: Starts a 5-card queue based on a recency/scoring prioritization algorithm. Features step-by-step progress tracking, optional hint disclosures (reveals meaning, part of speech, examples, and collocations), and strict sentence validation (empty/whitespace sentences or sentences omitting the target word are rejected).
+  - **AI Vocabulary Correction**: Integrates with `/api/vocabulary-correction` (sends target vocabulary, part of speech, meaning, and user sentence) to evaluate grammatical naturalness, returning target usage roles and detailed correction feedback without auto-replacing the original sentence.
+- **Gamification Engine**: Local XP tracking based on `XP_RULES`. Award pending daily XP for completing sessions, diagnostic tests, weekly reviews, mental models, level-ups, vocabulary sentence practice (5 XP), vocabulary recall session completion (20 XP, awarded only for a full 5-card session with 0 skips and duplicate-protected), and article practice, with a daily claim mechanism and capped limits.
 - **Article Practice**: Paste an article URL to extract text server-side and generate copyright-safe academic speaking practice (snapshot, brief, main idea, key points, useful vocabulary candidates, comprehension checks, speaking task, follow-up questions, and warnings).
 - **Article Vocabulary Save**: Save useful vocabulary candidates directly to the Vocabulary Notebook with the source set to `"article"`, carrying over the word, meaning, selected level, and usage examples from the article context (duplicate-safe).
 - **Article Practice → Active Session Bridge**: Click "Practice This Speaking Task" in the Article Practice result to switch views, set mode to "Reading-to-Speaking", and populate Today's Target with a compact prompt containing task details, source, instructions, structure, vocabulary, and URL, without auto-starting the session.
@@ -126,7 +130,7 @@ hot-reloaded.
 ## Current Limitations
 
 - No authentication.
-- No database, cloud sync, or deployment workflow (Clerk / Supabase are not used).
+- No database, cloud sync, or deployment workflow (Clerk / Supabase are not used; localStorage is local-only).
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.
@@ -136,6 +140,11 @@ hot-reloaded.
 - Article Practice results are stored in React state only (no article history or full article body storage yet).
 - No save-all vocabulary button (words must be saved individually).
 - No article-specific CSV fields or feedback context.
+- Vocabulary Notebook 2.0 limitations:
+  - No advanced spaced repetition algorithm (uses a simple recency-based prioritization).
+  - No bulk AI classification or automatic tagging of vocabulary.
+  - No automated "Generate Sentence" or auto-answer templates (users must write their own sentences).
+  - No pronunciation scoring or audio recording exports yet.
 
 ## Roadmap
 
