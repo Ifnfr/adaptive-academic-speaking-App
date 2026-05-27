@@ -16,16 +16,24 @@ import type { VocabItem } from "../vocabulary";
 import type { XpProfile, XpEvent, Badge } from "../gamification";
 
 // ---------------------------------------------------------------------------
-// Session types (mirrored from page.tsx to avoid circular imports)
+// Session types
 // ---------------------------------------------------------------------------
 
 /**
  * Shape of a completed session record as stored in localStorage.
  *
- * This type mirrors `SessionRecord` defined in `page.tsx`. It is intentionally
- * duplicated here so the storage adapter boundary can be imported without
- * pulling in the full page component. If the canonical definition in page.tsx
- * changes, update this type to match.
+ * `page.tsx` defines a stricter `SessionRecord` type with narrow union fields
+ * (e.g. `level: Level` instead of `level: string`). Since each union type
+ * extends `string`, `SessionRecord` is a subtype of `StoredSessionRecord`.
+ *
+ * This means:
+ *   - page.tsx can pass `SessionRecord[]` to `saveSessions()` without casting.
+ *   - page.tsx casts the return of `loadSessions()` to `SessionRecord[]`.
+ *     This is safe because the adapter's `isSessionRecord` guard validates the
+ *     same field set (typeof checks only) that page.tsx originally used.
+ *
+ * If either type changes, update the other to match. Fields must stay in sync:
+ *   page.tsx SessionRecord  ←→  StoredSessionRecord  ←→  adapter isSessionRecord
  */
 export type StoredSessionRecord = {
   id: string;

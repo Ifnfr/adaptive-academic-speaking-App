@@ -74,6 +74,7 @@ import {
   ArticlePracticeView,
   type ArticlePracticeResult,
 } from "./components/ArticlePracticeView";
+import { storage } from "./lib/storage";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -320,32 +321,7 @@ const BADGE_BY_EVENT: Partial<Record<XpEventType, string>> = {
   level_up_applied: "first_level_up",
 };
 
-const SESSIONS_STORAGE_KEY = "adaptive-speaking-app:sessions";
 const MAX_STORED_SESSIONS = 20;
-
-// Type guard: defensive against shape drift or hand-edited storage.
-function isSessionRecord(value: unknown): value is SessionRecord {
-  if (!value || typeof value !== "object") return false;
-  const r = value as Record<string, unknown>;
-  return (
-    typeof r.id === "string" &&
-    typeof r.date === "string" &&
-    typeof r.level === "string" &&
-    typeof r.mode === "string" &&
-    typeof r.feedbackType === "string" &&
-    typeof r.sessionType === "string" &&
-    typeof r.provider === "string" &&
-    typeof r.todayTarget === "string" &&
-    typeof r.durationSeconds === "number" &&
-    typeof r.transcript === "string" &&
-    typeof r.mainWeakness === "string" &&
-    typeof r.evidence === "string" &&
-    typeof r.betterPhrase === "string" &&
-    typeof r.retryTask === "string" &&
-    typeof r.retryTranscript === "string" &&
-    typeof r.csv === "string"
-  );
-}
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -423,29 +399,17 @@ function withEarnedBadge(
   return [...badges, createEarnedBadge(definition)];
 }
 
+// Session load/save delegated to the storage adapter boundary.
+// The adapter owns the localStorage key, type guard, and cap logic.
+// The cast to SessionRecord[] is safe because the adapter's isSessionRecord
+// guard validates the identical field set — SessionRecord (with narrow union
+// types like Level, Mode) is a subtype of StoredSessionRecord (with string).
 function loadSessions(): SessionRecord[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(SESSIONS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isSessionRecord).slice(0, MAX_STORED_SESSIONS);
-  } catch {
-    return [];
-  }
+  return storage.loadSessions() as SessionRecord[];
 }
 
 function saveSessions(sessions: SessionRecord[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      SESSIONS_STORAGE_KEY,
-      JSON.stringify(sessions.slice(0, MAX_STORED_SESSIONS)),
-    );
-  } catch {
-    // Quota exceeded or storage unavailable; skip silently.
-  }
+  storage.saveSessions(sessions);
 }
 
 // ---------- External stores for useSyncExternalStore ----------
