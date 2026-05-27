@@ -34,5 +34,10 @@ test.describe("i18n language foundation", () => {
     expect(t("id", "profile.saveProfileSettings")).toBe(
       "Simpan pengaturan profil",
     );
+    expect(t("id", "profile.appLanguage")).toBe("Bahasa aplikasi");
+    expect(t("id", "profile.feedbackLanguage")).toBe("Bahasa umpan balik");
+    expect(t("id", "profile.targetLanguageFixed")).toBe(
+      "Saat ini hanya bahasa Inggris",
+    );
   });
 });

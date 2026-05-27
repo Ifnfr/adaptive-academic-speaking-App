@@ -103,6 +103,11 @@ import {
   type UserProfilePreferencesPatch,
 } from "./lib/storage/supabase-profile-adapter";
 import { ProfileSettingsView } from "./components/ProfileSettingsView";
+import {
+  DEFAULT_APP_LANGUAGE,
+  normalizeAppLanguage,
+  type AppLanguage,
+} from "./lib/i18n";
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
 
@@ -694,6 +699,10 @@ export default function Home() {
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [appLanguageOverride, setAppLanguageOverride] = useState<{
+    userId: string;
+    language: AppLanguage;
+  } | null>(null);
 
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
@@ -1222,6 +1231,13 @@ export default function Home() {
   const effectiveArticleFocus = articleFocus.trim() || articleFocusPlaceholder;
   const currentLocalDate = getLocalDateString();
   const speakerProgress = getSpeakerLevelProgress(xpProfile.totalXp);
+  const appLanguagePreview =
+    appLanguageOverride?.userId === cloudAuthState.userId
+      ? appLanguageOverride.language
+      : null;
+  const appLanguage = cloudAuthState.isSignedIn
+    ? appLanguagePreview ?? normalizeAppLanguage(ownerProfile?.preferredAppLanguage)
+    : DEFAULT_APP_LANGUAGE;
   const claimableXp =
     xpProfile.pendingDailyXp + xpProfile.unclaimedPreviousXp;
   const alreadyClaimedToday = xpProfile.lastClaimedDate === currentLocalDate;
@@ -2450,6 +2466,7 @@ export default function Home() {
           speakerLevelName={speakerProgress.currentLevel.name}
           totalXp={xpProfile.totalXp}
           gamificationReady={gamificationReady}
+          appLanguage={appLanguage}
           onSelectView={setView}
           onSelectDiagnostic={handleSelectDiagnostic}
         />
@@ -2774,6 +2791,7 @@ export default function Home() {
           {view === "settings" && (
             <ProfileSettingsView
               isSignedIn={cloudAuthState.isSignedIn}
+              appLanguage={appLanguage}
               profile={ownerProfile}
               profileLoadError={profileLoadError}
               profileSaveStatus={profileSaveStatus}
@@ -2794,6 +2812,13 @@ export default function Home() {
                 ).length
               }
               onSavePreferences={handleSaveProfilePreferences}
+              onAppLanguageChange={(language) => {
+                if (!cloudAuthState.userId) return;
+                setAppLanguageOverride({
+                  userId: cloudAuthState.userId,
+                  language,
+                });
+              }}
             />
           )}
 

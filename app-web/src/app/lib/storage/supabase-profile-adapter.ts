@@ -190,6 +190,18 @@ export function applyProfilePreferencesPatchToProfile(
     publicProfileEnabled:
       patch.publicProfileEnabled ?? profile.publicProfileEnabled,
     leaderboardOptIn: patch.leaderboardOptIn ?? profile.leaderboardOptIn,
+    preferredAppLanguage:
+      patch.preferredAppLanguage === undefined
+        ? profile.preferredAppLanguage
+        : normalizeNullableString(patch.preferredAppLanguage),
+    feedbackLanguage:
+      patch.feedbackLanguage === undefined
+        ? profile.feedbackLanguage
+        : normalizeNullableString(patch.feedbackLanguage),
+    targetLanguage:
+      patch.targetLanguage === undefined
+        ? profile.targetLanguage
+        : normalizeNullableString(patch.targetLanguage),
   };
 }
 

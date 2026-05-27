@@ -18,6 +18,7 @@ const dictionaries = {
     "profile.bio": "Bio",
     "profile.displayName": "Display name",
     "profile.feedbackLanguage": "Feedback language",
+    "profile.indonesian": "Indonesian",
     "profile.languagePreferences": "Language preferences",
     "profile.languagePreferencesComingSoon": "Coming soon",
     "profile.leaderboardOptIn": "Leaderboard opt-in",
@@ -31,6 +32,8 @@ const dictionaries = {
     "profile.saved": "Profile settings saved.",
     "profile.saving": "Saving...",
     "profile.targetLanguage": "Target language",
+    "profile.targetLanguageFixed": "English only for now",
+    "profile.english": "English",
     "profile.yourProgress": "Your Progress",
   },
   id: {
@@ -40,6 +43,7 @@ const dictionaries = {
     "profile.bio": "Bio",
     "profile.displayName": "Nama tampilan",
     "profile.feedbackLanguage": "Bahasa umpan balik",
+    "profile.indonesian": "Bahasa Indonesia",
     "profile.languagePreferences": "Preferensi bahasa",
     "profile.languagePreferencesComingSoon": "Segera hadir",
     "profile.leaderboardOptIn": "Ikut papan peringkat",
@@ -53,6 +57,8 @@ const dictionaries = {
     "profile.saved": "Pengaturan profil tersimpan.",
     "profile.saving": "Menyimpan...",
     "profile.targetLanguage": "Bahasa target",
+    "profile.targetLanguageFixed": "Saat ini hanya bahasa Inggris",
+    "profile.english": "Bahasa Inggris",
     "profile.yourProgress": "Progres Anda",
   },
 } as const;
