@@ -74,6 +74,7 @@ import {
   writeCompletedSessionToCloud,
   type SessionCloudAuthState,
 } from "./lib/storage/session-cloud-runtime";
+import { writeVocabularyChangesToCloud } from "./lib/storage/vocab-cloud-runtime";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -895,8 +896,14 @@ export default function Home() {
       : null;
 
   const persistVocabulary = (nextItems: VocabItem[]) => {
+    const prevItems = vocabularyItems;
     setVocabularyItems(nextItems);
     storage.saveVocabulary(nextItems);
+    void writeVocabularyChangesToCloud({
+      auth: sessionCloudAuthRef.current,
+      previous: prevItems,
+      next: nextItems,
+    });
   };
 
   const handleSaveArticleVocabularyCandidate = (candidate: {
