@@ -7,6 +7,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { MutableRefObject } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { buildLevelUpCheck } from "./lib/level-up";
 import { LEVEL_PHASE, nextLevelHint } from "./lib/levels";
 import { buildCoachRecommendation } from "./lib/coach";
@@ -67,6 +69,11 @@ import {
   type ArticlePracticeResult,
 } from "./components/ArticlePracticeView";
 import { storage } from "./lib/storage";
+import {
+  DISABLED_SESSION_CLOUD_AUTH,
+  writeCompletedSessionToCloud,
+  type SessionCloudAuthState,
+} from "./lib/storage/session-cloud-runtime";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -119,6 +126,7 @@ const MODES = ["Fluency Sprint", "Argument Drill", "Reading-to-Speaking", "Debat
 const FEEDBACK_TYPES = ["Quick", "Deep"] as const;
 const SESSION_TYPES = ["Micro", "Standard", "Deep"] as const;
 const AI_PROVIDERS = ["Claude", "DeepSeek", "Gemini"] as const;
+const CLERK_ENABLED = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 type Level = (typeof LEVELS)[number];
 type Mode = (typeof MODES)[number];
@@ -633,6 +641,10 @@ const cardHeader =
 const cardBody = "p-6";
 
 export default function Home() {
+  const sessionCloudAuthRef = useRef<SessionCloudAuthState>(
+    DISABLED_SESSION_CLOUD_AUTH,
+  );
+
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
   const [mode, setMode] = useState<Mode>("Fluency Sprint");
@@ -1978,6 +1990,11 @@ export default function Home() {
     const next = [record, ...sessions].slice(0, MAX_STORED_SESSIONS);
     updateSessions(next);
     if (activeSession.mode !== "Diagnostic") {
+      void writeCompletedSessionToCloud({
+        auth: sessionCloudAuthRef.current,
+        session: record,
+      });
+
       awardGamificationEvent(
         "normal_session_completed",
         record.id,
@@ -2033,6 +2050,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full">
+      {CLERK_ENABLED && (
+        <SessionCloudAuthBridge authRef={sessionCloudAuthRef} />
+      )}
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10">
         {/* Sidebar */}
         <Sidebar
@@ -2392,6 +2412,29 @@ export default function Home() {
 }
 
 // --- Reusable bits kept in the same file ---
+
+type SessionCloudAuthBridgeProps = {
+  authRef: MutableRefObject<SessionCloudAuthState>;
+};
+
+function SessionCloudAuthBridge({ authRef }: SessionCloudAuthBridgeProps) {
+  const { getToken, isLoaded, isSignedIn, userId } = useAuth();
+
+  useEffect(() => {
+    authRef.current = {
+      isLoaded,
+      isSignedIn: isSignedIn === true,
+      userId: userId ?? null,
+      getToken: () => getToken(),
+    };
+
+    return () => {
+      authRef.current = DISABLED_SESSION_CLOUD_AUTH;
+    };
+  }, [authRef, getToken, isLoaded, isSignedIn, userId]);
+
+  return null;
+}
 
 type SummaryCellProps = {
   label: string;
