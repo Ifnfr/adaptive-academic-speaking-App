@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { AppLanguage, Translate } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 import type { UserProfile, UserProfilePreferencesPatch } from "../lib/storage/supabase-profile-adapter";
 
 // ---------------------------------------------------------------------------
@@ -18,6 +20,7 @@ const cardBody = "p-6";
 export type ProfileSettingsViewProps = {
   // Auth state
   isSignedIn: boolean;
+  appLanguage?: AppLanguage | null;
   // Profile loaded from Supabase (null = not loaded / unavailable)
   profile: UserProfile | null;
   profileLoadError: string | null;
@@ -134,6 +137,7 @@ function Toggle({
 // Safe local stats card (shown for both signed-out and signed-in users)
 // ---------------------------------------------------------------------------
 function LocalStatsCard({
+  t,
   totalXp,
   speakerLevel,
   speakerLevelName,
@@ -144,6 +148,7 @@ function LocalStatsCard({
   articlePracticeCount,
   activeRecallCount,
 }: {
+  t: Translate;
   totalXp: number;
   speakerLevel: number;
   speakerLevelName: string;
@@ -158,10 +163,10 @@ function LocalStatsCard({
     <div className={card}>
       <div className={cardHeader}>
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-          Your Progress
+          {t("profile.yourProgress")}
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-          Local Stats
+          {t("profile.localStats")}
         </h2>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
           Counts only — no transcripts, sentences, or private content shown.
@@ -190,6 +195,7 @@ function LocalStatsCard({
 // Signed-out view
 // ---------------------------------------------------------------------------
 function SignedOutProfile({
+  t,
   totalXp,
   speakerLevel,
   speakerLevelName,
@@ -199,17 +205,17 @@ function SignedOutProfile({
   earnedBadgeCount,
   articlePracticeCount,
   activeRecallCount,
-}: Omit<ProfileSettingsViewProps, "isSignedIn" | "profile" | "profileLoadError" | "profileSaveStatus" | "profileSaveError" | "onSavePreferences">) {
+}: Omit<ProfileSettingsViewProps, "isSignedIn" | "appLanguage" | "profile" | "profileLoadError" | "profileSaveStatus" | "profileSaveError" | "onSavePreferences"> & { t: Translate }) {
   return (
     <div className="flex flex-col gap-4">
       {/* Local profile info card */}
       <div className={card}>
         <div className={cardHeader}>
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-            Local Profile
+            {t("profile.localProfile")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Profile &amp; Settings
+            {t("profile.profileSettings")}
           </h2>
           <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
             You are using fonetik in local mode.
@@ -238,6 +244,7 @@ function SignedOutProfile({
 
       {/* Safe local stats */}
       <LocalStatsCard
+        t={t}
         totalXp={totalXp}
         speakerLevel={speakerLevel}
         speakerLevelName={speakerLevelName}
@@ -256,6 +263,7 @@ function SignedOutProfile({
 // Signed-in view
 // ---------------------------------------------------------------------------
 function SignedInProfile({
+  t,
   profile,
   profileLoadError,
   profileSaveStatus,
@@ -270,7 +278,7 @@ function SignedInProfile({
   articlePracticeCount,
   activeRecallCount,
   onSavePreferences,
-}: Omit<ProfileSettingsViewProps, "isSignedIn">) {
+}: Omit<ProfileSettingsViewProps, "isSignedIn" | "appLanguage"> & { t: Translate }) {
   // Local form state — seeded from profile when loaded
   const [displayName, setDisplayName] = useState<string>(
     profile?.displayName ?? ""
@@ -314,10 +322,10 @@ function SignedInProfile({
       <div className={card}>
         <div className={cardHeader}>
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-            Account
+            {t("profile.account")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Profile &amp; Settings
+            {t("profile.profileSettings")}
           </h2>
         </div>
         <div className={cardBody}>
@@ -373,10 +381,10 @@ function SignedInProfile({
       <div className={card}>
         <div className={cardHeader}>
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-            Profile Settings
+            {t("profile.profileSettingsSection")}
           </p>
           <h3 className="mt-1 text-base font-semibold text-[var(--brand-ink)]">
-            Profile &amp; Privacy
+            {t("profile.profilePrivacy")}
           </h3>
           <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
             Enabling sharing settings will never publish transcripts, retry
@@ -392,7 +400,7 @@ function SignedInProfile({
                 htmlFor="profile-display-name-input"
                 className="block text-sm font-medium text-[var(--brand-ink)] mb-1.5"
               >
-                Display name
+                {t("profile.displayName")}
               </label>
               <input
                 id="profile-display-name-input"
@@ -412,7 +420,7 @@ function SignedInProfile({
                 htmlFor="profile-bio-input"
                 className="block text-sm font-medium text-[var(--brand-ink)] mb-1.5"
               >
-                Bio
+                {t("profile.bio")}
                 <span className="ml-1 text-xs font-normal text-[var(--brand-muted)]">
                   ({bio.length}/200)
                 </span>
@@ -437,7 +445,7 @@ function SignedInProfile({
               <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 divide-y divide-[var(--brand-border)]">
                 <Toggle
                   id="toggle-public-profile"
-                  label="Public profile"
+                  label={t("profile.publicProfile")}
                   description="No public profile page exists yet — this setting will be used when public profiles launch in a future update."
                   checked={publicProfileEnabled}
                   onChange={setPublicProfileEnabled}
@@ -445,7 +453,7 @@ function SignedInProfile({
                 />
                 <Toggle
                   id="toggle-leaderboard-opt-in"
-                  label="Leaderboard opt-in"
+                  label={t("profile.leaderboardOptIn")}
                   description="No leaderboard exists yet — this setting will be used when a leaderboard launches in a future update."
                   checked={leaderboardOptIn}
                   onChange={setLeaderboardOptIn}
@@ -457,22 +465,22 @@ function SignedInProfile({
             {/* Language preferences (coming soon, read-only placeholders) */}
             <div>
               <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
-                Language preferences
+                {t("profile.languagePreferences")}
                 <span className="ml-2 text-xs font-normal text-[var(--brand-muted)]">
-                  Coming soon
+                  {t("profile.languagePreferencesComingSoon")}
                 </span>
               </p>
               <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-3 text-xs text-[var(--brand-ink-soft)] space-y-2">
                 <div className="flex justify-between">
-                  <span>App language</span>
+                  <span>{t("profile.appLanguage")}</span>
                   <span className="text-[var(--brand-muted)]">—</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Feedback language</span>
+                  <span>{t("profile.feedbackLanguage")}</span>
                   <span className="text-[var(--brand-muted)]">—</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Target language</span>
+                  <span>{t("profile.targetLanguage")}</span>
                   <span className="text-[var(--brand-muted)]">—</span>
                 </div>
               </div>
@@ -487,7 +495,7 @@ function SignedInProfile({
                 disabled={isSaving}
                 className="rounded-lg bg-[var(--brand-teal-ink)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-1"
               >
-                {isSaving ? "Saving…" : "Save profile settings"}
+                {isSaving ? t("profile.saving") : t("profile.saveProfileSettings")}
               </button>
 
               {profileSaveStatus === "saved" && (
@@ -495,7 +503,7 @@ function SignedInProfile({
                   className="text-xs text-green-600"
                   data-testid="profile-save-success"
                 >
-                  Profile settings saved.
+                  {t("profile.saved")}
                 </p>
               )}
               {profileSaveStatus === "error" && profileSaveError && (
@@ -513,6 +521,7 @@ function SignedInProfile({
 
       {/* Safe local stats */}
       <LocalStatsCard
+        t={t}
         totalXp={totalXp}
         speakerLevel={speakerLevel}
         speakerLevelName={speakerLevelName}
@@ -532,6 +541,7 @@ function SignedInProfile({
 // ---------------------------------------------------------------------------
 export function ProfileSettingsView({
   isSignedIn,
+  appLanguage,
   profile,
   profileLoadError,
   profileSaveStatus,
@@ -547,9 +557,12 @@ export function ProfileSettingsView({
   activeRecallCount,
   onSavePreferences,
 }: ProfileSettingsViewProps) {
+  const { t } = useI18n(appLanguage);
+
   if (!isSignedIn) {
     return (
       <SignedOutProfile
+        t={t}
         totalXp={totalXp}
         speakerLevel={speakerLevel}
         speakerLevelName={speakerLevelName}
@@ -581,6 +594,7 @@ export function ProfileSettingsView({
       articlePracticeCount={articlePracticeCount}
       activeRecallCount={activeRecallCount}
       onSavePreferences={onSavePreferences}
+      t={t}
     />
   );
 }

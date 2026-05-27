@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 
 export type SidebarView =
   | "active"
@@ -23,6 +25,7 @@ type SidebarProps = {
   speakerLevelName: string;
   totalXp: number;
   gamificationReady: boolean;
+  appLanguage?: AppLanguage | null;
   onSelectView: (view: SidebarView) => void;
   onSelectDiagnostic: () => void;
 };
@@ -82,9 +85,11 @@ export function Sidebar({
   speakerLevelName,
   totalXp,
   gamificationReady,
+  appLanguage,
   onSelectView,
   onSelectDiagnostic,
 }: SidebarProps) {
+  const { t } = useI18n(appLanguage);
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
 
@@ -233,7 +238,7 @@ export function Sidebar({
               active={view === "settings"}
               onClick={() => onSelectView("settings")}
             >
-              Profile & Settings
+              {t("nav.profileSettings")}
             </SidebarItem>
           </SidebarGroup>
         </nav>
