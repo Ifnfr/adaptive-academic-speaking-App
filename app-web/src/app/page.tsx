@@ -1206,9 +1206,10 @@ export default function Home() {
         body: JSON.stringify({
           provider: aiProvider,
           level: item.level,
-          word: item.word,
+          targetVocabulary: item.word,
           meaning: item.meaning,
-          sentence: sentence.sentence,
+          partOfSpeech: item.partOfSpeech ?? "other",
+          userSentence: sentence.sentence,
         }),
       });
 

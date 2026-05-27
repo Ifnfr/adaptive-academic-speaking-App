@@ -37,6 +37,7 @@ export type VocabSentenceCorrection = {
   correctedSentence: string;
   collocationTip: string;
   retryInstruction: string;
+  targetUsageRole?: string;
   warnings: string[];
   checkedAt: string;
   providerUsed: string;
@@ -113,6 +114,7 @@ export type SaveSentenceCorrectionInput = {
   correctedSentence: string;
   collocationTip: string;
   retryInstruction: string;
+  targetUsageRole?: string;
   warnings?: string[];
   checkedAt?: string;
   providerUsed: string;
@@ -567,6 +569,9 @@ function normalizeCorrection(value: unknown): VocabSentenceCorrection | undefine
     correctedSentence: source.correctedSentence.trim(),
     collocationTip: source.collocationTip.trim(),
     retryInstruction: source.retryInstruction.trim(),
+    targetUsageRole: isNonEmptyString(source.targetUsageRole)
+      ? source.targetUsageRole.trim()
+      : undefined,
     warnings: normalizeStringList(source.warnings),
     checkedAt: source.checkedAt,
     providerUsed: source.providerUsed.trim(),

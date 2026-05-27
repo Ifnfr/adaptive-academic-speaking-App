@@ -1177,6 +1177,14 @@ function SavedSentenceCorrection({
             </span>{" "}
             {sentence.correction.collocationTip}
           </p>
+          {sentence.correction.targetUsageRole && (
+            <p>
+              <span className="font-semibold text-[var(--brand-ink)]">
+                Target role in your sentence:
+              </span>{" "}
+              {sentence.correction.targetUsageRole}
+            </p>
+          )}
           <p>
             <span className="font-semibold text-[var(--brand-ink)]">
               Retry:

@@ -28,9 +28,10 @@ type VocabularyCorrectionStatus = (typeof CORRECTION_STATUSES)[number];
 type VocabularyCorrectionRequest = {
   provider: Provider;
   level: Level;
-  word: string;
+  targetVocabulary: string;
   meaning: string;
-  sentence: string;
+  partOfSpeech: string;
+  userSentence: string;
 };
 
 type VocabularyCorrectionResponse = {
@@ -39,6 +40,7 @@ type VocabularyCorrectionResponse = {
   correctedSentence: string;
   collocationTip: string;
   retryInstruction: string;
+  targetUsageRole?: string;
   warnings: string[];
 };
 
@@ -58,14 +60,17 @@ function buildSystemPrompt(): string {
     "The correctedSentence must be exactly one sentence.",
     "The retryInstruction must be one short actionable task asking the learner to try again themselves.",
     "Feedback should support spoken reuse of the vocabulary word.",
+    "If partOfSpeech is provided, consider how the target vocabulary functions in the user's sentence.",
+    "Explain only the role of the target vocabulary. Do not classify every word in the sentence.",
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
     "- No markdown. No code fences. No commentary outside JSON.",
     "- The JSON object MUST have exactly these keys:",
-    '  "status", "explanation", "correctedSentence", "collocationTip", "retryInstruction", "warnings".',
+    '  "status", "explanation", "correctedSentence", "collocationTip", "retryInstruction", "targetUsageRole", "warnings".',
     '- status MUST be one of: "natural", "understandable", "awkward", "incorrect".',
     "- explanation, correctedSentence, collocationTip, and retryInstruction are short strings.",
+    "- targetUsageRole is a short string explaining how the target vocabulary functions in the user's sentence. Use an empty string if unsure.",
     "- correctedSentence is one sentence only, no paragraph, no list, no multiple alternatives.",
     "- retryInstruction is one short task.",
     "- warnings is an array of strings. Use [] if there are no warnings.",
@@ -115,13 +120,14 @@ function buildUserPrompt(req: VocabularyCorrectionRequest): string {
   return [
     "LEARNER CONTEXT:",
     `- Level: ${req.level}`,
-    `- Target word/phrase: ${req.word}`,
+    `- Target word/phrase: ${req.targetVocabulary}`,
     `- Meaning: ${req.meaning || "(not provided)"}`,
+    `- Part of speech: ${req.partOfSpeech || "(not provided)"}`,
     "",
     levelGuidance(req.level),
     "",
     "USER SUBMITTED SENTENCE:",
-    req.sentence,
+    req.userSentence,
     "",
     "TASK:",
     "1. Decide whether the sentence is natural, understandable, awkward, or incorrect.",
@@ -129,9 +135,10 @@ function buildUserPrompt(req: VocabularyCorrectionRequest): string {
     "3. Provide exactly one corrected sentence.",
     "4. Give one collocation or usage tip.",
     "5. Give one short retry instruction so the learner writes or says a new sentence themselves.",
-    "6. Add warnings only when useful.",
+    "6. Explain how the target vocabulary functions in the user's sentence if you can do that briefly.",
+    "7. Add warnings only when useful.",
     "",
-    'Return ONLY this JSON shape: {"status":"understandable","explanation":"...","correctedSentence":"...","collocationTip":"...","retryInstruction":"...","warnings":[]}',
+    'Return ONLY this JSON shape: {"status":"understandable","explanation":"...","correctedSentence":"...","collocationTip":"...","retryInstruction":"...","targetUsageRole":"...","warnings":[]}',
   ].join("\n");
 }
 
@@ -305,13 +312,19 @@ function parseVocabularyCorrection(
     const correctedSentence = normalizeRequiredString(data.correctedSentence);
     const collocationTip = normalizeRequiredString(data.collocationTip);
     const retryInstruction = normalizeRequiredString(data.retryInstruction);
+    const targetUsageRole =
+      typeof data.targetUsageRole === "string"
+        ? limitText(data.targetUsageRole, 400)
+        : "";
 
     if (
       !status ||
       !isShortRequiredText(explanation, 60, 500) ||
       !isShortRequiredText(collocationTip, 60, 500) ||
       !isShortRequiredText(retryInstruction, 30, 220) ||
-      !isShortRequiredText(correctedSentence, 40, 300)
+      !isShortRequiredText(correctedSentence, 40, 300) ||
+      (targetUsageRole.length > 0 &&
+        !isShortRequiredText(targetUsageRole, 50, 400))
     ) {
       return { ok: false, reason: "validation" };
     }
@@ -328,6 +341,7 @@ function parseVocabularyCorrection(
         correctedSentence,
         collocationTip,
         retryInstruction,
+        targetUsageRole: targetUsageRole || undefined,
         warnings: normalizeWarnings(data.warnings),
       },
     };
@@ -354,26 +368,33 @@ function validateRequest(body: unknown): VocabularyCorrectionRequest | string {
     return "Unsupported level. Use Foundation, Beginner, Intermediate, Advanced, or Expert.";
   }
 
-  const word = normalizeString(source.word, 100);
-  if (!word) {
+  const targetVocabulary = normalizeString(
+    source.targetVocabulary ?? source.word,
+    100,
+  );
+  if (!targetVocabulary) {
     return "Vocabulary word or phrase is required.";
   }
 
-  const sentence = normalizeString(source.sentence, 500);
-  if (!sentence) {
+  const userSentence = normalizeString(
+    source.userSentence ?? source.sentence,
+    500,
+  );
+  if (!userSentence) {
     return "Sentence is required.";
   }
 
-  if (!containsVocabWord(sentence, word)) {
+  if (!containsVocabWord(userSentence, targetVocabulary)) {
     return "Sentence must include the target vocabulary word or phrase.";
   }
 
   return {
     provider,
     level,
-    word,
+    targetVocabulary,
     meaning: normalizeString(source.meaning, 300),
-    sentence,
+    partOfSpeech: normalizeString(source.partOfSpeech, 80),
+    userSentence,
   };
 }
 

@@ -100,6 +100,8 @@ test.describe("MVP Smoke Flows", () => {
           correctedSentence: "Let me clarify this issue.",
           collocationTip: "clarify the meaning, clarify the context",
           retryInstruction: "Try another context.",
+          targetUsageRole:
+            "Here, clarify functions as a verb meaning to make something clear.",
           warnings: [],
         }),
       });
@@ -144,6 +146,9 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.locator("span:has-text(\"Natural\")")).toBeVisible();
     await expect(
       page.locator("p:has-text(\"Good usage of clarify.\")"),
+    ).toBeVisible();
+    await expect(
+      page.locator("text=Target role in your sentence"),
     ).toBeVisible();
 
     // Complete the recall session, then open full dictionary management
