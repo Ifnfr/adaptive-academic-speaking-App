@@ -66,7 +66,7 @@ macOS or Linux:
 cp .env.example .env.local
 ```
 
-Open `app-web/.env.local` and add the provider keys you have. These keys remain strictly server-side in Next.js API routes; browser code never accesses them directly (no `NEXT_PUBLIC_` variables are used).
+Open `app-web/.env.local` and add the provider keys you have. Provider keys remain strictly server-side in Next.js API routes; browser code never accesses Claude, DeepSeek, or Gemini keys directly.
 
 Features like Quick Feedback, Diagnostic Mode, Weekly Review, Mental Model, Vocabulary Correction, and Article Practice require at least one active provider key.
 
@@ -77,9 +77,15 @@ CLAUDE_API_KEY=
 DEEPSEEK_API_KEY=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
+
+# Optional Clerk auth shell. Leave blank for local-only use.
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
 ```
 
 You only need one provider key to test AI features. Leave providers you do not use blank. Always restart the dev server after editing `.env.local` for the changes to take effect.
+
+Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
@@ -216,6 +222,8 @@ shows a safe fallback message and you can type or paste the transcript manually.
 
 - Do not commit `.env.local`.
 - Do not share real API keys in screenshots.
-- Do not add provider keys with `NEXT_PUBLIC_`.
+- Do not add Claude, DeepSeek, or Gemini provider keys with `NEXT_PUBLIC_`.
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is allowed for Clerk because it is public by design.
+- Keep `CLERK_SECRET_KEY` server-side only.
 - Provider keys stay server-side in Next.js API routes.
 - The app stores session history in browser localStorage, not in a cloud database.

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 type TopbarProps = {
   subtitle: string;
   title: string;
@@ -5,6 +7,7 @@ type TopbarProps = {
   hasActiveSession: boolean;
   mode: string;
   level: string;
+  authSlot?: ReactNode;
 };
 
 export function Topbar({
@@ -14,6 +17,7 @@ export function Topbar({
   hasActiveSession,
   mode,
   level,
+  authSlot,
 }: TopbarProps) {
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
@@ -44,6 +48,7 @@ export function Topbar({
         <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
           {level}
         </span>
+        {authSlot}
       </div>
     </header>
   );

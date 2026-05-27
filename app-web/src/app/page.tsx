@@ -62,6 +62,7 @@ import {
 import { SessionLogView } from "./components/SessionLogView";
 import { Sidebar, type SidebarView } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
+import { AuthStatus } from "./components/AuthStatus";
 import { SessionSetup } from "./components/SessionSetup";
 import { CoachPanels } from "./components/CoachPanels";
 import { SpeakingPromptCard } from "./components/SpeakingPromptCard";
@@ -2103,6 +2104,7 @@ export default function Home() {
             hasActiveSession={Boolean(activeSession)}
             mode={mode}
             level={level}
+            authSlot={<AuthStatus />}
           />
 
           {/* ===================== Active Session view ===================== */}

@@ -89,9 +89,15 @@ CLAUDE_API_KEY=
 DEEPSEEK_API_KEY=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.0-flash
+
+# Optional Clerk auth shell. Leave blank for local-only use.
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
+CLERK_SECRET_KEY=
 ```
 
 `GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
+Clerk keys are optional for the current local MVP; when omitted, the app shows
+Local mode and keeps using browser storage only.
 Restart `npm run dev` after editing `.env.local`; environment variables are not
 hot-reloaded.
 
@@ -123,14 +129,16 @@ hot-reloaded.
 - Keep provider keys in `app-web/.env.local`.
 - Do not commit `.env.local`.
 - Do not use `NEXT_PUBLIC_` for provider API keys.
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is allowed for Clerk because it is a public browser key.
+- Keep `CLERK_SECRET_KEY` server-side only.
 - Do not put provider keys in browser code.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
 - Session history is stored locally in the user's browser, not in a database.
 
 ## Current Limitations
 
-- No authentication.
-- No database, cloud sync, or deployment workflow (Clerk / Supabase are not used; localStorage is local-only).
+- Clerk authentication shell is optional and does not sync, import, or persist data yet.
+- No database, cloud sync, or deployment workflow (Supabase is not used; localStorage is local-only).
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.
