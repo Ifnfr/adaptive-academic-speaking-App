@@ -94,12 +94,17 @@ test.describe("CloudSyncStatusPanel model", () => {
     if (!model.visible) return;
     expect(model.title).toBe("Cloud restore available");
     expect(model.description).toContain("No local data has been changed.");
-    expect(model.actionNote).toBe("Restore/import controls are not enabled yet.");
+    expect(model.actionNote).toBe(
+      "Review the counts before restoring cloud data.",
+    );
     expect(model.restoreEnabled).toBe(true);
-    expect(model.counts.find((row) => row.key === "sessions")?.value.cloud).toBe(2);
+    expect(model.importEnabled).toBe(false);
+    expect(model.counts.find((row) => row.key === "sessions")?.value.cloud).toBe(
+      2,
+    );
   });
 
-  test("shows read-only import messaging, counts, and warnings", () => {
+  test("enables import action only for import-available messaging", () => {
     const model = buildCloudSyncStatusPanelModel(
       loadedResult("import-available"),
     );
@@ -108,14 +113,20 @@ test.describe("CloudSyncStatusPanel model", () => {
     if (!model.visible) return;
     expect(model.title).toBe("Cloud import available");
     expect(model.description).toContain("No local data has been changed.");
+    expect(model.actionNote).toBe(
+      "Review the counts before importing cloud data.",
+    );
     expect(model.restoreEnabled).toBe(false);
+    expect(model.importEnabled).toBe(true);
     expect(model.reasons).toEqual([
       expect.objectContaining({
         level: "warning",
         message: expect.stringContaining("Local and cloud XP profiles disagree"),
       }),
     ]);
-    expect(model.counts.find((row) => row.key === "vocabulary")?.value.updated).toBe(1);
+    expect(
+      model.counts.find((row) => row.key === "vocabulary")?.value.updated,
+    ).toBe(1);
   });
 
   test("shows failed cloud check safety copy", () => {
@@ -133,6 +144,7 @@ test.describe("CloudSyncStatusPanel model", () => {
       counts: [],
       reasons: [],
       restoreEnabled: false,
+      importEnabled: false,
     });
   });
 

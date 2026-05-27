@@ -41,6 +41,7 @@ export type CloudSyncStatusPanelModel =
       }>;
       reasons: SyncMergeReason[];
       restoreEnabled: boolean;
+      importEnabled: boolean;
     };
 
 export function buildCloudSyncStatusPanelModel(
@@ -58,6 +59,7 @@ export function buildCloudSyncStatusPanelModel(
       counts: [],
       reasons: [],
       restoreEnabled: false,
+      importEnabled: false,
     };
   }
 
@@ -70,6 +72,7 @@ export function buildCloudSyncStatusPanelModel(
   }
 
   const isRestore = result.plan.status === "restore-available";
+  const isImport = result.plan.status === "import-available";
 
   return {
     visible: true,
@@ -77,7 +80,9 @@ export function buildCloudSyncStatusPanelModel(
     description: isRestore
       ? "Cloud data is available for this browser. No local data has been changed."
       : "Cloud has safe additions or updates to review. No local data has been changed.",
-    actionNote: "Restore/import controls are not enabled yet.",
+    actionNote: isRestore
+      ? "Review the counts before restoring cloud data."
+      : "Review the counts before importing cloud data.",
     tone: "info",
     counts: DOMAIN_ORDER.map((key) => ({
       key,
@@ -86,6 +91,7 @@ export function buildCloudSyncStatusPanelModel(
     })),
     reasons: result.plan.reasons,
     restoreEnabled: isRestore,
+    importEnabled: isImport,
   };
 }
 
@@ -94,19 +100,31 @@ export type CloudRestoreActionResult =
   | { status: "aborted-local-not-empty" }
   | { status: "failed" };
 
+export type CloudImportActionResult =
+  | { status: "imported" }
+  | { status: "aborted-active-session" }
+  | { status: "aborted-local-changed" }
+  | { status: "failed" };
+
 type CloudSyncStatusPanelProps = {
   result: CloudSnapshotRuntimeResult | null;
   onConfirmRestore?: () => Promise<CloudRestoreActionResult>;
+  onConfirmImport?: () => Promise<CloudImportActionResult>;
 };
 
 export function CloudSyncStatusPanel({
   result,
   onConfirmRestore,
+  onConfirmImport,
 }: CloudSyncStatusPanelProps) {
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreCompleted, setRestoreCompleted] = useState(false);
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importCompleted, setImportCompleted] = useState(false);
   const model = buildCloudSyncStatusPanelModel(result);
   if (!model.visible) return null;
 
@@ -241,6 +259,86 @@ export function CloudSyncStatusPanel({
             {restoreMessage && (
               <p className="text-xs font-medium text-[var(--brand-ink-soft)]">
                 {restoreMessage}
+              </p>
+            )}
+          </div>
+        )}
+
+        {model.importEnabled && onConfirmImport && !importCompleted && (
+          <div className="flex flex-col gap-3 border-t border-[var(--brand-border)] pt-3">
+            {!confirmImportOpen ? (
+              <button
+                type="button"
+                className="w-fit rounded-full border border-[var(--brand-teal)] bg-[var(--brand-teal)] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                onClick={() => {
+                  setImportMessage(null);
+                  setConfirmImportOpen(true);
+                }}
+              >
+                Import to this browser
+              </button>
+            ) : (
+              <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                  Import cloud data to this browser?
+                </h3>
+                <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                  fonetik will merge safe cloud additions and updates into this
+                  browser. Local data will not be cleared. Cloud data will not
+                  be changed.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-4 py-2 text-xs font-medium text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                    disabled={importBusy}
+                    onClick={() => {
+                      setConfirmImportOpen(false);
+                      setImportMessage(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-[var(--brand-teal)] bg-[var(--brand-teal)] px-4 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={importBusy}
+                    onClick={async () => {
+                      setImportBusy(true);
+                      try {
+                        const result = await onConfirmImport();
+                        if (result.status === "imported") {
+                          setImportMessage(
+                            "Cloud data imported to this browser. Local storage remains the source of truth.",
+                          );
+                          setImportCompleted(true);
+                          setConfirmImportOpen(false);
+                        } else if (result.status === "aborted-active-session") {
+                          setImportMessage(
+                            "Import was not applied. Finish the active session before importing cloud data.",
+                          );
+                        } else if (result.status === "aborted-local-changed") {
+                          setImportMessage(
+                            "Import was not applied. Local data changed before confirmation, so your browser data was left untouched.",
+                          );
+                        } else {
+                          setImportMessage(
+                            "Import could not be completed. Local data is safe.",
+                          );
+                        }
+                      } finally {
+                        setImportBusy(false);
+                      }
+                    }}
+                  >
+                    Confirm import
+                  </button>
+                </div>
+              </div>
+            )}
+            {importMessage && (
+              <p className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                {importMessage}
               </p>
             )}
           </div>

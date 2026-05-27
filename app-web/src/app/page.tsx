@@ -70,6 +70,7 @@ import {
 } from "./components/ArticlePracticeView";
 import {
   CloudSyncStatusPanel,
+  type CloudImportActionResult,
   type CloudRestoreActionResult,
 } from "./components/CloudSyncStatusPanel";
 import { storage } from "./lib/storage";
@@ -82,6 +83,7 @@ import {
   loadCloudSnapshotPlan,
   type CloudSnapshotRuntimeResult,
 } from "./lib/storage/cloud-snapshot-runtime";
+import type { SyncMergePlan } from "./lib/storage/sync-merge";
 import { writeVocabularyChangesToCloud } from "./lib/storage/vocab-cloud-runtime";
 import {
   writeXpProfileToCloud,
@@ -336,6 +338,7 @@ const BADGE_BY_EVENT: Partial<Record<XpEventType, string>> = {
 };
 
 const MAX_STORED_SESSIONS = 20;
+const CLOUD_WRITE_SUPPRESSION_RELEASE_MS = 100;
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -974,7 +977,60 @@ export default function Home() {
     } finally {
       window.setTimeout(() => {
         suppressCloudWritesRef.current = false;
-      }, 0);
+      }, CLOUD_WRITE_SUPPRESSION_RELEASE_MS);
+    }
+  };
+
+  const handleConfirmCloudImport = async (): Promise<CloudImportActionResult> => {
+    if (
+      !cloudSnapshotResult ||
+      cloudSnapshotResult.status !== "loaded" ||
+      cloudSnapshotResult.plan.status !== "import-available"
+    ) {
+      return { status: "failed" };
+    }
+
+    if (activeSession) {
+      return { status: "aborted-active-session" };
+    }
+
+    const localSnapshot: LocalSnapshotTarget = {
+      sessions,
+      vocabularyItems,
+      xpProfile,
+      xpEvents,
+      badges,
+    };
+
+    if (
+      !isLocalSnapshotCompatibleWithMerged(
+        localSnapshot,
+        cloudSnapshotResult.plan.merged,
+      )
+    ) {
+      return { status: "aborted-local-changed" };
+    }
+
+    suppressCloudWritesRef.current = true;
+    try {
+      const saved = applyMergedCloudSnapshotToLocal(
+        cloudSnapshotResult.plan.merged,
+        {
+          updateSessions,
+          setVocabularyItems,
+          setXpProfile,
+          setXpEvents,
+          setBadges,
+        },
+      );
+
+      return saved ? { status: "imported" } : { status: "failed" };
+    } catch {
+      return { status: "failed" };
+    } finally {
+      window.setTimeout(() => {
+        suppressCloudWritesRef.current = false;
+      }, CLOUD_WRITE_SUPPRESSION_RELEASE_MS);
     }
   };
 
@@ -2253,6 +2309,7 @@ export default function Home() {
           <CloudSyncStatusPanel
             result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
             onConfirmRestore={handleConfirmCloudRestore}
+            onConfirmImport={handleConfirmCloudImport}
           />
 
           {/* ===================== Active Session view ===================== */}
@@ -2585,7 +2642,7 @@ export default function Home() {
 
 // --- Reusable bits kept in the same file ---
 
-type LocalRestoreTarget = {
+type LocalSnapshotTarget = {
   sessions: ReadonlyArray<SessionRecord>;
   vocabularyItems: ReadonlyArray<VocabItem>;
   xpProfile: XpProfile;
@@ -2599,7 +2656,7 @@ function isEmptyLocalRestoreTarget({
   xpProfile,
   xpEvents,
   badges,
-}: LocalRestoreTarget): boolean {
+}: LocalSnapshotTarget): boolean {
   return (
     sessions.length === 0 &&
     vocabularyItems.length === 0 &&
@@ -2616,6 +2673,145 @@ function isEmptyXpProfileForRestore(profile: XpProfile): boolean {
     profile.unclaimedPreviousXp <= 0 &&
     !profile.lastClaimedDate
   );
+}
+
+type LocalSnapshotSetters = {
+  updateSessions: (next: SessionRecord[]) => void;
+  setVocabularyItems: (next: VocabItem[]) => void;
+  setXpProfile: (next: XpProfile) => void;
+  setXpEvents: (next: XpEvent[]) => void;
+  setBadges: (next: Badge[]) => void;
+};
+
+function applyMergedCloudSnapshotToLocal(
+  merged: SyncMergePlan["merged"],
+  setters: LocalSnapshotSetters,
+): boolean {
+  const nextSessions = merged.sessions.slice(
+    0,
+    MAX_STORED_SESSIONS,
+  ) as SessionRecord[];
+  const nextVocabulary = [...merged.vocabulary];
+  const nextProfile = merged.xpProfile ?? createDefaultXpProfile();
+  const nextEvents = [...merged.xpEvents];
+  const nextBadges = [...merged.badges];
+
+  setters.updateSessions(nextSessions);
+  setters.setVocabularyItems(nextVocabulary);
+  storage.saveVocabulary(nextVocabulary);
+  setters.setXpProfile(nextProfile);
+  const profileSaved = storage.saveXpProfile(nextProfile);
+  setters.setXpEvents(nextEvents);
+  const eventsSaved = storage.saveXpEvents(nextEvents);
+  setters.setBadges(nextBadges);
+  const badgesSaved = storage.saveBadges(nextBadges);
+
+  return profileSaved && eventsSaved && badgesSaved;
+}
+
+function isLocalSnapshotCompatibleWithMerged(
+  local: LocalSnapshotTarget,
+  merged: SyncMergePlan["merged"],
+): boolean {
+  return (
+    areLocalSessionsPreserved(local.sessions, merged.sessions) &&
+    areLocalVocabularyItemsPreserved(
+      local.vocabularyItems,
+      merged.vocabulary,
+    ) &&
+    isLocalXpProfilePreserved(local.xpProfile, merged.xpProfile) &&
+    areLocalXpEventsPreserved(local.xpEvents, merged.xpEvents) &&
+    areLocalBadgesPreserved(local.badges, merged.badges)
+  );
+}
+
+function areLocalSessionsPreserved(
+  local: ReadonlyArray<SessionRecord>,
+  merged: ReadonlyArray<{ id: string; csv: string }>,
+): boolean {
+  const mergedById = new Map(merged.map((session) => [session.id, session]));
+  return local.every((session) => {
+    const candidate = mergedById.get(session.id);
+    return Boolean(candidate && candidate.csv === session.csv);
+  });
+}
+
+function areLocalVocabularyItemsPreserved(
+  local: ReadonlyArray<VocabItem>,
+  merged: ReadonlyArray<VocabItem>,
+): boolean {
+  const mergedById = new Map(merged.map((item) => [item.id, item]));
+  return local.every((item) => {
+    const candidate = mergedById.get(item.id);
+    if (!candidate) return false;
+
+    const localUpdatedAt = Date.parse(item.updatedAt);
+    const mergedUpdatedAt = Date.parse(candidate.updatedAt);
+    if (
+      !Number.isNaN(localUpdatedAt) &&
+      !Number.isNaN(mergedUpdatedAt) &&
+      localUpdatedAt > mergedUpdatedAt
+    ) {
+      return false;
+    }
+
+    const mergedSentencesById = new Map(
+      candidate.userSentences.map((sentence) => [sentence.id, sentence]),
+    );
+    return item.userSentences.every((sentence) => {
+      const mergedSentence = mergedSentencesById.get(sentence.id);
+      if (!mergedSentence) return false;
+      if (!sentence.correction) return true;
+      if (!mergedSentence.correction) return false;
+
+      const localCheckedAt = Date.parse(sentence.correction.checkedAt);
+      const mergedCheckedAt = Date.parse(mergedSentence.correction.checkedAt);
+      return (
+        Number.isNaN(localCheckedAt) ||
+        Number.isNaN(mergedCheckedAt) ||
+        localCheckedAt <= mergedCheckedAt
+      );
+    });
+  });
+}
+
+function isLocalXpProfilePreserved(
+  local: XpProfile,
+  merged: XpProfile | null,
+): boolean {
+  if (isEmptyXpProfileForRestore(local)) return true;
+  if (!merged) return false;
+  return (
+    merged.totalXp === local.totalXp &&
+    merged.pendingDailyXp === local.pendingDailyXp &&
+    merged.unclaimedPreviousXp === local.unclaimedPreviousXp &&
+    merged.activeDate === local.activeDate &&
+    merged.lastClaimedDate === local.lastClaimedDate
+  );
+}
+
+function areLocalXpEventsPreserved(
+  local: ReadonlyArray<XpEvent>,
+  merged: ReadonlyArray<XpEvent>,
+): boolean {
+  const mergedKeys = new Set(
+    merged.map((event) => `${event.type}|${event.sourceId}`),
+  );
+  return local.every((event) =>
+    mergedKeys.has(`${event.type}|${event.sourceId}`),
+  );
+}
+
+function areLocalBadgesPreserved(
+  local: ReadonlyArray<Badge>,
+  merged: ReadonlyArray<Badge>,
+): boolean {
+  const mergedById = new Map(merged.map((badge) => [badge.id, badge]));
+  return local.every((badge) => {
+    const candidate = mergedById.get(badge.id);
+    if (!candidate) return false;
+    return badge.status !== "earned" || candidate.status === "earned";
+  });
 }
 
 type SessionCloudAuthBridgeProps = {
