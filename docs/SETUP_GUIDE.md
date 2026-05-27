@@ -227,3 +227,26 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Keep `CLERK_SECRET_KEY` server-side only.
 - Provider keys stay server-side in Next.js API routes.
 - The app stores session history in browser localStorage, not in a cloud database.
+- Do not add real database credentials to Supabase migration files.
+
+## Supabase Schema (Prepared)
+
+The `supabase/migrations/` folder contains Postgres schema and Row Level Security
+(RLS) policy SQL files. These are **schema-only preparation** for future cloud
+persistence.
+
+Current status:
+
+- The app is **not connected** to Supabase at runtime.
+- Browser `localStorage` remains the only data source.
+- The migration files define tables, RLS policies, indexes, and triggers.
+- RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.
+
+To apply these migrations later, you will need a Supabase project and the
+Supabase CLI:
+
+```bash
+supabase db push
+```
+
+Do not run this command until the app-side integration is ready.

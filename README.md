@@ -138,7 +138,7 @@ hot-reloaded.
 ## Current Limitations
 
 - Clerk authentication shell is optional and does not sync, import, or persist data yet.
-- No database, cloud sync, or deployment workflow (Supabase is not used; localStorage is local-only).
+- Supabase schema and RLS policies exist in `supabase/migrations/` but the app is **not connected** to Supabase yet (schema-only preparation).
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.
@@ -176,6 +176,9 @@ adaptive-academic-speaking-app/
 │   ├── src/app/api/mental-model/
 │   ├── .env.example
 │   └── package.json
+├── supabase/
+│   └── migrations/
+│       └── 20260527_001_initial_schema.sql
 ├── docs/
 │   ├── SETUP_GUIDE.md
 │   ├── MVP_TEST_CHECKLIST.md

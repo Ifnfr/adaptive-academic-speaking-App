@@ -65,10 +65,22 @@ small coaching features.
   - `adaptive-speaking-app:badges` (locked/earned badge lists)
 - There is no database, auth system, or cloud sync in the current local-first MVP.
 
+## Database Schema (Prepared)
+
+- Supabase Postgres schema and RLS policies exist in `supabase/migrations/`.
+- The app is **not connected** to Supabase yet.
+- localStorage remains the only source of truth at runtime.
+- RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
+- No real database credentials should be committed.
+- Tables prepared: `profiles`, `speaking_sessions`, `vocabulary_items`,
+  `vocabulary_sentences`, `vocabulary_corrections`, `xp_profiles`, `xp_events`,
+  `badges`, `article_practice_records`.
+- The `article_practice_records` table does **not** store raw HTML or full
+  article bodies — only structured speaking-task metadata.
+
 ## Not In Current MVP
 
-- Authentication (Supabase / Clerk)
-- Database or cloud sync (stored strictly in local browser `localStorage`)
+- Database or cloud sync (schema exists but app uses local `localStorage` only)
 - Deployment workflow
 - Mobile app
 - Dedicated Deep Feedback mode (currently routes to Quick Feedback)
@@ -85,3 +97,4 @@ small coaching features.
 - API keys belong only in `app-web/.env.local`.
 - Provider keys must not use `NEXT_PUBLIC_`.
 - `.env.local`, `.next`, and `node_modules` should not be committed.
+- Supabase migration files are schema-only; do not add real keys or secrets.
