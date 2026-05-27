@@ -93,11 +93,16 @@ GEMINI_MODEL=gemini-2.0-flash
 # Optional Clerk auth shell. Leave blank for local-only use.
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
+
+# Optional Supabase client setup for future cloud adapters.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
 `GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
 Clerk keys are optional for the current local MVP; when omitted, the app shows
 Local mode and keeps using browser storage only.
+Supabase keys are optional and are not connected to app data yet.
 Restart `npm run dev` after editing `.env.local`; environment variables are not
 hot-reloaded.
 
@@ -131,6 +136,9 @@ hot-reloaded.
 - Do not use `NEXT_PUBLIC_` for provider API keys.
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is allowed for Clerk because it is a public browser key.
 - Keep `CLERK_SECRET_KEY` server-side only.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is allowed for Supabase only with RLS enabled and tested.
+- Never expose a Supabase service-role key, database password, or provider AI key to browser code.
+- Before future cloud persistence tasks, enable Clerk's native Supabase integration so RLS can compare `owner_id` with `auth.jwt()->>'sub'`.
 - Do not put provider keys in browser code.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
 - Session history is stored locally in the user's browser, not in a database.
@@ -138,7 +146,8 @@ hot-reloaded.
 ## Current Limitations
 
 - Clerk authentication shell is optional and does not sync, import, or persist data yet.
-- Supabase schema and RLS policies exist in `supabase/migrations/` but the app is **not connected** to Supabase yet (schema-only preparation).
+- Supabase schema, RLS policies, and client helpers exist, but the app does not read or write Supabase data yet.
+- LocalStorage is still the runtime source of truth for app data.
 - Session history is local to the browser and capped by the app.
 - Browser speech-to-text depends on browser support. If unsupported, users can type or paste transcripts.
 - Deep Feedback is visible as a setup option but currently routes through the Quick Feedback flow.

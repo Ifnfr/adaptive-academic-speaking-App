@@ -63,14 +63,17 @@ small coaching features.
   - `adaptive-speaking-app:xp-profile` (total/pending/streak gamification status)
   - `adaptive-speaking-app:xp-events` (history of XP events for caps & diagnostics)
   - `adaptive-speaking-app:badges` (locked/earned badge lists)
-- There is no database, auth system, or cloud sync in the current local-first MVP.
+- Clerk auth shell and Supabase client helpers are optional preparation only.
+- There is no cloud data sync in the current local-first MVP.
 
 ## Database Schema (Prepared)
 
 - Supabase Postgres schema and RLS policies exist in `supabase/migrations/`.
-- The app is **not connected** to Supabase yet.
+- Supabase client helpers exist under `app-web/src/app/lib/supabase/`.
+- The app does not read from or write to Supabase yet.
 - localStorage remains the only source of truth at runtime.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
+- Future cloud persistence should use Clerk's native Supabase integration.
 - No real database credentials should be committed.
 - Tables prepared: `profiles`, `speaking_sessions`, `vocabulary_items`,
   `vocabulary_sentences`, `vocabulary_corrections`, `xp_profiles`, `xp_events`,
@@ -80,7 +83,7 @@ small coaching features.
 
 ## Not In Current MVP
 
-- Database or cloud sync (schema exists but app uses local `localStorage` only)
+- Cloud sync (schema/client helpers exist but app uses local `localStorage` only)
 - Deployment workflow
 - Mobile app
 - Dedicated Deep Feedback mode (currently routes to Quick Feedback)

@@ -81,11 +81,17 @@ GEMINI_MODEL=gemini-2.5-flash
 # Optional Clerk auth shell. Leave blank for local-only use.
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
+
+# Optional Supabase client setup for future cloud adapters.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
 You only need one provider key to test AI features. Leave providers you do not use blank. Always restart the dev server after editing `.env.local` for the changes to take effect.
 
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
+
+Supabase keys are optional preparation for future cloud persistence. The current app still uses localStorage even when these placeholders are filled.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
@@ -225,6 +231,9 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Do not add Claude, DeepSeek, or Gemini provider keys with `NEXT_PUBLIC_`.
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is allowed for Clerk because it is public by design.
 - Keep `CLERK_SECRET_KEY` server-side only.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is allowed for Supabase only with RLS enabled and tested.
+- Never expose a Supabase service-role key or database password in browser code.
+- Enable Clerk's native Supabase integration in the Clerk and Supabase dashboards before future cloud persistence work.
 - Provider keys stay server-side in Next.js API routes.
 - The app stores session history in browser localStorage, not in a cloud database.
 - Do not add real database credentials to Supabase migration files.
@@ -237,7 +246,7 @@ persistence.
 
 Current status:
 
-- The app is **not connected** to Supabase at runtime.
+- Supabase client helpers exist, but no app data is read from or written to Supabase yet.
 - Browser `localStorage` remains the only data source.
 - The migration files define tables, RLS policies, indexes, and triggers.
 - RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.
