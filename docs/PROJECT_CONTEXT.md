@@ -75,7 +75,8 @@ small coaching features.
 - Cloud duplicate XP prevention relies on a unique database constraint on `(owner_id, type, source_id)` for `xp_events`.
 - XP rules remain local and deterministic. AI never decides XP values.
 - Database cascade deletes automatically clean up child sentences and corrections for deleted vocabulary items.
-- The app does NOT load sessions, vocabulary, or gamification data from the cloud yet, nor does it sync existing local records, clear local history, or handle cloud merge conflicts.
+- The app supports loading a cloud snapshot preview. Signed-in users can trigger a user-confirmed cloud restore (available only if local browser data is empty) or cloud import (if local data exists, using a conservative merge plan and compatibility guard).
+- During restore/import, local storage is never cleared, no cloud data is deleted or mutated, and no XP recalculations occur. CSV payloads, nested vocabulary relationships, and XP source details are preserved exactly. XP events are deduped on import using type and sourceId.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
 - Clerk's native Supabase integration is used to verify database operations.
 - No database credentials should be committed.
@@ -87,7 +88,7 @@ small coaching features.
 
 ## Not In Current MVP
 
-- Cloud load, full synchronization, or merge conflict resolution (Clerk and Supabase are configured for best-effort cloud writes only; browser localStorage remains the source of truth)
+- Automated background sync or advanced interactive conflict resolution UI (Clerk and Supabase are configured for best-effort writes, read-only snapshot previews, and user-initiated restore/import; the app is not fully cloud-first yet)
 - Deployment workflow
 - Mobile app
 - Dedicated Deep Feedback mode (currently routes to Quick Feedback)

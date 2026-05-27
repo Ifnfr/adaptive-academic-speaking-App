@@ -145,7 +145,7 @@ hot-reloaded.
 
 ## Current Limitations
 
-- **Hybrid local-first migration in progress**: Completed normal sessions, vocabulary changes, and gamification updates (XP profile, XP events, and badges) are best-effort written to Supabase as a non-blocking cloud save when the user is signed in and Supabase is configured. However, the app does NOT load sessions, vocabulary, or gamification data from the cloud yet, nor does it import/sync existing local history, handle merge conflicts, or clear local storage.
+- **Hybrid local-first migration in progress**: Completed normal sessions, vocabulary changes, and gamification updates (XP profile, XP events, and badges) are best-effort written to Supabase when configured. It supports loading cloud snapshots for user-confirmed restore (for empty local browsers) and import (using conservative compatibility guards and XP deduplication). Browser `localStorage` remains the runtime source of truth, and no local data is cleared or deleted, nor is the cloud mutated during restore/import.
 - LocalStorage remains the runtime source of truth for all app data.
 - XP rules remain local and deterministic, and cloud write failures do not affect local XP behavior or progression.
 - Session history is local to the browser and capped by the app.

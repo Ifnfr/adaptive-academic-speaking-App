@@ -91,7 +91,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
-Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. However, localStorage remains the source of truth, and no local data is cleared.
+Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. It also supports reading cloud snapshots for user-confirmed restore (when local is empty) and import (using conservative compatibility guards when local data exists). Browser localStorage remains the runtime source of truth, and no local data is cleared or deleted during these actions.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
@@ -246,7 +246,7 @@ The `supabase/migrations/` folder contains Postgres schema and Row Level Securit
 Current status:
 
 - Best-effort cloud session, vocabulary, and gamification writing is active: completed normal sessions, vocabulary changes (items, user sentences, and corrections), and gamification updates (XP profile, events, and badges) are upserted to Supabase on the client when the user is signed in and Supabase environment variables are present.
-- Browser `localStorage` remains the runtime source of truth. The app does not load sessions, vocabulary, or gamification data from the cloud, nor does it sync local backlogs.
+- Browser `localStorage` remains the runtime source of truth. Users can load cloud snapshot previews and trigger manual user-confirmed restore or import actions, but the app does not run automatic background syncs, nor does it automatically clear local data.
 - The migration files define tables, RLS policies, indexes, and triggers.
 - RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.
 
