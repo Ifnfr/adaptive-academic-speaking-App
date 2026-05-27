@@ -17,10 +17,12 @@ import {
 } from "./lib/speaking-prompt";
 import {
   addUserSentence,
+  buildVocabularyPracticeQueue,
   computeVocabularyStats,
   createVocabItem,
   deleteVocabItem,
   loadVocabulary,
+  markVocabularyPracticed,
   saveSentenceCorrection,
   saveVocabulary,
   updateVocabStatus,
@@ -806,6 +808,24 @@ export default function Home() {
   const [selectedVocabItemId, setSelectedVocabItemId] = useState<string | null>(
     null,
   );
+  const [vocabularyMode, setVocabularyMode] = useState<
+    "recent" | "manage" | "practice"
+  >("recent");
+  const [vocabPracticeQueueIds, setVocabPracticeQueueIds] = useState<string[]>(
+    [],
+  );
+  const [vocabPracticeIndex, setVocabPracticeIndex] = useState(0);
+  const [vocabPracticeCardState, setVocabPracticeCardState] = useState<
+    "writing" | "accepted" | "skipped"
+  >("writing");
+  const [vocabPracticeAcceptedSentenceId, setVocabPracticeAcceptedSentenceId] =
+    useState<string | null>(null);
+  const [vocabPracticeHintVisible, setVocabPracticeHintVisible] =
+    useState(false);
+  const [vocabPracticePracticedCount, setVocabPracticePracticedCount] =
+    useState(0);
+  const [vocabPracticeSkippedCount, setVocabPracticeSkippedCount] = useState(0);
+  const [vocabPracticeComplete, setVocabPracticeComplete] = useState(false);
   const [vocabSentenceDraft, setVocabSentenceDraft] = useState("");
   const [vocabMessage, setVocabMessage] = useState<{
     tone: "success" | "error" | "info";
@@ -896,6 +916,12 @@ export default function Home() {
     vocabularyItems.find((item) => item.id === selectedVocabItemId) ??
     vocabularyItems[0] ??
     null;
+  const vocabPracticeCurrentItem =
+    vocabPracticeQueueIds.length > 0 && !vocabPracticeComplete
+      ? vocabularyItems.find(
+          (item) => item.id === vocabPracticeQueueIds[vocabPracticeIndex],
+        ) ?? null
+      : null;
 
   const persistVocabulary = (nextItems: VocabItem[]) => {
     setVocabularyItems(nextItems);
@@ -986,12 +1012,134 @@ export default function Home() {
 
   const handleSelectVocabularyPracticeItem = (id: string) => {
     setSelectedVocabItemId(id);
+    setVocabularyMode("manage");
     setVocabSentenceDraft("");
     setVocabularyCorrectionError(null);
     setVocabMessage({
       tone: "info",
       text: "Write one simple sentence using this word.",
     });
+  };
+
+  const resetVocabularyPracticeCard = () => {
+    setVocabSentenceDraft("");
+    setVocabPracticeCardState("writing");
+    setVocabPracticeAcceptedSentenceId(null);
+    setVocabPracticeHintVisible(false);
+    setVocabularyCorrectionError(null);
+  };
+
+  const handleBackToVocabularyHome = () => {
+    setVocabularyMode("recent");
+    resetVocabularyPracticeCard();
+    setVocabPracticeQueueIds([]);
+    setVocabPracticeIndex(0);
+    setVocabPracticePracticedCount(0);
+    setVocabPracticeSkippedCount(0);
+    setVocabPracticeComplete(false);
+  };
+
+  const handleViewAllVocabulary = () => {
+    setVocabularyMode("manage");
+    resetVocabularyPracticeCard();
+  };
+
+  const handleStartVocabularyPractice = () => {
+    const queueIds = buildVocabularyPracticeQueue(vocabularyItems, { size: 5 });
+    if (queueIds.length === 0) {
+      setVocabMessage({
+        tone: "info",
+        text: "No practice cards are available. Add vocabulary or unpause saved items first.",
+      });
+      return;
+    }
+
+    setVocabularyMode("practice");
+    setVocabPracticeQueueIds(queueIds);
+    setVocabPracticeIndex(0);
+    setVocabPracticePracticedCount(0);
+    setVocabPracticeSkippedCount(0);
+    setVocabPracticeComplete(false);
+    resetVocabularyPracticeCard();
+    setVocabMessage({
+      tone: "info",
+      text: "Active recall started. Write one original sentence for each card.",
+    });
+  };
+
+  const handleShowVocabularyHint = () => {
+    setVocabPracticeHintVisible(true);
+  };
+
+  const handleSubmitVocabularyPracticeSentence = () => {
+    if (!vocabPracticeCurrentItem) {
+      setVocabMessage({
+        tone: "error",
+        text: "No practice card is active.",
+      });
+      return;
+    }
+
+    const result = addUserSentence(
+      vocabularyItems,
+      vocabPracticeCurrentItem.id,
+      vocabSentenceDraft,
+    );
+    if (!result.accepted) {
+      setVocabMessage({ tone: "error", text: result.reason });
+      return;
+    }
+
+    persistVocabulary(result.items);
+    setSelectedVocabItemId(result.item?.id ?? vocabPracticeCurrentItem.id);
+    setVocabSentenceDraft("");
+    setVocabularyCorrectionError(null);
+    setVocabPracticeCardState("accepted");
+    setVocabPracticePracticedCount((count) => count + 1);
+    setVocabMessage({ tone: "success", text: result.reason });
+    const savedSentence = result.item?.userSentences.at(-1);
+    if (result.item && savedSentence) {
+      setVocabPracticeAcceptedSentenceId(savedSentence.id);
+      awardGamificationEvent(
+        "vocab_sentence_submitted",
+        `${result.item.id}-${savedSentence.id}`,
+        "vocabulary",
+        "Submitted a valid vocabulary practice sentence.",
+      );
+    }
+  };
+
+  const handleSkipVocabularyPracticeCard = () => {
+    if (!vocabPracticeCurrentItem) return;
+    const nextItems = markVocabularyPracticed(
+      vocabularyItems,
+      vocabPracticeCurrentItem.id,
+    );
+    persistVocabulary(nextItems);
+    setVocabPracticeSkippedCount((count) => count + 1);
+    setVocabPracticeCardState("skipped");
+    setVocabSentenceDraft("");
+    setVocabularyCorrectionError(null);
+    setVocabMessage({
+      tone: "info",
+      text: "Card skipped. No XP or reuse count was added.",
+    });
+  };
+
+  const handleNextVocabularyPracticeCard = () => {
+    const nextIndex = vocabPracticeIndex + 1;
+    if (nextIndex >= vocabPracticeQueueIds.length) {
+      setVocabPracticeComplete(true);
+      resetVocabularyPracticeCard();
+      setVocabMessage({
+        tone: "success",
+        text: "Active recall session complete.",
+      });
+      return;
+    }
+
+    setVocabPracticeIndex(nextIndex);
+    resetVocabularyPracticeCard();
   };
 
   const handleSubmitVocabularySentence = () => {
@@ -2075,6 +2223,7 @@ export default function Home() {
           {/* ===================== Vocabulary Notebook view ===================== */}
           {view === "vocabulary" && (
             <VocabularyNotebookView
+              mode={vocabularyMode}
               items={vocabularyItems}
               stats={vocabularyStats}
               formWord={vocabFormWord}
@@ -2088,6 +2237,15 @@ export default function Home() {
               message={vocabMessage}
               correctionLoadingId={vocabularyCorrectionLoadingId}
               correctionError={vocabularyCorrectionError}
+              practiceCurrentItem={vocabPracticeCurrentItem}
+              practiceQueueLength={vocabPracticeQueueIds.length}
+              practiceIndex={vocabPracticeIndex}
+              practiceCardState={vocabPracticeCardState}
+              practiceHintVisible={vocabPracticeHintVisible}
+              practicePracticedCount={vocabPracticePracticedCount}
+              practiceSkippedCount={vocabPracticeSkippedCount}
+              practiceComplete={vocabPracticeComplete}
+              practiceAcceptedSentenceId={vocabPracticeAcceptedSentenceId}
               onFormWordChange={setVocabFormWord}
               onFormMeaningChange={setVocabFormMeaning}
               onFormLevelChange={setVocabFormLevel}
@@ -2101,6 +2259,13 @@ export default function Home() {
               onSentenceDraftChange={setVocabSentenceDraft}
               onSubmitSentence={handleSubmitVocabularySentence}
               onCheckSentence={handleCheckVocabularySentence}
+              onBackToHome={handleBackToVocabularyHome}
+              onViewAll={handleViewAllVocabulary}
+              onStartPractice={handleStartVocabularyPractice}
+              onShowPracticeHint={handleShowVocabularyHint}
+              onSubmitPracticeSentence={handleSubmitVocabularyPracticeSentence}
+              onSkipPracticeCard={handleSkipVocabularyPracticeCard}
+              onNextPracticeCard={handleNextVocabularyPracticeCard}
             />
           )}
 

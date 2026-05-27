@@ -115,19 +115,24 @@ test.describe("MVP Smoke Flows", () => {
     await page.locator("#vocab-meaning").fill("to make clear");
     await page.click("button:has-text(\"Add Vocabulary\")");
 
-    // Verify word added to list
+    // Verify word added to recent preview
     await expect(page.locator("p:has-text(\"clarify\")").first()).toBeVisible();
+
+    // Active recall opens a fixed practice card
+    await page.click("button:has-text(\"Start Practice\")");
+    await expect(page.locator("text=Card 1 of 1")).toBeVisible();
+    await expect(page.locator("h3:has-text(\"clarify\")")).toBeVisible();
 
     // Sentence practice without word should fail validation
     await page.locator("#vocab-sentence").fill("I want to explain the details.");
-    await page.click("button:has-text(\"Save Sentence\")");
+    await page.click("button:has-text(\"Submit Sentence\")");
     await expect(page.locator("p[role=\"status\"]")).toContainText(
       "Use the vocabulary word in your sentence first.",
     );
 
     // Sentence practice with word should succeed
     await page.locator("#vocab-sentence").fill("I want to clarify the details.");
-    await page.click("button:has-text(\"Save Sentence\")");
+    await page.click("button:has-text(\"Submit Sentence\")");
     await expect(page.locator("p[role=\"status\"]")).toContainText(
       "Sentence saved.",
     );
@@ -141,7 +146,15 @@ test.describe("MVP Smoke Flows", () => {
       page.locator("p:has-text(\"Good usage of clarify.\")"),
     ).toBeVisible();
 
-    // Delete item
+    // Complete the recall session, then open full dictionary management
+    await page.click("button:has-text(\"Finish Session\")");
+    await expect(page.locator("h3:has-text(\"Session complete\")")).toBeVisible();
+    await page.click("button:has-text(\"Back to Vocabulary Notebook\")");
+    await page.click("button:has-text(\"View All / Manage Vocabulary\")");
+    await expect(page.locator("h3:has-text(\"All vocabulary\")")).toBeVisible();
+    await expect(page.locator("text=Sentence history: 1")).toBeVisible();
+
+    // Delete item from dictionary mode
     await page.click("button:has-text(\"Delete\")");
     await expect(page.locator("p:has-text(\"clarify\")").first()).not.toBeVisible();
   });
