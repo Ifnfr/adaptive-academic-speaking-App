@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { MutableRefObject } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { buildLevelUpCheck } from "./lib/level-up";
 import { LEVEL_PHASE, nextLevelHint } from "./lib/levels";
 import { buildCoachRecommendation } from "./lib/coach";
@@ -90,6 +90,13 @@ import {
   writeXpEventsToCloud,
   writeBadgesToCloud,
 } from "./lib/storage/gamification-cloud-runtime";
+import {
+  isSupabaseConfigured,
+  createBrowserSupabaseClient,
+} from "./lib/supabase";
+import { bootstrapProfile } from "./lib/storage/supabase-profile-adapter";
+
+type ClerkUserType = ReturnType<typeof useUser>["user"];
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -668,6 +675,9 @@ export default function Home() {
     useState<CloudSnapshotRuntimeResult | null>(null);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
   const suppressCloudWritesRef = useRef(false);
+  const bootstrappedUserRef = useRef<string | null>(null);
+  const [clerkUser, setClerkUser] = useState<ClerkUserType>(null);
+  const [isClerkUserLoaded, setIsClerkUserLoaded] = useState(false);
 
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
@@ -923,6 +933,65 @@ export default function Home() {
     xpEvents,
     xpProfile,
   ]);
+
+  // --- Profile Bootstrap Runtime ---
+  useEffect(() => {
+    if (CLERK_ENABLED && !isClerkUserLoaded) return;
+    if (!cloudAuthState.isLoaded) return;
+    if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) {
+      bootstrappedUserRef.current = null;
+      return;
+    }
+    if (bootstrappedUserRef.current === cloudAuthState.userId) return;
+    if (!isSupabaseConfigured()) return;
+
+    let cancelled = false;
+
+    async function runBootstrap() {
+      if (!cloudAuthState.userId || !cloudAuthState.getToken) return;
+      try {
+        const token = await cloudAuthState.getToken();
+        if (!token || cancelled) return;
+
+        const supabaseClient = createBrowserSupabaseClient({
+          accessToken: async () => {
+            try {
+              return (await cloudAuthState.getToken?.()) ?? token;
+            } catch {
+              return token;
+            }
+          },
+        });
+        if (!supabaseClient || cancelled) return;
+
+        const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress ?? null;
+        const clerkAvatar = clerkUser?.imageUrl ?? null;
+        const clerkDisplayName = clerkUser?.fullName ?? clerkUser?.username ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "Signed in user";
+
+        await bootstrapProfile(
+          cloudAuthState.userId,
+          {
+            email: clerkEmail,
+            displayName: clerkDisplayName,
+            avatarUrl: clerkAvatar,
+          },
+          supabaseClient,
+        );
+
+        if (cancelled) return;
+        bootstrappedUserRef.current = cloudAuthState.userId;
+      } catch (err) {
+        // Bootstrap failure is non-blocking and caught cleanly
+        console.error("Profile bootstrap failed:", err);
+      }
+    }
+
+    void runBootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudAuthState, clerkUser, isClerkUserLoaded]);
 
   const handleConfirmCloudRestore = async (): Promise<CloudRestoreActionResult> => {
     if (
@@ -2267,6 +2336,14 @@ export default function Home() {
           onAuthStateChange={setCloudAuthState}
         />
       )}
+      {CLERK_ENABLED && (
+        <ClerkUserBridge
+          onUserChange={(u, loaded) => {
+            setClerkUser(u);
+            setIsClerkUserLoaded(loaded);
+          }}
+        />
+      )}
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10">
         {/* Sidebar */}
         <Sidebar
@@ -2841,6 +2918,18 @@ function SessionCloudAuthBridge({
     };
   }, [authRef, getToken, isLoaded, isSignedIn, onAuthStateChange, userId]);
 
+  return null;
+}
+
+type ClerkUserBridgeProps = {
+  onUserChange: (user: ClerkUserType, isUserLoaded: boolean) => void;
+};
+
+function ClerkUserBridge({ onUserChange }: ClerkUserBridgeProps) {
+  const { user, isLoaded } = useUser();
+  useEffect(() => {
+    onUserChange(user, isLoaded);
+  }, [user, isLoaded, onUserChange]);
   return null;
 }
 

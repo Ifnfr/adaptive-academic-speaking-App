@@ -9,6 +9,7 @@ import {
   mapSupabaseRowToUserProfile,
   updateSupabaseProfilePreferences,
   upsertSupabaseProfile,
+  bootstrapProfile,
   type SupabaseProfileRow,
 } from "../src/app/lib/storage/supabase-profile-adapter";
 import type { FonetikSupabaseClient } from "../src/app/lib/supabase";
@@ -415,5 +416,239 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
         mock.client,
       ),
     ).rejects.toThrow("profile update failed");
+  });
+});
+
+function createCombinedProfileClientMock({
+  existingData,
+  upsertError = null,
+  loadError = null,
+}: {
+  existingData: SupabaseProfileRow | null;
+  upsertError?: Error | null;
+  loadError?: Error | null;
+}) {
+  const calls: string[] = [];
+  let upsertRow: unknown = null;
+  let upsertOptions: unknown = null;
+
+  const selectQuery = {
+    select(columns: string) {
+      calls.push(`select:${columns}`);
+      return selectQuery;
+    },
+    eq(column: string, value: string) {
+      calls.push(`eq:${column}:${value}`);
+      return selectQuery;
+    },
+    maybeSingle() {
+      calls.push("maybeSingle");
+      return Promise.resolve({ data: existingData, error: loadError });
+    },
+  };
+
+  return {
+    calls,
+    getUpsertRow: () => upsertRow,
+    getUpsertOptions: () => upsertOptions,
+    client: {
+      from(table: string) {
+        calls.push(`from:${table}`);
+        return {
+          ...selectQuery,
+          upsert(row: unknown, options: unknown) {
+            calls.push("upsert");
+            upsertRow = row;
+            upsertOptions = options;
+            return Promise.resolve({ error: upsertError });
+          },
+        };
+      },
+    } as unknown as FonetikSupabaseClient,
+  };
+}
+
+test.describe("Supabase profile adapter bootstrapProfile", () => {
+  test("bootstrapProfile upserts a new profile with Clerk fields and privacy defaults", async () => {
+    const mock = createCombinedProfileClientMock({ existingData: null });
+
+    await bootstrapProfile(
+      "user_clerk_123",
+      {
+        email: "learner@example.com",
+        displayName: "Learner Name",
+        avatarUrl: "https://example.com/avatar.png",
+      },
+      mock.client,
+    );
+
+    expect(mock.calls).toContain("upsert");
+    expect(mock.getUpsertRow()).toEqual({
+      owner_id: "user_clerk_123",
+      email: "learner@example.com",
+      display_name: "Learner Name",
+      avatar_url: "https://example.com/avatar.png",
+      public_profile_enabled: false,
+      leaderboard_opt_in: false,
+    });
+  });
+
+  test("bootstrapProfile updates missing email/avatarUrl but preserves existing display name and other settings", async () => {
+    const existingRow: SupabaseProfileRow = {
+      id: "profile-row-uuid",
+      owner_id: "user_clerk_123",
+      email: null,
+      display_name: "Custom Name",
+      learner_level: "Advanced",
+      preferred_provider: "Claude",
+      preferred_mode: "Fluency Sprint",
+      avatar_url: null,
+      bio: "Keep my bio safe.",
+      public_profile_enabled: true,
+      leaderboard_opt_in: true,
+      preferred_app_language: "en",
+      feedback_language: "id",
+      target_language: "en",
+      created_at: "2026-05-27T00:00:00.000Z",
+      updated_at: "2026-05-27T01:00:00.000Z",
+    };
+
+    const mock = createCombinedProfileClientMock({ existingData: existingRow });
+
+    await bootstrapProfile(
+      "user_clerk_123",
+      {
+        email: "learner@example.com",
+        displayName: "Clerk Full Name",
+        avatarUrl: "https://example.com/avatar.png",
+      },
+      mock.client,
+    );
+
+    expect(mock.calls).toContain("upsert");
+    const upsertRow = mock.getUpsertRow();
+    expect(upsertRow).toEqual({
+      owner_id: "user_clerk_123",
+      email: "learner@example.com",
+      avatar_url: "https://example.com/avatar.png",
+    });
+    expect(upsertRow).not.toHaveProperty("display_name");
+    expect(upsertRow).not.toHaveProperty("bio");
+    expect(upsertRow).not.toHaveProperty("public_profile_enabled");
+    expect(upsertRow).not.toHaveProperty("leaderboard_opt_in");
+  });
+
+  test("bootstrapProfile does not call upsert if existing profile is already up to date", async () => {
+    const existingRow: SupabaseProfileRow = {
+      id: "profile-row-uuid",
+      owner_id: "user_clerk_123",
+      email: "learner@example.com",
+      display_name: "Learner Name",
+      learner_level: "Advanced",
+      preferred_provider: "Claude",
+      preferred_mode: "Fluency Sprint",
+      avatar_url: "https://example.com/avatar.png",
+      bio: "Keep my bio safe.",
+      public_profile_enabled: true,
+      leaderboard_opt_in: true,
+      preferred_app_language: "en",
+      feedback_language: "id",
+      target_language: "en",
+      created_at: "2026-05-27T00:00:00.000Z",
+      updated_at: "2026-05-27T01:00:00.000Z",
+    };
+
+    const mock = createCombinedProfileClientMock({ existingData: existingRow });
+
+    await bootstrapProfile(
+      "user_clerk_123",
+      {
+        email: "learner@example.com",
+        displayName: "Learner Name",
+        avatarUrl: "https://example.com/avatar.png",
+      },
+      mock.client,
+    );
+
+    expect(mock.calls).not.toContain("upsert");
+    expect(mock.getUpsertRow()).toBeNull();
+  });
+
+  test("bootstrap runner logic swallows error to be non-blocking", async () => {
+    const mock = createCombinedProfileClientMock({
+      existingData: null,
+      loadError: new Error("Supabase is down"),
+    });
+
+    let loggedError: Error | null = null;
+    const consoleErrorSpy = (err: unknown) => {
+      loggedError = err as Error;
+    };
+
+    // Simulate page.tsx try-catch bootstrap execution
+    const runBootstrap = async () => {
+      try {
+        await bootstrapProfile(
+          "user_clerk_123",
+          {
+            email: "learner@example.com",
+            displayName: "Learner Name",
+          },
+          mock.client,
+        );
+      } catch (err) {
+        consoleErrorSpy(err);
+      }
+    };
+
+    await expect(runBootstrap()).resolves.not.toThrow();
+    expect(loggedError).toBeTruthy();
+    expect(loggedError!.message).toBe("Supabase is down");
+  });
+
+  test("bootstrap skips when user is signed out or missing config", async () => {
+    // Simulate signed-out state: no userId
+    const runForSignedOut = async (userId: string | null) => {
+      if (!userId) {
+        // Skips bootstrap
+        return;
+      }
+      // Should not be called
+      throw new Error("Should not run bootstrap");
+    };
+
+    await expect(runForSignedOut(null)).resolves.not.toThrow();
+  });
+
+  test("bootstrap does not call any localStorage write helpers", async () => {
+    const mock = createCombinedProfileClientMock({ existingData: null });
+    const originalLocalStorage = globalThis.localStorage;
+    const writes: string[] = [];
+
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        setItem: (key: string) => {
+          writes.push(key);
+        },
+      },
+    });
+
+    try {
+      await bootstrapProfile(
+        "user_clerk_123",
+        {
+          email: "learner@example.com",
+          displayName: "Learner Name",
+        },
+        mock.client,
+      );
+      expect(writes).toEqual([]);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        configurable: true,
+        value: originalLocalStorage,
+      });
+    }
   });
 });

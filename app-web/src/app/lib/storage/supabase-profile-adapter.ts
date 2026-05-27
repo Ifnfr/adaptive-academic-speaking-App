@@ -227,3 +227,40 @@ export async function updateSupabaseProfilePreferences(
     throw error;
   }
 }
+
+export async function bootstrapProfile(
+  ownerId: string,
+  clerkSeed: ClerkProfileSeed,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<void> {
+  const existing = await loadSupabaseProfile(ownerId, supabaseClient);
+  const clerkEmail = clerkSeed.email ?? null;
+  const clerkAvatar = clerkSeed.avatarUrl ?? null;
+  const clerkDisplayName = clerkSeed.displayName ?? "Signed in user";
+
+  if (!existing) {
+    const newProfile: UserProfilePatch = {
+      email: clerkEmail,
+      displayName: clerkDisplayName,
+      avatarUrl: clerkAvatar,
+      publicProfileEnabled: false,
+      leaderboardOptIn: false,
+    };
+    await upsertSupabaseProfile(ownerId, newProfile, supabaseClient);
+  } else {
+    const patch: UserProfilePatch = {};
+    if (existing.email !== clerkEmail) {
+      patch.email = clerkEmail;
+    }
+    if (existing.avatarUrl !== clerkAvatar) {
+      patch.avatarUrl = clerkAvatar;
+    }
+    if (!existing.displayName) {
+      patch.displayName = clerkDisplayName;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await upsertSupabaseProfile(ownerId, patch, supabaseClient);
+    }
+  }
+}
