@@ -960,7 +960,15 @@ export async function POST(request: Request) {
 
   if (idempotencyKeyValid && rawIdempotencyKey) {
     idempotencyKeyHash = computeHash(rawIdempotencyKey);
-    requestHash = getArticlePracticeRequestHash(validated);
+    requestHash = getArticlePracticeRequestHash({
+      url: validated.url,
+      level: validated.level,
+      provider: validated.provider,
+      model: resolvedModel,
+      mode: validated.mode,
+      focus: validated.focus,
+      promptVersion: PROMPT_VERSIONS.articlePractice,
+    });
 
     try {
       const existing = await getExistingIdempotencyRecord(
@@ -970,7 +978,8 @@ export async function POST(request: Request) {
       if (
         existing &&
         existing.request_status === "succeeded" &&
-        existing.response_json
+        existing.response_json &&
+        existing.request_hash === requestHash
       ) {
         recordAiUsageEvent({
           feature: "article-practice",

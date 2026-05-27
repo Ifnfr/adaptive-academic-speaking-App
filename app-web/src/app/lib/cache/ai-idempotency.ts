@@ -26,16 +26,20 @@ export function getArticlePracticeRequestHash(inputs: {
   url: string;
   level: string;
   provider: string;
+  model: string;
   mode?: string;
   focus?: string;
+  promptVersion: string;
 }): string {
   const normalized = normalizeUrl(inputs.url);
   const dataToHash = {
     url: normalized,
     level: inputs.level,
     provider: inputs.provider,
+    model: inputs.model,
     mode: inputs.mode || "",
     focus: inputs.focus || "",
+    promptVersion: inputs.promptVersion,
   };
   return computeHash(JSON.stringify(dataToHash));
 }

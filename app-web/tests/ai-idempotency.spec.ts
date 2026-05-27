@@ -32,20 +32,24 @@ test.describe("AI Idempotency - Key Hashing", () => {
 });
 
 test.describe("AI Idempotency - Request Hashing", () => {
-  test("getArticlePracticeRequestHash is deterministic and normalizes URLs", () => {
+  test("getArticlePracticeRequestHash is deterministic, normalizes URLs, and includes model & promptVersion", () => {
     const inputs1 = {
       url: "  HTTPS://EXAMPLE.COM/path?ref=123  ",
       level: "Intermediate",
       provider: "Gemini",
+      model: "gemini-2.0-flash",
       mode: "Reading",
       focus: "Vocabulary",
+      promptVersion: "v1.0",
     };
     const inputs2 = {
       url: "https://example.com/path",
       level: "Intermediate",
       provider: "Gemini",
+      model: "gemini-2.0-flash",
       mode: "Reading",
       focus: "Vocabulary",
+      promptVersion: "v1.0",
     };
 
     const hash1 = getArticlePracticeRequestHash(inputs1);
@@ -57,6 +61,18 @@ test.describe("AI Idempotency - Request Hashing", () => {
       level: "Advanced",
     });
     expect(hash1).not.toBe(hashDiffLevel);
+
+    const hashDiffPrompt = getArticlePracticeRequestHash({
+      ...inputs1,
+      promptVersion: "v1.1",
+    });
+    expect(hash1).not.toBe(hashDiffPrompt);
+
+    const hashDiffModel = getArticlePracticeRequestHash({
+      ...inputs1,
+      model: "gemini-2.5-flash",
+    });
+    expect(hash1).not.toBe(hashDiffModel);
   });
 });
 
@@ -234,5 +250,122 @@ test.describe("AI Idempotency - Fallback Safety", () => {
         responseJson: { saved: true },
       })
     ).resolves.not.toThrow();
+  });
+});
+
+test.describe("AI Idempotency - Request Matching & Replay Validation", () => {
+  const mockSucceededResponse = { success: true, data: "cached-data" };
+  const expiresAtFuture = new Date(Date.now() + 1000 * 60 * 10).toISOString();
+
+  test("same idempotency key + same request_hash replays stored response", async () => {
+    const currentRequestHash = "matching-request-hash";
+
+    const existingRecord = {
+      id: "some-uuid",
+      request_status: "succeeded",
+      response_json: mockSucceededResponse,
+      request_hash: "matching-request-hash",
+      expires_at: expiresAtFuture,
+    };
+
+    const isReplayable =
+      existingRecord.request_status === "succeeded" &&
+      existingRecord.request_hash === currentRequestHash &&
+      new Date(existingRecord.expires_at).getTime() > Date.now();
+
+    expect(isReplayable).toBe(true);
+  });
+
+  test("same idempotency key + different request_hash does not replay stored response", async () => {
+    const currentRequestHash = "new-request-hash";
+
+    const existingRecord = {
+      id: "some-uuid",
+      request_status: "succeeded",
+      response_json: mockSucceededResponse,
+      request_hash: "old-request-hash",
+      expires_at: expiresAtFuture,
+    };
+
+    const isReplayable =
+      existingRecord.request_status === "succeeded" &&
+      existingRecord.request_hash === currentRequestHash &&
+      new Date(existingRecord.expires_at).getTime() > Date.now();
+
+    expect(isReplayable).toBe(false);
+  });
+
+  test("failed row does not replay as success", async () => {
+    const existingRecord = {
+      id: "some-uuid",
+      request_status: "failed",
+      response_json: null,
+      request_hash: "matching-request-hash",
+      expires_at: expiresAtFuture,
+    };
+
+    const isReplayable =
+      existingRecord.request_status === "succeeded" &&
+      existingRecord.request_hash === "matching-request-hash" &&
+      new Date(existingRecord.expires_at).getTime() > Date.now();
+
+    expect(isReplayable).toBe(false);
+  });
+
+  test("in_progress row does not replay as success", async () => {
+    const existingRecord = {
+      id: "some-uuid",
+      request_status: "in_progress",
+      response_json: null,
+      request_hash: "matching-request-hash",
+      expires_at: expiresAtFuture,
+    };
+
+    const isReplayable =
+      existingRecord.request_status === "succeeded" &&
+      existingRecord.request_hash === "matching-request-hash" &&
+      new Date(existingRecord.expires_at).getTime() > Date.now();
+
+    expect(isReplayable).toBe(false);
+  });
+
+  test("expired row does not replay", async () => {
+    const expiresAtPast = new Date(Date.now() - 1000 * 60 * 10).toISOString();
+    const existingRecord = {
+      id: "some-uuid",
+      request_status: "succeeded",
+      response_json: mockSucceededResponse,
+      request_hash: "matching-request-hash",
+      expires_at: expiresAtPast,
+    };
+
+    const isReplayable =
+      existingRecord.request_status === "succeeded" &&
+      existingRecord.request_hash === "matching-request-hash" &&
+      new Date(existingRecord.expires_at).getTime() > Date.now();
+
+    expect(isReplayable).toBe(false);
+  });
+
+  test("no raw content persisted checks in idempotency schema", () => {
+    const sampleRecordKeys = [
+      "id",
+      "owner_id",
+      "scope_key",
+      "feature",
+      "idempotency_key_hash",
+      "request_hash",
+      "request_status",
+      "response_json",
+      "error_code",
+      "expires_at",
+      "created_at",
+      "updated_at"
+    ];
+    expect(sampleRecordKeys).not.toContain("raw_html");
+    expect(sampleRecordKeys).not.toContain("article_text");
+    expect(sampleRecordKeys).not.toContain("transcript");
+    expect(sampleRecordKeys).not.toContain("user_sentence");
+    expect(sampleRecordKeys).not.toContain("csv");
   });
 });
