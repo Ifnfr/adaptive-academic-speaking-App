@@ -3,7 +3,15 @@ import {
   getArticlePracticeCacheKey,
   getGlobalCachedResponse,
   saveGlobalCachedResponse,
+  PROMPT_VERSIONS,
 } from "../../lib/cache/ai-cache";
+import {
+  recordAiUsageEvent,
+  resolveProviderModel,
+  estimateTokensFromText,
+  estimateTokensFromJson,
+  estimateAiCost,
+} from "../../lib/cache/ai-usage";
 
 // Runs on the Node.js runtime so article fetching and provider keys stay server-side.
 export const runtime = "nodejs";
@@ -936,6 +944,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validated }, { status: 400 });
   }
 
+  const resolvedModel = resolveProviderModel(validated.provider);
+
   // Check global cache
   const cacheKey = getArticlePracticeCacheKey(
     validated.url,
@@ -947,6 +957,18 @@ export async function POST(request: Request) {
   try {
     const cached = await getGlobalCachedResponse(cacheKey);
     if (cached) {
+      // Log cache hit — fire and forget
+      recordAiUsageEvent({
+        feature: "article-practice",
+        provider: validated.provider,
+        model: resolvedModel,
+        promptVersion: PROMPT_VERSIONS.articlePractice,
+        cached: true,
+        requestStatus: "cache_hit",
+        estimatedInputTokens: null,
+        estimatedOutputTokens: estimateTokensFromJson(cached),
+        estimatedCostUsd: 0,
+      }).catch(() => {});
       return NextResponse.json(cached);
     }
   } catch {
@@ -961,6 +983,15 @@ export async function POST(request: Request) {
       err instanceof ArticleFetchError
         ? err.message
         : "The article could not be prepared for practice.";
+    recordAiUsageEvent({
+      feature: "article-practice",
+      provider: validated.provider,
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSIONS.articlePractice,
+      cached: false,
+      requestStatus: "article_fetch_failed",
+      errorCode: message.slice(0, 200),
+    }).catch(() => {});
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
@@ -975,6 +1006,8 @@ export async function POST(request: Request) {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(validated, article);
 
+  const estimatedInputTokens = estimateTokensFromText(systemPrompt + userPrompt);
+
   let raw = "";
   try {
     if (validated.provider === "Claude") {
@@ -986,8 +1019,20 @@ export async function POST(request: Request) {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Provider call failed.";
+    recordAiUsageEvent({
+      feature: "article-practice",
+      provider: validated.provider,
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSIONS.articlePractice,
+      cached: false,
+      requestStatus: "provider_failed",
+      estimatedInputTokens,
+      errorCode: message.slice(0, 200),
+    }).catch(() => {});
     return NextResponse.json({ error: message }, { status: 502 });
   }
+
+  const estimatedOutputTokens = estimateTokensFromText(raw);
 
   const parsedPractice = parseArticlePractice(raw, validated.level, article);
   if (!parsedPractice.ok) {
@@ -995,8 +1040,43 @@ export async function POST(request: Request) {
       parsedPractice.reason === "validation"
         ? "Provider JSON did not match the Article Practice schema. Try again or switch provider."
         : "Provider response could not be parsed as JSON. Try again or switch provider.";
+    recordAiUsageEvent({
+      feature: "article-practice",
+      provider: validated.provider,
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSIONS.articlePractice,
+      cached: false,
+      requestStatus: "provider_parse_failed",
+      estimatedInputTokens,
+      estimatedOutputTokens,
+      estimatedCostUsd: estimateAiCost({
+        provider: validated.provider,
+        model: resolvedModel,
+        inputTokens: estimatedInputTokens,
+        outputTokens: estimatedOutputTokens,
+      }),
+      errorCode: parsedPractice.reason,
+    }).catch(() => {});
     return NextResponse.json({ error }, { status: 502 });
   }
+
+  // Log provider success — fire and forget
+  recordAiUsageEvent({
+    feature: "article-practice",
+    provider: validated.provider,
+    model: resolvedModel,
+    promptVersion: PROMPT_VERSIONS.articlePractice,
+    cached: false,
+    requestStatus: "provider_success",
+    estimatedInputTokens,
+    estimatedOutputTokens,
+    estimatedCostUsd: estimateAiCost({
+      provider: validated.provider,
+      model: resolvedModel,
+      inputTokens: estimatedInputTokens,
+      outputTokens: estimatedOutputTokens,
+    }),
+  }).catch(() => {});
 
   // Save successful result to global cache
   try {
