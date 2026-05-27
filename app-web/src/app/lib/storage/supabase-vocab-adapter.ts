@@ -180,8 +180,8 @@ export function mapSupabaseRowToStoredVocab(
     example: row.example ?? "",
     collocations: row.collocations ?? [],
     userSentences: sentences,
-    reuseCount: row.reuse_count,
-    correctUseCount: row.correct_use_count,
+    reuseCount: row.reuse_count ?? 0,
+    correctUseCount: row.correct_use_count ?? 0,
     lastPracticedAt: row.last_practiced_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -215,6 +215,68 @@ export function mapSupabaseRowToStoredCorrection(
     checkedAt: row.checked_at,
     providerUsed: row.provider_used ?? "",
   };
+}
+
+/**
+ * Loads vocabulary items, practice sentences, and corrections from Supabase
+ * and reconstructs the local nested VocabItem shape. This helper is inactive
+ * until future runtime code explicitly calls it; it does not write localStorage
+ * or infer deletes.
+ */
+export async function loadSupabaseVocabulary(
+  ownerId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<VocabItem[]> {
+  const { data: itemRows, error: itemError } = await supabaseClient
+    .from(VOCAB_ITEMS_TABLE)
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("created_at", { ascending: false });
+
+  if (itemError) {
+    throw itemError;
+  }
+
+  const { data: sentenceRows, error: sentenceError } = await supabaseClient
+    .from(VOCAB_SENTENCES_TABLE)
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("created_at", { ascending: true });
+
+  if (sentenceError) {
+    throw sentenceError;
+  }
+
+  const { data: correctionRows, error: correctionError } = await supabaseClient
+    .from(VOCAB_CORRECTIONS_TABLE)
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("checked_at", { ascending: true });
+
+  if (correctionError) {
+    throw correctionError;
+  }
+
+  const correctionsBySentenceId = new Map<string, VocabSentenceCorrection>();
+  for (const row of (correctionRows as SupabaseVocabCorrectionRow[] | null) ?? []) {
+    correctionsBySentenceId.set(row.sentence_id, mapSupabaseRowToStoredCorrection(row));
+  }
+
+  const sentencesByVocabId = new Map<string, VocabUserSentence[]>();
+  for (const row of (sentenceRows as SupabaseVocabSentenceRow[] | null) ?? []) {
+    const sentences = sentencesByVocabId.get(row.vocab_item_id) ?? [];
+    sentences.push(
+      mapSupabaseRowToStoredSentence(
+        row,
+        correctionsBySentenceId.get(row.id),
+      ),
+    );
+    sentencesByVocabId.set(row.vocab_item_id, sentences);
+  }
+
+  return ((itemRows as SupabaseVocabItemRow[] | null) ?? []).map((row) =>
+    mapSupabaseRowToStoredVocab(row, sentencesByVocabId.get(row.id) ?? []),
+  );
 }
 
 /**

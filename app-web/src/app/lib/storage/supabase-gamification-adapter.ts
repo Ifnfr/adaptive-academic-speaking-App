@@ -6,7 +6,14 @@
  */
 
 import type { FonetikSupabaseClient } from "../supabase";
-import type { XpProfile, XpEvent, Badge, XpEventType, BadgeStatus } from "../gamification";
+import {
+  createDefaultXpProfile,
+  type XpProfile,
+  type XpEvent,
+  type Badge,
+  type XpEventType,
+  type BadgeStatus,
+} from "../gamification";
 
 const XP_PROFILES_TABLE = "xp_profiles";
 const XP_EVENTS_TABLE = "xp_events";
@@ -14,9 +21,9 @@ const BADGES_TABLE = "badges";
 
 export type SupabaseXpProfileRow = {
   owner_id: string;
-  total_xp: number;
-  pending_daily_xp: number;
-  unclaimed_previous_xp: number;
+  total_xp: number | null;
+  pending_daily_xp: number | null;
+  unclaimed_previous_xp: number | null;
   active_date: string | null;
   last_claimed_date: string | null;
   created_at: string;
@@ -39,7 +46,7 @@ export type SupabaseXpEventRow = {
   owner_id: string;
   client_id: string | null;
   type: string;
-  xp: number;
+  xp: number | null;
   local_date: string | null;
   source_id: string;
   source_kind: string | null;
@@ -134,9 +141,9 @@ export function mapSupabaseRowToStoredProfile(
 ): XpProfile {
   return {
     version: 1,
-    totalXp: row.total_xp,
-    pendingDailyXp: row.pending_daily_xp,
-    unclaimedPreviousXp: row.unclaimed_previous_xp,
+    totalXp: row.total_xp ?? 0,
+    pendingDailyXp: row.pending_daily_xp ?? 0,
+    unclaimedPreviousXp: row.unclaimed_previous_xp ?? 0,
     activeDate: row.active_date ?? "",
     lastClaimedDate: row.last_claimed_date,
     createdAt: row.created_at,
@@ -151,7 +158,7 @@ export function mapSupabaseRowToStoredEvent(
     version: 1,
     id: row.client_id ?? "",
     type: row.type as XpEventType,
-    xp: row.xp,
+    xp: row.xp ?? 0,
     localDate: row.local_date ?? "",
     createdAt: row.created_at,
     sourceId: row.source_id,
@@ -171,6 +178,95 @@ export function mapSupabaseRowToStoredBadge(
     status: (row.status as BadgeStatus) ?? "locked",
     earnedAt: row.earned_at,
   };
+}
+
+export type SupabaseGamificationSnapshot = {
+  profile: XpProfile;
+  events: XpEvent[];
+  badges: Badge[];
+};
+
+export async function loadSupabaseXpProfile(
+  ownerId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<XpProfile> {
+  const { data, error } = await supabaseClient
+    .from(XP_PROFILES_TABLE)
+    .select("*")
+    .eq("owner_id", ownerId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return createDefaultXpProfile();
+  }
+
+  return mapSupabaseRowToStoredProfile(data as SupabaseXpProfileRow);
+}
+
+export async function loadSupabaseXpEvents(
+  ownerId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<XpEvent[]> {
+  const { data, error } = await supabaseClient
+    .from(XP_EVENTS_TABLE)
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const events: XpEvent[] = [];
+  const seen = new Set<string>();
+  for (const row of (data as SupabaseXpEventRow[] | null) ?? []) {
+    const key = `${row.type}:${row.source_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push(mapSupabaseRowToStoredEvent(row));
+  }
+  return events;
+}
+
+export async function loadSupabaseBadges(
+  ownerId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<Badge[]> {
+  const { data, error } = await supabaseClient
+    .from(BADGES_TABLE)
+    .select("*")
+    .eq("owner_id", ownerId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data as SupabaseBadgeRow[] | null) ?? []).map(
+    mapSupabaseRowToStoredBadge,
+  );
+}
+
+/**
+ * Loads all gamification cloud rows into local shapes without recalculating XP
+ * or writing localStorage. This helper is inactive unless explicitly called by
+ * tests or future sync/import code.
+ */
+export async function loadSupabaseGamificationSnapshot(
+  ownerId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<SupabaseGamificationSnapshot> {
+  const [profile, events, badges] = await Promise.all([
+    loadSupabaseXpProfile(ownerId, supabaseClient),
+    loadSupabaseXpEvents(ownerId, supabaseClient),
+    loadSupabaseBadges(ownerId, supabaseClient),
+  ]);
+
+  return { profile, events, badges };
 }
 
 /**

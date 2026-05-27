@@ -6,6 +6,7 @@ import {
   mapSupabaseRowToStoredVocab,
   mapSupabaseRowToStoredSentence,
   mapSupabaseRowToStoredCorrection,
+  loadSupabaseVocabulary,
   upsertVocabItemRow,
   upsertSentenceRows,
   upsertCorrectionRow,
@@ -91,6 +92,36 @@ function createMockSupabaseClient(responses: Record<string, { data: unknown; err
     client: {
       from(table: string) {
         calls.push(`from:${table}`);
+        return query;
+      },
+    } as unknown as FonetikSupabaseClient,
+  };
+}
+
+function createReadSupabaseClient(responses: Record<string, { data: unknown; error: Error | null }>) {
+  const calls: string[] = [];
+
+  return {
+    calls,
+    client: {
+      from(table: string) {
+        calls.push(`from:${table}`);
+        const query = {
+          select(columns: string) {
+            calls.push(`select:${columns}`);
+            return query;
+          },
+          eq(column: string, value: string) {
+            calls.push(`eq:${column}:${value}`);
+            return query;
+          },
+          order(column: string, options: { ascending: boolean }) {
+            calls.push(`order:${column}:${options.ascending}`);
+            return Promise.resolve(
+              responses[table] ?? { data: null, error: null },
+            );
+          },
+        };
         return query;
       },
     } as unknown as FonetikSupabaseClient,
@@ -275,5 +306,113 @@ test.describe("Supabase adapter operations", () => {
       "eq:owner_id:user_123",
       "eq:client_id:vocab-456",
     ]);
+  });
+});
+
+test.describe("Supabase vocabulary read helpers", () => {
+  const rowItem: SupabaseVocabItemRow = {
+    id: "db-vocab-uuid",
+    owner_id: "user_clerk_123",
+    client_id: "vocab-456",
+    word: "target",
+    meaning: "An objective or result to be achieved.",
+    part_of_speech: "noun",
+    source: "feedback",
+    level: "Advanced",
+    status: "practicing",
+    example: "Our marketing campaign hit its target.",
+    collocations: ["achieve a target", "hit a target"],
+    reuse_count: 1,
+    correct_use_count: 1,
+    last_practiced_at: "2026-05-27T00:30:00Z",
+    created_at: "2026-05-27T00:00:00Z",
+    updated_at: "2026-05-27T00:30:00Z",
+  };
+
+  const rowSentence: SupabaseVocabSentenceRow = {
+    id: "db-sentence-uuid",
+    owner_id: "user_clerk_123",
+    vocab_item_id: "db-vocab-uuid",
+    client_id: "sentence-123",
+    sentence: "This is a test sentence containing the word target.",
+    contains_word: true,
+    created_at: "2026-05-27T00:30:00Z",
+  };
+
+  const rowCorrection: SupabaseVocabCorrectionRow = {
+    id: "db-correction-uuid",
+    owner_id: "user_clerk_123",
+    sentence_id: "db-sentence-uuid",
+    status: "natural",
+    explanation: "Correct and natural phrasing.",
+    corrected_sentence: "This is a correct test sentence.",
+    collocation_tip: "Try using it with other words.",
+    retry_instruction: "Repeat this sentence twice.",
+    target_usage_role: "subject",
+    warnings: ["warning 1", "warning 2"],
+    provider_used: "Gemini",
+    checked_at: "2026-05-27T01:00:00Z",
+  };
+
+  test("loads items with nested sentences and corrections", async () => {
+    const mock = createReadSupabaseClient({
+      vocabulary_items: { data: [rowItem], error: null },
+      vocabulary_sentences: { data: [rowSentence], error: null },
+      vocabulary_corrections: { data: [rowCorrection], error: null },
+    });
+
+    const items = await loadSupabaseVocabulary("user_clerk_123", mock.client);
+
+    expect(mock.calls).toEqual([
+      "from:vocabulary_items",
+      "select:*",
+      "eq:owner_id:user_clerk_123",
+      "order:created_at:false",
+      "from:vocabulary_sentences",
+      "select:*",
+      "eq:owner_id:user_clerk_123",
+      "order:created_at:true",
+      "from:vocabulary_corrections",
+      "select:*",
+      "eq:owner_id:user_clerk_123",
+      "order:checked_at:true",
+    ]);
+    expect(items).toEqual([testItem]);
+    expect(items[0].id).toBe("vocab-456");
+    expect(items[0].userSentences[0].id).toBe("sentence-123");
+    expect(items[0].userSentences[0].correction?.targetUsageRole).toBe("subject");
+  });
+
+  test("loads vocabulary safely when corrections are missing", async () => {
+    const mock = createReadSupabaseClient({
+      vocabulary_items: { data: [rowItem], error: null },
+      vocabulary_sentences: { data: [rowSentence], error: null },
+      vocabulary_corrections: { data: [], error: null },
+    });
+
+    const items = await loadSupabaseVocabulary("user_clerk_123", mock.client);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].userSentences).toEqual([
+      {
+        id: "sentence-123",
+        sentence: "This is a test sentence containing the word target.",
+        containsWord: true,
+        createdAt: "2026-05-27T00:30:00Z",
+        correction: undefined,
+      },
+    ]);
+  });
+
+  test("loads empty cloud vocabulary rows as an empty list", async () => {
+    const mock = createReadSupabaseClient({
+      vocabulary_items: { data: null, error: null },
+      vocabulary_sentences: { data: null, error: null },
+      vocabulary_corrections: { data: null, error: null },
+    });
+
+    await expect(
+      loadSupabaseVocabulary("user_clerk_123", mock.client),
+    ).resolves.toEqual([]);
   });
 });
