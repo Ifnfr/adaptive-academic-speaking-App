@@ -82,9 +82,10 @@ GEMINI_MODEL=gemini-2.5-flash
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 
-# Optional Supabase client setup for future cloud adapters.
+# Optional Supabase client setup for session, vocabulary, and gamification cloud persistence.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 You only need one provider key to test AI features. Leave providers you do not use blank. Always restart the dev server after editing `.env.local` for the changes to take effect.
@@ -92,6 +93,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
 Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. It also supports reading cloud snapshots for user-confirmed restore (when local is empty) and import (using conservative compatibility guards when local data exists). Browser localStorage remains the runtime source of truth, and no local data is cleared or deleted during these actions.
+`SUPABASE_SERVICE_ROLE_KEY` is a server-only service role key used for administrative actions (like global AI response cache writes). It must never be prefixed with `NEXT_PUBLIC` or exposed client-side. If omitted, global cache writes are silently disabled.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 

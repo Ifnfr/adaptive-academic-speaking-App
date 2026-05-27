@@ -97,12 +97,14 @@ CLERK_SECRET_KEY=
 # Optional Supabase client setup for session, vocabulary, and gamification cloud persistence.
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 `GEMINI_MODEL` is optional. If unset, the app uses its default Gemini model.
 Clerk keys are optional for the current local MVP; when omitted, the app shows
 Local mode and keeps using browser storage only.
 Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including user sentences and corrections), and gamification updates (XP profile, XP events, and badges) to Supabase (non-blocking, fallback-safe).
+`SUPABASE_SERVICE_ROLE_KEY` is a server-only key used for administrative database operations (such as global AI response cache writes). It must never be prefixed with `NEXT_PUBLIC` or exposed client-side. If omitted, global cache writes are silently disabled.
 Restart `npm run dev` after editing `.env.local`; environment variables are not
 hot-reloaded.
 
@@ -127,7 +129,7 @@ hot-reloaded.
   Checks a user's practice sentence for vocabulary naturalness, grammar correctness, and collocations.
 
 - `POST /api/article-practice`  
-  Extracts text from a URL and generates a structured, copyright-safe speaking task.
+  Extracts text from a URL and generates a structured, copyright-safe speaking task. Employs exact-match global response caching via Supabase to minimize AI provider costs.
 
 ## Security Notes
 
@@ -142,9 +144,11 @@ hot-reloaded.
 - Do not put provider keys in browser code.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
 - Session history, vocabulary, and gamification data are stored primarily in the user's browser, with newly completed normal sessions, vocabulary changes, and gamification updates best-effort copied to the cloud database.
+- Global cache writes are locked down: anonymous and public authenticated clients cannot perform `INSERT`, `UPDATE`, or `DELETE` operations on `global_ai_response_cache`. Write privileges are restricted to server-side code instantiating a client with `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Current Limitations
 
+- **Article Caching Limitations**: Caching is currently exact-match only (not semantic/vector-based yet). Global caching is currently limited to `/api/article-practice` only. Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached. Raw fetched HTML or extracted article bodies are never cached or persisted in the database. AI usage/cost ledger and request idempotency are planned for future phases.
 - **Hybrid local-first migration in progress**: Completed normal sessions, vocabulary changes, and gamification updates (XP profile, XP events, and badges) are best-effort written to Supabase when configured. It supports loading cloud snapshots for user-confirmed restore (for empty local browsers) and import (using conservative compatibility guards and XP deduplication). Browser `localStorage` remains the runtime source of truth, and no local data is cleared or deleted, nor is the cloud mutated during restore/import.
 - LocalStorage remains the runtime source of truth for all app data.
 - XP rules remain local and deterministic, and cloud write failures do not affect local XP behavior or progression.

@@ -320,3 +320,14 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Bridge button click awards 0 XP
 - [ ] If an active session is already running, clicking the bridge button updates the setup/target but does not reset the session prematurely (displays active session bridge warning: "Article speaking task copied to Session setup. Click Restart Session when you are ready to switch tasks.")
 - [ ] Manually editing Today's Target or starting/restarting a session clears the bridge status message
+
+### Article Practice Caching and Security
+- [ ] Caching is exact-match and checks Supabase before provider API calls
+- [ ] Cache key is a deterministic SHA-256 hash of URL (normalized), level, provider, mode, focus, and promptVersion
+- [ ] URL normalization strips query tracking parameters, normalizes case, and trailing slashes for root domains
+- [ ] Cache fails silently and falls back to normal AI generation if the database is offline/unconfigured
+- [ ] Cache writes utilize the server-only `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] Public `INSERT`, `UPDATE`, or `DELETE` policies on the global cache table are disabled to prevent cache poisoning
+- [ ] Changing `PROMPT_VERSIONS.articlePractice` in code invalidates previous cache entries automatically
+- [ ] Only copyright-safe structured JSON is cached; raw HTML and extracted article bodies are never persisted
+- [ ] Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached.

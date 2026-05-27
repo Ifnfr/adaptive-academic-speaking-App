@@ -80,11 +80,12 @@ small coaching features.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
 - Clerk's native Supabase integration is used to verify database operations.
 - No database credentials should be committed.
-- Tables prepared/defined: `profiles`, `speaking_sessions`, `vocabulary_items`,
-  `vocabulary_sentences`, `vocabulary_corrections`, `xp_profiles`, `xp_events`,
-  `badges`, `article_practice_records`.
-- The `article_practice_records` table does **not** store raw HTML or full
-  article bodies — only structured speaking-task metadata.
+- Tables prepared/defined: profiles, speaking_sessions, vocabulary_items,
+  vocabulary_sentences, vocabulary_corrections, xp_profiles, xp_events,
+  badges, global_ai_response_cache.
+- The `global_ai_response_cache` table does **not** store raw HTML or full
+  article bodies — only structured, copyright-safe speaking-task metadata.
+- **Article Practice Caching**: Exact-match global caching is implemented for `/api/article-practice`. The cache key includes normalized URL, learner level, provider, mode, focus, and promptVersion. Cache lookup is executed prior to fetching or querying providers. Cache writes utilize the server-only `SUPABASE_SERVICE_ROLE_KEY` to prevent cache poisoning, and public write (INSERT/UPDATE/DELETE) privileges are completely disabled. It is not semantic vector caching yet. Global caching is currently limited to `/api/article-practice` only. Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached.
 
 ## Not In Current MVP
 
