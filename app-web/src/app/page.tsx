@@ -75,6 +75,11 @@ import {
   type SessionCloudAuthState,
 } from "./lib/storage/session-cloud-runtime";
 import { writeVocabularyChangesToCloud } from "./lib/storage/vocab-cloud-runtime";
+import {
+  writeXpProfileToCloud,
+  writeXpEventsToCloud,
+  writeBadgesToCloud,
+} from "./lib/storage/gamification-cloud-runtime";
 
 // ----- Minimal Web Speech API types -----
 // The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
@@ -838,6 +843,10 @@ export default function Home() {
   useEffect(() => {
     if (!gamificationReady) return;
     storage.saveXpProfile(xpProfile);
+    void writeXpProfileToCloud({
+      auth: sessionCloudAuthRef.current,
+      profile: xpProfile,
+    });
   }, [gamificationReady, xpProfile]);
 
   // --- Sidebar navigation view ---
@@ -1297,6 +1306,10 @@ export default function Home() {
     if (nextBadges.length !== badges.length) {
       setBadges(nextBadges);
       storage.saveBadges(nextBadges);
+      void writeBadgesToCloud({
+        auth: sessionCloudAuthRef.current,
+        badges: nextBadges,
+      });
     }
   };
 
@@ -1313,11 +1326,17 @@ export default function Home() {
         sourceKind,
         reason,
       });
+      const prevEvents = xpEvents;
       const awarded = awardXpEvent(xpProfile, xpEvents, candidate);
       setXpProfile(awarded.profile);
       setXpEvents(awarded.events);
       storage.saveXpProfile(awarded.profile);
       storage.saveXpEvents(awarded.events);
+      void writeXpEventsToCloud({
+        auth: sessionCloudAuthRef.current,
+        previous: prevEvents,
+        next: awarded.events,
+      });
 
       if (awarded.result.allowed) {
         updateBadges(type, awarded.profile);
