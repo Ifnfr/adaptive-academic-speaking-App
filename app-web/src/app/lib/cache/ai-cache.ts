@@ -104,6 +104,27 @@ function getCacheSupabaseClient() {
   }
 }
 
+/**
+ * Instantiates the Supabase client using the server-only service role key.
+ * This is safe to call only server-side.
+ */
+function getCacheServiceRoleSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  try {
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function getGlobalCachedResponse(cacheKey: string, supabaseClient?: unknown): Promise<unknown | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const client = (supabaseClient as any) || getCacheSupabaseClient();
@@ -124,7 +145,7 @@ export async function getGlobalCachedResponse(cacheKey: string, supabaseClient?:
 }
 
 /**
- * Saves a response to the global cache.
+ * Saves a response to the global cache using the administrative client.
  * Failures are caught cleanly and are non-blocking.
  */
 export async function saveGlobalCachedResponse(
@@ -134,7 +155,7 @@ export async function saveGlobalCachedResponse(
   supabaseClient?: unknown
 ): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client = (supabaseClient as any) || getCacheSupabaseClient();
+  const client = (supabaseClient as any) || getCacheServiceRoleSupabaseClient();
   if (!client) return;
 
   try {

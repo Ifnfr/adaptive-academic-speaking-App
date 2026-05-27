@@ -23,11 +23,6 @@ create policy "global_cache_select_all"
   on global_ai_response_cache for select
   using (true);
 
--- Allow insert for all roles (anon and authenticated)
-create policy "global_cache_insert_all"
-  on global_ai_response_cache for insert
-  with check (true);
-
 -- Index cache keys for fast lookup
 create index global_ai_response_cache_key_idx
   on global_ai_response_cache (cache_key);

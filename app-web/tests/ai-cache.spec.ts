@@ -9,6 +9,7 @@ import {
 // Store original environment variables
 const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const originalKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const originalServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 test.describe("AI Cache Utilities - URL Normalization", () => {
   test("normalizeUrl trims whitespace, hostnames, and protocols", () => {
@@ -160,11 +161,13 @@ test.describe("AI Cache Utilities - Fallback Safety", () => {
   test.beforeEach(() => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "";
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "";
   });
 
   test.afterAll(() => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = originalKey;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceKey;
   });
 
   test("getGlobalCachedResponse safely returns null on missing configuration", async () => {
@@ -188,7 +191,7 @@ test.describe("AI Cache Utilities - Fallback Safety", () => {
 
   test("saveGlobalCachedResponse does not throw on connection failure", async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://invalid-supabase-host-123.abc";
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "dummy-key";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "dummy-key";
 
     await expect(
       saveGlobalCachedResponse("dummy-key", "article-practice", { test: 1 })
