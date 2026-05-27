@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { CloudSnapshotRuntimeResult } from "../lib/storage/cloud-snapshot-runtime";
 import type {
   DomainCounts,
@@ -39,6 +40,7 @@ export type CloudSyncStatusPanelModel =
         value: DomainCounts;
       }>;
       reasons: SyncMergeReason[];
+      restoreEnabled: boolean;
     };
 
 export function buildCloudSyncStatusPanelModel(
@@ -55,6 +57,7 @@ export function buildCloudSyncStatusPanelModel(
       tone: "warning",
       counts: [],
       reasons: [],
+      restoreEnabled: false,
     };
   }
 
@@ -82,14 +85,28 @@ export function buildCloudSyncStatusPanelModel(
       value: result.plan.counts[key],
     })),
     reasons: result.plan.reasons,
+    restoreEnabled: isRestore,
   };
 }
 
+export type CloudRestoreActionResult =
+  | { status: "restored" }
+  | { status: "aborted-local-not-empty" }
+  | { status: "failed" };
+
 type CloudSyncStatusPanelProps = {
   result: CloudSnapshotRuntimeResult | null;
+  onConfirmRestore?: () => Promise<CloudRestoreActionResult>;
 };
 
-export function CloudSyncStatusPanel({ result }: CloudSyncStatusPanelProps) {
+export function CloudSyncStatusPanel({
+  result,
+  onConfirmRestore,
+}: CloudSyncStatusPanelProps) {
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreCompleted, setRestoreCompleted] = useState(false);
   const model = buildCloudSyncStatusPanelModel(result);
   if (!model.visible) return null;
 
@@ -151,6 +168,83 @@ export function CloudSyncStatusPanel({ result }: CloudSyncStatusPanelProps) {
         <p className="text-xs font-medium text-[var(--brand-ink-soft)]">
           {model.actionNote}
         </p>
+
+        {model.restoreEnabled && onConfirmRestore && !restoreCompleted && (
+          <div className="flex flex-col gap-3 border-t border-[var(--brand-border)] pt-3">
+            {!confirmRestoreOpen ? (
+              <button
+                type="button"
+                className="w-fit rounded-full border border-[var(--brand-teal)] bg-[var(--brand-teal)] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                onClick={() => {
+                  setRestoreMessage(null);
+                  setConfirmRestoreOpen(true);
+                }}
+              >
+                Restore to this browser
+              </button>
+            ) : (
+              <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                  Restore cloud data to this browser?
+                </h3>
+                <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                  fonetik will copy the merged cloud snapshot into this browser.
+                  Existing local data will not be cleared. Because this browser
+                  currently has no local learning data, this is treated as a
+                  restore.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-4 py-2 text-xs font-medium text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                    disabled={restoreBusy}
+                    onClick={() => {
+                      setConfirmRestoreOpen(false);
+                      setRestoreMessage(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-[var(--brand-teal)] bg-[var(--brand-teal)] px-4 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={restoreBusy}
+                    onClick={async () => {
+                      setRestoreBusy(true);
+                      try {
+                        const result = await onConfirmRestore();
+                        if (result.status === "restored") {
+                          setRestoreMessage(
+                            "Cloud data restored to this browser. Local storage remains the source of truth.",
+                          );
+                          setRestoreCompleted(true);
+                          setConfirmRestoreOpen(false);
+                        } else if (result.status === "aborted-local-not-empty") {
+                          setRestoreMessage(
+                            "Restore was not applied. Local data changed before confirmation, so your browser data was left untouched.",
+                          );
+                        } else {
+                          setRestoreMessage(
+                            "Restore could not be completed. Local data is safe.",
+                          );
+                        }
+                      } finally {
+                        setRestoreBusy(false);
+                      }
+                    }}
+                  >
+                    Confirm restore
+                  </button>
+                </div>
+              </div>
+            )}
+            {restoreMessage && (
+              <p className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                {restoreMessage}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

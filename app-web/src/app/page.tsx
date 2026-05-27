@@ -68,7 +68,10 @@ import {
   ArticlePracticeView,
   type ArticlePracticeResult,
 } from "./components/ArticlePracticeView";
-import { CloudSyncStatusPanel } from "./components/CloudSyncStatusPanel";
+import {
+  CloudSyncStatusPanel,
+  type CloudRestoreActionResult,
+} from "./components/CloudSyncStatusPanel";
 import { storage } from "./lib/storage";
 import {
   DISABLED_SESSION_CLOUD_AUTH,
@@ -661,6 +664,7 @@ export default function Home() {
   const [cloudSnapshotResult, setCloudSnapshotResult] =
     useState<CloudSnapshotRuntimeResult | null>(null);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
+  const suppressCloudWritesRef = useRef(false);
 
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
@@ -854,6 +858,7 @@ export default function Home() {
   useEffect(() => {
     if (!gamificationReady) return;
     storage.saveXpProfile(xpProfile);
+    if (suppressCloudWritesRef.current) return;
     void writeXpProfileToCloud({
       auth: sessionCloudAuthRef.current,
       profile: xpProfile,
@@ -915,6 +920,63 @@ export default function Home() {
     xpEvents,
     xpProfile,
   ]);
+
+  const handleConfirmCloudRestore = async (): Promise<CloudRestoreActionResult> => {
+    if (
+      !cloudSnapshotResult ||
+      cloudSnapshotResult.status !== "loaded" ||
+      cloudSnapshotResult.plan.status !== "restore-available"
+    ) {
+      return { status: "failed" };
+    }
+
+    if (
+      !isEmptyLocalRestoreTarget({
+        sessions,
+        vocabularyItems,
+        xpProfile,
+        xpEvents,
+        badges,
+      })
+    ) {
+      return { status: "aborted-local-not-empty" };
+    }
+
+    const restoredSessions = cloudSnapshotResult.plan.merged.sessions.slice(
+      0,
+      MAX_STORED_SESSIONS,
+    ) as SessionRecord[];
+    const restoredVocabulary = cloudSnapshotResult.plan.merged.vocabulary;
+    const restoredProfile =
+      cloudSnapshotResult.plan.merged.xpProfile ?? createDefaultXpProfile();
+    const restoredEvents = cloudSnapshotResult.plan.merged.xpEvents;
+    const restoredBadges = cloudSnapshotResult.plan.merged.badges;
+
+    suppressCloudWritesRef.current = true;
+    try {
+      updateSessions(restoredSessions);
+      setVocabularyItems(restoredVocabulary);
+      storage.saveVocabulary(restoredVocabulary);
+      setXpProfile(restoredProfile);
+      const profileSaved = storage.saveXpProfile(restoredProfile);
+      setXpEvents(restoredEvents);
+      const eventsSaved = storage.saveXpEvents(restoredEvents);
+      setBadges(restoredBadges);
+      const badgesSaved = storage.saveBadges(restoredBadges);
+
+      if (!profileSaved || !eventsSaved || !badgesSaved) {
+        return { status: "failed" };
+      }
+
+      return { status: "restored" };
+    } catch {
+      return { status: "failed" };
+    } finally {
+      window.setTimeout(() => {
+        suppressCloudWritesRef.current = false;
+      }, 0);
+    }
+  };
 
   // --- Sidebar navigation view ---
   // Lightweight local view state. No router, no real new routes. The Active
@@ -2190,6 +2252,7 @@ export default function Home() {
 
           <CloudSyncStatusPanel
             result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
+            onConfirmRestore={handleConfirmCloudRestore}
           />
 
           {/* ===================== Active Session view ===================== */}
@@ -2521,6 +2584,39 @@ export default function Home() {
 }
 
 // --- Reusable bits kept in the same file ---
+
+type LocalRestoreTarget = {
+  sessions: ReadonlyArray<SessionRecord>;
+  vocabularyItems: ReadonlyArray<VocabItem>;
+  xpProfile: XpProfile;
+  xpEvents: ReadonlyArray<XpEvent>;
+  badges: ReadonlyArray<Badge>;
+};
+
+function isEmptyLocalRestoreTarget({
+  sessions,
+  vocabularyItems,
+  xpProfile,
+  xpEvents,
+  badges,
+}: LocalRestoreTarget): boolean {
+  return (
+    sessions.length === 0 &&
+    vocabularyItems.length === 0 &&
+    xpEvents.length === 0 &&
+    badges.length === 0 &&
+    isEmptyXpProfileForRestore(xpProfile)
+  );
+}
+
+function isEmptyXpProfileForRestore(profile: XpProfile): boolean {
+  return (
+    profile.totalXp <= 0 &&
+    profile.pendingDailyXp <= 0 &&
+    profile.unclaimedPreviousXp <= 0 &&
+    !profile.lastClaimedDate
+  );
+}
 
 type SessionCloudAuthBridgeProps = {
   authRef: MutableRefObject<SessionCloudAuthState>;

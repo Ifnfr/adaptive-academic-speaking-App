@@ -95,6 +95,7 @@ test.describe("CloudSyncStatusPanel model", () => {
     expect(model.title).toBe("Cloud restore available");
     expect(model.description).toContain("No local data has been changed.");
     expect(model.actionNote).toBe("Restore/import controls are not enabled yet.");
+    expect(model.restoreEnabled).toBe(true);
     expect(model.counts.find((row) => row.key === "sessions")?.value.cloud).toBe(2);
   });
 
@@ -107,6 +108,7 @@ test.describe("CloudSyncStatusPanel model", () => {
     if (!model.visible) return;
     expect(model.title).toBe("Cloud import available");
     expect(model.description).toContain("No local data has been changed.");
+    expect(model.restoreEnabled).toBe(false);
     expect(model.reasons).toEqual([
       expect.objectContaining({
         level: "warning",
@@ -130,6 +132,7 @@ test.describe("CloudSyncStatusPanel model", () => {
       tone: "warning",
       counts: [],
       reasons: [],
+      restoreEnabled: false,
     });
   });
 
