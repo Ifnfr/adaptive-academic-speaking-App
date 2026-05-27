@@ -82,10 +82,11 @@ small coaching features.
 - No database credentials should be committed.
 - Tables prepared/defined: profiles, speaking_sessions, vocabulary_items,
   vocabulary_sentences, vocabulary_corrections, xp_profiles, xp_events,
-  badges, global_ai_response_cache.
+  badges, global_ai_response_cache, ai_usage_events.
 - The `global_ai_response_cache` table does **not** store raw HTML or full
   article bodies — only structured, copyright-safe speaking-task metadata.
 - **Article Practice Caching**: Exact-match global caching is implemented for `/api/article-practice`. The cache key includes normalized URL, learner level, provider, mode, focus, and promptVersion. Cache lookup is executed prior to fetching or querying providers. Cache writes utilize the server-only `SUPABASE_SERVICE_ROLE_KEY` to prevent cache poisoning, and public write (INSERT/UPDATE/DELETE) privileges are completely disabled. It is not semantic vector caching yet. Global caching is currently limited to `/api/article-practice` only. Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached.
+- **AI Usage Ledger**: The `ai_usage_events` table records metadata-only usage events for `/api/article-practice`. Each row includes feature, provider, model, prompt version, cached flag, request status, estimated input/output tokens, estimated cost (USD), and optional error code. RLS is enabled with no public policies; writes use the server-only service role. Token estimates use chars / 4; cost estimates use a static price map and may be null for unknown models. Usage logging is non-blocking and does not affect route behavior or API responses. Personal route usage logging and request idempotency are future work.
 
 ## Not In Current MVP
 

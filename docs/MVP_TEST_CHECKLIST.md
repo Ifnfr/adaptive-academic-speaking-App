@@ -331,3 +331,16 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Changing `PROMPT_VERSIONS.articlePractice` in code invalidates previous cache entries automatically
 - [ ] Only copyright-safe structured JSON is cached; raw HTML and extracted article bodies are never persisted
 - [ ] Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached.
+
+### AI Usage Ledger (Article Practice)
+- [ ] Usage events are recorded for cache hit, provider success, article fetch failure, provider failure, and parse/validation failure
+- [ ] Usage rows contain only metadata: feature, provider, model, prompt version, cached, request status, estimated tokens, estimated cost, and error code
+- [ ] No raw article text, HTML, transcripts, user sentences, CSV, or personal content is stored in usage rows
+- [ ] Usage writes use server-only `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] `ai_usage_events` has RLS enabled with no public INSERT, UPDATE, DELETE, or SELECT policies
+- [ ] Usage logging failure does not affect Article Practice route behavior or API responses
+- [ ] Token estimates use deterministic chars / 4 approximation
+- [ ] Cost estimates use a static provider/model price map; unknown models produce null cost
+- [ ] Missing `SUPABASE_SERVICE_ROLE_KEY` silently disables usage logging without errors
+- [ ] Usage ledger is currently scoped to `/api/article-practice` only; personal routes do not have usage logging yet
+- [ ] No API response shapes changed by usage logging

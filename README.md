@@ -129,7 +129,7 @@ hot-reloaded.
   Checks a user's practice sentence for vocabulary naturalness, grammar correctness, and collocations.
 
 - `POST /api/article-practice`  
-  Extracts text from a URL and generates a structured, copyright-safe speaking task. Employs exact-match global response caching via Supabase to minimize AI provider costs.
+  Extracts text from a URL and generates a structured, copyright-safe speaking task. Employs exact-match global response caching via Supabase to minimize AI provider costs. Records metadata-only AI usage events (estimated tokens, cost, status) for cost visibility.
 
 ## Security Notes
 
@@ -145,10 +145,12 @@ hot-reloaded.
 - Provider calls happen only in server-side API routes under `app-web/src/app/api/`.
 - Session history, vocabulary, and gamification data are stored primarily in the user's browser, with newly completed normal sessions, vocabulary changes, and gamification updates best-effort copied to the cloud database.
 - Global cache writes are locked down: anonymous and public authenticated clients cannot perform `INSERT`, `UPDATE`, or `DELETE` operations on `global_ai_response_cache`. Write privileges are restricted to server-side code instantiating a client with `SUPABASE_SERVICE_ROLE_KEY`.
+- AI usage logging (`ai_usage_events`) has RLS enabled with no public policies. Usage writes are server-only via service role. Usage rows store metadata only (feature, provider, model, prompt version, status, estimated tokens and cost). No raw article text, HTML, transcripts, user sentences, or personal content is stored.
 
 ## Current Limitations
 
-- **Article Caching Limitations**: Caching is currently exact-match only (not semantic/vector-based yet). Global caching is currently limited to `/api/article-practice` only. Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached. Raw fetched HTML or extracted article bodies are never cached or persisted in the database. AI usage/cost ledger and request idempotency are planned for future phases.
+- **Article Caching Limitations**: Caching is currently exact-match only (not semantic/vector-based yet). Global caching is currently limited to `/api/article-practice` only. Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached. Raw fetched HTML or extracted article bodies are never cached or persisted in the database. Request idempotency is planned for a future phase.
+- **AI Usage Ledger**: AI usage/cost tracking is currently scoped to `/api/article-practice` only. Token and cost values are estimates (chars / 4 for tokens; static price map for cost). Unknown model costs are recorded as null. Usage logging failure does not affect Article Practice behavior or API responses. Usage ledger rollout to personal routes and a user-facing usage UI are future work. This does not change API response shapes or app UI.
 - **Hybrid local-first migration in progress**: Completed normal sessions, vocabulary changes, and gamification updates (XP profile, XP events, and badges) are best-effort written to Supabase when configured. It supports loading cloud snapshots for user-confirmed restore (for empty local browsers) and import (using conservative compatibility guards and XP deduplication). Browser `localStorage` remains the runtime source of truth, and no local data is cleared or deleted, nor is the cloud mutated during restore/import.
 - LocalStorage remains the runtime source of truth for all app data.
 - XP rules remain local and deterministic, and cloud write failures do not affect local XP behavior or progression.

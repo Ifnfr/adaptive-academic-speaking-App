@@ -93,7 +93,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
 Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. It also supports reading cloud snapshots for user-confirmed restore (when local is empty) and import (using conservative compatibility guards when local data exists). Browser localStorage remains the runtime source of truth, and no local data is cleared or deleted during these actions.
-`SUPABASE_SERVICE_ROLE_KEY` is a server-only service role key used for administrative actions (like global AI response cache writes). It must never be prefixed with `NEXT_PUBLIC` or exposed client-side. If omitted, global cache writes are silently disabled.
+`SUPABASE_SERVICE_ROLE_KEY` is a server-only service role key used for administrative actions (global AI response cache writes and AI usage event logging). It must never be prefixed with `NEXT_PUBLIC` or exposed client-side. If omitted, global cache writes and usage logging are silently disabled.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
 
