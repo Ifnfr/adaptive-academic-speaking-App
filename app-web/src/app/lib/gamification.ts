@@ -40,6 +40,7 @@ export type XpEventType =
   | "level_up_applied"
   | "article_practice_completed"
   | "vocab_sentence_submitted"
+  | "vocab_recall_session_completed"
   | "vocab_reused";
 
 type XpEventSourceKind =
@@ -132,6 +133,7 @@ export const XP_RULES: Readonly<
   level_up_applied: { xp: 25, dailyCap: 1 },
   article_practice_completed: { xp: 25, dailyCap: 3 },
   vocab_sentence_submitted: { xp: 5, dailyCap: 10 },
+  vocab_recall_session_completed: { xp: 20, dailyCap: 2 },
   vocab_reused: { xp: 10, dailyCap: 5 },
 } as const;
 

@@ -40,6 +40,7 @@ type VocabularyNotebookViewProps = {
   practiceSkippedCount: number;
   practiceComplete: boolean;
   practiceAcceptedSentenceId: string | null;
+  practiceCompletionXpMessage: string | null;
   onFormWordChange: (value: string) => void;
   onFormMeaningChange: (value: string) => void;
   onFormLevelChange: (value: VocabLevel) => void;
@@ -174,6 +175,7 @@ export function VocabularyNotebookView({
   practiceSkippedCount,
   practiceComplete,
   practiceAcceptedSentenceId,
+  practiceCompletionXpMessage,
   onFormWordChange,
   onFormMeaningChange,
   onFormLevelChange,
@@ -312,6 +314,7 @@ export function VocabularyNotebookView({
             skippedCount={practiceSkippedCount}
             complete={practiceComplete}
             acceptedSentenceId={practiceAcceptedSentenceId}
+            completionXpMessage={practiceCompletionXpMessage}
             sentenceDraft={sentenceDraft}
             correctionLoadingId={correctionLoadingId}
             correctionError={correctionError}
@@ -858,6 +861,7 @@ function RecallPracticeView({
   skippedCount,
   complete,
   acceptedSentenceId,
+  completionXpMessage,
   sentenceDraft,
   correctionLoadingId,
   correctionError,
@@ -883,6 +887,7 @@ function RecallPracticeView({
   skippedCount: number;
   complete: boolean;
   acceptedSentenceId: string | null;
+  completionXpMessage: string | null;
   sentenceDraft: string;
   correctionLoadingId: string | null;
   correctionError: { sentenceId: string; text: string } | null;
@@ -912,6 +917,11 @@ function RecallPracticeView({
           <StatCard label="Practiced" value={String(practicedCount)} />
           <StatCard label="Skipped" value={String(skippedCount)} />
         </div>
+        {completionXpMessage && (
+          <p className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-4 py-3 text-sm text-[var(--brand-ink-soft)]">
+            {completionXpMessage}
+          </p>
+        )}
         <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button type="button" onClick={onBackToHome} className={buttonSecondary}>
             Back to Vocabulary Notebook

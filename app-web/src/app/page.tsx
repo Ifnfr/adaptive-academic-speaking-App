@@ -826,6 +826,8 @@ export default function Home() {
     useState(0);
   const [vocabPracticeSkippedCount, setVocabPracticeSkippedCount] = useState(0);
   const [vocabPracticeComplete, setVocabPracticeComplete] = useState(false);
+  const [vocabPracticeCompletionXpMessage, setVocabPracticeCompletionXpMessage] =
+    useState<string | null>(null);
   const [vocabSentenceDraft, setVocabSentenceDraft] = useState("");
   const [vocabMessage, setVocabMessage] = useState<{
     tone: "success" | "error" | "info";
@@ -1037,6 +1039,7 @@ export default function Home() {
     setVocabPracticePracticedCount(0);
     setVocabPracticeSkippedCount(0);
     setVocabPracticeComplete(false);
+    setVocabPracticeCompletionXpMessage(null);
   };
 
   const handleViewAllVocabulary = () => {
@@ -1060,6 +1063,7 @@ export default function Home() {
     setVocabPracticePracticedCount(0);
     setVocabPracticeSkippedCount(0);
     setVocabPracticeComplete(false);
+    setVocabPracticeCompletionXpMessage(null);
     resetVocabularyPracticeCard();
     setVocabMessage({
       tone: "info",
@@ -1129,6 +1133,33 @@ export default function Home() {
   const handleNextVocabularyPracticeCard = () => {
     const nextIndex = vocabPracticeIndex + 1;
     if (nextIndex >= vocabPracticeQueueIds.length) {
+      const completedFullRecallQueue =
+        vocabPracticeQueueIds.length === 5 &&
+        vocabPracticeSkippedCount === 0 &&
+        vocabPracticePracticedCount === 5;
+
+      if (completedFullRecallQueue) {
+        const localDate = getLocalDateString();
+        const awardResult = awardGamificationEvent(
+          "vocab_recall_session_completed",
+          `vocab-recall-${localDate}-${stableTextKey(
+            vocabPracticeQueueIds.join("|"),
+          )}`,
+          "vocabulary",
+          "Completed a 5-card vocabulary active recall session with no skips.",
+        );
+
+        setVocabPracticeCompletionXpMessage(
+          awardResult?.allowed
+            ? "Recall session XP added."
+            : "Session complete. XP already claimed or daily cap reached.",
+        );
+      } else {
+        setVocabPracticeCompletionXpMessage(
+          "Session complete. Completion XP requires 5 saved sentences with no skipped cards.",
+        );
+      }
+
       setVocabPracticeComplete(true);
       resetVocabularyPracticeCard();
       setVocabMessage({
@@ -1298,7 +1329,7 @@ export default function Home() {
     sourceId: string,
     sourceKind: XpEvent["sourceKind"],
     reason: string,
-  ) => {
+  ): { allowed: boolean; reason: string; xpToAward: number } | null => {
     try {
       const candidate = createXpEvent({
         type,
@@ -1315,8 +1346,10 @@ export default function Home() {
       if (awarded.result.allowed) {
         updateBadges(type, awarded.profile);
       }
+      return awarded.result;
     } catch {
       // Gamification is optional; it should never block the practice flow.
+      return null;
     }
   };
 
@@ -2247,6 +2280,7 @@ export default function Home() {
               practiceSkippedCount={vocabPracticeSkippedCount}
               practiceComplete={vocabPracticeComplete}
               practiceAcceptedSentenceId={vocabPracticeAcceptedSentenceId}
+              practiceCompletionXpMessage={vocabPracticeCompletionXpMessage}
               onFormWordChange={setVocabFormWord}
               onFormMeaningChange={setVocabFormMeaning}
               onFormLevelChange={setVocabFormLevel}

@@ -154,6 +154,9 @@ test.describe("MVP Smoke Flows", () => {
     // Complete the recall session, then open full dictionary management
     await page.click("button:has-text(\"Finish Session\")");
     await expect(page.locator("h3:has-text(\"Session complete\")")).toBeVisible();
+    await expect(
+      page.locator("text=Completion XP requires 5 saved sentences"),
+    ).toBeVisible();
     await page.click("button:has-text(\"Back to Vocabulary Notebook\")");
     await page.click("button:has-text(\"View All / Manage Vocabulary\")");
     await expect(page.locator("h3:has-text(\"All vocabulary\")")).toBeVisible();
