@@ -243,6 +243,9 @@ Manual checks to run before declaring the local MVP stable.
 
 - [ ] Vocabulary helpers use only `adaptive-speaking-app:vocabulary`
 - [ ] Malformed vocabulary localStorage values normalize safely
+- [ ] Old vocabulary records without `partOfSpeech` load with an `other` fallback
+- [ ] Vocabulary practice queue prioritizes underused, new/practicing, and older-practiced items without random shuffle
+- [ ] Practice recency helper updates only `lastPracticedAt`, not reuse/correct counts or XP
 - [ ] Sidebar opens Vocabulary Notebook from the Practice section
 - [ ] Add Vocabulary form saves word, meaning, level, source, optional example, and collocations
 - [ ] Saved vocabulary list shows status, level, source, reuse count, Practice, and Delete controls

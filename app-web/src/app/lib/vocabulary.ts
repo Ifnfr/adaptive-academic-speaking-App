@@ -14,6 +14,17 @@ export type VocabLevel =
   | "Advanced"
   | "Expert";
 
+export type VocabPartOfSpeech =
+  | "noun"
+  | "verb"
+  | "adj"
+  | "adv"
+  | "prep"
+  | "phrase"
+  | "phrasal verb"
+  | "idiom"
+  | "other";
+
 export type VocabCorrectionStatus =
   | "natural"
   | "understandable"
@@ -44,6 +55,7 @@ export type VocabItem = {
   id: string;
   word: string;
   meaning: string;
+  partOfSpeech?: VocabPartOfSpeech;
   source: VocabSource;
   level: VocabLevel;
   status: VocabStatus;
@@ -69,6 +81,7 @@ export type VocabStats = {
 export type CreateVocabItemInput = {
   word: string;
   meaning: string;
+  partOfSpeech?: VocabPartOfSpeech;
   source?: VocabSource;
   level?: VocabLevel;
   status?: VocabStatus;
@@ -79,6 +92,7 @@ export type CreateVocabItemInput = {
 export type UpdateVocabItemPatch = Partial<{
   word: string;
   meaning: string;
+  partOfSpeech: VocabPartOfSpeech;
   source: VocabSource;
   level: VocabLevel;
   status: VocabStatus;
@@ -102,6 +116,11 @@ export type SaveSentenceCorrectionInput = {
   warnings?: string[];
   checkedAt?: string;
   providerUsed: string;
+};
+
+export type VocabularyPracticeQueueOptions = {
+  size?: number;
+  now?: Date;
 };
 
 export const VOCABULARY_STORAGE_KEY = "adaptive-speaking-app:vocabulary";
@@ -130,6 +149,18 @@ const VOCAB_LEVELS: readonly VocabLevel[] = [
   "Intermediate",
   "Advanced",
   "Expert",
+];
+
+const VOCAB_PARTS_OF_SPEECH: readonly VocabPartOfSpeech[] = [
+  "noun",
+  "verb",
+  "adj",
+  "adv",
+  "prep",
+  "phrase",
+  "phrasal verb",
+  "idiom",
+  "other",
 ];
 
 const VOCAB_CORRECTION_STATUSES: readonly VocabCorrectionStatus[] = [
@@ -163,6 +194,7 @@ export function normalizeVocabulary(value: unknown): VocabItem[] {
       id: source.id.trim(),
       word: source.word.trim(),
       meaning: source.meaning.trim(),
+      partOfSpeech: normalizePartOfSpeech(source.partOfSpeech),
       source: isVocabSource(source.source) ? source.source : "manual",
       level: isVocabLevel(source.level) ? source.level : "Foundation",
       status: isVocabStatus(source.status) ? source.status : "new",
@@ -211,6 +243,7 @@ export function createVocabItem(input: CreateVocabItemInput): VocabItem {
     id: createLocalId("vocab"),
     word: input.word.trim(),
     meaning: input.meaning.trim(),
+    partOfSpeech: normalizePartOfSpeech(input.partOfSpeech),
     source: input.source && isVocabSource(input.source) ? input.source : "manual",
     level: input.level && isVocabLevel(input.level) ? input.level : "Foundation",
     status: input.status && isVocabStatus(input.status) ? input.status : "new",
@@ -247,6 +280,10 @@ export function updateVocabItem(
       source:
         patch.source && isVocabSource(patch.source) ? patch.source : item.source,
       level: patch.level && isVocabLevel(patch.level) ? patch.level : item.level,
+      partOfSpeech:
+        patch.partOfSpeech && isVocabPartOfSpeech(patch.partOfSpeech)
+          ? patch.partOfSpeech
+          : item.partOfSpeech,
       status:
         patch.status && isVocabStatus(patch.status) ? patch.status : item.status,
       example:
@@ -276,6 +313,25 @@ export function updateVocabStatus(
   return updateVocabItem(items, id, { status });
 }
 
+export function markVocabularyPracticed(
+  items: ReadonlyArray<VocabItem>,
+  id: string,
+  practicedAt: string = new Date().toISOString(),
+): VocabItem[] {
+  const safeId = id.trim();
+  const safePracticedAt = isIsoDateTimeString(practicedAt)
+    ? practicedAt
+    : new Date().toISOString();
+
+  return normalizeVocabulary(items).map((item) => {
+    if (item.id !== safeId) return item;
+    return {
+      ...item,
+      lastPracticedAt: safePracticedAt,
+    };
+  });
+}
+
 export function containsVocabWord(text: string, word: string): boolean {
   const normalizedText = normalizeSpacing(text).toLowerCase();
   const normalizedWord = normalizeSpacing(word).toLowerCase();
@@ -287,6 +343,41 @@ export function containsVocabWord(text: string, word: string): boolean {
 
   const pattern = new RegExp(`\\b${escapeRegExp(normalizedWord)}\\b`, "i");
   return pattern.test(normalizedText);
+}
+
+export function buildVocabularyPracticeQueue(
+  items: ReadonlyArray<VocabItem>,
+  options: VocabularyPracticeQueueOptions = {},
+): string[] {
+  const size = normalizeQueueSize(options.size);
+  if (size <= 0) return [];
+
+  const now = options.now instanceof Date ? options.now : new Date();
+  const nowTime = Number.isNaN(now.getTime()) ? Date.now() : now.getTime();
+  const eligibleItems = normalizeVocabulary(items).filter(
+    (item) => item.status !== "paused",
+  );
+
+  const nonMasteredItems = eligibleItems.filter(
+    (item) => item.status !== "mastered",
+  );
+  const masteredItems = eligibleItems.filter(
+    (item) => item.status === "mastered",
+  );
+  const queuePool =
+    nonMasteredItems.length >= size
+      ? nonMasteredItems
+      : [...nonMasteredItems, ...masteredItems];
+
+  return queuePool
+    .map((item, index) => ({
+      item,
+      index,
+      score: scoreVocabularyForPractice(item, nowTime),
+    }))
+    .sort(comparePracticeQueueItems)
+    .slice(0, size)
+    .map(({ item }) => item.id);
 }
 
 export function addUserSentence(
@@ -509,6 +600,93 @@ function createSourceCounts(): Record<VocabSource, number> {
   };
 }
 
+type PracticeQueueCandidate = {
+  item: VocabItem;
+  index: number;
+  score: number;
+};
+
+function scoreVocabularyForPractice(item: VocabItem, nowTime: number): number {
+  const reuseCount = Math.max(0, item.reuseCount);
+  const correctUseCount = Math.max(0, item.correctUseCount);
+  let score = 0;
+
+  if (item.status === "new") {
+    score += 40;
+  } else if (item.status === "practicing") {
+    score += 30;
+  } else if (item.status === "active") {
+    score += 10;
+  } else if (item.status === "mastered") {
+    score -= 30;
+  }
+
+  score += (10 - Math.min(reuseCount, 10)) * 8;
+  score += (5 - Math.min(correctUseCount, 5)) * 10;
+
+  const lastPracticedTime = dateTimeValue(item.lastPracticedAt);
+  if (lastPracticedTime === null) {
+    score += 35;
+  } else {
+    const daysSincePractice = Math.max(
+      0,
+      Math.floor((nowTime - lastPracticedTime) / 86_400_000),
+    );
+    score += Math.min(30, daysSincePractice * 2);
+  }
+
+  if (item.source === "article" && reuseCount < 2) {
+    score += 12;
+  }
+
+  score -= reuseCount * 3;
+  score -= correctUseCount * 5;
+
+  return score;
+}
+
+function comparePracticeQueueItems(
+  a: PracticeQueueCandidate,
+  b: PracticeQueueCandidate,
+): number {
+  if (b.score !== a.score) return b.score - a.score;
+  if (a.item.reuseCount !== b.item.reuseCount) {
+    return a.item.reuseCount - b.item.reuseCount;
+  }
+  if (a.item.correctUseCount !== b.item.correctUseCount) {
+    return a.item.correctUseCount - b.item.correctUseCount;
+  }
+
+  const aLastPracticed = dateTimeValue(a.item.lastPracticedAt) ?? 0;
+  const bLastPracticed = dateTimeValue(b.item.lastPracticedAt) ?? 0;
+  if (aLastPracticed !== bLastPracticed) {
+    return aLastPracticed - bLastPracticed;
+  }
+
+  const aCreatedAt = dateTimeValue(a.item.createdAt) ?? 0;
+  const bCreatedAt = dateTimeValue(b.item.createdAt) ?? 0;
+  if (aCreatedAt !== bCreatedAt) {
+    return bCreatedAt - aCreatedAt;
+  }
+
+  const wordComparison = a.item.word.localeCompare(b.item.word);
+  if (wordComparison !== 0) return wordComparison;
+  return a.index - b.index;
+}
+
+function normalizeQueueSize(value: unknown): number {
+  if (value === undefined) return 5;
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.floor(numeric);
+}
+
+function dateTimeValue(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const numeric = Date.parse(value);
+  return Number.isNaN(numeric) ? null : numeric;
+}
+
 function createLocalId(prefix: string): string {
   if (
     typeof crypto !== "undefined" &&
@@ -556,6 +734,19 @@ function isVocabSource(value: unknown): value is VocabSource {
 
 function isVocabLevel(value: unknown): value is VocabLevel {
   return typeof value === "string" && VOCAB_LEVELS.includes(value as VocabLevel);
+}
+
+function isVocabPartOfSpeech(value: unknown): value is VocabPartOfSpeech {
+  return (
+    typeof value === "string" &&
+    VOCAB_PARTS_OF_SPEECH.includes(value as VocabPartOfSpeech)
+  );
+}
+
+function normalizePartOfSpeech(value: unknown): VocabPartOfSpeech {
+  if (typeof value !== "string") return "other";
+  const normalized = value.trim().toLowerCase();
+  return isVocabPartOfSpeech(normalized) ? normalized : "other";
 }
 
 function isVocabCorrectionStatus(
