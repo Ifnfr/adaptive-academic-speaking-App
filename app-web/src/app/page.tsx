@@ -106,6 +106,8 @@ import { ProfileSettingsView } from "./components/ProfileSettingsView";
 import {
   DEFAULT_APP_LANGUAGE,
   normalizeAppLanguage,
+  normalizeFeedbackLanguage,
+  normalizeTargetLanguage,
   useI18n,
   type AppLanguage,
   type Translate,
@@ -1606,6 +1608,10 @@ export default function Home() {
           meaning: item.meaning,
           partOfSpeech: item.partOfSpeech ?? "other",
           userSentence: sentence.sentence,
+          feedbackLanguage: normalizeFeedbackLanguage(
+            ownerProfile?.feedbackLanguage,
+          ),
+          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
         }),
       });
 

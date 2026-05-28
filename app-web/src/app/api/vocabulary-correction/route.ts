@@ -32,6 +32,8 @@ type VocabularyCorrectionRequest = {
   meaning: string;
   partOfSpeech: string;
   userSentence: string;
+  feedbackLanguage: FeedbackLanguage;
+  targetLanguage: TargetLanguage;
 };
 
 type VocabularyCorrectionResponse = {
@@ -48,9 +50,37 @@ type VocabularyCorrectionParseResult =
   | { ok: true; value: VocabularyCorrectionResponse }
   | { ok: false; reason: "parse" | "validation" };
 
+type FeedbackLanguage = "en" | "id";
+type TargetLanguage = "en";
+
 // ---------- Prompt building ----------
 
-function buildSystemPrompt(): string {
+function feedbackLanguageLabel(language: FeedbackLanguage): string {
+  return language === "id" ? "Indonesian" : "English";
+}
+
+function targetLanguageLabel(language: TargetLanguage): string {
+  return language === "en" ? "English" : "English";
+}
+
+function buildLanguagePolicy(req: VocabularyCorrectionRequest): string {
+  return [
+    "LANGUAGE POLICY:",
+    `- Evaluate the learner's submitted sentence as ${targetLanguageLabel(req.targetLanguage)}.`,
+    `- Write explanation, collocationTip, retryInstruction, targetUsageRole, and warnings in ${feedbackLanguageLabel(req.feedbackLanguage)}.`,
+    `- Keep correctedSentence in ${targetLanguageLabel(req.targetLanguage)}.`,
+    "- Do not translate the full learner sentence.",
+    "- Keep the target vocabulary word or phrase in the target language.",
+    ...(req.feedbackLanguage === "id"
+      ? [
+          "- Use concise, beginner-friendly Indonesian.",
+          "- Avoid long grammar terminology unless necessary.",
+        ]
+      : []),
+  ].join("\n");
+}
+
+function buildSystemPrompt(req: VocabularyCorrectionRequest): string {
   return [
     "You are a vocabulary sentence correction coach for academic speaking.",
     "Your job is to check ONLY the user's submitted sentence using the target vocabulary word or phrase.",
@@ -62,6 +92,8 @@ function buildSystemPrompt(): string {
     "Feedback should support spoken reuse of the vocabulary word.",
     "If partOfSpeech is provided, consider how the target vocabulary functions in the user's sentence.",
     "Explain only the role of the target vocabulary. Do not classify every word in the sentence.",
+    "",
+    buildLanguagePolicy(req),
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -166,6 +198,14 @@ function normalizeLevel(value: unknown): Level | null {
     (level) => level.toLowerCase() === value.trim().toLowerCase(),
   );
   return match ? (match as Level) : null;
+}
+
+function normalizeFeedbackLanguage(value: unknown): FeedbackLanguage {
+  return value === "id" ? "id" : "en";
+}
+
+function normalizeTargetLanguage(value: unknown): TargetLanguage {
+  return value === "en" ? "en" : "en";
 }
 
 function normalizeStatus(value: unknown): VocabularyCorrectionStatus | null {
@@ -395,6 +435,8 @@ function validateRequest(body: unknown): VocabularyCorrectionRequest | string {
     meaning: normalizeString(source.meaning, 300),
     partOfSpeech: normalizeString(source.partOfSpeech, 80),
     userSentence,
+    feedbackLanguage: normalizeFeedbackLanguage(source.feedbackLanguage),
+    targetLanguage: normalizeTargetLanguage(source.targetLanguage),
   };
 }
 
@@ -583,7 +625,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(validated);
   const userPrompt = buildUserPrompt(validated);
 
   let raw = "";
