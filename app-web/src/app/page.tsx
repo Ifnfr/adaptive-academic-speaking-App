@@ -1994,6 +1994,10 @@ export default function Home() {
           todayTarget: activeSession.target,
           transcript: capturedAttempt.transcript,
           durationSeconds: capturedAttempt.durationSeconds,
+          feedbackLanguage: normalizeFeedbackLanguage(
+            ownerProfile?.feedbackLanguage,
+          ),
+          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
         }),
       });
 
