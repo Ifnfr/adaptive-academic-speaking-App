@@ -24,6 +24,10 @@ test.describe("i18n language foundation", () => {
     expect(t("fr", "profile.saveProfileSettings")).toBe(
       "Save profile settings",
     );
+    expect(t("en", "progress.levelUpCheck")).toBe("Level-Up Check");
+    expect(t("en", "progress.statusReady")).toBe("Ready");
+    expect(t("en", "review.runBtn")).toBe("Run Weekly Review");
+    expect(t("en", "mental.focusWeakness")).toBe("Focus / Weakness");
   });
 
   test("Indonesian dictionary returns Indonesian labels for wired keys", () => {
@@ -39,5 +43,32 @@ test.describe("i18n language foundation", () => {
     expect(t("id", "profile.targetLanguageFixed")).toBe(
       "Saat ini hanya bahasa Inggris",
     );
+    // New keys verification
+    expect(t("id", "progress.levelUpCheck")).toBe("Level-Up Check");
+    expect(t("id", "progress.localReadiness")).toBe("Pemeriksaan kesiapan lokal");
+    expect(t("id", "progress.statusReady")).toBe("Siap");
+    expect(t("id", "review.runBtn")).toBe("Jalankan Tinjauan Mingguan");
+    expect(t("id", "mental.focusWeakness")).toBe("Fokus / Kelemahan");
+    expect(t("id", "mental.microDrill")).toBe("Latihan Mikro");
   });
 });
+
+test.describe("i18n E2E default language", () => {
+  test("sidebar, topbar and layouts render in English by default for signed-out users", async ({ page }) => {
+    await page.goto("/");
+
+    // Verify initial layout is English
+    await expect(page.locator("aside")).toContainText("Profile & Settings");
+    await expect(page.locator("aside")).toContainText("Active Session");
+    await expect(page.locator("header")).toContainText("Active Practice");
+
+    // Navigate to Progress view
+    await page.getByRole("button", { name: "Progress" }).click();
+
+    // Verify localized titles inside Progress View render in English
+    await expect(page.locator("body")).toContainText("Local readiness check");
+    await expect(page.locator("body")).toContainText("Sessions completed");
+    await expect(page.locator("body")).toContainText("Practice today to start");
+  });
+});
+

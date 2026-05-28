@@ -106,10 +106,10 @@ export function Sidebar({
             />
             <div>
               <p className="text-sm font-semibold tracking-tight text-[var(--brand-teal-ink)]">
-                Speak Better
+                {t("sidebar.speakBetter")}
               </p>
               <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                AI-Powered academic speaking practice
+                {t("sidebar.tagline")}
               </p>
             </div>
           </div>
@@ -119,10 +119,10 @@ export function Sidebar({
         <div className="overflow-hidden rounded-2xl border border-[var(--brand-teal-ink)] bg-[var(--brand-teal-ink)] text-white shadow-sm">
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
-              Current Level
+              {t("sidebar.currentLevel")}
             </p>
             <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
-              {sessionsCount === 0 ? "Day 1" : `${sessionsCount} sessions`}
+              {sessionsCount === 0 ? t("sidebar.day1") : `${sessionsCount} ${sessionsCount === 1 ? t("sidebar.sessionCount") : t("sidebar.sessionsCount")}`}
             </span>
           </div>
           <div className="px-5 py-4">
@@ -136,7 +136,7 @@ export function Sidebar({
               </p>
             )}
             <p className="mt-3 text-[11px] text-white/60">
-              Adjust in Session setup.
+              {t("sidebar.adjustSetup")}
             </p>
           </div>
         </div>
@@ -146,77 +146,77 @@ export function Sidebar({
           <div className="px-5 py-4">
             <div className="flex items-baseline justify-between">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
-                Speaker Level
+                {t("sidebar.speakerLevel")}
               </p>
               <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
-                XP
+                {t("sidebar.xp")}
               </span>
             </div>
             <p className="mt-2 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
               {gamificationReady ? `Level ${speakerLevel}` : "Level -"}
             </p>
             <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-              {gamificationReady ? speakerLevelName : "Loading speaker progress"}
+              {gamificationReady ? speakerLevelName : t("sidebar.loadingSpeaker")}
             </p>
             <p className="mt-3 font-mono text-xs tabular-nums text-[var(--brand-muted)]">
-              {gamificationReady ? `${totalXp} total XP` : "- total XP"}
+              {gamificationReady ? `${totalXp} ${t("sidebar.totalXp")}` : `- ${t("sidebar.totalXp")}`}
             </p>
             <p className="mt-2 text-[11px] text-[var(--brand-muted)]">
-              Separate from English Level.
+              {t("sidebar.separateLevel")}
             </p>
           </div>
         </div>
 
         {/* Grouped nav */}
         <nav className={card} aria-label="Sections">
-          <SidebarGroup label="Practice">
+          <SidebarGroup label={t("sidebar.groupPractice")}>
             <SidebarItem
               active={view === "active"}
               onClick={() => onSelectView("active")}
             >
-              Active Session
+              {t("sidebar.viewActive")}
             </SidebarItem>
             <SidebarItem
               active={view === "vocabulary"}
               onClick={() => onSelectView("vocabulary")}
             >
-              Vocabulary Notebook
+              {t("sidebar.viewVocabulary")}
             </SidebarItem>
             <SidebarItem
               active={view === "article-practice"}
               onClick={() => onSelectView("article-practice")}
             >
-              Article Practice
+              {t("sidebar.viewArticlePractice")}
             </SidebarItem>
             <SidebarItem
               active={view === "session-log"}
               onClick={() => onSelectView("session-log")}
             >
-              Session Log
+              {t("sidebar.viewSessionLog")}
             </SidebarItem>
           </SidebarGroup>
 
-          <SidebarGroup label="Analytics">
+          <SidebarGroup label={t("sidebar.groupAnalytics")}>
             <SidebarItem
               active={view === "progress"}
               onClick={() => onSelectView("progress")}
             >
-              Progress
+              {t("sidebar.viewProgress")}
             </SidebarItem>
             <SidebarItem
               active={view === "weekly-review"}
               onClick={() => onSelectView("weekly-review")}
             >
-              Weekly Review
+              {t("sidebar.viewWeeklyReview")}
             </SidebarItem>
           </SidebarGroup>
 
-          <SidebarGroup label="System">
+          <SidebarGroup label={t("sidebar.groupSystem")}>
             <SidebarItem
               active={view === "mental-model"}
               onClick={() => onSelectView("mental-model")}
             >
-              Mental Model
+              {t("sidebar.viewMentalModel")}
             </SidebarItem>
             <SidebarItem
               active={view === "settings"}
@@ -232,10 +232,10 @@ export function Sidebar({
           <div className="px-5 py-4">
             <div className="flex items-baseline justify-between">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
-                Day Streak
+                {t("sidebar.dayStreak")}
               </p>
               <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
-                Local
+                {t("sidebar.local")}
               </span>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
@@ -248,12 +248,13 @@ export function Sidebar({
             </div>
             <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
               {dayStreak === 0
-                ? "Complete a session today to start a streak."
-                : "Don't break the chain. Keep practicing daily."}
+                ? t("sidebar.streakStart")
+                : t("sidebar.streakKeep")}
             </p>
             <p className="mt-3 text-[11px] text-[var(--brand-muted)]">
               {sessionsCount}{" "}
-              {sessionsCount === 1 ? "session" : "sessions"} stored locally · max 20
+              {sessionsCount === 1 ? t("sidebar.sessionCount") : t("sidebar.sessionsCount")}{" "}
+              {t("sidebar.storedLocally")} · {t("sidebar.max20")}
             </p>
           </div>
         </div>

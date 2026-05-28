@@ -1,5 +1,8 @@
 
 
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
+
 export type ArticlePracticeResult = {
   sourceTitle: string;
   sourceUrl: string;
@@ -34,6 +37,7 @@ type ArticlePracticeViewProps = {
   articlePracticeLoading: boolean;
   articlePracticeError: string | null;
   savedVocabularyWords: ReadonlySet<string>;
+  appLanguage?: AppLanguage | null;
   onArticleUrlChange: (value: string) => void;
   onArticleFocusChange: (value: string) => void;
   onGenerateArticlePractice: () => void;
@@ -83,12 +87,14 @@ export function ArticlePracticeView({
   articlePracticeLoading,
   articlePracticeError,
   savedVocabularyWords,
+  appLanguage,
   onArticleUrlChange,
   onArticleFocusChange,
   onGenerateArticlePractice,
   onPracticeSpeakingTask,
   onSaveVocabularyCandidate,
 }: ArticlePracticeViewProps) {
+  const { t } = useI18n(appLanguage);
   const isWordSaved = (word: string): boolean => {
     return savedVocabularyWords.has(word.trim().toLowerCase());
   };
@@ -117,28 +123,27 @@ export function ArticlePracticeView({
     <section className={card}>
       <div className={cardHeader}>
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-          Article input
+          {t("article.input")}
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-          Article Practice
+          {t("article.title")}
         </h2>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-          Turn a real article URL into copyright-safe academic speaking practice.
-          The full article text is not shown or stored.
+          {t("article.tagline")}
         </p>
       </div>
 
       <div className={`${cardBody} flex flex-col gap-5`}>
         <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <SummaryCell label="Provider" value={provider} />
-            <SummaryCell label="Level" value={level} />
-            <SummaryCell label="Mode" value={mode} />
+            <SummaryCell label={t("article.provider")} value={provider} />
+            <SummaryCell label={t("article.level")} value={level} />
+            <SummaryCell label={t("article.mode")} value={mode} />
           </div>
 
           <div className="mt-5">
             <label htmlFor="article-url" className={labelClass}>
-              Article URL
+              {t("article.url")}
             </label>
             <input
               id="article-url"
@@ -148,32 +153,30 @@ export function ArticlePracticeView({
               className={inputClass}
             />
             <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-              Paste the original source URL. The app generates practice material
-              from a short server-side article extraction.
+              {t("article.urlTagline")}
             </p>
           </div>
 
           <div className="mt-5">
             <label htmlFor="article-focus" className={labelClass}>
-              Focus (optional)
+              {t("article.focus")}
             </label>
             <textarea
               id="article-focus"
               rows={3}
               value={articleFocus}
               onChange={(event) => onArticleFocusChange(event.target.value)}
-              placeholder={focusPlaceholder || "Use the article for speaking practice"}
+              placeholder={focusPlaceholder || t("article.focusPlaceholder")}
               className={`${inputClass} resize-y leading-6`}
             />
             <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-              Leave blank to use Today&apos;s Target as the focus.
+              {t("article.focusTagline")}
             </p>
           </div>
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-[var(--brand-ink-soft)]">
-              No article history or speaking attempt is created in this view.
-              Vocabulary can be saved to Notebook and XP is awarded on success.
+              {t("article.viewTagline")}
             </p>
             <button
               type="button"
@@ -182,8 +185,8 @@ export function ArticlePracticeView({
               className={`${buttonPrimary} w-full sm:w-auto`}
             >
               {articlePracticeLoading
-                ? "Generating practice..."
-                : "Generate Practice"}
+                ? t("article.generating")
+                : t("article.generateBtn")}
             </button>
           </div>
         </div>
@@ -195,8 +198,7 @@ export function ArticlePracticeView({
           >
             <p>{articlePracticeError}</p>
             <p className="mt-1 text-xs opacity-80">
-              Check the URL, try a different article, wait a moment, or switch
-              provider.
+              {t("article.errorTagline")}
             </p>
             <div className="mt-3">
               <button
@@ -205,7 +207,7 @@ export function ArticlePracticeView({
                 disabled={articlePracticeLoading}
                 className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {articlePracticeLoading ? "Trying again..." : "Try Again"}
+                {articlePracticeLoading ? t("article.tryingAgain") : t("article.tryAgain")}
               </button>
             </div>
           </div>
@@ -214,24 +216,24 @@ export function ArticlePracticeView({
         {articlePracticeResult && (
           <div className="rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-              Article practice result
+              {t("article.result")}
             </h3>
 
             <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
-              <p className={labelClass}>Article Snapshot</p>
+              <p className={labelClass}>{t("article.snapshot")}</p>
               <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                 <SummaryCell
-                  label="Title"
+                  label={t("article.snapTitle")}
                   value={articlePracticeResult.sourceTitle}
                   multiline
                 />
                 <SummaryCell
-                  label="Domain"
+                  label={t("article.snapDomain")}
                   value={articlePracticeResult.sourceDomain}
                 />
                 <div className="sm:col-span-2">
                   <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-                    Source URL
+                    {t("article.sourceUrl")}
                   </p>
                   <a
                     href={articlePracticeResult.sourceUrl}
@@ -244,34 +246,33 @@ export function ArticlePracticeView({
                 </div>
               </dl>
               <p className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
-                Based on the article source. Open the original article to read
-                the full text.
+                {t("article.snapTagline")}
               </p>
             </div>
 
             <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
               <SummaryCell
-                label="Brief"
+                label={t("article.brief")}
                 value={articlePracticeResult.articleBrief}
                 multiline
               />
               <SummaryCell
-                label="Main Idea"
+                label={t("article.mainIdea")}
                 value={articlePracticeResult.mainIdea}
                 multiline
               />
             </dl>
 
             <div className="mt-5 grid grid-cols-1 gap-5 border-t border-[var(--brand-border)] pt-4 lg:grid-cols-2">
-              <ListSection title="Key Points" items={articlePracticeResult.keyPoints} />
+              <ListSection title={t("article.keyPoints")} items={articlePracticeResult.keyPoints} />
               <ListSection
-                title="Check Your Understanding"
+                title={t("article.checkUnderstanding")}
                 items={articlePracticeResult.comprehensionChecks}
               />
             </div>
 
             <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-              <p className={labelClass}>Useful Vocabulary</p>
+              <p className={labelClass}>{t("article.usefulVocab")}</p>
               <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {articlePracticeResult.usefulVocabulary.map((item) => {
                   const saved = isWordSaved(item.word);
@@ -291,7 +292,7 @@ export function ArticlePracticeView({
                       </p>
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <p className="text-[10px] leading-tight text-[var(--brand-muted)]">
-                          Save this word, then practice using it in your own sentence.
+                          {t("article.vocabSaveInstruction")}
                         </p>
                         <button
                           type="button"
@@ -303,7 +304,7 @@ export function ArticlePracticeView({
                               : "shrink-0 rounded-md border border-[var(--brand-teal)]/50 bg-[var(--brand-teal)]/10 px-2.5 py-1 text-xs font-medium text-[var(--brand-teal-ink)] transition-colors hover:bg-[var(--brand-teal)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]"
                           }
                         >
-                          {saved ? "Saved ✓" : "Save to Notebook"}
+                          {saved ? t("vocab.wordSaved") : t("vocab.saveToNotebook")}
                         </button>
                       </div>
                     </li>
@@ -313,7 +314,7 @@ export function ArticlePracticeView({
             </div>
 
             <div className="mt-5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
-              <p className={labelClass}>Speaking Task</p>
+              <p className={labelClass}>{t("article.speakingTask")}</p>
               <h4 className="text-base font-semibold text-[var(--brand-ink)]">
                 {articlePracticeResult.speakingTask.title}
               </h4>
@@ -321,10 +322,10 @@ export function ArticlePracticeView({
                 {articlePracticeResult.speakingTask.instruction}
               </p>
               <p className="mt-3 inline-flex rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-xs text-[var(--brand-ink-soft)]">
-                {articlePracticeResult.speakingTask.timeLimitSeconds} seconds
+                {articlePracticeResult.speakingTask.timeLimitSeconds} {t("article.seconds")}
               </p>
               <div className="mt-4">
-                <p className={labelClass}>Target Structure</p>
+                <p className={labelClass}>{t("article.targetStructure")}</p>
                 <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
                   {articlePracticeResult.speakingTask.targetStructure.map(
                     (item) => (
@@ -337,29 +338,28 @@ export function ArticlePracticeView({
               </div>
               <div className="mt-5 flex flex-col gap-2 border-t border-[var(--brand-border)] pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-[var(--brand-ink-soft)]">
-                  Send this task to Active Session. You will still start the
-                  session yourself.
+                  {t("article.taskTagline")}
                 </p>
                 <button
                   type="button"
                   onClick={() => onPracticeSpeakingTask(articlePracticeResult)}
                   className={`${buttonPrimary} w-full sm:w-auto`}
                 >
-                  Practice This Speaking Task
+                  {t("article.practiceTaskBtn")}
                 </button>
               </div>
             </div>
 
             <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
               <ListSection
-                title="Follow-Up Questions"
+                title={t("article.followUp")}
                 items={articlePracticeResult.followUpQuestions}
               />
             </div>
 
             {articlePracticeResult.warnings.length > 0 && (
               <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-                <ListSection title="Warnings" items={articlePracticeResult.warnings} />
+                <ListSection title={t("article.warnings")} items={articlePracticeResult.warnings} />
               </div>
             )}
           </div>

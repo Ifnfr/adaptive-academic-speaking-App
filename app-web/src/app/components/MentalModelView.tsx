@@ -1,3 +1,6 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
+
 export type MentalModelResult = {
   coreStandard: string;
   qualityCriteria: string[];
@@ -16,6 +19,7 @@ type MentalModelViewProps = {
   mentalModelResult: MentalModelResult | null;
   mentalModelLoading: boolean;
   mentalModelError: string | null;
+  appLanguage?: AppLanguage | null;
   onFocusChange: (value: string) => void;
   onGenerateMentalModel: () => void;
 };
@@ -55,9 +59,11 @@ export function MentalModelView({
   mentalModelResult,
   mentalModelLoading,
   mentalModelError,
+  appLanguage,
   onFocusChange,
   onGenerateMentalModel,
 }: MentalModelViewProps) {
+  const { t } = useI18n(appLanguage);
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -74,24 +80,23 @@ export function MentalModelView({
     <section className={card}>
       <div className={cardHeader}>
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-          AI teaching
+          {t("common.aiTeaching")}
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-          Mental Model
+          {t("topbar.titleMentalModel")}
         </h2>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-          Use this before practice to understand quality standards and response
-          patterns. It is not a memorized answer generator.
+          {t("common.mentalTagline")}
         </p>
       </div>
       <div className={`${cardBody} flex flex-col gap-5`}>
         <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <SummaryCell label="Level" value={level} />
-            <SummaryCell label="Mode" value={mode} />
+            <SummaryCell label={t("setup.level")} value={level} />
+            <SummaryCell label={t("setup.mode")} value={mode} />
             <div className="sm:col-span-2">
               <label htmlFor="mental-model-focus" className={labelClass}>
-                Focus / Weakness
+                {t("mental.focusWeakness")}
               </label>
               <textarea
                 id="mental-model-focus"
@@ -102,15 +107,14 @@ export function MentalModelView({
                 className={`${inputClass} resize-y leading-6`}
               />
               <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-                Leave blank to use the current target or latest practice weakness.
+                {t("mental.leaveBlank")}
               </p>
             </div>
           </div>
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-[var(--brand-ink-soft)]">
-              The request sends setup context and recent weakness text only, not
-              transcripts.
+              {t("mental.requestSends")}
             </p>
             <button
               type="button"
@@ -119,8 +123,8 @@ export function MentalModelView({
               className={`${buttonPrimary} w-full sm:w-auto`}
             >
               {mentalModelLoading
-                ? "Generating mental model..."
-                : "Generate Mental Model"}
+                ? t("mental.generating")
+                : t("mental.generateBtn")}
             </button>
           </div>
         </div>
@@ -132,7 +136,7 @@ export function MentalModelView({
           >
             <p>{mentalModelError}</p>
             <p className="mt-1 text-xs opacity-80">
-              You can try again, wait a moment, or switch provider.
+              {t("review.errorTagline")}
             </p>
             <div className="mt-3">
               <button
@@ -141,7 +145,7 @@ export function MentalModelView({
                 disabled={mentalModelLoading}
                 className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {mentalModelLoading ? "Trying again..." : "Try Again"}
+                {mentalModelLoading ? t("review.tryingAgain") : t("review.tryAgain")}
               </button>
             </div>
           </div>
@@ -150,26 +154,26 @@ export function MentalModelView({
         {mentalModelResult && (
           <div className="rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-              Mental model result
+              {t("mental.resultTitle")}
             </h3>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
               <SummaryCell
-                label="Core Standard"
+                label={t("mental.coreStandard")}
                 value={mentalModelResult.coreStandard}
                 multiline
               />
               <SummaryCell
-                label="Micro Drill"
+                label={t("mental.microDrill")}
                 value={mentalModelResult.microDrill}
                 multiline
               />
               <SummaryCell
-                label="Weak Pattern"
+                label={t("mental.weakPattern")}
                 value={mentalModelResult.weakPattern}
                 multiline
               />
               <SummaryCell
-                label="Strong Pattern"
+                label={t("mental.strongPattern")}
                 value={mentalModelResult.strongPattern}
                 multiline
               />
@@ -177,7 +181,7 @@ export function MentalModelView({
 
             <div className="mt-5 grid grid-cols-1 gap-5 border-t border-[var(--brand-border)] pt-4 lg:grid-cols-2">
               <div>
-                <p className={labelClass}>Quality Criteria</p>
+                <p className={labelClass}>{t("mental.qualityCriteria")}</p>
                 <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
                   {mentalModelResult.qualityCriteria.map((item) => (
                     <li key={item} className="break-words">
@@ -187,7 +191,7 @@ export function MentalModelView({
                 </ul>
               </div>
               <div>
-                <p className={labelClass}>Self-Check Questions</p>
+                <p className={labelClass}>{t("mental.selfCheck")}</p>
                 <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
                   {mentalModelResult.selfCheckQuestions.map((item) => (
                     <li key={item} className="break-words">
@@ -199,7 +203,7 @@ export function MentalModelView({
             </div>
 
             <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-              <p className={labelClass}>Reference Model</p>
+              <p className={labelClass}>{t("mental.referenceModel")}</p>
               <p className="whitespace-pre-wrap break-words text-sm text-[var(--brand-ink)]">
                 {mentalModelResult.referenceModel}
               </p>

@@ -1,3 +1,5 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 import type { SpeakerLevelProgress, XpProfile } from "../lib/gamification";
 import { XpClaimCard } from "./XpClaimCard";
 
@@ -9,6 +11,7 @@ type GamificationPanelProps = {
   xpEventsCount: number;
   badgesCount: number;
   earnedBadgeLabels: string[];
+  appLanguage?: AppLanguage | null;
   onClaimXp: () => void;
 };
 
@@ -20,8 +23,10 @@ export function GamificationPanel({
   xpEventsCount,
   badgesCount,
   earnedBadgeLabels,
+  appLanguage,
   onClaimXp,
 }: GamificationPanelProps) {
+  const { t } = useI18n(appLanguage);
   const percent = Math.round(progress.progressRatio * 100);
 
   return (
@@ -29,13 +34,13 @@ export function GamificationPanel({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
-            Speaker Level
+            {t("sidebar.speakerLevel")}
           </p>
           <h3 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
             Level {progress.currentLevel.level} · {progress.currentLevel.name}
           </h3>
           <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-            XP-based progress. This is separate from your English level.
+            {t("game.gamificationSeparate")}
           </p>
         </div>
         <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] px-4 py-3">
@@ -51,12 +56,12 @@ export function GamificationPanel({
       <div className="mt-5">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-            Progress to next Speaker Level
+            {t("game.xpProgress")}
           </p>
           <p className="font-mono text-xs tabular-nums text-[var(--brand-ink-soft)]">
             {progress.nextLevel
-              ? `${progress.xpNeededForNext} XP to Level ${progress.nextLevel.level}`
-              : "Max Speaker Level reached"}
+              ? `${progress.xpNeededForNext} XP ${t("game.xpNeeded")} ${progress.nextLevel.level}`
+              : t("game.maxReached")}
           </p>
         </div>
         <div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--brand-border)]">
@@ -66,24 +71,24 @@ export function GamificationPanel({
           />
         </div>
         <p className="mt-2 font-mono text-xs tabular-nums text-[var(--brand-ink-soft)]">
-          {percent}% complete
+          {percent}% {t("game.percentComplete")}
         </p>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <StatCard label="Pending Today" value={`${profile.pendingDailyXp} XP`} />
+        <StatCard label={t("game.pendingToday")} value={`${profile.pendingDailyXp} XP`} />
         <StatCard
-          label="Previous Unclaimed"
+          label={t("game.prevUnclaimed")}
           value={`${profile.unclaimedPreviousXp} XP`}
         />
-        <StatCard label="Reward Events" value={String(xpEventsCount)} />
-        <StatCard label="Badges" value={String(badgesCount)} />
+        <StatCard label={t("game.rewardEvents")} value={String(xpEventsCount)} />
+        <StatCard label={t("game.badges")} value={String(badgesCount)} />
       </div>
 
       {earnedBadgeLabels.length > 0 && (
         <div className="mt-5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-            Earned Badges
+            {t("game.earnedBadges")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {earnedBadgeLabels.map((label) => (

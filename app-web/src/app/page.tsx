@@ -106,7 +106,9 @@ import { ProfileSettingsView } from "./components/ProfileSettingsView";
 import {
   DEFAULT_APP_LANGUAGE,
   normalizeAppLanguage,
+  useI18n,
   type AppLanguage,
+  type Translate,
 } from "./lib/i18n";
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
@@ -1253,6 +1255,7 @@ export default function Home() {
   const appLanguage = cloudAuthState.isSignedIn
     ? appLanguagePreview ?? normalizeAppLanguage(ownerProfile?.preferredAppLanguage)
     : DEFAULT_APP_LANGUAGE;
+  const { t: homeT } = useI18n(appLanguage);
   const claimableXp =
     xpProfile.pendingDailyXp + xpProfile.unclaimedPreviousXp;
   const alreadyClaimedToday = xpProfile.lastClaimedDate === currentLocalDate;
@@ -2482,12 +2485,13 @@ export default function Home() {
         <main className="flex min-w-0 flex-1 flex-col gap-6">
           {/* Topbar */}
           <Topbar
-            subtitle={viewSubtitle(view)}
-            title={viewTitle(view)}
-            description={view === "active" ? subtitle : viewDescription(view)}
+            subtitle={viewSubtitle(view, homeT)}
+            title={viewTitle(view, homeT)}
+            description={view === "active" ? subtitle : viewDescription(view, homeT)}
             hasActiveSession={Boolean(activeSession)}
             mode={mode}
             level={level}
+            appLanguage={appLanguage}
             authSlot={
               <>
                 <CloudSnapshotStatusBadge
@@ -2577,6 +2581,7 @@ export default function Home() {
             feedbackTypes={FEEDBACK_TYPES}
             sessionTypes={SESSION_TYPES}
             aiProviders={AI_PROVIDERS}
+            appLanguage={appLanguage}
             onLevelChange={(value) => setLevel(value as Level)}
             onModeChange={(value) => setMode(value as Mode)}
             onFeedbackTypeChange={(value) => setFeedbackType(value as FeedbackType)}
@@ -2682,6 +2687,7 @@ export default function Home() {
               practiceComplete={vocabPracticeComplete}
               practiceAcceptedSentenceId={vocabPracticeAcceptedSentenceId}
               practiceCompletionXpMessage={vocabPracticeCompletionXpMessage}
+              appLanguage={appLanguage}
               onFormWordChange={setVocabFormWord}
               onFormMeaningChange={setVocabFormMeaning}
               onFormLevelChange={setVocabFormLevel}
@@ -2710,6 +2716,7 @@ export default function Home() {
             <SessionLogView
               sessions={sessions}
               lastCsvCopied={lastCsvCopied}
+              appLanguage={appLanguage}
               onCopyLastCsv={handleCopyLastCsv}
               onGoToActiveSession={() => setView("active")}
             />
@@ -2719,13 +2726,13 @@ export default function Home() {
             <section className={card}>
               <div className={cardHeader}>
                 <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                  Analytics
+                  {homeT("sidebar.groupAnalytics")}
                 </p>
                 <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                  Progress
+                  {homeT("topbar.titleProgress")}
                 </h2>
                 <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                  Simple counts based on the sessions stored in your browser.
+                  {homeT("topbar.descProgress")}
                 </p>
               </div>
               <div className={cardBody}>
@@ -2740,6 +2747,7 @@ export default function Home() {
                   xpEventsCount={xpEvents.length}
                   badgesCount={earnedBadgesCount}
                   earnedBadgeLabels={earnedBadgeLabels}
+                  appLanguage={appLanguage}
                   onApplyNextLevel={handleApplyLevelUp}
                   onClaimXp={handleClaimXp}
                 />
@@ -2755,6 +2763,7 @@ export default function Home() {
               weeklyReviewResult={weeklyReviewResult}
               weeklyReviewLoading={weeklyReviewLoading}
               weeklyReviewError={weeklyReviewError}
+              appLanguage={appLanguage}
               onRunWeeklyReview={handleRunWeeklyReview}
             />
           )}
@@ -2772,6 +2781,7 @@ export default function Home() {
               articlePracticeLoading={articlePracticeLoading}
               articlePracticeError={articlePracticeError}
               savedVocabularyWords={savedVocabularyWords}
+              appLanguage={appLanguage}
               onArticleUrlChange={setArticleUrl}
               onArticleFocusChange={setArticleFocus}
               onGenerateArticlePractice={handleGenerateArticlePractice}
@@ -2790,6 +2800,7 @@ export default function Home() {
               mentalModelResult={mentalModelResult}
               mentalModelLoading={mentalModelLoading}
               mentalModelError={mentalModelError}
+              appLanguage={appLanguage}
               onFocusChange={setMentalModelFocus}
               onGenerateMentalModel={handleGenerateMentalModel}
             />
@@ -3147,72 +3158,72 @@ function SummaryCell({
 // ---------- Topbar copy helpers ----------
 // Pure functions used by the topbar; defined at module scope so they don't
 // rebuild on every render.
-function viewTitle(view: string): string {
+function viewTitle(view: string, translate: Translate): string {
   switch (view) {
     case "active":
-      return "Active Practice";
+      return translate("topbar.titleActive");
     case "vocabulary":
-      return "Vocabulary Notebook";
+      return translate("topbar.titleVocabulary");
     case "article-practice":
-      return "Article Practice";
+      return translate("topbar.titleArticlePractice");
     case "session-log":
-      return "Session Log";
+      return translate("topbar.titleSessionLog");
     case "progress":
-      return "Progress";
+      return translate("topbar.titleProgress");
     case "weekly-review":
-      return "Weekly Review";
+      return translate("topbar.titleWeeklyReview");
     case "diagnostic":
       return "Diagnostic";
     case "mental-model":
-      return "Mental Model";
+      return translate("topbar.titleMentalModel");
     case "settings":
-      return "Profile & Settings";
+      return translate("nav.profileSettings");
     default:
       return "fonetik";
   }
 }
 
-function viewSubtitle(view: string): string {
+function viewSubtitle(view: string, translate: Translate): string {
   switch (view) {
     case "active":
-      return "Active Session";
+      return translate("sidebar.viewActive");
     case "vocabulary":
-      return "Vocabulary Notebook";
+      return translate("topbar.titleVocabulary");
     case "article-practice":
-      return "Article Practice";
+      return translate("topbar.titleArticlePractice");
     case "session-log":
-      return "Session Log";
+      return translate("topbar.titleSessionLog");
     case "progress":
-      return "Progress";
+      return translate("topbar.titleProgress");
     case "weekly-review":
-      return "Weekly Review";
+      return translate("topbar.titleWeeklyReview");
     case "diagnostic":
       return "Diagnostic";
     case "mental-model":
-      return "Mental Model";
+      return translate("topbar.titleMentalModel");
     case "settings":
-      return "Profile & Settings";
+      return translate("nav.profileSettings");
     default:
       return "fonetik";
   }
 }
 
-function viewDescription(view: string): string {
+function viewDescription(view: string, translate: Translate): string {
   switch (view) {
     case "vocabulary":
-      return "Save useful words and practice using them in your own sentences.";
+      return translate("topbar.descVocabulary");
     case "article-practice":
-      return "Turn a real article URL into copyright-safe speaking practice.";
+      return translate("topbar.descArticlePractice");
     case "session-log":
-      return "Review your most recent practice sessions.";
+      return translate("topbar.descSessionLog");
     case "progress":
-      return "Lightweight overview based on stored session history.";
+      return translate("topbar.descProgress");
     case "weekly-review":
-      return "Reserved for a future batch.";
+      return translate("topbar.descWeeklyReview");
     case "mental-model":
-      return "Reserved for a future batch.";
+      return translate("topbar.descMentalModel");
     case "settings":
-      return "Owner-only profile and preferences.";
+      return translate("topbar.descSettings");
     default:
       return "";
   }

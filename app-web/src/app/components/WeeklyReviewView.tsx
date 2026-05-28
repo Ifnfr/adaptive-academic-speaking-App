@@ -1,3 +1,6 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
+
 export type WeeklyReviewResult = {
   summary: string;
   recurringWeakness: string;
@@ -14,6 +17,7 @@ type WeeklyReviewViewProps = {
   weeklyReviewResult: WeeklyReviewResult | null;
   weeklyReviewLoading: boolean;
   weeklyReviewError: string | null;
+  appLanguage?: AppLanguage | null;
   onRunWeeklyReview: () => void;
 };
 
@@ -50,8 +54,10 @@ export function WeeklyReviewView({
   weeklyReviewResult,
   weeklyReviewLoading,
   weeklyReviewError,
+  appLanguage,
   onRunWeeklyReview,
 }: WeeklyReviewViewProps) {
+  const { t } = useI18n(appLanguage);
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -67,42 +73,39 @@ export function WeeklyReviewView({
       <div className={`${cardHeader} flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between`}>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-            AI review
+            {t("common.aiReview")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Weekly Review
+            {t("topbar.titleWeeklyReview")}
           </h2>
           <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-            Summarizes your latest practice sessions with the selected provider.
-            Results are not stored.
+            {t("common.weeklyTagline")}
           </p>
         </div>
         <span className="inline-flex w-fit rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-xs text-[var(--brand-ink-soft)]">
-          {Math.min(sessionsCount, 4)}/4 completed sessions
+          {Math.min(sessionsCount, 4)}/4 {t("review.completedSessions")}
         </span>
       </div>
       <div className={`${cardBody} flex flex-col gap-5`}>
         {sessionsCount < 4 ? (
           <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center">
             <p className="text-sm font-medium text-[var(--brand-ink)]">
-              Weekly Review requires at least 4 completed practice sessions.
+              {t("review.requires4")}
             </p>
             <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-              Complete {4 - sessionsCount} more session
-              {4 - sessionsCount === 1 ? "" : "s"} to unlock this review.
+              {t("review.unlockMore")}
             </p>
           </div>
         ) : (
           <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className={labelClass}>Ready to review</p>
+                <p className={labelClass}>{t("common.readyToReview")}</p>
                 <p className="text-sm text-[var(--brand-ink)]">
-                  Uses the latest {Math.min(sessionsCount, 7)} session summaries
-                  with {provider}.
+                  {t("review.usesLatest")} ({provider})
                 </p>
                 <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                  Transcripts are not sent for this MVP review.
+                  {t("review.transcriptsNotSent")}
                 </p>
               </div>
               <button
@@ -112,8 +115,8 @@ export function WeeklyReviewView({
                 className={`${buttonPrimary} w-full sm:w-auto`}
               >
                 {weeklyReviewLoading
-                  ? "Running weekly review..."
-                  : "Run Weekly Review"}
+                  ? t("review.running")
+                  : t("review.runBtn")}
               </button>
             </div>
           </div>
@@ -126,7 +129,7 @@ export function WeeklyReviewView({
           >
             <p>{weeklyReviewError}</p>
             <p className="mt-1 text-xs opacity-80">
-              You can try again, wait a moment, or switch provider.
+              {t("review.errorTagline")}
             </p>
             <div className="mt-3">
               <button
@@ -135,7 +138,7 @@ export function WeeklyReviewView({
                 disabled={weeklyReviewLoading || sessionsCount < 4}
                 className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {weeklyReviewLoading ? "Trying again..." : "Try Again"}
+                {weeklyReviewLoading ? t("review.tryingAgain") : t("review.tryAgain")}
               </button>
             </div>
           </div>
@@ -144,32 +147,32 @@ export function WeeklyReviewView({
         {weeklyReviewResult && (
           <div className="rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-              Weekly review result
+              {t("review.resultTitle")}
             </h3>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
               <SummaryCell
-                label="Summary"
+                label={t("review.summary")}
                 value={weeklyReviewResult.summary}
                 multiline
               />
               <SummaryCell
-                label="Recurring Weakness"
+                label={t("review.recurringWeakness")}
                 value={weeklyReviewResult.recurringWeakness}
                 multiline
               />
               <SummaryCell
-                label="Best Improvement"
+                label={t("review.bestImprovement")}
                 value={weeklyReviewResult.bestImprovement}
                 multiline
               />
               <SummaryCell
-                label="Score Trend"
+                label={t("review.scoreTrend")}
                 value={weeklyReviewResult.scoreTrend}
                 multiline
               />
               <div className="sm:col-span-2">
                 <SummaryCell
-                  label="Next Week Focus"
+                  label={t("review.nextWeekFocus")}
                   value={weeklyReviewResult.nextWeekFocus}
                   multiline
                 />
@@ -177,7 +180,7 @@ export function WeeklyReviewView({
             </dl>
 
             <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-              <p className={labelClass}>7-Day Recommended Plan</p>
+              <p className={labelClass}>{t("review.plan")}</p>
               <ol className="list-none space-y-1 text-sm text-[var(--brand-ink)]">
                 {weeklyReviewResult.recommendedPlan.map((item, i) => (
                   <li key={i} className="break-words">
@@ -189,7 +192,7 @@ export function WeeklyReviewView({
 
             {weeklyReviewResult.warnings.length > 0 && (
               <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-                <p className={labelClass}>Warnings</p>
+                <p className={labelClass}>{t("common.warnings")}</p>
                 <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
                   {weeklyReviewResult.warnings.map((warning) => (
                     <li key={warning} className="break-words">

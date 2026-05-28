@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 
 type TopbarProps = {
   subtitle: string;
@@ -8,6 +10,7 @@ type TopbarProps = {
   mode: string;
   level: string;
   authSlot?: ReactNode;
+  appLanguage?: AppLanguage | null;
 };
 
 export function Topbar({
@@ -18,7 +21,9 @@ export function Topbar({
   mode,
   level,
   authSlot,
+  appLanguage,
 }: TopbarProps) {
+  const { t } = useI18n(appLanguage);
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
 
@@ -40,7 +45,7 @@ export function Topbar({
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
-          {hasActiveSession ? "Session active" : "Idle"}
+          {hasActiveSession ? t("topbar.sessionActive") : t("topbar.idle")}
         </span>
         <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
           {mode}

@@ -1,3 +1,5 @@
+import type { AppLanguage, Translate } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 import type {
   VocabItem,
   VocabLevel,
@@ -41,6 +43,7 @@ type VocabularyNotebookViewProps = {
   practiceComplete: boolean;
   practiceAcceptedSentenceId: string | null;
   practiceCompletionXpMessage: string | null;
+  appLanguage?: AppLanguage | null;
   onFormWordChange: (value: string) => void;
   onFormMeaningChange: (value: string) => void;
   onFormLevelChange: (value: VocabLevel) => void;
@@ -86,13 +89,6 @@ const VOCAB_STATUSES: readonly VocabStatus[] = [
   "paused",
 ];
 
-function statusLabel(status: VocabStatus): string {
-  if (status === "new") return "New";
-  if (status === "practicing") return "Practicing";
-  if (status === "active") return "Active";
-  if (status === "mastered") return "Mastered";
-  return "Paused";
-}
 
 function sourceLabel(source: VocabSource): string {
   if (source === "manual") return "Manual";
@@ -176,6 +172,7 @@ export function VocabularyNotebookView({
   practiceComplete,
   practiceAcceptedSentenceId,
   practiceCompletionXpMessage,
+  appLanguage,
   onFormWordChange,
   onFormMeaningChange,
   onFormLevelChange,
@@ -197,6 +194,16 @@ export function VocabularyNotebookView({
   onSkipPracticeCard,
   onNextPracticeCard,
 }: VocabularyNotebookViewProps) {
+  const { t } = useI18n(appLanguage);
+
+  function statusLabel(status: VocabStatus): string {
+    if (status === "new") return t("vocab.new");
+    if (status === "practicing") return t("vocab.practicing");
+    if (status === "active") return t("vocab.active");
+    if (status === "mastered") return t("vocab.mastered");
+    return t("vocab.paused");
+  }
+
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -218,27 +225,26 @@ export function VocabularyNotebookView({
     <section className={card}>
       <div className={cardHeader}>
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-          Local notebook
+          {t("vocab.localNotebook")}
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-          Vocabulary Notebook
+          {t("vocab.title")}
         </h2>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-          Move saved words from passive storage into active speaking recall.
-          No AI sentence is generated here.
+          {t("vocab.tagline")}
         </p>
       </div>
 
       <div className={`${cardBody} space-y-6`}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
-          <StatCard label="Total words" value={String(stats.totalCount)} />
-          <StatCard label="New" value={String(stats.byStatus.new)} />
+          <StatCard label={t("vocab.totalWords")} value={String(stats.totalCount)} />
+          <StatCard label={t("vocab.new")} value={String(stats.byStatus.new)} />
           <StatCard
-            label="Practicing"
+            label={t("vocab.practicing")}
             value={String(stats.byStatus.practicing)}
           />
-          <StatCard label="Active" value={String(stats.byStatus.active)} />
-          <StatCard label="Reuse" value={String(stats.totalReuseCount)} />
+          <StatCard label={t("vocab.active")} value={String(stats.byStatus.active)} />
+          <StatCard label={t("vocab.reuse")} value={String(stats.totalReuseCount)} />
         </div>
 
         {message && (
@@ -270,6 +276,9 @@ export function VocabularyNotebookView({
             inputClass={inputClass}
             buttonPrimary={buttonPrimary}
             buttonSecondary={buttonSecondary}
+            statusLabel={statusLabel}
+            sourceLabel={sourceLabel}
+            t={t}
             onFormWordChange={onFormWordChange}
             onFormMeaningChange={onFormMeaningChange}
             onFormLevelChange={onFormLevelChange}
@@ -293,6 +302,8 @@ export function VocabularyNotebookView({
             inputClass={inputClass}
             buttonPrimary={buttonPrimary}
             buttonSecondary={buttonSecondary}
+            statusLabel={statusLabel}
+            sourceLabel={sourceLabel}
             onBackToHome={onBackToHome}
             onDeleteItem={onDeleteItem}
             onStatusChange={onStatusChange}
@@ -350,6 +361,9 @@ function RecentVocabularyHome({
   inputClass,
   buttonPrimary,
   buttonSecondary,
+  statusLabel,
+  sourceLabel,
+  t,
   onFormWordChange,
   onFormMeaningChange,
   onFormLevelChange,
@@ -372,6 +386,9 @@ function RecentVocabularyHome({
   inputClass: string;
   buttonPrimary: string;
   buttonSecondary: string;
+  statusLabel: (status: VocabStatus) => string;
+  sourceLabel: (source: VocabSource) => string;
+  t: Translate;
   onFormWordChange: (value: string) => void;
   onFormMeaningChange: (value: string) => void;
   onFormLevelChange: (value: VocabLevel) => void;
@@ -394,6 +411,8 @@ function RecentVocabularyHome({
         labelClass={labelClass}
         inputClass={inputClass}
         buttonPrimary={buttonPrimary}
+        sourceLabel={sourceLabel}
+        t={t}
         onFormWordChange={onFormWordChange}
         onFormMeaningChange={onFormMeaningChange}
         onFormLevelChange={onFormLevelChange}
@@ -407,11 +426,10 @@ function RecentVocabularyHome({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-              Recent vocabulary
+              {t("vocab.recentVocab")}
             </h3>
             <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-              The newest five words stay here. Use View All for full dictionary
-              details and history.
+              {t("vocab.recentTagline")}
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -421,21 +439,21 @@ function RecentVocabularyHome({
               disabled={items.length === 0}
               className={buttonPrimary}
             >
-              Start Practice
+              {t("vocab.startPractice")}
             </button>
             <button
               type="button"
               onClick={onViewAll}
               className={buttonSecondary}
             >
-              View All / Manage Vocabulary
+              {t("vocab.viewAllManage")}
             </button>
           </div>
         </div>
 
         {recentItems.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)] p-6 text-sm text-[var(--brand-ink-soft)]">
-            No saved vocabulary yet. Add one useful word or phrase to begin.
+            {t("vocab.noVocabYet")}
           </p>
         ) : (
           <ul className="mt-4 grid grid-cols-1 gap-3">
@@ -476,6 +494,8 @@ function AddVocabularyForm({
   labelClass,
   inputClass,
   buttonPrimary,
+  sourceLabel,
+  t,
   onFormWordChange,
   onFormMeaningChange,
   onFormLevelChange,
@@ -493,6 +513,8 @@ function AddVocabularyForm({
   labelClass: string;
   inputClass: string;
   buttonPrimary: string;
+  sourceLabel: (source: VocabSource) => string;
+  t: Translate;
   onFormWordChange: (value: string) => void;
   onFormMeaningChange: (value: string) => void;
   onFormLevelChange: (value: VocabLevel) => void;
@@ -505,17 +527,17 @@ function AddVocabularyForm({
     <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-          Add vocabulary
+          {t("vocab.addWord")}
         </h3>
         <p className="text-xs text-[var(--brand-ink-soft)]">
-          Keep it simple: one useful word or phrase, one clear meaning.
+          {t("vocab.addTagline")}
         </p>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="vocab-word" className={labelClass}>
-            Word or phrase
+            {t("vocab.wordPhrase")}
           </label>
           <input
             id="vocab-word"
@@ -527,7 +549,7 @@ function AddVocabularyForm({
         </div>
         <div>
           <label htmlFor="vocab-meaning" className={labelClass}>
-            Meaning
+            {t("vocab.meaning")}
           </label>
           <input
             id="vocab-meaning"
@@ -539,7 +561,7 @@ function AddVocabularyForm({
         </div>
         <SelectField
           id="vocab-level"
-          label="Level"
+          label={t("setup.level")}
           value={formLevel}
           options={VOCAB_LEVELS}
           getLabel={(value) => value}
@@ -547,7 +569,7 @@ function AddVocabularyForm({
         />
         <SelectField
           id="vocab-source"
-          label="Source"
+          label={t("vocab.source")}
           value={formSource}
           options={VOCAB_SOURCES}
           getLabel={sourceLabel}
@@ -555,7 +577,7 @@ function AddVocabularyForm({
         />
         <div>
           <label htmlFor="vocab-example" className={labelClass}>
-            Example (optional)
+            {t("vocab.example")}
           </label>
           <input
             id="vocab-example"
@@ -567,7 +589,7 @@ function AddVocabularyForm({
         </div>
         <div>
           <label htmlFor="vocab-collocations" className={labelClass}>
-            Collocations (optional)
+            {t("vocab.collocations")}
           </label>
           <input
             id="vocab-collocations"
@@ -581,7 +603,7 @@ function AddVocabularyForm({
 
       <div className="mt-4">
         <button type="button" onClick={onAddItem} className={buttonPrimary}>
-          Add Vocabulary
+          {t("vocab.addBtn")}
         </button>
       </div>
     </div>
@@ -598,6 +620,8 @@ function ManageVocabularyView({
   inputClass,
   buttonPrimary,
   buttonSecondary,
+  statusLabel,
+  sourceLabel,
   onBackToHome,
   onDeleteItem,
   onStatusChange,
@@ -615,6 +639,8 @@ function ManageVocabularyView({
   inputClass: string;
   buttonPrimary: string;
   buttonSecondary: string;
+  statusLabel: (status: VocabStatus) => string;
+  sourceLabel: (source: VocabSource) => string;
   onBackToHome: () => void;
   onDeleteItem: (id: string) => void;
   onStatusChange: (id: string, status: VocabStatus) => void;
@@ -654,6 +680,8 @@ function ManageVocabularyView({
                   item={item}
                   inputClass={inputClass}
                   buttonSecondary={buttonSecondary}
+                  statusLabel={statusLabel}
+                  sourceLabel={sourceLabel}
                   onStatusChange={onStatusChange}
                   onSelectPracticeItem={onSelectPracticeItem}
                   onDeleteItem={onDeleteItem}
@@ -685,6 +713,8 @@ function VocabularyManageCard({
   item,
   inputClass,
   buttonSecondary,
+  statusLabel,
+  sourceLabel,
   onStatusChange,
   onSelectPracticeItem,
   onDeleteItem,
@@ -692,6 +722,8 @@ function VocabularyManageCard({
   item: VocabItem;
   inputClass: string;
   buttonSecondary: string;
+  statusLabel: (status: VocabStatus) => string;
+  sourceLabel: (source: VocabSource) => string;
   onStatusChange: (id: string, status: VocabStatus) => void;
   onSelectPracticeItem: (id: string) => void;
   onDeleteItem: (id: string) => void;
