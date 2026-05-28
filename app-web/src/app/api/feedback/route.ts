@@ -17,6 +17,8 @@ type FeedbackRequest = {
   todayTarget: string;
   transcript: string;
   durationSeconds: number;
+  feedbackLanguage: FeedbackLanguage;
+  targetLanguage: TargetLanguage;
 };
 
 type QuickFeedback = {
@@ -48,6 +50,9 @@ type FeedbackResponse = QuickFeedback & {
   scores: Scores;
 };
 
+type FeedbackLanguage = "en" | "id";
+type TargetLanguage = "en";
+
 // Score dimensions per level. Keys are camelCase to match the JSON shape.
 const FOUNDATION_KEYS = ["fluency", "coherence"] as const;
 const BEGINNER_KEYS = ["fluency", "grammar", "coherence"] as const;
@@ -74,9 +79,34 @@ function scoreKeysForLevel(level: string): readonly ScoreKey[] {
 
 // ---------- Prompt building ----------
 
-function buildSystemPrompt(level: string): string {
+function feedbackLanguageLabel(language: FeedbackLanguage): string {
+  return language === "id" ? "Indonesian" : "English";
+}
+
+function targetLanguageLabel(language: TargetLanguage): string {
+  return language === "en" ? "English" : "English";
+}
+
+function buildLanguagePolicy(req: FeedbackRequest): string {
+  return [
+    "LANGUAGE POLICY:",
+    `- Evaluate the learner's transcript as ${targetLanguageLabel(req.targetLanguage)}.`,
+    `- Write mainWeakness, evidence, retryTask, and feedback explanations in ${feedbackLanguageLabel(req.feedbackLanguage)}.`,
+    `- Keep betterPhrase and any corrected phrase examples in ${targetLanguageLabel(req.targetLanguage)}.`,
+    "- Do not translate the full learner transcript.",
+    "- If evidence quotes or paraphrases the learner, keep the learner's wording in the target language and explain around it in the feedback language.",
+    ...(req.feedbackLanguage === "id"
+      ? [
+          "- Use concise, beginner-friendly Indonesian.",
+          "- Avoid long grammar terminology unless necessary.",
+        ]
+      : []),
+  ].join("\n");
+}
+
+function buildSystemPrompt(req: FeedbackRequest): string {
   const foundationRule =
-    level === "Foundation"
+    req.level === "Foundation"
       ? [
           "LEVEL RULE (Foundation):",
           "- Do NOT correct grammar.",
@@ -91,7 +121,7 @@ function buildSystemPrompt(level: string): string {
           '- The "scores" object MUST contain exactly: fluency, coherence.',
           "- Do NOT include grammar, vocabulary, argument, or academicTone keys.",
         ].join("\n")
-      : level === "Beginner"
+      : req.level === "Beginner"
         ? [
             "LEVEL RULE (Beginner):",
             "- Evaluate fluency, grammar, and coherence only.",
@@ -111,6 +141,8 @@ function buildSystemPrompt(level: string): string {
     "moment from the transcript. Never invent transcript details.",
     "",
     foundationRule,
+    "",
+    buildLanguagePolicy(req),
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -242,6 +274,14 @@ function normalizeScores(level: string, raw: unknown): Scores {
     result[key] = clampScore(source[key]);
   }
   return result as Scores;
+}
+
+function normalizeFeedbackLanguage(value: unknown): FeedbackLanguage {
+  return value === "id" ? "id" : "en";
+}
+
+function normalizeTargetLanguage(value: unknown): TargetLanguage {
+  return value === "en" ? "en" : "en";
 }
 
 // ---------- Provider callers ----------
@@ -430,6 +470,8 @@ function validateRequest(body: unknown): FeedbackRequest | string {
     todayTarget: typeof b.todayTarget === "string" ? b.todayTarget : "",
     transcript,
     durationSeconds,
+    feedbackLanguage: normalizeFeedbackLanguage(b.feedbackLanguage),
+    targetLanguage: normalizeTargetLanguage(b.targetLanguage),
   };
 }
 
@@ -470,7 +512,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt(validated.level);
+  const systemPrompt = buildSystemPrompt(validated);
   const userPrompt = buildUserPrompt(validated);
 
   let raw = "";

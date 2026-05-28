@@ -32,7 +32,7 @@ test.describe("AI Idempotency - Key Hashing", () => {
 });
 
 test.describe("AI Idempotency - Request Hashing", () => {
-  test("getArticlePracticeRequestHash is deterministic, normalizes URLs, and includes model & promptVersion", () => {
+  test("getArticlePracticeRequestHash is deterministic, normalizes URLs, and includes model & promptVersion & languages", () => {
     const inputs1 = {
       url: "  HTTPS://EXAMPLE.COM/path?ref=123  ",
       level: "Intermediate",
@@ -41,6 +41,8 @@ test.describe("AI Idempotency - Request Hashing", () => {
       mode: "Reading",
       focus: "Vocabulary",
       promptVersion: "v1.0",
+      feedbackLanguage: "en",
+      targetLanguage: "en",
     };
     const inputs2 = {
       url: "https://example.com/path",
@@ -50,6 +52,8 @@ test.describe("AI Idempotency - Request Hashing", () => {
       mode: "Reading",
       focus: "Vocabulary",
       promptVersion: "v1.0",
+      feedbackLanguage: "en",
+      targetLanguage: "en",
     };
 
     const hash1 = getArticlePracticeRequestHash(inputs1);
@@ -73,6 +77,12 @@ test.describe("AI Idempotency - Request Hashing", () => {
       model: "gemini-2.5-flash",
     });
     expect(hash1).not.toBe(hashDiffModel);
+
+    const hashDiffLang = getArticlePracticeRequestHash({
+      ...inputs1,
+      feedbackLanguage: "id",
+    });
+    expect(hash1).not.toBe(hashDiffLang);
   });
 });
 

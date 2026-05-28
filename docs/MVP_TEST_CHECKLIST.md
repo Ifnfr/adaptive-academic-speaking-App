@@ -231,12 +231,12 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Local stats are counts/summaries only: XP, speaker level, streak, sessions, vocabulary, badges, active recall, and article practice
 - [ ] Signed-in mode shows account/profile card with avatar, display name, bio, and joined date when available
 - [ ] Signed-in email is labeled private/account-only
-- [ ] Language preferences are visible as coming-soon placeholders only
+- [ ] Language preferences selectors render App Language and Feedback Language options (English and Indonesian)
 - [ ] `public_profile_enabled` defaults false
 - [ ] `leaderboard_opt_in` defaults false
 - [ ] Toggle copy says no public profile page or leaderboard exists yet
 - [ ] Privacy copy says transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, session CSV content, XP event source IDs, and private notes are not published
-- [ ] Save sends only displayName, bio, publicProfileEnabled, and leaderboardOptIn
+- [ ] Save sends displayName, bio, publicProfileEnabled, leaderboardOptIn, preferredAppLanguage, feedbackLanguage, and targetLanguage
 - [ ] Save failure shows a non-blocking message and does not affect local learning data
 - [ ] Profile UI does not write learning data to localStorage
 - [ ] No public profile route, leaderboard route, public profile link, or leaderboard link is visible
@@ -382,3 +382,19 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] All database actions use the server-only `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] No raw article text, HTML, transcripts, user sentences, CSV, or personal content is stored in idempotency rows
 - [ ] Personal/semi-personal AI routes are not globally cached or idempotent
+
+## 22. Localization and Multi-Language Support
+
+- [ ] Selecting App Language "id" immediately changes UI text and labels to Indonesian across the Sidebar, Topbar, Session Setup, Vocabulary Notebook, Article Practice, Progress, Session Log, Weekly Review, Mental Model, and Profile & Settings views
+- [ ] Selecting App Language "en" restores all UI text and labels back to English
+- [ ] Missing app language localization keys default safely to English UI text without crashing
+- [ ] Changing Feedback Language to "id" and performing a session attempt returns AI feedback explanations in Indonesian, while keeping the corrected sentence, words, target structures, and reference models in English
+- [ ] Changing Feedback Language to "id" for diagnostic tests, weekly reviews, mental models, vocabulary corrections, and article practice returns explanations/instructions in Indonesian, keeping English target sentences and vocabulary terms untranslated
+- [ ] Indonesian AI feedback is concise and beginner-friendly
+- [ ] Missing or invalid incoming `feedbackLanguage` values on AI routes fall back safely to English ("en")
+- [ ] Missing or invalid incoming `targetLanguage` values on AI routes fall back safely to English ("en")
+- [ ] Target practice language is restricted to English only (no options for other target languages in Profile & Settings)
+- [ ] Stored session transcripts, history logs, vocabulary lists, and previous AI corrections are not translated retroactively when changing App Language or Feedback Language
+- [ ] Changing Feedback Language or Target Language correctly isolates cache keys and request hashes in Article Practice (e.g. English vs Indonesian requests map to different keys, preventing improper replay)
+- [ ] Changing Feedback Language or Target Language correctly isolates idempotency request hashes in Article Practice
+

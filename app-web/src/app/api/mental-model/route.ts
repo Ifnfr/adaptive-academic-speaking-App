@@ -24,6 +24,8 @@ type MentalModelRequest = {
   focus: string;
   latestWeakness: string;
   latestRetryTask: string;
+  feedbackLanguage: FeedbackLanguage;
+  targetLanguage: TargetLanguage;
 };
 
 type MentalModelResponse = {
@@ -40,9 +42,36 @@ type MentalModelParseResult =
   | { ok: true; value: MentalModelResponse }
   | { ok: false; reason: "parse" | "validation" };
 
+type FeedbackLanguage = "en" | "id";
+type TargetLanguage = "en";
+
 // ---------- Prompt building ----------
 
-function buildSystemPrompt(): string {
+function feedbackLanguageLabel(language: FeedbackLanguage): string {
+  return language === "id" ? "Indonesian" : "English";
+}
+
+function targetLanguageLabel(language: TargetLanguage): string {
+  return language === "en" ? "English" : "English";
+}
+
+function buildLanguagePolicy(req: MentalModelRequest): string {
+  return [
+    "LANGUAGE POLICY:",
+    `- Write coreStandard, qualityCriteria, weakPattern, strongPattern, selfCheckQuestions, and microDrill in ${feedbackLanguageLabel(req.feedbackLanguage)}.`,
+    `- Keep referenceModel in ${targetLanguageLabel(req.targetLanguage)} because it is a target-language speech pattern sample.`,
+    `- Keep examples inside explanation fields in ${targetLanguageLabel(req.targetLanguage)} when they are target-language examples.`,
+    "- Do not translate full learner transcripts or session content.",
+    ...(req.feedbackLanguage === "id"
+      ? [
+          "- Use concise, beginner-friendly Indonesian.",
+          "- Avoid long grammar terminology unless necessary.",
+        ]
+      : []),
+  ].join("\n");
+}
+
+function buildSystemPrompt(req: MentalModelRequest): string {
   return [
     "You are an academic speaking coach teaching mental models for speaking practice.",
     "Your job is to help the learner recognize what a strong academic speaking response sounds like before they practice.",
@@ -50,6 +79,8 @@ function buildSystemPrompt(): string {
     "Do not produce a full essay, full answer, or memorization script.",
     "Teach general standards, response patterns, evaluation habits, and contrastive examples.",
     "Keep the reference model short, generic, and framed as a pattern sample rather than an answer to copy.",
+    "",
+    buildLanguagePolicy(req),
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -121,6 +152,14 @@ function normalizeLevel(value: unknown): Level | null {
     (level) => level.toLowerCase() === value.trim().toLowerCase(),
   );
   return match ? (match as Level) : null;
+}
+
+function normalizeFeedbackLanguage(value: unknown): FeedbackLanguage {
+  return value === "id" ? "id" : "en";
+}
+
+function normalizeTargetLanguage(value: unknown): TargetLanguage {
+  return value === "en" ? "en" : "en";
 }
 
 function normalizeShortList(raw: unknown): string[] | null {
@@ -271,6 +310,8 @@ function validateRequest(body: unknown): MentalModelRequest | string {
     focus,
     latestWeakness: normalizeString(source.latestWeakness, 500),
     latestRetryTask: normalizeString(source.latestRetryTask, 500),
+    feedbackLanguage: normalizeFeedbackLanguage(source.feedbackLanguage),
+    targetLanguage: normalizeTargetLanguage(source.targetLanguage),
   };
 }
 
@@ -459,7 +500,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(validated);
   const userPrompt = buildUserPrompt(validated);
 
   let raw = "";

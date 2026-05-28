@@ -23,6 +23,8 @@ type DiagnosticRequest = {
   durationSeconds: number;
   currentLevel: string;
   todayTarget: string;
+  feedbackLanguage: FeedbackLanguage;
+  targetLanguage: TargetLanguage;
 };
 
 type DiagnosticScores = {
@@ -42,6 +44,9 @@ type DiagnosticResponse = {
   sevenDayFocusPlan: string[];
 };
 
+type FeedbackLanguage = "en" | "id";
+type TargetLanguage = "en";
+
 // ---------- Prompt building ----------
 
 const SCORE_KEYS = [
@@ -53,7 +58,32 @@ const SCORE_KEYS = [
   "academicTone",
 ] as const;
 
-function buildSystemPrompt(): string {
+function feedbackLanguageLabel(language: FeedbackLanguage): string {
+  return language === "id" ? "Indonesian" : "English";
+}
+
+function targetLanguageLabel(language: TargetLanguage): string {
+  return language === "en" ? "English" : "English";
+}
+
+function buildLanguagePolicy(req: DiagnosticRequest): string {
+  return [
+    "LANGUAGE POLICY:",
+    `- Evaluate the learner's speaking ability as ${targetLanguageLabel(req.targetLanguage)}.`,
+    `- Write mainBottleneck, summary, sevenDayFocusPlan, explanations, and warnings in ${feedbackLanguageLabel(req.feedbackLanguage)}.`,
+    `- Keep reusable speaking phrases and templates in ${targetLanguageLabel(req.targetLanguage)}.`,
+    "- Do not translate the full learner transcript or session content.",
+    "- Keep recommendedLevel and scores unchanged as structured values.",
+    ...(req.feedbackLanguage === "id"
+      ? [
+          "- Use concise, beginner-friendly Indonesian.",
+          "- Avoid long grammar terminology unless necessary.",
+        ]
+      : []),
+  ].join("\n");
+}
+
+function buildSystemPrompt(req: DiagnosticRequest): string {
   return [
     "You are an academic speaking coach running a quick diagnostic.",
     "Your job is to estimate the learner's current level and the single",
@@ -63,6 +93,8 @@ function buildSystemPrompt(): string {
     "Use the diagnostic recommendedLevel as the basis for the 7-day focus plan.",
     "The 7-day focus plan must be level-appropriate practical speaking drills, not reading or research homework only.",
     "Every plan item must include a concrete speaking action the learner can do.",
+    "",
+    buildLanguagePolicy(req),
     "",
     "LEVEL-SPECIFIC PLAN GUIDANCE:",
     "Foundation:",
@@ -195,6 +227,14 @@ function normalizePlan(raw: unknown): string[] {
     }
   }
   return base;
+}
+
+function normalizeFeedbackLanguage(value: unknown): FeedbackLanguage {
+  return value === "id" ? "id" : "en";
+}
+
+function normalizeTargetLanguage(value: unknown): TargetLanguage {
+  return value === "en" ? "en" : "en";
 }
 
 function isFoundationPlanItemAllowed(item: string): boolean {
@@ -427,6 +467,8 @@ function validateRequest(body: unknown): DiagnosticRequest | string {
     durationSeconds,
     currentLevel: typeof b.currentLevel === "string" ? b.currentLevel : "",
     todayTarget: typeof b.todayTarget === "string" ? b.todayTarget : "",
+    feedbackLanguage: normalizeFeedbackLanguage(b.feedbackLanguage),
+    targetLanguage: normalizeTargetLanguage(b.targetLanguage),
   };
 }
 
@@ -470,7 +512,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(validated);
   const userPrompt = buildUserPrompt(validated);
 
   let raw = "";

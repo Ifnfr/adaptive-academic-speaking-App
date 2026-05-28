@@ -1,3 +1,6 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
+
 type SessionLogSession = {
   id: string;
   date: string;
@@ -10,6 +13,7 @@ type SessionLogSession = {
 type SessionLogViewProps = {
   sessions: SessionLogSession[];
   lastCsvCopied: boolean;
+  appLanguage?: AppLanguage | null;
   onCopyLastCsv: () => void | Promise<void>;
   onGoToActiveSession: () => void;
 };
@@ -44,9 +48,11 @@ function SummaryCell({
 export function SessionLogView({
   sessions,
   lastCsvCopied,
+  appLanguage,
   onCopyLastCsv,
   onGoToActiveSession,
 }: SessionLogViewProps) {
+  const { t } = useI18n(appLanguage);
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -60,15 +66,15 @@ export function SessionLogView({
       <div className={`${cardHeader} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-            History
+            {t("log.history")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Session Log
+            {t("log.title")}
           </h2>
           <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
             {sessions.length === 0
-              ? "No sessions stored yet. Complete one from Active Session to populate this log."
-              : `Showing the ${Math.min(sessions.length, 5)} most recent of ${sessions.length} stored.`}
+              ? t("log.taglineEmpty")
+              : `${t("log.taglineShowing")} ${Math.min(sessions.length, 5)} ${t("log.taglineOf")} ${sessions.length} ${t("log.taglineStored")}`}
           </p>
         </div>
         {sessions.length > 0 && (
@@ -78,14 +84,14 @@ export function SessionLogView({
               onClick={onCopyLastCsv}
               className={buttonSecondary}
             >
-              Copy Last CSV
+              {t("log.copyCsvBtn")}
             </button>
             {lastCsvCopied && (
               <span
                 role="status"
                 className="text-xs font-medium text-[var(--brand-teal-ink)]"
               >
-                Copied
+                {t("log.copied")}
               </span>
             )}
           </div>
@@ -95,14 +101,14 @@ export function SessionLogView({
         {sessions.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center">
             <p className="text-sm text-[var(--brand-ink-soft)]">
-              Your completed sessions will appear here.
+              {t("log.emptyMessage")}
             </p>
             <button
               type="button"
               onClick={onGoToActiveSession}
               className={`${buttonSecondary} mt-4`}
             >
-              Go to Active Session
+              {t("log.goToActive")}
             </button>
           </div>
         ) : (
@@ -123,12 +129,12 @@ export function SessionLogView({
                 </div>
                 <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
                   <SummaryCell
-                    label="Main Weakness"
+                    label={t("log.mainWeakness")}
                     value={s.mainWeakness}
                     multiline
                   />
                   <SummaryCell
-                    label="Next Target"
+                    label={t("log.nextTarget")}
                     value={s.retryTask}
                     multiline
                   />

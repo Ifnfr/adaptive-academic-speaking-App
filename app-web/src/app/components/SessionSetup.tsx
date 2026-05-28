@@ -1,3 +1,6 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
+
 type SessionSetupProps = {
   level: string;
   mode: string;
@@ -12,6 +15,7 @@ type SessionSetupProps = {
   feedbackTypes: readonly string[];
   sessionTypes: readonly string[];
   aiProviders: readonly string[];
+  appLanguage?: AppLanguage | null;
   onLevelChange: (value: string) => void;
   onModeChange: (value: string) => void;
   onFeedbackTypeChange: (value: string) => void;
@@ -56,14 +60,6 @@ function SelectField({ label, value, options, onChange }: SelectFieldProps) {
   );
 }
 
-function modeDescription(mode: string): string {
-  if (mode === "Diagnostic") return "Baseline assessment";
-  if (mode === "Fluency Sprint") return "Speak without stopping";
-  if (mode === "Argument Drill") return "Defend a position";
-  if (mode === "Reading-to-Speaking") return "Explain an excerpt";
-  return "Make a debatable claim";
-}
-
 export function SessionSetup({
   level,
   mode,
@@ -78,6 +74,7 @@ export function SessionSetup({
   feedbackTypes,
   sessionTypes,
   aiProviders,
+  appLanguage,
   onLevelChange,
   onModeChange,
   onFeedbackTypeChange,
@@ -86,6 +83,16 @@ export function SessionSetup({
   onTargetChange,
   onStartSession,
 }: SessionSetupProps) {
+  const { t } = useI18n(appLanguage);
+
+  function modeDescription(m: string): string {
+    if (m === "Diagnostic") return t("setup.descDiagnostic");
+    if (m === "Fluency Sprint") return t("setup.descFluencySprint");
+    if (m === "Argument Drill") return t("setup.descArgumentDrill");
+    if (m === "Reading-to-Speaking") return t("setup.descReadingSpeaking");
+    return t("setup.descDebate");
+  }
+
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -102,19 +109,19 @@ export function SessionSetup({
     <section className={card}>
       <div className={cardHeader}>
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-          Step 1
+          {t("setup.step1")}
         </p>
         <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-          Session setup
+          {t("setup.title")}
         </h2>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-          Pick your mode visibly, set the rest, then start.
+          {t("setup.tagline")}
         </p>
       </div>
       <div className={cardBody}>
         {/* Mode cards (replaces the old dropdown) */}
         <fieldset>
-          <legend className={labelClass}>Mode</legend>
+          <legend className={labelClass}>{t("setup.mode")}</legend>
           <div
             role="radiogroup"
             aria-label="Practice mode"
@@ -143,7 +150,7 @@ export function SessionSetup({
                   </span>
                   {isDiagnostic && (
                     <span className="mt-1 inline-flex items-center rounded-full border border-[var(--brand-gold)]/50 bg-[var(--brand-gold-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--brand-ink)]">
-                      Assessment
+                      {t("setup.assessment")}
                     </span>
                   )}
                 </button>
@@ -155,25 +162,25 @@ export function SessionSetup({
         {/* Other controls */}
         <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
           <SelectField
-            label="Level"
+            label={t("setup.level")}
             value={level}
             options={levels}
             onChange={onLevelChange}
           />
           <SelectField
-            label="Feedback Type"
+            label={t("setup.feedbackType")}
             value={feedbackType}
             options={feedbackTypes}
             onChange={onFeedbackTypeChange}
           />
           <SelectField
-            label="Session Type"
+            label={t("setup.sessionType")}
             value={sessionType}
             options={sessionTypes}
             onChange={onSessionTypeChange}
           />
           <SelectField
-            label="AI Provider"
+            label={t("setup.aiProvider")}
             value={aiProvider}
             options={aiProviders}
             onChange={onAiProviderChange}
@@ -181,14 +188,14 @@ export function SessionSetup({
 
           <div className="sm:col-span-2">
             <label htmlFor="target" className={labelClass}>
-              Today&apos;s Target
+              {t("setup.todaysTarget")}
             </label>
             <textarea
               id="target"
               value={target}
               onChange={(e) => onTargetChange(e.target.value)}
               rows={3}
-              placeholder="What do you want to improve in this session?"
+              placeholder={t("setup.targetPlaceholder")}
               className={`${inputClass} resize-y`}
             />
           </div>
@@ -197,8 +204,7 @@ export function SessionSetup({
         <div className="mt-6">
           {!hasPreviousSession && (
             <p className="mb-3 text-xs text-[var(--brand-ink-soft)]">
-              No previous weakness yet. Complete one session to activate
-              weakness repetition.
+              {t("setup.noPreviousWeakness")}
             </p>
           )}
           <button
@@ -206,7 +212,7 @@ export function SessionSetup({
             onClick={onStartSession}
             className={`${buttonPrimary} w-full sm:w-auto`}
           >
-            {hasActiveSession ? "Restart Session" : "Start Session"}
+            {hasActiveSession ? t("setup.restartSession") : t("setup.startSession")}
           </button>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 import type {
   LevelUpCheckResult,
   LevelUpStatus,
@@ -6,6 +8,7 @@ import type {
 type LevelUpCheckPanelProps = {
   result: LevelUpCheckResult;
   onApplyNextLevel: () => void;
+  appLanguage?: AppLanguage | null;
 };
 
 function levelUpStatusClasses(status: LevelUpStatus): string {
@@ -50,25 +53,34 @@ function SummaryCell({
 export function LevelUpCheckPanel({
   result,
   onApplyNextLevel,
+  appLanguage,
 }: LevelUpCheckPanelProps) {
+  const { t } = useI18n(appLanguage);
   const canApply = result.status === "Ready" && result.nextLevel !== null;
   const labelClass =
     "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
   const buttonPrimary =
     "rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:bg-[var(--brand-border-strong)] disabled:text-[var(--brand-muted)]";
 
+  const statusLabels: Record<LevelUpStatus, string> = {
+    Ready: t("progress.statusReady"),
+    "Almost ready": t("progress.statusAlmostReady"),
+    "Not ready yet": t("progress.statusNotReady"),
+    "Max level reached": t("progress.statusMaxReached"),
+  };
+
   return (
     <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
-            Level-Up Check
+            {t("progress.levelUpCheck")}
           </p>
           <h3 className="mt-1 text-base font-semibold text-[var(--brand-ink)]">
-            Local readiness check
+            {t("progress.localReadiness")}
           </h3>
           <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-            Based only on completed sessions stored in this browser.
+            {t("progress.basedOnSessions")}
           </p>
         </div>
         <span
@@ -76,18 +88,18 @@ export function LevelUpCheckPanel({
             result.status,
           )}`}
         >
-          {result.status}
+          {statusLabels[result.status]}
         </span>
       </div>
 
       <dl className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCell label="Current Level" value={result.currentLevel} />
-        <SummaryCell label="Next Level" value={result.nextLevel ?? "None"} />
+        <SummaryCell label={t("progress.currentLevel")} value={result.currentLevel} />
+        <SummaryCell label={t("progress.nextLevel")} value={result.nextLevel ?? t("progress.none")} />
         <SummaryCell
-          label="Valid Sessions"
+          label={t("progress.validSessions")}
           value={
             result.requiredSessionCount === 0
-              ? "Not required"
+              ? t("progress.notRequired")
               : `${result.validSessionCount}/${result.requiredSessionCount}`
           }
           mono
@@ -96,7 +108,7 @@ export function LevelUpCheckPanel({
 
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div>
-          <p className={labelClass}>Evidence</p>
+          <p className={labelClass}>{t("progress.evidence")}</p>
           <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
             {result.evidence.map((item) => (
               <li key={item}>{item}</li>
@@ -105,10 +117,10 @@ export function LevelUpCheckPanel({
         </div>
 
         <div>
-          <p className={labelClass}>Missing requirements</p>
+          <p className={labelClass}>{t("progress.missingReq")}</p>
           {result.missingRequirements.length === 0 ? (
             <p className="text-sm text-[var(--brand-teal-ink)]">
-              No missing requirements.
+              {t("progress.noMissingReq")}
             </p>
           ) : (
             <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
@@ -120,7 +132,7 @@ export function LevelUpCheckPanel({
         </div>
 
         <div>
-          <p className={labelClass}>Recommended next action</p>
+          <p className={labelClass}>{t("progress.nextAction")}</p>
           <p className="text-sm text-[var(--brand-ink)]">
             {result.recommendedNextAction}
           </p>
@@ -130,7 +142,7 @@ export function LevelUpCheckPanel({
               onClick={onApplyNextLevel}
               className={`${buttonPrimary} mt-4 w-full sm:w-auto`}
             >
-              Apply Next Level
+              {t("progress.applyNextBtn")}
             </button>
           )}
         </div>

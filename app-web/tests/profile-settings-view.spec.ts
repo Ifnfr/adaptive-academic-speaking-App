@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import {
+  buildProfileSettingsPreferencesPatch,
+  getProfileLanguagePreferenceState,
+} from "../src/app/components/ProfileSettingsView";
+import {
   applyProfilePreferencesPatchToProfile,
   mapProfilePreferencesPatchToSupabaseUpdate,
 } from "../src/app/lib/storage/supabase-profile-adapter";
@@ -52,6 +56,9 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
       bio: "Short bio.",
       publicProfileEnabled: true,
       leaderboardOptIn: false,
+      preferredAppLanguage: "id",
+      feedbackLanguage: "id",
+      targetLanguage: "en",
     };
     const update = mapProfilePreferencesPatchToSupabaseUpdate(patch);
     const keys = Object.keys(update);
@@ -59,6 +66,9 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
     expect(keys).toContain("bio");
     expect(keys).toContain("public_profile_enabled");
     expect(keys).toContain("leaderboard_opt_in");
+    expect(keys).toContain("preferred_app_language");
+    expect(keys).toContain("feedback_language");
+    expect(keys).toContain("target_language");
     // Email must not appear (it's excluded from UserProfilePreferencesPatch)
     expect(keys).not.toContain("email");
   });
@@ -141,6 +151,81 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
     expect(next.targetLanguage).toBe(baseProfile.targetLanguage);
     expect(next.publicProfileEnabled).toBe(true);
     expect(next.leaderboardOptIn).toBe(true);
+  });
+
+  test("language preference state normalizes invalid or null profile values safely", () => {
+    const state = getProfileLanguagePreferenceState(
+      {
+        preferredAppLanguage: "fr",
+        feedbackLanguage: null,
+        targetLanguage: "id",
+      },
+      null,
+    );
+    expect(state.appLanguage).toBe("en");
+    expect(state.feedbackLanguage).toBe("en");
+    expect(state.targetLanguage).toBe("en");
+    expect(state.appLanguageOptions).toEqual(["en", "id"]);
+    expect(state.feedbackLanguageOptions).toEqual(["en", "id"]);
+    expect(state.targetLanguageOptions).toEqual(["en"]);
+  });
+
+  test("language preference state uses loaded profile values when valid", () => {
+    const state = getProfileLanguagePreferenceState(
+      {
+        preferredAppLanguage: "id",
+        feedbackLanguage: "id",
+        targetLanguage: "en",
+      },
+      "en",
+    );
+    expect(state.appLanguage).toBe("id");
+    expect(state.feedbackLanguage).toBe("id");
+    expect(state.targetLanguage).toBe("en");
+  });
+
+  test("profile settings save payload includes language preferences and safe fields only", () => {
+    const patch = buildProfileSettingsPreferencesPatch({
+      displayName: " Test User ",
+      bio: " Short bio. ",
+      publicProfileEnabled: false,
+      leaderboardOptIn: true,
+      preferredAppLanguage: "id",
+      feedbackLanguage: "id",
+    });
+    expect(patch).toEqual({
+      displayName: "Test User",
+      bio: "Short bio.",
+      publicProfileEnabled: false,
+      leaderboardOptIn: true,
+      preferredAppLanguage: "id",
+      feedbackLanguage: "id",
+      targetLanguage: "en",
+    });
+    expect(Object.keys(patch).sort()).toEqual(
+      [
+        "bio",
+        "displayName",
+        "feedbackLanguage",
+        "leaderboardOptIn",
+        "preferredAppLanguage",
+        "publicProfileEnabled",
+        "targetLanguage",
+      ].sort(),
+    );
+  });
+
+  test("applying language preferences updates optimistic profile state", () => {
+    const next = applyProfilePreferencesPatchToProfile(baseProfile, {
+      preferredAppLanguage: "id",
+      feedbackLanguage: "id",
+      targetLanguage: "en",
+    });
+    expect(next.preferredAppLanguage).toBe("id");
+    expect(next.feedbackLanguage).toBe("id");
+    expect(next.targetLanguage).toBe("en");
+    expect(next.email).toBe(baseProfile.email);
+    expect(next.avatarUrl).toBe(baseProfile.avatarUrl);
   });
 });
 

@@ -1,3 +1,5 @@
+import type { AppLanguage } from "../lib/i18n";
+import { useI18n } from "../lib/i18n";
 import type { LevelUpCheckResult } from "../lib/level-up";
 import type { SpeakerLevelProgress, XpProfile } from "../lib/gamification";
 import { GamificationPanel } from "./GamificationPanel";
@@ -20,6 +22,7 @@ type ProgressViewProps = {
   xpEventsCount: number;
   badgesCount: number;
   earnedBadgeLabels: string[];
+  appLanguage?: AppLanguage | null;
   onApplyNextLevel: () => void;
   onClaimXp: () => void;
 };
@@ -35,9 +38,11 @@ export function ProgressView({
   xpEventsCount,
   badgesCount,
   earnedBadgeLabels,
+  appLanguage,
   onApplyNextLevel,
   onClaimXp,
 }: ProgressViewProps) {
+  const { t } = useI18n(appLanguage);
   const total = sessions.length;
   const modeCounts = sessions.reduce<Record<string, number>>((acc, s) => {
     acc[s.mode] = (acc[s.mode] ?? 0) + 1;
@@ -61,6 +66,7 @@ export function ProgressView({
           xpEventsCount={xpEventsCount}
           badgesCount={badgesCount}
           earnedBadgeLabels={earnedBadgeLabels}
+          appLanguage={appLanguage}
           onClaimXp={onClaimXp}
         />
       </div>
@@ -69,51 +75,52 @@ export function ProgressView({
         <LevelUpCheckPanel
           result={levelUpCheck}
           onApplyNextLevel={onApplyNextLevel}
+          appLanguage={appLanguage}
         />
       </div>
 
       <div>
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-          Sessions completed
+          {t("progress.sessionsCompleted")}
         </p>
         <p className="font-mono text-3xl font-semibold tabular-nums text-[var(--brand-ink)]">
           {total}
         </p>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-          Stored locally · max 20
+          {t("sidebar.storedLocally")} · {t("sidebar.max20")}
         </p>
       </div>
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
-          Day Streak
+          {t("sidebar.dayStreak")}
         </p>
         <p className="font-mono text-3xl font-semibold tabular-nums text-[var(--brand-ink)]">
           {dayStreak}
         </p>
         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
           {dayStreak === 0
-            ? "Practice today to start"
-            : "Consecutive practice days"}
+            ? t("progress.streakTaglineStart")
+            : t("progress.streakTaglineConsecutive")}
         </p>
       </div>
       <div>
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-          Latest session
+          {t("progress.latestSession")}
         </p>
         <p className="text-sm text-[var(--brand-ink)]">
           {sessions[0]
             ? `${sessions[0].date} · ${sessions[0].mode}`
-            : "No data"}
+            : t("progress.noData")}
         </p>
       </div>
 
       <div className="sm:col-span-3">
         <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-          Sessions by mode
+          {t("progress.sessionsByMode")}
         </p>
         {sessions.length === 0 ? (
           <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 text-sm text-[var(--brand-ink-soft)]">
-            Complete at least one session to see progress.
+            {t("progress.completeToSee")}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -138,11 +145,11 @@ export function ProgressView({
 
       <div className="sm:col-span-3">
         <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-          Sessions by level
+          {t("progress.sessionsByLevel")}
         </p>
         {sessions.length === 0 ? (
           <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 text-sm text-[var(--brand-ink-soft)]">
-            Level counts will appear after your first completed session.
+            {t("progress.levelAppear")}
           </p>
         ) : (
           <ul className="space-y-2">

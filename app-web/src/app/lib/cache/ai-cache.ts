@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
 export const PROMPT_VERSIONS = {
-  articlePractice: "v1.0",
+  articlePractice: "v1.1",
 };
 
 /**
@@ -68,6 +68,8 @@ export function getArticlePracticeCacheKey(
   provider: string,
   mode: string,
   focus: string,
+  feedbackLanguage: string,
+  targetLanguage: string,
   promptVersion: string = PROMPT_VERSIONS.articlePractice
 ): string {
   const normalized = normalizeUrl(url);
@@ -77,6 +79,8 @@ export function getArticlePracticeCacheKey(
     provider,
     mode: mode || "",
     focus: focus || "",
+    feedbackLanguage,
+    targetLanguage,
   };
   const inputsString = JSON.stringify(inputs);
   const hash = computeHash(inputsString);
