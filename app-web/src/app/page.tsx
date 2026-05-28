@@ -2062,6 +2062,10 @@ export default function Home() {
           durationSeconds: capturedAttempt.durationSeconds,
           currentLevel: activeSession.level,
           todayTarget: activeSession.target,
+          feedbackLanguage: normalizeFeedbackLanguage(
+            ownerProfile?.feedbackLanguage,
+          ),
+          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
         }),
       });
 
@@ -2134,6 +2138,10 @@ export default function Home() {
         body: JSON.stringify({
           provider: aiProvider,
           sessions: sessionSummaries,
+          feedbackLanguage: normalizeFeedbackLanguage(
+            ownerProfile?.feedbackLanguage,
+          ),
+          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
         }),
       });
 
@@ -2203,6 +2211,10 @@ export default function Home() {
           focus,
           latestWeakness: previousSession?.mainWeakness ?? "",
           latestRetryTask: previousSession?.retryTask ?? "",
+          feedbackLanguage: normalizeFeedbackLanguage(
+            ownerProfile?.feedbackLanguage,
+          ),
+          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
         }),
       });
 

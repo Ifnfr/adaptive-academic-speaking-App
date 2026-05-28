@@ -29,6 +29,8 @@ type WeeklyReviewRequest = {
   provider: Provider;
   learnerLevel: LearnerLevel;
   sessions: WeeklyReviewSession[];
+  feedbackLanguage: FeedbackLanguage;
+  targetLanguage: TargetLanguage;
 };
 
 type WeeklyReviewResponse = {
@@ -45,9 +47,37 @@ type WeeklyReviewParseResult =
   | { ok: true; value: WeeklyReviewResponse }
   | { ok: false; reason: "parse" | "validation" };
 
+type FeedbackLanguage = "en" | "id";
+type TargetLanguage = "en";
+
 // ---------- Prompt building ----------
 
-function buildSystemPrompt(): string {
+function feedbackLanguageLabel(language: FeedbackLanguage): string {
+  return language === "id" ? "Indonesian" : "English";
+}
+
+function targetLanguageLabel(language: TargetLanguage): string {
+  return language === "en" ? "English" : "English";
+}
+
+function buildLanguagePolicy(req: WeeklyReviewRequest): string {
+  return [
+    "LANGUAGE POLICY:",
+    `- Review the stored sessions as ${targetLanguageLabel(req.targetLanguage)}-learning history.`,
+    `- Write summary, recurringWeakness, bestImprovement, scoreTrend, nextWeekFocus, recommendedPlan, and warnings in ${feedbackLanguageLabel(req.feedbackLanguage)}.`,
+    `- Keep sentence frames and reusable speaking templates in ${targetLanguageLabel(req.targetLanguage)}.`,
+    "- Do not rewrite old sessions as a different stored-language schema.",
+    "- Do not translate full transcripts, CSV rows, or stored session content.",
+    ...(req.feedbackLanguage === "id"
+      ? [
+          "- Use concise, beginner-friendly Indonesian.",
+          "- Avoid long grammar terminology unless necessary.",
+        ]
+      : []),
+  ].join("\n");
+}
+
+function buildSystemPrompt(req: WeeklyReviewRequest): string {
   return [
     "You are an academic speaking coach producing a weekly review.",
     "Use only the provided completed practice session summaries.",
@@ -55,6 +85,8 @@ function buildSystemPrompt(): string {
     "Focus on recurring patterns, visible improvements, score trends from CSV rows, and one practical plan for next week.",
     "The 7-day recommended plan must be level-appropriate practical speaking drills, not reading or research homework only.",
     "Every recommendedPlan item must include a concrete speaking action the learner can do.",
+    "",
+    buildLanguagePolicy(req),
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -174,6 +206,14 @@ function normalizeLevel(value: unknown): LearnerLevel | null {
     default:
       return null;
   }
+}
+
+function normalizeFeedbackLanguage(value: unknown): FeedbackLanguage {
+  return value === "id" ? "id" : "en";
+}
+
+function normalizeTargetLanguage(value: unknown): TargetLanguage {
+  return value === "en" ? "en" : "en";
 }
 
 function normalizeDuration(value: unknown): number {
@@ -386,7 +426,13 @@ function validateRequest(body: unknown): WeeklyReviewRequest | string {
 
   const learnerLevel = sessions[0].level;
 
-  return { provider, learnerLevel, sessions };
+  return {
+    provider,
+    learnerLevel,
+    sessions,
+    feedbackLanguage: normalizeFeedbackLanguage(source.feedbackLanguage),
+    targetLanguage: normalizeTargetLanguage(source.targetLanguage),
+  };
 }
 
 // ---------- Provider error mapping ----------
@@ -574,7 +620,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(validated);
   const userPrompt = buildUserPrompt(validated);
 
   let raw = "";
