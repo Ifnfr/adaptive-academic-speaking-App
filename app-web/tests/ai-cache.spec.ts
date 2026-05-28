@@ -37,13 +37,15 @@ test.describe("AI Cache Utilities - URL Normalization", () => {
 });
 
 test.describe("AI Cache Utilities - Key Generation", () => {
-  test("getArticlePracticeCacheKey is deterministic and includes prompt version", () => {
+  test("getArticlePracticeCacheKey is deterministic and includes prompt version and languages", () => {
     const key1 = getArticlePracticeCacheKey(
       "https://example.com",
       "Intermediate",
       "Gemini",
       "Reading",
       "Weakness",
+      "en",
+      "en",
       "v1.0"
     );
     const key2 = getArticlePracticeCacheKey(
@@ -52,6 +54,8 @@ test.describe("AI Cache Utilities - Key Generation", () => {
       "Gemini",
       "Reading",
       "Weakness",
+      "en",
+      "en",
       "v1.0"
     );
     const keyDiffLevel = getArticlePracticeCacheKey(
@@ -60,6 +64,8 @@ test.describe("AI Cache Utilities - Key Generation", () => {
       "Gemini",
       "Reading",
       "Weakness",
+      "en",
+      "en",
       "v1.0"
     );
     const keyDiffPrompt = getArticlePracticeCacheKey(
@@ -68,12 +74,25 @@ test.describe("AI Cache Utilities - Key Generation", () => {
       "Gemini",
       "Reading",
       "Weakness",
+      "en",
+      "en",
       "v2.0"
+    );
+    const keyDiffLang = getArticlePracticeCacheKey(
+      "https://example.com",
+      "Intermediate",
+      "Gemini",
+      "Reading",
+      "Weakness",
+      "id",
+      "en",
+      "v1.0"
     );
 
     expect(key1).toBe(key2);
     expect(key1).not.toBe(keyDiffLevel);
     expect(key1).not.toBe(keyDiffPrompt);
+    expect(key1).not.toBe(keyDiffLang);
     expect(key1).toContain("global:article-practice:");
   });
 });

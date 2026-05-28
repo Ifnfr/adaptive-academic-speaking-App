@@ -30,6 +30,8 @@ export function getArticlePracticeRequestHash(inputs: {
   mode?: string;
   focus?: string;
   promptVersion: string;
+  feedbackLanguage: string;
+  targetLanguage: string;
 }): string {
   const normalized = normalizeUrl(inputs.url);
   const dataToHash = {
@@ -40,6 +42,8 @@ export function getArticlePracticeRequestHash(inputs: {
     mode: inputs.mode || "",
     focus: inputs.focus || "",
     promptVersion: inputs.promptVersion,
+    feedbackLanguage: inputs.feedbackLanguage,
+    targetLanguage: inputs.targetLanguage,
   };
   return computeHash(JSON.stringify(dataToHash));
 }

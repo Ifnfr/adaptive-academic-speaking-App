@@ -34,12 +34,17 @@ const LEVELS = [
 ] as const;
 type LearnerLevel = (typeof LEVELS)[number];
 
+type FeedbackLanguage = "en" | "id";
+type TargetLanguage = "en";
+
 type ArticlePracticeRequest = {
   provider: Provider;
   url: string;
   level: LearnerLevel;
   mode: string;
   focus: string;
+  feedbackLanguage: FeedbackLanguage;
+  targetLanguage: TargetLanguage;
 };
 
 type UsefulVocabularyItem = {
@@ -95,7 +100,37 @@ class ArticleFetchError extends Error {
   }
 }
 
-function buildSystemPrompt(): string {
+function normalizeFeedbackLanguage(value: unknown): FeedbackLanguage {
+  return value === "id" ? "id" : "en";
+}
+
+function normalizeTargetLanguage(value: unknown): TargetLanguage {
+  return value === "en" ? "en" : "en";
+}
+
+function feedbackLanguageLabel(language: FeedbackLanguage): string {
+  return language === "id" ? "Indonesian" : "English";
+}
+
+function buildLanguagePolicy(req: ArticlePracticeRequest): string {
+  const policy = [
+    "LANGUAGE POLICY:",
+    `- Write articleBrief, mainIdea, keyPoints, usefulVocabulary.meaning, usefulVocabulary.whyUseful, comprehensionChecks, speakingTask.title, speakingTask.instruction, followUpQuestions, and warnings in ${feedbackLanguageLabel(req.feedbackLanguage)}.`,
+    `- usefulVocabulary.word MUST remain in English.`,
+    `- speakingTask.targetStructure MUST remain in English.`,
+    `- sourceTitle, sourceUrl, and sourceDomain are source-derived and MUST NOT be translated.`,
+    `- Do NOT translate the full article text.`,
+    `- Do NOT store or return the full article text.`,
+  ];
+  if (req.feedbackLanguage === "id") {
+    policy.push(
+      "- Use concise, beginner-friendly Indonesian for all Indonesian text."
+    );
+  }
+  return policy.join("\n");
+}
+
+function buildSystemPrompt(req: ArticlePracticeRequest): string {
   return [
     "You are an academic speaking coach creating Article Practice from a real article source.",
     "Use only the provided article text, title, source domain, and URL.",
@@ -103,6 +138,8 @@ function buildSystemPrompt(): string {
     "Do not reproduce long article passages, copied paragraphs, or copyrighted excerpts.",
     "Do not write a full speech, full answer, essay, or copy-ready response for the learner.",
     "Turn the article into understanding, vocabulary noticing, and speaking practice.",
+    "",
+    buildLanguagePolicy(req),
     "",
     "OUTPUT FORMAT:",
     "- Respond with ONLY a single JSON object.",
@@ -248,6 +285,8 @@ function validateRequest(body: unknown): ArticlePracticeRequest | string {
     level,
     mode: normalizeString(source.mode, 100),
     focus: normalizeString(source.focus, 300),
+    feedbackLanguage: normalizeFeedbackLanguage(source.feedbackLanguage),
+    targetLanguage: normalizeTargetLanguage(source.targetLanguage),
   };
 }
 
@@ -968,6 +1007,8 @@ export async function POST(request: Request) {
       mode: validated.mode,
       focus: validated.focus,
       promptVersion: PROMPT_VERSIONS.articlePractice,
+      feedbackLanguage: validated.feedbackLanguage,
+      targetLanguage: validated.targetLanguage,
     });
 
     try {
@@ -1018,7 +1059,9 @@ export async function POST(request: Request) {
     validated.level,
     validated.provider,
     validated.mode,
-    validated.focus
+    validated.focus,
+    validated.feedbackLanguage,
+    validated.targetLanguage
   );
   try {
     const cached = await getGlobalCachedResponse(cacheKey);
@@ -1104,7 +1147,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(validated);
   const userPrompt = buildUserPrompt(validated, article);
 
   const estimatedInputTokens = estimateTokensFromText(systemPrompt + userPrompt);

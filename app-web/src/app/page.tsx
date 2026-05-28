@@ -2286,6 +2286,10 @@ export default function Home() {
           level,
           mode,
           focus,
+          feedbackLanguage: normalizeFeedbackLanguage(
+            ownerProfile?.feedbackLanguage,
+          ),
+          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
         }),
       });
 
