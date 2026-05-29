@@ -61,6 +61,7 @@ const dictionaries = {
     "sidebar.viewProgress": "Progress",
     "sidebar.viewWeeklyReview": "Weekly Review",
     "sidebar.viewMentalModel": "Mental Model",
+    "sidebar.viewLeaderboard": "Leaderboard",
     "sidebar.streakStart": "Complete a session today to start a streak.",
     "sidebar.streakKeep": "Don't break the chain. Keep practicing daily.",
     "sidebar.storedLocally": "stored locally",
@@ -81,6 +82,8 @@ const dictionaries = {
     "topbar.descWeeklyReview": "Reserved for a future batch.",
     "topbar.descMentalModel": "Reserved for a future batch.",
     "topbar.descSettings": "Owner-only profile and preferences.",
+    "topbar.titleLeaderboard": "Leaderboard",
+    "topbar.descLeaderboard": "Celebrate progress and consistency with other active learners.",
     "topbar.sessionActive": "Session active",
     "topbar.idle": "Idle",
 
@@ -312,6 +315,7 @@ const dictionaries = {
     "sidebar.viewProgress": "Progres",
     "sidebar.viewWeeklyReview": "Tinjauan Mingguan",
     "sidebar.viewMentalModel": "Model Mental",
+    "sidebar.viewLeaderboard": "Papan Peringkat",
     "sidebar.streakStart": "Selesaikan sesi hari ini untuk memulai runtun.",
     "sidebar.streakKeep": "Jangan putus rantai. Terus berlatih setiap hari.",
     "sidebar.storedLocally": "tersimpan lokal",
@@ -332,6 +336,8 @@ const dictionaries = {
     "topbar.descWeeklyReview": "Disediakan untuk batch mendatang.",
     "topbar.descMentalModel": "Disediakan untuk batch mendatang.",
     "topbar.descSettings": "Profil dan preferensi khusus pemilik.",
+    "topbar.titleLeaderboard": "Papan Peringkat",
+    "topbar.descLeaderboard": "Rayakan kemajuan dan konsistensi dengan pelajar aktif lainnya.",
     "topbar.sessionActive": "Sesi aktif",
     "topbar.idle": "Santai",
 

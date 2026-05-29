@@ -54,6 +54,7 @@ import {
   type MentalModelResult,
 } from "./components/MentalModelView";
 import { SessionLogView } from "./components/SessionLogView";
+import { LeaderboardView } from "./components/LeaderboardView";
 import { Sidebar, type SidebarView } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
@@ -2832,6 +2833,14 @@ export default function Home() {
             />
           )}
 
+          {/* ===================== Leaderboard ===================== */}
+          {view === "leaderboard" && (
+            <LeaderboardView
+              appLanguage={appLanguage}
+              onGoToSettings={() => setView("settings")}
+            />
+          )}
+
           {/* ===================== Profile & Settings ===================== */}
           {view === "settings" && (
             <ProfileSettingsView
@@ -3204,6 +3213,8 @@ function viewTitle(view: string, translate: Translate): string {
       return translate("topbar.titleMentalModel");
     case "settings":
       return translate("nav.profileSettings");
+    case "leaderboard":
+      return translate("topbar.titleLeaderboard");
     default:
       return "fonetik";
   }
@@ -3229,6 +3240,8 @@ function viewSubtitle(view: string, translate: Translate): string {
       return translate("topbar.titleMentalModel");
     case "settings":
       return translate("nav.profileSettings");
+    case "leaderboard":
+      return translate("sidebar.viewLeaderboard");
     default:
       return "fonetik";
   }
@@ -3250,6 +3263,8 @@ function viewDescription(view: string, translate: Translate): string {
       return translate("topbar.descMentalModel");
     case "settings":
       return translate("topbar.descSettings");
+    case "leaderboard":
+      return translate("topbar.descLeaderboard");
     default:
       return "";
   }
