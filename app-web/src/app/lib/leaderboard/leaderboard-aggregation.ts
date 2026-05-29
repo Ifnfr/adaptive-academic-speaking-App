@@ -48,7 +48,7 @@ export interface LeaderboardCurrentUser {
   isSignedIn: boolean;
   optedIn: boolean;
   visibility: "signed-out" | "public" | "private";
-  rank: number; // -1 if not opted in or signed out
+  rank: number | null; // null if not opted in or signed out
   previewRank: number; // calculated rank even if opted out
   periodXp: number;
   displayName: string;
@@ -337,7 +337,7 @@ export function buildLeaderboardSnapshot(params: {
       isSignedIn: true,
       optedIn: profile.leaderboardOptIn,
       visibility: profile.leaderboardOptIn ? "public" : "private",
-      rank: publicRank,
+      rank: profile.leaderboardOptIn && userXp > 0 ? publicRank : null,
       previewRank: previewRank,
       periodXp: userXp,
       displayName: profile.displayName || "You",

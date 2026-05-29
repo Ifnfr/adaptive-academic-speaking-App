@@ -235,7 +235,7 @@ test.describe("Leaderboard Aggregation Core", () => {
       isSignedIn: true,
       optedIn: false,
       visibility: "private",
-      rank: -1, // Hidden from public rankings
+      rank: null, // Hidden from public rankings
       previewRank: 1, // Would be 1st
       periodXp: 100,
       displayName: "Charlie Brown",
