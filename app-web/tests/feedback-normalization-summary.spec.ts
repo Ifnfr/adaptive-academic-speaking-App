@@ -7,7 +7,11 @@ import {
   getRecommendedNextActionId,
   filterSignalsByWindow,
 } from "../src/app/lib/feedback-normalization/summary";
-import type { FeedbackSignal } from "../src/app/lib/feedback-normalization/types";
+import type {
+  FeedbackSignal,
+  FeedbackSignalCategory,
+  FeedbackSignalLearnerLevel,
+} from "../src/app/lib/feedback-normalization/types";
 
 test.describe("Feedback Signal Summary Aggregator", () => {
   // A helper function to create mock FeedbackSignal objects cleanly
