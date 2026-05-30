@@ -12,7 +12,7 @@ export type LearningPathCompletionRule =
   | 'continued'
   | 'completed';
 
-export type CardStatus = 'locked' | 'available' | 'completed';
+export type CardStatus = 'completed' | 'current' | 'recommended' | 'available' | 'upcoming';
 
 export interface LearningPathCard {
   id: string;
@@ -64,11 +64,18 @@ export interface LearningPath {
   phases: LearningPathPhase[];
 }
 
-export interface LearningPathProgress {
-  userId: string;
-  pathId: string;
-  currentDay: number;
-  completedCardIds: string[];
-  cardStatuses: Record<string, CardStatus>;
+export interface StoredCardProgress {
+  cardId: string;
+  status: LearningPathCompletionRule;
+  attemptCount: number;
   lastUpdatedAt: string;
 }
+
+export interface StoredLearningPathProgress {
+  pathId: string;
+  phaseId: string;
+  cards: Record<string, StoredCardProgress>;
+  lastRecommendedCardId: string | null;
+  lastUpdatedAt: string;
+}
+
