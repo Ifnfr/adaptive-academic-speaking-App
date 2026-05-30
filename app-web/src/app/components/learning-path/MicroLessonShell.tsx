@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { AppLanguage } from "../../lib/i18n";
 import { useI18n } from "../../lib/i18n";
 import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
+import { useMicroPractice } from "../../lib/learning-path/useMicroPractice";
 import { GuidedWordLesson } from "./GuidedWordLesson";
 import { PhrasePatternLesson } from "./PhrasePatternLesson";
 import { SentenceBuilderLesson } from "./SentenceBuilderLesson";
@@ -24,6 +26,19 @@ export function MicroLessonShell({
   appLanguage
 }: MicroLessonShellProps) {
   useI18n(appLanguage);
+
+  const contract = useMicroPractice("idle");
+  const onUpdateStatusRef = useRef(onUpdateStatus);
+
+  useEffect(() => {
+    onUpdateStatusRef.current = onUpdateStatus;
+  }, [onUpdateStatus]);
+
+  useEffect(() => {
+    if (contract.lastProgressEvent) {
+      onUpdateStatusRef.current(contract.lastProgressEvent);
+    }
+  }, [contract.lastProgressEvent]);
 
   const getStatusDisplay = (st: CardStatus) => {
     switch (st) {
@@ -182,7 +197,7 @@ export function MicroLessonShell({
 
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => onUpdateStatus("viewed")}
+                onClick={() => contract.actions.startLesson()}
                 className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
                 data-testid="mark-viewed-btn"
               >
@@ -190,7 +205,7 @@ export function MicroLessonShell({
               </button>
 
               <button
-                onClick={() => onUpdateStatus("attempted")}
+                onClick={() => contract.actions.startAttempt()}
                 className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
                 data-testid="mark-attempted-btn"
               >
@@ -198,7 +213,7 @@ export function MicroLessonShell({
               </button>
 
               <button
-                onClick={() => onUpdateStatus("continued")}
+                onClick={() => contract.actions.continueAnyway()}
                 className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
                 data-testid="continue-anyway-btn"
               >
@@ -206,7 +221,7 @@ export function MicroLessonShell({
               </button>
 
               <button
-                onClick={() => onUpdateStatus("completed")}
+                onClick={() => contract.actions.completeWithSupport()}
                 className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
                 data-testid="mark-completed-btn"
               >
