@@ -54,6 +54,7 @@ shown in the UI is **fonetik**.
   - Includes `Guided Word`, `Phrase Pattern`, `Sentence Builder`, and a basic simulated `Micro Speaking` lesson flow, wrapped in a generic `MicroLessonShell`.
   - Privacy-first: Stores only safe progress (card IDs, statuses, attempt counts, timestamps) locally. Never stores transcripts, recordings, raw usage, email, or owner IDs.
   - MVP limitations: No real speech/pronunciation scoring, no AI semantic grading, no adaptive AI planner, and no Supabase sync yet.
+- **Feedback Normalization Engine (Foundation)**: A pure, side-effect-free helper pipeline that safely converts untrusted AI feedback signals into structured, normalized taxonomy categories (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It enforces strict privacy (stripping raw AI text and PII) and provides deterministic retry actions, safe summary aggregations, and Learning Path advisory hints, without modifying UI or storage yet.
 
 ## Tech Stack
 

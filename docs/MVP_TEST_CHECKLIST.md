@@ -448,3 +448,16 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Privacy strictness: No transcripts, recordings, raw usage, email, owner IDs, or AI corrections appear in DOM or storage
 - [ ] Safe completion state appears upon finishing all Phase 1 cards
 - [ ] No AI scoring claims, final exams, or auto-pass mechanisms are presented
+
+## 25. Feedback Normalization Engine (Foundation)
+
+> The Feedback Normalization Engine is currently a pure helper foundation. It has no UI or storage integration yet.
+
+- [ ] Taxonomy defines exactly 10 safe categories (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement)
+- [ ] Normalization helpers correctly filter out unknown categories and sanitize inputs
+- [ ] Retry action mapper returns deterministic, safe practice recommendations based on categories
+- [ ] Summary helpers correctly aggregate signals by latest, 7-day, and all-local windows
+- [ ] Learning Path adapter converts summaries into safe advisory hints
+- [ ] Pipeline enforces privacy by dropping raw AI text, user transcripts, and PII
+- [ ] All 378 foundation tests pass without modifying existing AI routes or UI
+

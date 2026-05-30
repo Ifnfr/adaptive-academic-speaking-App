@@ -247,6 +247,7 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Leaderboard Privacy: Only public safe fields (rank, display name or safe initials/fallback, avatar/initials, level, period XP, badge counts) are visible. No private learning data or identifiers are exposed. Opted-out users are hidden publicly but can view their simulated position privately.
 - The API route runs server-side and uses a privileged service-role client only for read/select operations. It does not mutate XP, profiles, or leaderboard data.
 - Do not add real database credentials to Supabase migration files.
+- **Feedback Normalization Engine**: (Foundation only) Operates purely in memory as a stateless helper pipeline to sanitize AI output into a safe taxonomy. It does not integrate with UI or storage yet and never persists or leaks transcripts or raw AI text.
 
 ## Supabase Schema & Hybrid Cloud Status
 

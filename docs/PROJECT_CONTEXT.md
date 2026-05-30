@@ -60,6 +60,7 @@ small coaching features.
   - Progress is purely local and deterministic, stored in `fonetik:learning-path-progress:v1`.
   - MicroLessonShell wraps interactive cards including Guided Word, Phrase Pattern, Sentence Builder, and a simulated Micro Speaking flow.
   - Strict privacy non-goals: Does not store transcripts, recordings, email, or usage IDs in local progress. No AI scoring, planner, or Supabase cloud sync is present in the MVP.
+- **Feedback Normalization Engine (Foundation)**: A pure, stateless helper pipeline that normalizes untrusted raw feedback signals into a safe, 10-category taxonomy (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It securely generates deterministic retry actions, summary aggregations, and Learning Path recommendation hints. Strict privacy enforcement ensures no user transcripts, PII, or raw AI text pass through the pipeline. It currently has no UI or storage integration.
 
 ## API Routes
 
