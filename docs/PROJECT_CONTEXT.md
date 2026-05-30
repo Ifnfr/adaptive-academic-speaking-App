@@ -55,6 +55,11 @@ small coaching features.
   - Opted-out signed-in users see private visibility and a simulated position (`previewRank`) while remaining hidden publicly.
   - No coins, energy, shop, extra points, or house systems are featured.
   - Only safe public fields are exposed (rank, display name/fallback, initials/avatar, level, period XP, badge counts). No email, owner IDs, source IDs, raw XP events, transcripts, or learning details are exposed.
+- **Learning Path (Phase 1 MVP)**: A local-first, static-curriculum guided journey (Beginner Confidence Ladder).
+  - Includes Unit 1 (Introduce Yourself) and Unit 2 (My Daily Life) spread across 14 days, featuring a "Today's Mission" focus.
+  - Progress is purely local and deterministic, stored in `fonetik:learning-path-progress:v1`.
+  - MicroLessonShell wraps interactive cards including Guided Word, Phrase Pattern, Sentence Builder, and a simulated Micro Speaking flow.
+  - Strict privacy non-goals: Does not store transcripts, recordings, email, or usage IDs in local progress. No AI scoring, planner, or Supabase cloud sync is present in the MVP.
 
 ## API Routes
 

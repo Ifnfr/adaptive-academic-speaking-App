@@ -48,6 +48,12 @@ shown in the UI is **fonetik**.
   - User-controlled visibility: only users with `leaderboard_opt_in = true` and greater than zero XP appear in public rankings.
   - Opted-out signed-in users can view their own private ranking stats and a simulated position (`previewRank`) while remaining hidden from the public leaderboard.
   - Prevents exposing private data: only safe public fields (rank, display name/initials fallback, avatar, level, period XP, and badges) are shown. No emails, user IDs, raw XP events, transcripts, vocabulary, AI corrections, URLs, or notes are exposed.
+- **Learning Path (Phase 1 MVP)**: A local-first, static-curriculum guided journey (Beginner Confidence Ladder).
+  - Features a 14-day progressive journey through Unit 1 (Introduce Yourself) and Unit 2 (My Daily Life) with a "Today's Mission" focus.
+  - Safe, deterministic local progress and recommendation engine stored in `fonetik:learning-path-progress:v1` localStorage key.
+  - Includes `Guided Word`, `Phrase Pattern`, `Sentence Builder`, and a basic simulated `Micro Speaking` lesson flow, wrapped in a generic `MicroLessonShell`.
+  - Privacy-first: Stores only safe progress (card IDs, statuses, attempt counts, timestamps) locally. Never stores transcripts, recordings, raw usage, email, or owner IDs.
+  - MVP limitations: No real speech/pronunciation scoring, no AI semantic grading, no adaptive AI planner, and no Supabase sync yet.
 
 ## Tech Stack
 

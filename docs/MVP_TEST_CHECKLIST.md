@@ -431,3 +431,20 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] API route `/api/leaderboard` handles missing/invalid period parameters by defaulting to `weekly`
 - [ ] API route performs administrative queries server-side using `SUPABASE_SERVICE_ROLE_KEY` but performs only read/select operations (no writes, increments, or mutations)
 - [ ] No XP rules or gamification calculations are changed or overridden by the leaderboard components
+
+## 24. Learning Path (Phase 1 MVP)
+
+> Learning Path is a local-first, static-curriculum journey designed to build beginner confidence.
+
+- [ ] Sidebar navigation includes a "Learning Path" link
+- [ ] Phase 1 renders Unit 1 (Introduce Yourself) and Unit 2 (My Daily Life)
+- [ ] All 14 days render in the correct sequential order
+- [ ] Today's Mission updates dynamically as progress changes
+- [ ] Card statuses correctly reflect completed, current, recommended, available, or upcoming states
+- [ ] Interactive cards launch the `MicroLessonShell`
+- [ ] Guided Word, Phrase Pattern, Sentence Builder, and Micro Speaking specialized renderers work securely
+- [ ] Progress persists successfully to `fonetik:learning-path-progress:v1` in `localStorage`
+- [ ] Completing a card advances the recommendation engine correctly
+- [ ] Privacy strictness: No transcripts, recordings, raw usage, email, owner IDs, or AI corrections appear in DOM or storage
+- [ ] Safe completion state appears upon finishing all Phase 1 cards
+- [ ] No AI scoring claims, final exams, or auto-pass mechanisms are presented

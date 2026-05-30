@@ -139,6 +139,9 @@ and start again. Do not commit `.next`.
 9. End the session and copy the CSV.
 10. Open Session Log and confirm the session appears.
 11. Open Profile or Settings and confirm local-only mode shows a local profile card or progress details.
+12. Navigate to **Learning Path** in the sidebar.
+13. Ensure **Unit 1** and **Today's Mission** are visible.
+14. Complete a Phase 1 card (e.g. Guided Word or Phrase Pattern) and verify that local progress persists and the recommendation advances to the next card. (Note: Learning Path progress is entirely local and does not sync to Supabase in the MVP. Local storage key: `fonetik:learning-path-progress:v1`).
 
 For the full QA list, see [MVP_TEST_CHECKLIST.md](MVP_TEST_CHECKLIST.md).
 
