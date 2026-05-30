@@ -2867,21 +2867,6 @@ export default function Home() {
               profileLoadError={profileLoadError}
               profileSaveStatus={profileSaveStatus}
               profileSaveError={profileSaveError}
-              totalXp={xpProfile.totalXp}
-              speakerLevel={speakerProgress.currentLevel.level}
-              speakerLevelName={speakerProgress.currentLevel.name}
-              dayStreak={dayStreak}
-              totalSessions={sessions.length}
-              vocabularyCount={vocabularyItems.length}
-              earnedBadgeCount={badges.filter((b) => b.status === "earned").length}
-              articlePracticeCount={
-                xpEvents.filter((e) => e.type === "article_practice_completed").length
-              }
-              activeRecallCount={
-                xpEvents.filter(
-                  (e) => e.type === "vocab_recall_session_completed",
-                ).length
-              }
               onSavePreferences={handleSaveProfilePreferences}
               onAppLanguageChange={(language) => {
                 if (!cloudAuthState.userId) return;

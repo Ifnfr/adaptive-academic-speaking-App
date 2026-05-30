@@ -32,16 +32,6 @@ export type SettingsViewProps = {
   profileLoadError: string | null;
   profileSaveStatus: "idle" | "saving" | "saved" | "error";
   profileSaveError: string | null;
-  // Local stats needed for rendering the LocalStatsCard in the settings page
-  totalXp: number;
-  speakerLevel: number;
-  speakerLevelName: string;
-  dayStreak: number;
-  totalSessions: number;
-  vocabularyCount: number;
-  earnedBadgeCount: number;
-  articlePracticeCount: number;
-  activeRecallCount: number;
   onSavePreferences: (patch: UserProfilePreferencesPatch) => void;
   onAppLanguageChange?: (language: AppLanguage) => void;
 };
@@ -114,19 +104,7 @@ export function buildProfileSettingsPreferencesPatch({
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-function StatRow({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="flex items-center justify-between py-2 border-b border-[var(--brand-border)] last:border-b-0">
-      <span className="text-sm text-[var(--brand-ink-soft)]">{label}</span>
-      <span
-        className="font-mono text-sm font-medium tabular-nums text-[var(--brand-ink)]"
-        data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
+
 
 function Toggle({
   id,
@@ -222,76 +200,10 @@ function LanguageSelect<T extends string>({
   );
 }
 
-function LocalStatsCard({
-  t,
-  totalXp,
-  speakerLevel,
-  speakerLevelName,
-  dayStreak,
-  totalSessions,
-  vocabularyCount,
-  earnedBadgeCount,
-  articlePracticeCount,
-  activeRecallCount,
-}: {
-  t: Translate;
-  totalXp: number;
-  speakerLevel: number;
-  speakerLevelName: string;
-  dayStreak: number;
-  totalSessions: number;
-  vocabularyCount: number;
-  earnedBadgeCount: number;
-  articlePracticeCount: number;
-  activeRecallCount: number;
-}) {
-  return (
-    <div className={card}>
-      <div className={cardHeader}>
-        <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
-          {t("profile.yourProgress")}
-        </p>
-        <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-          {t("profile.localStats")}
-        </h2>
-        <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans">
-          Counts only — no transcripts, sentences, or private content shown.
-        </p>
-      </div>
-      <div className={cardBody}>
-        <div className="divide-y divide-[var(--brand-border)]">
-          <StatRow label="Total XP" value={totalXp} />
-          <StatRow
-            label="Speaker Level"
-            value={`Level ${speakerLevel} · ${speakerLevelName}`}
-          />
-          <StatRow label="Day Streak" value={`${dayStreak} day${dayStreak === 1 ? "" : "s"}`} />
-          <StatRow label="Sessions Completed" value={totalSessions} />
-          <StatRow label="Vocabulary Words" value={vocabularyCount} />
-          <StatRow label="Badges Earned" value={earnedBadgeCount} />
-          <StatRow label="Active Recall Sessions" value={activeRecallCount} />
-          <StatRow label="Article Practice Sessions" value={articlePracticeCount} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Signed-out Settings
 // ---------------------------------------------------------------------------
-function SignedOutSettings({
-  t,
-  totalXp,
-  speakerLevel,
-  speakerLevelName,
-  dayStreak,
-  totalSessions,
-  vocabularyCount,
-  earnedBadgeCount,
-  articlePracticeCount,
-  activeRecallCount,
-}: Omit<SettingsViewProps, "isSignedIn" | "appLanguage" | "profile" | "profileLoadError" | "profileSaveStatus" | "profileSaveError" | "onSavePreferences" | "onAppLanguageChange"> & { t: Translate }) {
+function SignedOutSettings({ t }: { t: Translate }) {
   return (
     <div className="flex flex-col gap-6" data-testid="settings-signed-out">
       {/* Local profile info notice */}
@@ -327,20 +239,6 @@ function SignedOutSettings({
           </div>
         </div>
       </div>
-
-      {/* Safe local stats */}
-      <LocalStatsCard
-        t={t}
-        totalXp={totalXp}
-        speakerLevel={speakerLevel}
-        speakerLevelName={speakerLevelName}
-        dayStreak={dayStreak}
-        totalSessions={totalSessions}
-        vocabularyCount={vocabularyCount}
-        earnedBadgeCount={earnedBadgeCount}
-        articlePracticeCount={articlePracticeCount}
-        activeRecallCount={activeRecallCount}
-      />
     </div>
   );
 }
@@ -355,15 +253,6 @@ function SignedInSettings({
   profileLoadError,
   profileSaveStatus,
   profileSaveError,
-  totalXp,
-  speakerLevel,
-  speakerLevelName,
-  dayStreak,
-  totalSessions,
-  vocabularyCount,
-  earnedBadgeCount,
-  articlePracticeCount,
-  activeRecallCount,
   onSavePreferences,
   onAppLanguageChange,
 }: Omit<SettingsViewProps, "isSignedIn"> & { t: Translate }) {
@@ -648,20 +537,6 @@ function SignedInSettings({
           </div>
         </div>
       </div>
-
-      {/* Safe local stats card */}
-      <LocalStatsCard
-        t={t}
-        totalXp={totalXp}
-        speakerLevel={speakerLevel}
-        speakerLevelName={speakerLevelName}
-        dayStreak={dayStreak}
-        totalSessions={totalSessions}
-        vocabularyCount={vocabularyCount}
-        earnedBadgeCount={earnedBadgeCount}
-        articlePracticeCount={articlePracticeCount}
-        activeRecallCount={activeRecallCount}
-      />
     </div>
   );
 }
@@ -676,15 +551,6 @@ export function SettingsView({
   profileLoadError,
   profileSaveStatus,
   profileSaveError,
-  totalXp,
-  speakerLevel,
-  speakerLevelName,
-  dayStreak,
-  totalSessions,
-  vocabularyCount,
-  earnedBadgeCount,
-  articlePracticeCount,
-  activeRecallCount,
   onSavePreferences,
   onAppLanguageChange,
 }: SettingsViewProps) {
@@ -694,15 +560,6 @@ export function SettingsView({
     return (
       <SignedOutSettings
         t={t}
-        totalXp={totalXp}
-        speakerLevel={speakerLevel}
-        speakerLevelName={speakerLevelName}
-        dayStreak={dayStreak}
-        totalSessions={totalSessions}
-        vocabularyCount={vocabularyCount}
-        earnedBadgeCount={earnedBadgeCount}
-        articlePracticeCount={articlePracticeCount}
-        activeRecallCount={activeRecallCount}
       />
     );
   }
@@ -714,15 +571,6 @@ export function SettingsView({
       profileLoadError={profileLoadError}
       profileSaveStatus={profileSaveStatus}
       profileSaveError={profileSaveError}
-      totalXp={totalXp}
-      speakerLevel={speakerLevel}
-      speakerLevelName={speakerLevelName}
-      dayStreak={dayStreak}
-      totalSessions={totalSessions}
-      vocabularyCount={vocabularyCount}
-      earnedBadgeCount={earnedBadgeCount}
-      articlePracticeCount={articlePracticeCount}
-      activeRecallCount={activeRecallCount}
       onSavePreferences={onSavePreferences}
       onAppLanguageChange={onAppLanguageChange}
       t={t}

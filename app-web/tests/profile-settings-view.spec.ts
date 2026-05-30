@@ -273,16 +273,16 @@ test.describe("Settings view — signed-out (local mode)", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Profile" }).click();
 
-    // Stats card appears
+    // Stats card appears on Profile view
     await expect(page.locator("body")).toContainText("Local Stats");
     await expect(page.locator("body")).toContainText("Total XP");
     await expect(page.locator("body")).toContainText("Speaker Level");
     await expect(page.locator("body")).toContainText("Day Streak");
-    await expect(page.locator("body")).toContainText("Sessions Completed");
-    await expect(page.locator("body")).toContainText("Vocabulary Words");
-    await expect(page.locator("body")).toContainText("Badges Earned");
+    await expect(page.locator("body")).toContainText("Sessions");
+    await expect(page.locator("body")).toContainText("Vocab Words");
+    await expect(page.locator("body")).toContainText("Badges");
   });
 
   test("signed-out view does not render private learning content", async ({
@@ -331,14 +331,14 @@ test.describe("Settings view — signed-out (local mode)", () => {
   }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(page.locator("body")).toContainText("Local Stats");
+    await expect(page.locator("body")).toContainText("Local Profile");
 
     // Navigate away
     await page.getByRole("button", { name: "Active Session" }).click();
-    await expect(page.locator("body")).not.toContainText("Local Stats");
+    await expect(page.locator("body")).not.toContainText("Local Profile");
 
     // Navigate back
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(page.locator("body")).toContainText("Local Stats");
+    await expect(page.locator("body")).toContainText("Local Profile");
   });
 });

@@ -62,8 +62,8 @@ test.describe("SettingsView Browser UI integration - Split Sidebar View", () => 
     await expect(page.locator("body")).toContainText("You are using fonetik in local mode.");
     await expect(page.locator("body")).toContainText("Learning data stays on this browser");
 
-    // Local Stats Card should still be visible
-    await expect(page.locator("body")).toContainText("Local Stats");
+    // Local Stats Card should not be visible in Settings anymore (moved to Profile)
+    await expect(page.locator("body")).not.toContainText("Local Stats");
   });
 
   test("Privacy: Settings view DOM must not contain private learning content placeholders", async ({ page }) => {
