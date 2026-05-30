@@ -13,7 +13,8 @@ import {
   getRecommendation,
   getFlatCurriculumCards
 } from "../lib/learning-path/recommendation";
-import { StoredLearningPathProgress, CardStatus } from "../lib/learning-path/types";
+import { StoredLearningPathProgress, CardStatus, LearningPathCard } from "../lib/learning-path/types";
+import { MicroLessonShell } from "./learning-path/MicroLessonShell";
 
 export type LearningPathViewProps = {
   appLanguage?: AppLanguage | null;
@@ -26,6 +27,7 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
   useI18n(appLanguage);
 
   const [progress, setProgress] = useState<StoredLearningPathProgress | null>(null);
+  const [activeCard, setActiveCard] = useState<LearningPathCard | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -47,9 +49,10 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
   const completedCount = flatCards.filter(c => progress.cards[c.id]?.status === 'completed').length;
   const progressPercent = flatCards.length > 0 ? Math.round((completedCount / flatCards.length) * 100) : 0;
 
-  const handlePreviewCard = (cardId: string) => {
-    const updated = updateCardProgress(cardId, 'viewed');
+  const handleStartLesson = (card: LearningPathCard) => {
+    const updated = updateCardProgress(card.id, 'viewed');
     setProgress(updated);
+    setActiveCard(card);
   };
 
   const handleCompleteCard = (cardId: string) => {
@@ -211,7 +214,7 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
 
                                 <div className="flex gap-2">
                                   <button
-                                    onClick={() => handlePreviewCard(card.id)}
+                                    onClick={() => handleStartLesson(card)}
                                     disabled={isUpcoming}
                                     className={`rounded px-3 py-1 font-medium transition-colors ${
                                       isUpcoming
@@ -296,11 +299,11 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
                   </div>
 
                   <button
-                    onClick={() => handlePreviewCard(recommendedCard.id)}
-                    className="w-full rounded-xl bg-[var(--brand-teal)] px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-[var(--brand-teal-ink)] transition-colors shadow-sm"
-                  >
-                    Start Lesson
-                  </button>
+                                    onClick={() => handleStartLesson(recommendedCard)}
+                                    className="w-full rounded-xl bg-[var(--brand-teal)] px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-[var(--brand-teal-ink)] transition-colors shadow-sm"
+                                  >
+                                    Start Lesson
+                                  </button>
 
                   <button
                     onClick={() => handleCompleteCard(recommendedCard.id)}
@@ -318,6 +321,21 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
           </div>
         </div>
       </div>
+      {activeCard && (
+        <MicroLessonShell
+          card={activeCard}
+          status={cardStatuses[activeCard.id] || 'upcoming'}
+          onClose={() => setActiveCard(null)}
+          onUpdateStatus={(completionStatus) => {
+            const updated = updateCardProgress(activeCard.id, completionStatus);
+            setProgress(updated);
+            if (completionStatus === 'completed') {
+              setActiveCard(null);
+            }
+          }}
+          appLanguage={appLanguage}
+        />
+      )}
     </div>
   );
 }
