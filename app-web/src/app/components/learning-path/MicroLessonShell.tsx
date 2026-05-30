@@ -126,14 +126,14 @@ export function MicroLessonShell({
             <SentenceBuilderLesson
               card={card}
               status={status}
-              onUpdateStatus={onUpdateStatus}
+              contract={contract}
               appLanguage={appLanguage}
             />
           ) : card.type === "micro-speaking" ? (
             <MicroSpeakingLesson
               card={card}
               status={status}
-              onUpdateStatus={onUpdateStatus}
+              contract={contract}
               appLanguage={appLanguage}
             />
           ) : (

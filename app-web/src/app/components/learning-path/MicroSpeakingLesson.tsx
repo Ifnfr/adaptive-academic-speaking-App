@@ -1,39 +1,36 @@
 "use client";
 
 import type { AppLanguage } from "../../lib/i18n";
-import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
-import { useState, useEffect } from "react";
+import { LearningPathCard, CardStatus } from "../../lib/learning-path/types";
+import { MicroPracticeContract } from "../../lib/learning-path/useMicroPractice";
+import { useState } from "react";
 
 export type MicroSpeakingLessonProps = {
   card: LearningPathCard;
   status: CardStatus;
-  onUpdateStatus: (status: LearningPathCompletionRule) => void;
+  contract: MicroPracticeContract;
   appLanguage?: AppLanguage | null;
 };
 
 export function MicroSpeakingLesson({
   card,
-  onUpdateStatus,
+  contract,
 }: MicroSpeakingLessonProps) {
   const [recordState, setRecordState] = useState<"idle" | "recording" | "recorded">("idle");
 
-  // Trigger viewed status once on mount
-  useEffect(() => {
-    onUpdateStatus("viewed");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleStartRecording = () => {
     setRecordState("recording");
-    onUpdateStatus("attempted");
+    contract.actions.startAttempt();
   };
 
   const handleStopRecording = () => {
     setRecordState("recorded");
+    contract.actions.markRecorded();
   };
 
   const handleRetry = () => {
     setRecordState("idle");
+    contract.actions.resetLocalAttempt();
   };
 
   return (
@@ -153,7 +150,7 @@ export function MicroSpeakingLesson({
 
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={() => onUpdateStatus("continued")}
+            onClick={() => contract.actions.continueAnyway()}
             className="flex-1 rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-center text-sm font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors focus:outline-none"
             data-testid="continue-btn"
           >
@@ -161,7 +158,7 @@ export function MicroSpeakingLesson({
           </button>
 
           <button
-            onClick={() => onUpdateStatus("completed")}
+            onClick={() => contract.actions.completeWithSupport()}
             className={`rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition-all shadow-sm focus:outline-none ${
               recordState === "recorded"
                 ? "bg-emerald-600 hover:bg-emerald-700"

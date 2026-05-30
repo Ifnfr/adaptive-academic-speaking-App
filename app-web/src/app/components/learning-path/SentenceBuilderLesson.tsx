@@ -1,13 +1,14 @@
 "use client";
 
 import type { AppLanguage } from "../../lib/i18n";
-import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
-import { useState, useEffect } from "react";
+import { LearningPathCard, CardStatus } from "../../lib/learning-path/types";
+import { MicroPracticeContract } from "../../lib/learning-path/useMicroPractice";
+import { useState } from "react";
 
 export type SentenceBuilderLessonProps = {
   card: LearningPathCard;
   status: CardStatus;
-  onUpdateStatus: (status: LearningPathCompletionRule) => void;
+  contract: MicroPracticeContract;
   appLanguage?: AppLanguage | null;
 };
 
@@ -18,7 +19,7 @@ function cleanWord(w: string): string {
 
 export function SentenceBuilderLesson({
   card,
-  onUpdateStatus,
+  contract,
 }: SentenceBuilderLessonProps) {
   const targetPhrase = card.targetPhrases[0] || "";
 
@@ -43,11 +44,7 @@ export function SentenceBuilderLesson({
   const [feedback, setFeedback] = useState<"none" | "success" | "retry">("none");
   const [isResetAllowed, setIsResetAllowed] = useState(false);
 
-  // Trigger viewed status once on mount
-  useEffect(() => {
-    onUpdateStatus("viewed");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   const handleTokenClick = (tokenId: number) => {
     if (selectedTokenIds.includes(tokenId)) return;
@@ -58,7 +55,7 @@ export function SentenceBuilderLesson({
     setFeedback("none");
 
     // Report attempted state to the progress callback
-    onUpdateStatus("attempted");
+    contract.actions.startAttempt();
 
     // If all tokens are selected, check the answer
     if (newSelection.length === targetWords.length) {
@@ -74,6 +71,7 @@ export function SentenceBuilderLesson({
         setFeedback("success");
       } else {
         setFeedback("retry");
+        contract.actions.markAttempted();
       }
     }
   };
@@ -202,7 +200,7 @@ export function SentenceBuilderLesson({
 
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={() => onUpdateStatus("continued")}
+            onClick={() => contract.actions.continueAnyway()}
             className="flex-1 rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-center text-sm font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors focus:outline-none"
             data-testid="continue-btn"
           >
@@ -210,7 +208,7 @@ export function SentenceBuilderLesson({
           </button>
 
           <button
-            onClick={() => onUpdateStatus("completed")}
+            onClick={() => contract.actions.completeWithSupport()}
             className={`rounded-xl px-4 py-3 text-center text-sm font-semibold text-white transition-all shadow-sm focus:outline-none ${
               feedback === "success"
                 ? "bg-emerald-600 hover:bg-emerald-700"
