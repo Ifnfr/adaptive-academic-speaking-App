@@ -115,7 +115,6 @@ test.describe("Feedback Normalization Helpers", () => {
 
   test("buildSafeFeedbackSignal does not include extra fields", () => {
     // Define an object with extra fields to test omission
-    // @ts-expect-error – passing extra field to ensure it is ignored
     const sig = buildSafeFeedbackSignal({
       category: "clarity",
       severity: "light",
@@ -123,7 +122,8 @@ test.describe("Feedback Normalization Helpers", () => {
       sourceSurface: "active-feedback",
       safeLabel: "Label",
       safeSummary: "Summary",
-    });
+      foo: "bar",
+    } as unknown as Parameters<typeof buildSafeFeedbackSignal>[0]);
     expect(((sig as unknown) as Record<string, unknown>).foo).toBeUndefined();
     assertAllowed(sig);
   });
