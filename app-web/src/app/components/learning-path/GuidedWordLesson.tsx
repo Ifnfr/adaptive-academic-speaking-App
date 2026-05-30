@@ -1,34 +1,35 @@
 "use client";
 
 import type { AppLanguage } from "../../lib/i18n";
-import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
+import { LearningPathCard, CardStatus } from "../../lib/learning-path/types";
+import { MicroPracticeContract } from "../../lib/learning-path/useMicroPractice";
 import { useState } from "react";
 
 export type GuidedWordLessonProps = {
   card: LearningPathCard;
   status: CardStatus;
-  onUpdateStatus: (status: LearningPathCompletionRule) => void;
+  contract: MicroPracticeContract;
   appLanguage?: AppLanguage | null;
 };
 
 export function GuidedWordLesson({
   card,
-  onUpdateStatus,
+  contract,
 }: GuidedWordLessonProps) {
   const [listenActive, setListenActive] = useState(false);
   const [practiceCount, setPracticeCount] = useState(0);
 
   const handleListenModel = () => {
+    contract.actions.startAttempt(); // Listening acts as starting an attempt
     setListenActive(true);
     setTimeout(() => {
       setListenActive(false);
-      onUpdateStatus("viewed");
     }, 1200);
   };
 
   const handlePractice = () => {
     setPracticeCount(prev => prev + 1);
-    onUpdateStatus("attempted");
+    contract.actions.startAttempt();
   };
 
   return (
@@ -112,7 +113,7 @@ export function GuidedWordLesson({
           </button>
 
           <button
-            onClick={() => onUpdateStatus("continued")}
+            onClick={() => contract.actions.continueAnyway()}
             className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-center text-sm font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors focus:outline-none"
             data-testid="continue-btn"
           >
@@ -120,7 +121,7 @@ export function GuidedWordLesson({
           </button>
 
           <button
-            onClick={() => onUpdateStatus("completed")}
+            onClick={() => contract.actions.completeWithSupport()}
             className="rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm focus:outline-none"
             data-testid="complete-btn"
           >

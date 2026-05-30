@@ -48,7 +48,7 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       expect(bodyText).not.toContain("grammar score");
     });
 
-    test("2. Listen model button changes state and updates progress to viewed", async ({ page }) => {
+    test("2. Listen model button changes state and updates progress to attempted", async ({ page }) => {
       const day1Card = page.locator("[data-testid='card-card-d1-c1']");
       await day1Card.getByRole("button", { name: "Preview Lesson" }).click();
 
@@ -63,10 +63,10 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       // Wait for play to finish (1.2s timeout)
       await expect(shell.locator("span", { hasText: "In Progress" })).toBeVisible();
 
-      // Check localStorage has marked it viewed
+      // Check localStorage has marked it attempted
       const rawProgress = await page.evaluate(() => localStorage.getItem("fonetik:learning-path-progress:v1"));
       const parsed = JSON.parse(rawProgress!);
-      expect(parsed.cards["card-d1-c1"].status).toBe("viewed");
+      expect(parsed.cards["card-d1-c1"].status).toBe("attempted");
     });
 
     test("3. Practice action increments practice count and updates progress to attempted", async ({ page }) => {

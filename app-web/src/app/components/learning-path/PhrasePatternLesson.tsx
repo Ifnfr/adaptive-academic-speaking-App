@@ -1,25 +1,26 @@
 "use client";
 
 import type { AppLanguage } from "../../lib/i18n";
-import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
+import { LearningPathCard, CardStatus } from "../../lib/learning-path/types";
+import { MicroPracticeContract } from "../../lib/learning-path/useMicroPractice";
 import { useState } from "react";
 
 export type PhrasePatternLessonProps = {
   card: LearningPathCard;
   status: CardStatus;
-  onUpdateStatus: (status: LearningPathCompletionRule) => void;
+  contract: MicroPracticeContract;
   appLanguage?: AppLanguage | null;
 };
 
 export function PhrasePatternLesson({
   card,
-  onUpdateStatus,
+  contract,
 }: PhrasePatternLessonProps) {
   const [practiceCount, setPracticeCount] = useState(0);
 
   const handlePractice = () => {
     setPracticeCount(prev => prev + 1);
-    onUpdateStatus("attempted");
+    contract.actions.startAttempt();
   };
 
   return (
@@ -90,7 +91,7 @@ export function PhrasePatternLesson({
           </button>
 
           <button
-            onClick={() => onUpdateStatus("continued")}
+            onClick={() => contract.actions.continueAnyway()}
             className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-center text-sm font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors focus:outline-none"
             data-testid="continue-btn"
           >
@@ -98,7 +99,7 @@ export function PhrasePatternLesson({
           </button>
 
           <button
-            onClick={() => onUpdateStatus("completed")}
+            onClick={() => contract.actions.completeWithSupport()}
             className="rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm focus:outline-none"
             data-testid="complete-btn"
           >

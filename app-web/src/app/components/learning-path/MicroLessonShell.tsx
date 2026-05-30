@@ -112,14 +112,14 @@ export function MicroLessonShell({
             <GuidedWordLesson
               card={card}
               status={status}
-              onUpdateStatus={onUpdateStatus}
+              contract={contract}
               appLanguage={appLanguage}
             />
           ) : card.type === "phrase-pattern" ? (
             <PhrasePatternLesson
               card={card}
               status={status}
-              onUpdateStatus={onUpdateStatus}
+              contract={contract}
               appLanguage={appLanguage}
             />
           ) : card.type === "sentence-builder" ? (
