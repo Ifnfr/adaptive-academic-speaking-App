@@ -104,6 +104,7 @@ import {
   type UserProfilePreferencesPatch,
 } from "./lib/storage/supabase-profile-adapter";
 import { ProfileSettingsView } from "./components/ProfileSettingsView";
+import { ProfileView } from "./components/ProfileView";
 import {
   DEFAULT_APP_LANGUAGE,
   normalizeAppLanguage,
@@ -1215,6 +1216,7 @@ export default function Home() {
   // sub-pages that reuse existing data.
   type View = SidebarView;
   const [view, setView] = useState<View>("active");
+  const [profileTab, setProfileTab] = useState<"profile" | "settings">("settings");
 
   // Fallback for invalid or old selected view states (e.g. diagnostic, level-up-check)
   useEffect(() => {
@@ -2843,37 +2845,84 @@ export default function Home() {
 
           {/* ===================== Profile & Settings ===================== */}
           {view === "settings" && (
-            <ProfileSettingsView
-              isSignedIn={cloudAuthState.isSignedIn}
-              appLanguage={appLanguage}
-              profile={ownerProfile}
-              profileLoadError={profileLoadError}
-              profileSaveStatus={profileSaveStatus}
-              profileSaveError={profileSaveError}
-              totalXp={xpProfile.totalXp}
-              speakerLevel={speakerProgress.currentLevel.level}
-              speakerLevelName={speakerProgress.currentLevel.name}
-              dayStreak={dayStreak}
-              totalSessions={sessions.length}
-              vocabularyCount={vocabularyItems.length}
-              earnedBadgeCount={badges.filter((b) => b.status === "earned").length}
-              articlePracticeCount={
-                xpEvents.filter((e) => e.type === "article_practice_completed").length
-              }
-              activeRecallCount={
-                xpEvents.filter(
-                  (e) => e.type === "vocab_recall_session_completed",
-                ).length
-              }
-              onSavePreferences={handleSaveProfilePreferences}
-              onAppLanguageChange={(language) => {
-                if (!cloudAuthState.userId) return;
-                setAppLanguageOverride({
-                  userId: cloudAuthState.userId,
-                  language,
-                });
-              }}
-            />
+            <div className="flex flex-col gap-6" data-testid="profile-settings-container">
+              {/* Tab Selector */}
+              <div className="flex border-b border-[var(--brand-border)] gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProfileTab("profile")}
+                  className={[
+                    "px-4 py-2 text-sm font-semibold border-b-2 transition-colors",
+                    profileTab === "profile"
+                      ? "border-[var(--brand-teal-ink)] text-[var(--brand-teal-ink)]"
+                      : "border-transparent text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)]",
+                  ].join(" ")}
+                  data-testid="profile-tab-button"
+                >
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfileTab("settings")}
+                  className={[
+                    "px-4 py-2 text-sm font-semibold border-b-2 transition-colors",
+                    profileTab === "settings"
+                      ? "border-[var(--brand-teal-ink)] text-[var(--brand-teal-ink)]"
+                      : "border-transparent text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)]",
+                  ].join(" ")}
+                  data-testid="settings-tab-button"
+                >
+                  Settings
+                </button>
+              </div>
+
+              {profileTab === "profile" ? (
+                <ProfileView
+                  isSignedIn={cloudAuthState.isSignedIn}
+                  appLanguage={appLanguage}
+                  profile={ownerProfile}
+                  totalXp={xpProfile.totalXp}
+                  dayStreak={dayStreak}
+                  totalSessions={sessions.length}
+                  vocabularyCount={vocabularyItems.length}
+                  earnedBadgeCount={badges.filter((b) => b.status === "earned").length}
+                  earnedBadgeLabels={badges.filter((b) => b.status === "earned").map((b) => b.label)}
+                  sessions={sessions.map((s) => ({ date: s.date, mode: s.mode }))}
+                />
+              ) : (
+                <ProfileSettingsView
+                  isSignedIn={cloudAuthState.isSignedIn}
+                  appLanguage={appLanguage}
+                  profile={ownerProfile}
+                  profileLoadError={profileLoadError}
+                  profileSaveStatus={profileSaveStatus}
+                  profileSaveError={profileSaveError}
+                  totalXp={xpProfile.totalXp}
+                  speakerLevel={speakerProgress.currentLevel.level}
+                  speakerLevelName={speakerProgress.currentLevel.name}
+                  dayStreak={dayStreak}
+                  totalSessions={sessions.length}
+                  vocabularyCount={vocabularyItems.length}
+                  earnedBadgeCount={badges.filter((b) => b.status === "earned").length}
+                  articlePracticeCount={
+                    xpEvents.filter((e) => e.type === "article_practice_completed").length
+                  }
+                  activeRecallCount={
+                    xpEvents.filter(
+                      (e) => e.type === "vocab_recall_session_completed",
+                    ).length
+                  }
+                  onSavePreferences={handleSaveProfilePreferences}
+                  onAppLanguageChange={(language) => {
+                    if (!cloudAuthState.userId) return;
+                    setAppLanguageOverride({
+                      userId: cloudAuthState.userId,
+                      language,
+                    });
+                  }}
+                />
+              )}
+            </div>
           )}
 
           <footer
