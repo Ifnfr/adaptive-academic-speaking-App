@@ -3,6 +3,8 @@
 import type { AppLanguage } from "../../lib/i18n";
 import { useI18n } from "../../lib/i18n";
 import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
+import { GuidedWordLesson } from "./GuidedWordLesson";
+import { PhrasePatternLesson } from "./PhrasePatternLesson";
 
 export type MicroLessonShellProps = {
   card: LearningPathCard;
@@ -89,94 +91,114 @@ export function MicroLessonShell({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto flex flex-col gap-6">
-          {/* Card Title & Main instructions */}
-          <div>
-            <h2 className="text-xl font-bold text-[var(--brand-ink)]" data-testid="lesson-card-title">
-              {card.title}
-            </h2>
-            <p className="mt-2 text-sm text-[var(--brand-ink-soft)]" data-testid="lesson-learner-instruction">
-              {card.learnerInstruction}
-            </p>
-            <p className="mt-1 text-sm italic text-[var(--brand-muted)]">
-              {card.indonesianExplanation}
-            </p>
-          </div>
+          {card.type === "guided-word" ? (
+            <GuidedWordLesson
+              card={card}
+              status={status}
+              onUpdateStatus={onUpdateStatus}
+              appLanguage={appLanguage}
+            />
+          ) : card.type === "phrase-pattern" ? (
+            <PhrasePatternLesson
+              card={card}
+              status={status}
+              onUpdateStatus={onUpdateStatus}
+              appLanguage={appLanguage}
+            />
+          ) : (
+            <>
+              {/* Card Title & Main instructions */}
+              <div>
+                <h2 className="text-xl font-bold text-[var(--brand-ink)]" data-testid="lesson-card-title">
+                  {card.title}
+                </h2>
+                <p className="mt-2 text-sm text-[var(--brand-ink-soft)]" data-testid="lesson-learner-instruction">
+                  {card.learnerInstruction}
+                </p>
+                <p className="mt-1 text-sm italic text-[var(--brand-muted)]">
+                  {card.indonesianExplanation}
+                </p>
+              </div>
 
-          {/* Target Phrases Box */}
-          <div className="rounded-xl bg-[var(--brand-surface-2)] p-4 border border-[var(--brand-border)]">
-            <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider block">
-              Target Phrases
-            </span>
-            <ul className="mt-2 flex flex-col gap-1.5 text-sm font-mono text-[var(--brand-ink)]">
-              {card.targetPhrases.map((phrase, idx) => (
-                <li key={idx} className="flex items-center gap-2">
-                  <span className="text-[var(--brand-teal-ink)]">•</span>
-                  {phrase}
-                </li>
-              ))}
-            </ul>
+              {/* Target Phrases Box */}
+              <div className="rounded-xl bg-[var(--brand-surface-2)] p-4 border border-[var(--brand-border)]">
+                <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider block">
+                  Target Phrases
+                </span>
+                <ul className="mt-2 flex flex-col gap-1.5 text-sm font-mono text-[var(--brand-ink)]">
+                  {card.targetPhrases.map((phrase, idx) => (
+                    <li key={idx} className="flex items-center gap-2">
+                      <span className="text-[var(--brand-teal-ink)]">•</span>
+                      {phrase}
+                    </li>
+                  ))}
+                </ul>
 
-            <div className="mt-4 border-t border-[var(--brand-border)] pt-3">
-              <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider block">
-                Practice Format / Scaffold
-              </span>
-              <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                {card.scaffold}
-              </p>
-            </div>
-          </div>
+                <div className="mt-4 border-t border-[var(--brand-border)] pt-3">
+                  <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider block">
+                    Practice Format / Scaffold
+                  </span>
+                  <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                    {card.scaffold}
+                  </p>
+                </div>
+              </div>
 
-          {/* Supportive Progress Status message */}
-          <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 flex flex-col gap-1">
-            <span className="text-xs font-semibold text-[var(--brand-ink)]">
-              Practice started
-            </span>
-            <p className="text-xs text-[var(--brand-ink-soft)]">
-              Latih pengucapan frasa di atas secara mandiri dengan membaca instruksi serta contoh format yang diberikan.
-            </p>
-          </div>
+              {/* Supportive Progress Status message */}
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 flex flex-col gap-1">
+                <span className="text-xs font-semibold text-[var(--brand-ink)]">
+                  Practice started
+                </span>
+                <p className="text-xs text-[var(--brand-ink-soft)]">
+                  Latih pengucapan frasa di atas secara mandiri dengan membaca instruksi serta contoh format yang diberikan.
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Modal Footer with generic actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4">
-          <span className="text-xs text-[var(--brand-muted)]">
-            Est: {card.estimatedMinutes} mins · Rule: {card.completionRule}
-          </span>
+        {card.type !== "guided-word" && card.type !== "phrase-pattern" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4">
+            <span className="text-xs text-[var(--brand-muted)]">
+              Est: {card.estimatedMinutes} mins · Rule: {card.completionRule}
+            </span>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => onUpdateStatus("viewed")}
-              className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
-              data-testid="mark-viewed-btn"
-            >
-              Mark as viewed
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => onUpdateStatus("viewed")}
+                className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
+                data-testid="mark-viewed-btn"
+              >
+                Mark as viewed
+              </button>
 
-            <button
-              onClick={() => onUpdateStatus("attempted")}
-              className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
-              data-testid="mark-attempted-btn"
-            >
-              Mark as attempted
-            </button>
+              <button
+                onClick={() => onUpdateStatus("attempted")}
+                className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
+                data-testid="mark-attempted-btn"
+              >
+                Mark as attempted
+              </button>
 
-            <button
-              onClick={() => onUpdateStatus("continued")}
-              className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
-              data-testid="continue-anyway-btn"
-            >
-              Continue anyway
-            </button>
+              <button
+                onClick={() => onUpdateStatus("continued")}
+                className="rounded-lg border border-[var(--brand-border)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--brand-ink)] hover:bg-gray-50 transition-colors"
+                data-testid="continue-anyway-btn"
+              >
+                Continue anyway
+              </button>
 
-            <button
-              onClick={() => onUpdateStatus("completed")}
-              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
-              data-testid="mark-completed-btn"
-            >
-              Completed with support
-            </button>
+              <button
+                onClick={() => onUpdateStatus("completed")}
+                className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                data-testid="mark-completed-btn"
+              >
+                Completed with support
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
