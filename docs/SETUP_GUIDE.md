@@ -93,7 +93,7 @@ You only need one provider key to test AI features. Leave providers you do not u
 Clerk keys are optional for the current MVP. If you leave them blank, fonetik runs in Local mode and keeps using browser localStorage only.
 
 Supabase keys are optional. When both Clerk and Supabase credentials are configured, the app best-effort writes newly completed normal sessions, vocabulary modifications (including sentences and corrections), and gamification updates (XP profile, events, and badges) to Supabase. It also supports reading cloud snapshots for user-confirmed restore (when local is empty) and import (using conservative compatibility guards when local data exists). Browser localStorage remains the runtime source of truth, and no local data is cleared or deleted during these actions.
-With Clerk and Supabase configured, signed-in users also get the owner-only Profile & Settings view. Profile preferences are separate from learning data: the UI can save and persist display name, bio, public profile enabled, leaderboard opt-in, preferredAppLanguage, feedbackLanguage, and targetLanguage, while localStorage remains the source of truth for learning stats. Public profiles are not implemented yet (privacy toggles default off), but the User Leaderboard is fully implemented as an MVP feature. App/Feedback language selectors support English and Indonesian.
+With Clerk and Supabase configured, signed-in users also get the owner-only Profile and Settings views. Profile preferences are separate from learning data: the UI can save and persist display name, bio, public profile enabled, leaderboard opt-in, preferredAppLanguage, feedbackLanguage, and targetLanguage, while localStorage remains the source of truth for learning stats. Public profiles are not implemented yet (privacy toggles default off), but the User Leaderboard is fully implemented as an MVP feature. App/Feedback language selectors support English and Indonesian.
 `SUPABASE_SERVICE_ROLE_KEY` is a server-only service role key used for administrative actions (global AI response cache writes, AI usage event logging, AI request idempotency registry writes, and server-side leaderboard aggregation read/select requests). It must never be prefixed with `NEXT_PUBLIC` or exposed client-side. If omitted, global cache writes, usage logging, request idempotency, and leaderboard aggregation are silently disabled.
 
 Do not use real keys in documentation, screenshots, commits, or issue reports.
@@ -138,7 +138,7 @@ and start again. Do not commit `.next`.
 8. Submit a Retry.
 9. End the session and copy the CSV.
 10. Open Session Log and confirm the session appears.
-11. Open Profile & Settings and confirm local-only mode shows a local profile card plus count-based stats.
+11. Open Profile or Settings and confirm local-only mode shows a local profile card or progress details.
 
 For the full QA list, see [MVP_TEST_CHECKLIST.md](MVP_TEST_CHECKLIST.md).
 
@@ -240,7 +240,7 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Enable Clerk's native Supabase integration in the Clerk and Supabase dashboards before future cloud persistence work.
 - Provider keys stay server-side in Next.js API routes.
 - The app stores session history, vocabulary, and gamification data primarily in browser localStorage.
-- Profile & Settings is owner-only. It is not a public profile page. The User Leaderboard displays sanitized details only, and Settings does not publish or leak transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, CSV/session raw content, XP event source IDs, or private notes.
+- Profile and Settings views are owner-only. They are not public profile pages. The User Leaderboard displays sanitized details only, and Settings does not publish or leak transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, CSV/session raw content, XP event source IDs, or private notes.
 - Leaderboard Privacy: Only public safe fields (rank, display name or safe initials/fallback, avatar/initials, level, period XP, badge counts) are visible. No private learning data or identifiers are exposed. Opted-out users are hidden publicly but can view their simulated position privately.
 - The API route runs server-side and uses a privileged service-role client only for read/select operations. It does not mutate XP, profiles, or leaderboard data.
 - Do not add real database credentials to Supabase migration files.
@@ -254,7 +254,7 @@ Current status:
 
 - Best-effort cloud session, vocabulary, and gamification writing is active: completed normal sessions, vocabulary changes (items, user sentences, and corrections), and gamification updates (XP profile, events, and badges) are upserted to Supabase on the client when the user is signed in and Supabase environment variables are present.
 - Browser `localStorage` remains the runtime source of truth. Users can load cloud snapshot previews and trigger manual user-confirmed restore or import actions, but the app does not run automatic background syncs, nor does it automatically clear local data.
-- Profile & Settings uses the profile row for signed-in account/preferences only. Email is shown as private/account-only, privacy toggles default off, language preferences allow selecting App Language (English/Indonesian) and Feedback Language (English/Indonesian), and learning stats are local count summaries. Stored history is not retroactively translated when changing languages. leaderboard_opt_in defaults to false and controls whether the user is shown publicly on the User Leaderboard.
+- Profile and Settings views use the profile row for signed-in account/preferences only. Email is shown as private/account-only, privacy toggles default off, language preferences allow selecting App Language (English/Indonesian) and Feedback Language (English/Indonesian), and learning stats are local count summaries. Stored history is not retroactively translated when changing languages. leaderboard_opt_in defaults to false and controls whether the user is shown publicly on the User Leaderboard.
 - The User Leaderboard runs server-side queries on profiles and XP events, filtering out users with zero XP or opted-out profiles, sorting by total valid XP per selected period. No coins, energy, shop, or house systems are used. No XP rules were changed.
 - The migration files define tables, RLS policies, indexes, and triggers.
 - RLS policies expect the Clerk JWT subject (`auth.jwt()->>'sub'`) as the owner.

@@ -13,7 +13,8 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Weekly Review opens from the sidebar
 - [ ] Diagnostic shortcut selects Diagnostic mode and opens Active Session
 - [ ] Mental Model opens from the sidebar
-- [ ] Profile & Settings opens from the sidebar
+- [ ] Profile opens from the sidebar
+- [ ] Settings opens from the sidebar
 - [ ] Article Practice opens from the sidebar
 
 ## 2. Session Setup
@@ -219,26 +220,35 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] No polling or background intervals run beyond timer/copy-status behavior
 - [ ] Cards and buttons remain usable at mobile widths
 
-## 17. Profile & Settings
+## 17. Profile
 
-> Profile & Settings is owner-only. It replaces the old Settings placeholder but
-> does not create public profile pages, leaderboard pages, or public profile links.
+> Profile is a read-only learner identity / achievement page. It does not contain edit controls, input boxes, or save buttons.
 
-- [ ] Sidebar opens Profile & Settings from the System section
-- [ ] Signed-out mode shows a local-only profile card
+- [ ] Sidebar opens Profile from the Analytics section
+- [ ] Profile renders the learner identity card (avatar/initials fallback, bio, display name, joined date when available)
+- [ ] Profile renders Level progress (current level, progress bar to next level, total XP)
+- [ ] Profile renders local stats card with counts only: sessions, day streak, vocab words, badges
+- [ ] Profile renders 7-day activity visualizer chart
+- [ ] Profile renders practice mode breakdown distribution chart
+- [ ] Profile renders earned badges preview tags
+- [ ] Profile renders visibility status and privacy reassuring copy (transcripts, CSV, corrections, URL are safe)
+
+## 17b. Settings
+
+> Settings is dedicated to preferences and privacy configurations. It does not render progress statistics cards.
+
+- [ ] Sidebar opens Settings from the System section
+- [ ] Signed-out mode shows local profile card explaining learning data remains local to the browser
 - [ ] Signed-out mode shows no cloud profile controls and no privacy toggles
-- [ ] Signed-out copy explains learning data remains local to the browser
-- [ ] Local stats are counts/summaries only: XP, speaker level, streak, sessions, vocabulary, badges, active recall, and article practice
-- [ ] Signed-in mode shows account/profile card with avatar, display name, bio, and joined date when available
+- [ ] Signed-in mode shows account card with avatar, display name, bio, and joined date when available
 - [ ] Signed-in email is labeled private/account-only
-- [ ] Language preferences selectors render App Language and Feedback Language options (English and Indonesian)
-- [ ] `public_profile_enabled` defaults false
-- [ ] `leaderboard_opt_in` defaults false
-- [ ] Toggle copy explains public visibility on the leaderboard is optional
-- [ ] Privacy copy says transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, session CSV content, XP event source IDs, and private notes are not published
-- [ ] Save sends displayName, bio, publicProfileEnabled, leaderboardOptIn, preferredAppLanguage, feedbackLanguage, and targetLanguage
-- [ ] Save failure shows a non-blocking message and does not affect local learning data
-- [ ] Profile UI does not write learning data to localStorage
+- [ ] Editable fields allow changing display name and bio (with character counter)
+- [ ] Privacy toggles render public profile toggle and leaderboard opt-in toggle (both defaulting to false)
+- [ ] Language selectors allow choosing App Language (English/Indonesian) and Feedback Language (English/Indonesian)
+- [ ] Target language selector is disabled and fixed to English
+- [ ] Save updates optimistic profile preferences in database (displayName, bio, publicProfileEnabled, leaderboardOptIn, preferredAppLanguage, feedbackLanguage, and targetLanguage)
+- [ ] Save failure shows non-blocking message and does not affect local learning data
+- [ ] Settings view does not render progress statistics card
 - [ ] No public profile route, public profile link, or unauthorized access to private data is visible
 - [ ] Known minor polish: empty display name/bio normalization can be improved later
 
@@ -385,7 +395,7 @@ Manual checks to run before declaring the local MVP stable.
 
 ## 22. Localization and Multi-Language Support
 
-- [ ] Selecting App Language "id" immediately changes UI text and labels to Indonesian across the Sidebar, Topbar, Session Setup, Vocabulary Notebook, Article Practice, Progress, Session Log, Weekly Review, Mental Model, and Profile & Settings views
+- [ ] Selecting App Language "id" immediately changes UI text and labels to Indonesian across the Sidebar, Topbar, Session Setup, Vocabulary Notebook, Article Practice, Progress, Session Log, Weekly Review, Mental Model, Profile, and Settings views
 - [ ] Selecting App Language "en" restores all UI text and labels back to English
 - [ ] Missing app language localization keys default safely to English UI text without crashing
 - [ ] Changing Feedback Language to "id" and performing a session attempt returns AI feedback explanations in Indonesian, while keeping the corrected sentence, words, target structures, and reference models in English
@@ -393,7 +403,7 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Indonesian AI feedback is concise and beginner-friendly
 - [ ] Missing or invalid incoming `feedbackLanguage` values on AI routes fall back safely to English ("en")
 - [ ] Missing or invalid incoming `targetLanguage` values on AI routes fall back safely to English ("en")
-- [ ] Target practice language is restricted to English only (no options for other target languages in Profile & Settings)
+- [ ] Target practice language is restricted to English only (no options for other target languages in Settings)
 - [ ] Stored session transcripts, history logs, vocabulary lists, and previous AI corrections are not translated retroactively when changing App Language or Feedback Language
 - [ ] Changing Feedback Language or Target Language correctly isolates cache keys and request hashes in Article Practice (e.g. English vs Indonesian requests map to different keys, preventing improper replay)
 - [ ] Changing Feedback Language or Target Language correctly isolates idempotency request hashes in Article Practice
