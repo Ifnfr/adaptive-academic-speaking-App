@@ -13,6 +13,7 @@ export type SidebarView =
   | "mental-model"
   | "settings"
   | "leaderboard"
+  | "learning-path"
   | "profile";
 
 type SidebarProps = {
@@ -177,6 +178,12 @@ export function Sidebar({
               onClick={() => onSelectView("active")}
             >
               {t("sidebar.viewActive")}
+            </SidebarItem>
+            <SidebarItem
+              active={view === "learning-path"}
+              onClick={() => onSelectView("learning-path")}
+            >
+              {t("sidebar.viewLearningPath")}
             </SidebarItem>
             <SidebarItem
               active={view === "vocabulary"}

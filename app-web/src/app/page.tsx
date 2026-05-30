@@ -105,6 +105,7 @@ import {
 } from "./lib/storage/supabase-profile-adapter";
 import { ProfileSettingsView } from "./components/ProfileSettingsView";
 import { ProfileView } from "./components/ProfileView";
+import { LearningPathView } from "./components/LearningPathView";
 import {
   DEFAULT_APP_LANGUAGE,
   normalizeAppLanguage,
@@ -2858,6 +2859,13 @@ export default function Home() {
             />
           )}
 
+          {/* ===================== Learning Path ===================== */}
+          {view === "learning-path" && (
+            <LearningPathView
+              appLanguage={appLanguage}
+            />
+          )}
+
           {/* ===================== Settings ===================== */}
           {view === "settings" && (
             <ProfileSettingsView
@@ -3219,6 +3227,8 @@ function viewTitle(view: string, translate: Translate): string {
       return translate("topbar.titleSettings");
     case "leaderboard":
       return translate("topbar.titleLeaderboard");
+    case "learning-path":
+      return translate("topbar.titleLearningPath");
     default:
       return "fonetik";
   }
@@ -3248,6 +3258,8 @@ function viewSubtitle(view: string, translate: Translate): string {
       return translate("sidebar.viewSettings");
     case "leaderboard":
       return translate("sidebar.viewLeaderboard");
+    case "learning-path":
+      return translate("sidebar.viewLearningPath");
     default:
       return "fonetik";
   }
@@ -3273,6 +3285,8 @@ function viewDescription(view: string, translate: Translate): string {
       return translate("topbar.descSettings");
     case "leaderboard":
       return translate("topbar.descLeaderboard");
+    case "learning-path":
+      return translate("topbar.descLearningPath");
     default:
       return "";
   }

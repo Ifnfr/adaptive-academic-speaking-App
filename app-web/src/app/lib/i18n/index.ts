@@ -64,6 +64,7 @@ const dictionaries = {
     "sidebar.viewLeaderboard": "Leaderboard",
     "sidebar.viewProfile": "Profile",
     "sidebar.viewSettings": "Settings",
+    "sidebar.viewLearningPath": "Learning Path",
     "sidebar.streakStart": "Complete a session today to start a streak.",
     "sidebar.streakKeep": "Don't break the chain. Keep practicing daily.",
     "sidebar.storedLocally": "stored locally",
@@ -89,6 +90,8 @@ const dictionaries = {
     "topbar.descSettings": "Account, language, and privacy preferences",
     "topbar.titleLeaderboard": "Leaderboard",
     "topbar.descLeaderboard": "Celebrate progress and consistency with other active learners.",
+    "topbar.titleLearningPath": "Learning Path",
+    "topbar.descLearningPath": "Structured learning modules to build your speaking confidence.",
     "topbar.sessionActive": "Session active",
     "topbar.idle": "Idle",
 
@@ -323,6 +326,7 @@ const dictionaries = {
     "sidebar.viewLeaderboard": "Papan Peringkat",
     "sidebar.viewProfile": "Profil",
     "sidebar.viewSettings": "Pengaturan",
+    "sidebar.viewLearningPath": "Jalur Belajar",
     "sidebar.streakStart": "Selesaikan sesi hari ini untuk memulai runtun.",
     "sidebar.streakKeep": "Jangan putus rantai. Terus berlatih setiap hari.",
     "sidebar.storedLocally": "tersimpan lokal",
@@ -348,6 +352,8 @@ const dictionaries = {
     "topbar.descSettings": "Preferensi akun, bahasa, dan privasi",
     "topbar.titleLeaderboard": "Papan Peringkat",
     "topbar.descLeaderboard": "Rayakan kemajuan dan konsistensi dengan pelajar aktif lainnya.",
+    "topbar.titleLearningPath": "Jalur Belajar",
+    "topbar.descLearningPath": "Modul belajar terstruktur untuk membangun kepercayaan diri berbicara Anda.",
     "topbar.sessionActive": "Sesi aktif",
     "topbar.idle": "Santai",
 
