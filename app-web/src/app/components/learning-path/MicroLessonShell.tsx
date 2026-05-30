@@ -5,6 +5,7 @@ import { useI18n } from "../../lib/i18n";
 import { LearningPathCard, CardStatus, LearningPathCompletionRule } from "../../lib/learning-path/types";
 import { GuidedWordLesson } from "./GuidedWordLesson";
 import { PhrasePatternLesson } from "./PhrasePatternLesson";
+import { SentenceBuilderLesson } from "./SentenceBuilderLesson";
 
 export type MicroLessonShellProps = {
   card: LearningPathCard;
@@ -105,6 +106,13 @@ export function MicroLessonShell({
               onUpdateStatus={onUpdateStatus}
               appLanguage={appLanguage}
             />
+          ) : card.type === "sentence-builder" ? (
+            <SentenceBuilderLesson
+              card={card}
+              status={status}
+              onUpdateStatus={onUpdateStatus}
+              appLanguage={appLanguage}
+            />
           ) : (
             <>
               {/* Card Title & Main instructions */}
@@ -158,7 +166,7 @@ export function MicroLessonShell({
         </div>
 
         {/* Modal Footer with generic actions */}
-        {card.type !== "guided-word" && card.type !== "phrase-pattern" && (
+        {card.type !== "guided-word" && card.type !== "phrase-pattern" && card.type !== "sentence-builder" && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4">
             <span className="text-xs text-[var(--brand-muted)]">
               Est: {card.estimatedMinutes} mins · Rule: {card.completionRule}
