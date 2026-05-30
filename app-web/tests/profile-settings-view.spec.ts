@@ -234,17 +234,18 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
 // These run in local/signed-out mode (no Clerk env configured in test env).
 // ---------------------------------------------------------------------------
 
-test.describe("Profile & Settings view — signed-out (local mode)", () => {
-  test("sidebar shows 'Profile & Settings' label", async ({ page }) => {
+test.describe("Settings view — signed-out (local mode)", () => {
+  test("sidebar shows 'Settings' label and old combined label is removed", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("aside")).toContainText("Profile & Settings");
+    await expect(page.locator("aside")).toContainText("Settings");
+    await expect(page.locator("aside")).not.toContainText("Profile & Settings");
   });
 
-  test("navigating to Profile & Settings renders local profile card", async ({
+  test("navigating to Settings renders local profile card", async ({
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
     await expect(page.locator("h2").first()).toContainText(/Profile & Settings/i);
   });
 
@@ -252,7 +253,7 @@ test.describe("Profile & Settings view — signed-out (local mode)", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
 
     // Should show local profile copy
     await expect(page.locator("body")).toContainText("Local Profile");
@@ -272,7 +273,7 @@ test.describe("Profile & Settings view — signed-out (local mode)", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
 
     // Stats card appears
     await expect(page.locator("body")).toContainText("Local Stats");
@@ -288,7 +289,7 @@ test.describe("Profile & Settings view — signed-out (local mode)", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
 
     // Raw field-shaped private content must not appear in the DOM. The UI may
     // still name private content categories in safety copy.
@@ -306,7 +307,7 @@ test.describe("Profile & Settings view — signed-out (local mode)", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
 
     // No link to a public profile page
     const publicProfileLinks = page.locator("a[href*='profile']");
@@ -317,19 +318,19 @@ test.describe("Profile & Settings view — signed-out (local mode)", () => {
     await expect(leaderboardLinks).toHaveCount(0);
   });
 
-  test("topbar shows 'Profile & Settings' as the page title", async ({
+  test("topbar shows 'Settings' as the page title", async ({
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    await expect(page.locator("header")).toContainText("Profile & Settings");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.locator("header")).toContainText("Settings");
   });
 
-  test("navigating away and back to Profile & Settings keeps the view stable", async ({
+  test("navigating away and back to Settings keeps the view stable", async ({
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
     await expect(page.locator("body")).toContainText("Local Stats");
 
     // Navigate away
@@ -337,7 +338,7 @@ test.describe("Profile & Settings view — signed-out (local mode)", () => {
     await expect(page.locator("body")).not.toContainText("Local Stats");
 
     // Navigate back
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
     await expect(page.locator("body")).toContainText("Local Stats");
   });
 });

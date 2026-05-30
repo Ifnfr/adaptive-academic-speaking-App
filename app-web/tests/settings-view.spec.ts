@@ -49,27 +49,25 @@ test.describe("SettingsView helper functions", () => {
 // E2E UI tests for SettingsView tab
 // ---------------------------------------------------------------------------
 
-test.describe("SettingsView Browser UI integration", () => {
+test.describe("SettingsView Browser UI integration - Split Sidebar View", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
   });
 
-  test("Settings tab renders local profile details and options", async ({ page }) => {
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    await page.getByTestId("settings-tab-button").click();
+  test("Settings view renders local profile details and options", async ({ page }) => {
+    await page.getByRole("button", { name: "Settings" }).click();
 
-    // Verify Settings tab elements
-    await expect(page.locator("body")).toContainText("Profile & Settings");
+    // Verify Settings page elements
+    await expect(page.locator("header")).toContainText("Settings");
     await expect(page.locator("body")).toContainText("You are using fonetik in local mode.");
     await expect(page.locator("body")).toContainText("Learning data stays on this browser");
 
-    // Local Stats Card should still be visible at the bottom of the settings tab
+    // Local Stats Card should still be visible
     await expect(page.locator("body")).toContainText("Local Stats");
   });
 
   test("Privacy: Settings view DOM must not contain private learning content placeholders", async ({ page }) => {
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    await page.getByTestId("settings-tab-button").click();
+    await page.getByRole("button", { name: "Settings" }).click();
 
     const bodyText = await page.locator("body").innerText();
     const forbidden = [

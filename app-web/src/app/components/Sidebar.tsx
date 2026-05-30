@@ -12,7 +12,8 @@ export type SidebarView =
   | "diagnostic"
   | "mental-model"
   | "settings"
-  | "leaderboard";
+  | "leaderboard"
+  | "profile";
 
 type SidebarProps = {
   view: SidebarView;
@@ -211,6 +212,12 @@ export function Sidebar({
               {t("sidebar.viewWeeklyReview")}
             </SidebarItem>
             <SidebarItem
+              active={view === "profile"}
+              onClick={() => onSelectView("profile")}
+            >
+              {t("sidebar.viewProfile")}
+            </SidebarItem>
+            <SidebarItem
               active={view === "leaderboard"}
               onClick={() => onSelectView("leaderboard")}
             >
@@ -229,7 +236,7 @@ export function Sidebar({
               active={view === "settings"}
               onClick={() => onSelectView("settings")}
             >
-              {t("nav.profileSettings")}
+              {t("sidebar.viewSettings")}
             </SidebarItem>
           </SidebarGroup>
         </nav>

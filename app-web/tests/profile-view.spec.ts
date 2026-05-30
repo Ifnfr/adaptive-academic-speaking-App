@@ -23,9 +23,6 @@ const PRIVATE_LEARNING_CONTENT_PATTERNS = [
 
 test.describe("ProfileView Privacy & Sanitization - Core Rules", () => {
   test("Display name fallbacks do not expose email", () => {
-    // We check the expected behavior:
-    // Signed-out defaults to "Local learner"
-    // Signed-in defaults to "Signed-in learner"
     const signedOutFallback = "Local learner";
     const signedInFallback = "Signed-in learner";
 
@@ -55,31 +52,30 @@ test.describe("ProfileView Privacy & Sanitization - Core Rules", () => {
 // E2E / UI Integration tests using Playwright browser driver
 // ---------------------------------------------------------------------------
 
-test.describe("ProfileView Browser UI Tests", () => {
+test.describe("ProfileView Browser UI Tests - Split Sidebar View", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
   });
 
-  test("Can navigate to Profile & Settings, defaults to Settings tab, and switch to Profile", async ({ page }) => {
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    
-    // Tab buttons should be visible
-    await expect(page.getByTestId("profile-tab-button")).toBeVisible();
-    await expect(page.getByTestId("settings-tab-button")).toBeVisible();
-    
-    // Default should be Settings view (ProfileView not visible yet)
-    await expect(page.getByTestId("profile-view-container")).not.toBeVisible();
-    
-    // Switch to Profile Tab
-    await page.getByTestId("profile-tab-button").click();
-    
-    // ProfileView container should now be visible
-    await expect(page.getByTestId("profile-view-container")).toBeVisible();
+  test("Sidebar shows separate Profile and Settings buttons, no legacy label", async ({ page }) => {
+    const sidebar = page.locator("aside");
+    await expect(sidebar.locator("button:has-text('Profile')")).toBeVisible();
+    await expect(sidebar.locator("button:has-text('Settings')")).toBeVisible();
+    await expect(sidebar.locator("button:has-text('Profile & Settings')")).toHaveCount(0);
   });
 
-  test("Renders safe identity and achievements summary on Profile tab", async ({ page }) => {
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    await page.getByTestId("profile-tab-button").click();
+  test("Can navigate to Profile directly from the sidebar", async ({ page }) => {
+    await page.getByRole("button", { name: "Profile" }).click();
+    
+    // ProfileView container should now be visible immediately
+    await expect(page.getByTestId("profile-view-container")).toBeVisible();
+    
+    // Topbar header check
+    await expect(page.locator("header")).toContainText("Profile");
+  });
+
+  test("Renders safe identity and achievements summary on Profile view", async ({ page }) => {
+    await page.getByRole("button", { name: "Profile" }).click();
 
     // Check display name
     await expect(page.getByTestId("profile-display-name")).toContainText("Local learner");
@@ -100,8 +96,7 @@ test.describe("ProfileView Browser UI Tests", () => {
   });
 
   test("Strict privacy check: Profile DOM must not leak private details", async ({ page }) => {
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    await page.getByTestId("profile-tab-button").click();
+    await page.getByRole("button", { name: "Profile" }).click();
 
     const bodyText = await page.locator("body").innerText();
     
@@ -116,22 +111,9 @@ test.describe("ProfileView Browser UI Tests", () => {
     expect(bodyText).not.toContain("@");
   });
 
-  test("Can switch to Settings tab and back to Profile tab", async ({ page }) => {
-    await page.getByRole("button", { name: "Profile & Settings" }).click();
-    
-    // Switch to Profile Tab
-    await page.getByTestId("profile-tab-button").click();
-    await expect(page.getByTestId("profile-view-container")).toBeVisible();
-
-    // Click Settings tab
-    await page.getByTestId("settings-tab-button").click();
-    
-    // The ProfileView should be hidden, and Settings/ProfileSettingsView should show
-    await expect(page.getByTestId("profile-view-container")).not.toBeVisible();
-    await expect(page.locator("body")).toContainText("Learning data stays on this browser");
-
-    // Click Profile tab again
-    await page.getByTestId("profile-tab-button").click();
-    await expect(page.getByTestId("profile-view-container")).toBeVisible();
+  test("Leaderboard still appears and works as expected", async ({ page }) => {
+    // Navigate to Leaderboard directly from sidebar
+    await page.getByRole("button", { name: "Leaderboard" }).click();
+    await expect(page.locator("header")).toContainText("Leaderboard");
   });
 });

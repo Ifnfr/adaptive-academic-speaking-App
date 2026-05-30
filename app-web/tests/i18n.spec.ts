@@ -58,7 +58,7 @@ test.describe("i18n E2E default language", () => {
     await page.goto("/");
 
     // Verify initial layout is English
-    await expect(page.locator("aside")).toContainText("Profile & Settings");
+    await expect(page.locator("aside")).toContainText("Settings");
     await expect(page.locator("aside")).toContainText("Active Session");
     await expect(page.locator("header")).toContainText("Active Practice");
 
