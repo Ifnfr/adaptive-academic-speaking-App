@@ -234,12 +234,12 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Language preferences selectors render App Language and Feedback Language options (English and Indonesian)
 - [ ] `public_profile_enabled` defaults false
 - [ ] `leaderboard_opt_in` defaults false
-- [ ] Toggle copy says no public profile page or leaderboard exists yet
+- [ ] Toggle copy explains public visibility on the leaderboard is optional
 - [ ] Privacy copy says transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, session CSV content, XP event source IDs, and private notes are not published
 - [ ] Save sends displayName, bio, publicProfileEnabled, leaderboardOptIn, preferredAppLanguage, feedbackLanguage, and targetLanguage
 - [ ] Save failure shows a non-blocking message and does not affect local learning data
 - [ ] Profile UI does not write learning data to localStorage
-- [ ] No public profile route, leaderboard route, public profile link, or leaderboard link is visible
+- [ ] No public profile route, public profile link, or unauthorized access to private data is visible
 - [ ] Known minor polish: empty display name/bio normalization can be improved later
 
 ## 18. Gamification Foundation
@@ -398,3 +398,26 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Changing Feedback Language or Target Language correctly isolates cache keys and request hashes in Article Practice (e.g. English vs Indonesian requests map to different keys, preventing improper replay)
 - [ ] Changing Feedback Language or Target Language correctly isolates idempotency request hashes in Article Practice
 
+## 23. User Leaderboard
+
+> The User Leaderboard aggregates valid XP events from Supabase Postgres server-side and displays a sanitized public ranking.
+
+- [ ] Sidebar renders the "Leaderboard" navigation link in the progress/analytics section
+- [ ] Clicking the "Leaderboard" link displays the LeaderboardView shell
+- [ ] Signed-out view displays a prompt to sign in to see the leaderboard with a working Sign In link
+- [ ] Signed-in view displays the Leaderboard header, subtitle, period tabs, and current user status summary card
+- [ ] Period tabs render Daily, Weekly, Monthly, and All-time filters, with Weekly selected by default
+- [ ] Switch between Daily, Weekly, Monthly, All-time tabs triggers a reload of ranking data with the correct query param (`?period=...`)
+- [ ] Current user status summary card displays rank (or preview rank), display name fallback, level, period XP, badges count, and status (e.g. "Opted In", "Opted Out - Private Visibility")
+- [ ] When opted out (`leaderboard_opt_in = false`), user status summary displays private visibility, their simulated position (`previewRank`), and a link to change this in Settings
+- [ ] When opted in (`leaderboard_opt_in = true`), user status summary displays their public rank, public visibility, and a link to change this in Settings
+- [ ] Rankings table lists ranking position (1, 2, 3, etc.), display name fallback, level, period XP, and badges count
+- [ ] Only users with `leaderboard_opt_in = true` and non-zero period XP appear publicly on the rankings table
+- [ ] Zero-XP users are hidden from the rankings table
+- [ ] Only safe public fields are rendered in the DOM; no emails, owner IDs, source IDs, raw XP events, transcripts, vocabulary sentences, or AI corrections are present
+- [ ] Loading state is displayed during data fetching
+- [ ] Empty state is handled gracefully when no public users are ranked
+- [ ] Error fallback handles network or database offline states gracefully without crashing the UI
+- [ ] API route `/api/leaderboard` handles missing/invalid period parameters by defaulting to `weekly`
+- [ ] API route performs administrative queries server-side using `SUPABASE_SERVICE_ROLE_KEY` but performs only read/select operations (no writes, increments, or mutations)
+- [ ] No XP rules or gamification calculations are changed or overridden by the leaderboard components

@@ -49,6 +49,12 @@ small coaching features.
   - **App Language**: Renders English and Indonesian UI labels for all core wired views (Sidebar, Topbar, Session Setup, Vocabulary Notebook, Article Practice, Gamification, Session Log, Weekly Review, Mental Model, etc.).
   - **Feedback Language**: Controls the language of explanations, weaknesses, and reviews (English or Indonesian) across all AI API routes. Indonesian feedback is concise and beginner-friendly.
   - **Target Practice Language**: Remains English only. Corrected phrases, examples, target structures, and reference models are not translated. Stored transcripts/history are not translated retroactively.
+- **User Leaderboard**: A user-only leaderboard component ranking users by valid XP.
+  - Supports Daily, Weekly, Monthly, and All-time filters (Weekly is the default).
+  - Only displays users with `leaderboard_opt_in = true` and XP > 0.
+  - Opted-out signed-in users see private visibility and a simulated position (`previewRank`) while remaining hidden publicly.
+  - No coins, energy, shop, extra points, or house systems are featured.
+  - Only safe public fields are exposed (rank, display name/fallback, initials/avatar, level, period XP, badge counts). No email, owner IDs, source IDs, raw XP events, transcripts, or learning details are exposed.
 
 ## API Routes
 
@@ -58,6 +64,7 @@ small coaching features.
 - `/api/mental-model` (micro drills & quality criteria)
 - `/api/vocabulary-correction` (vocabulary usage feedback)
 - `/api/article-practice` (URL text processing & prompt generation)
+- `/api/leaderboard` (user-only leaderboard query; supports period=daily|weekly|monthly|all-time; runs server-side with a privileged service-role client for read/select only; does not mutate data or leak private learning details)
 
 ## Local Data
 
@@ -82,7 +89,8 @@ small coaching features.
 - Database cascade deletes automatically clean up child sentences and corrections for deleted vocabulary items.
 - The app supports loading a cloud snapshot preview. Signed-in users can trigger a user-confirmed cloud restore (available only if local browser data is empty) or cloud import (if local data exists, using a conservative merge plan and compatibility guard).
 - During restore/import, local storage is never cleared, no cloud data is deleted or mutated, and no XP recalculations occur. CSV payloads, nested vocabulary relationships, and XP source details are preserved exactly. XP events are deduped on import using type and sourceId.
-- Profile & Settings loads and saves owner-scoped profile preferences when signed in. `public_profile_enabled`, `leaderboard_opt_in`, `preferred_app_language` (as preferredAppLanguage), `feedback_language` (as feedbackLanguage), and `target_language` (as targetLanguage) are stored. The profile view is not public, no leaderboard/public profile read surface exists yet, and learning stats shown there are derived from local browser state only.
+- Profile & Settings loads and saves owner-scoped profile preferences when signed in. `public_profile_enabled`, `leaderboard_opt_in`, `preferred_app_language` (as preferredAppLanguage), `feedback_language` (as feedbackLanguage), and `target_language` (as targetLanguage) are stored. The profile view is not public, the User Leaderboard is implemented to display sanitized rankings, and learning stats shown in Settings are derived from local browser state only.
+- Leaderboard Privacy & Security: The leaderboard API uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to perform read/select queries on profiles and XP events. It does not perform mutations or write operations. It filters out non-opted-in or zero-XP users. No private learning data (email, transcripts, corrections, vocabulary, URLs) is ever returned or rendered.
 - Profile saves include display name, bio, public profile enabled, leaderboard opt-in, preferredAppLanguage, feedbackLanguage, and targetLanguage. The UI does not write learning data to localStorage and does not expose transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, CSV/session raw content, XP event source IDs, or private notes. Stored history is not retroactively translated.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
 - Clerk's native Supabase integration is used to verify database operations.
@@ -99,7 +107,8 @@ small coaching features.
 ## Not In Current MVP
 
 - Automated background sync or advanced interactive conflict resolution UI (Clerk and Supabase are configured for best-effort writes, read-only snapshot previews, and user-initiated restore/import; the app is not fully cloud-first yet)
-- Public profile pages and leaderboard surfaces (profile privacy toggles exist and default off, but they are future-facing only)
+- Public profile pages (privacy toggles exist and default off, but the dedicated profile pages themselves are future-facing only)
+- User Leaderboard polish or deeper profile redesigns (the core user-only leaderboard is now fully implemented as MVP)
 - Full multi-target-language support (target practice language remains fixed to English only)
 - Deployment workflow
 - Mobile app
