@@ -3,7 +3,10 @@ export type LearningPathCardType =
   | 'phrase-pattern'
   | 'sentence-builder'
   | 'micro-speaking'
-  | 'weekly-checkpoint';
+  | 'weekly-checkpoint'
+  | 'supported-conversation'
+  | 'pronunciation-awareness'
+  | 'reflection-card';
 
 export type LearningPathCompletionRule =
   | 'viewed'
@@ -29,6 +32,19 @@ export interface LearningPathCard {
   completionRule: LearningPathCompletionRule;
   linkedEngine: string;
   mobileLayoutHint: 'compact' | 'standard' | 'scrollable';
+  // Phase 2 optional metadata
+  pronunciationFocus?: {
+    pairs: Array<{ wordA: string; wordB: string; correct: 'A' | 'B' }>;
+    instruction: string;
+  };
+  conversationPrompt?: {
+    tutorTurn: string;
+    options: Array<{ id: string; text: string; nextPrompt?: string }>;
+  };
+  reflectionPrompt?: {
+    question: string;
+    options: string[];
+  };
 }
 
 export interface LearningPathDay {
