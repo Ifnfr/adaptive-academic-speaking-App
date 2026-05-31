@@ -154,7 +154,9 @@ export const phase2Curriculum: LearningPathPhase = {
               estimatedMinutes: 3,
               completionRule: 'recorded',
               linkedEngine: 'micro-speaking',
-              mobileLayoutHint: 'standard'
+              mobileLayoutHint: 'standard',
+              speakingMode: 'fluency-sprint',
+              timeLimitsSeconds: [30, 20, 15]
             }
           ]
         },
@@ -445,7 +447,9 @@ export const phase2Curriculum: LearningPathPhase = {
               estimatedMinutes: 3,
               completionRule: 'recorded',
               linkedEngine: 'micro-speaking',
-              mobileLayoutHint: 'scrollable'
+              mobileLayoutHint: 'scrollable',
+              speakingMode: 'fluency-sprint',
+              timeLimitsSeconds: [30, 20, 15]
             }
           ]
         },

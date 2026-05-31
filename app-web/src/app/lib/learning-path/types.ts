@@ -45,6 +45,8 @@ export interface LearningPathCard {
     question: string;
     options: string[];
   };
+  speakingMode?: 'standard' | 'fluency-sprint';
+  timeLimitsSeconds?: number[];
 }
 
 export interface LearningPathDay {
