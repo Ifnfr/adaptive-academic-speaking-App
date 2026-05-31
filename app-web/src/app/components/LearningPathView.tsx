@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
-import { phase1Curriculum } from "../lib/learning-path/phase1-curriculum";
+import { allLearningPathCurriculum } from "../lib/learning-path/curriculum";
 import {
   loadProgress,
   updateCardProgress,
@@ -67,8 +67,8 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
     );
   }
 
-  const { recommendedCard, isPhaseComplete, cardStatuses } = getRecommendation(progress);
-  const flatCards = getFlatCurriculumCards();
+  const { recommendedCard, isPhaseComplete, cardStatuses } = getRecommendation(progress, { includePhase2: true });
+  const flatCards = getFlatCurriculumCards({ includePhase2: true });
   const completedCount = flatCards.filter(c => progress.cards[c.id]?.status === 'completed').length;
   const progressPercent = flatCards.length > 0 ? Math.round((completedCount / flatCards.length) * 100) : 0;
 
@@ -111,8 +111,7 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
     return 'bg-[var(--brand-surface-2)] border-b border-[var(--brand-border)]';
   };
 
-  const path = phase1Curriculum;
-  const phase = path.phases[0];
+  const path = allLearningPathCurriculum;
 
   return (
     <div className="flex flex-col gap-6" data-testid="learning-path-container">
@@ -139,10 +138,10 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
         <div className="mt-6 border-t border-[var(--brand-border)] pt-5">
           <div className="flex items-center justify-between text-sm">
             <span className="font-semibold text-[var(--brand-ink)]">
-              Phase 1: {phase.title}
+              Full Learning Path Progress
             </span>
             <span className="font-mono text-xs tabular-nums text-[var(--brand-ink-soft)]">
-              {completedCount} / {flatCards.length} lessons completed ({progressPercent}%)
+              {completedCount} / {flatCards.length} cards completed ({progressPercent}%)
             </span>
           </div>
           <div className="mt-2 h-2.5 w-full rounded-full bg-[var(--brand-surface-2)] overflow-hidden border border-[var(--brand-border)]">
@@ -158,7 +157,23 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left Vertical Journey Timeline */}
         <div className="lg:col-span-2 flex flex-col gap-8">
-          {phase.units.map((unit) => (
+          {path.phases.map((phase, phaseIndex) => (
+            <div key={phase.id} className="flex flex-col gap-6" data-testid={`phase-${phase.id}`}>
+              {/* Phase header */}
+              <div className="flex items-center gap-3 pt-2">
+                <span className="rounded-full bg-[var(--brand-teal)]/10 border border-[var(--brand-teal)]/30 px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[var(--brand-teal-ink)]">
+                  Phase {phaseIndex + 1}
+                </span>
+                <div>
+                  <h2 className="text-base font-bold text-[var(--brand-ink)]"
+                    data-testid={`phase-title-${phase.id}`}>
+                    {phase.title}
+                  </h2>
+                  <p className="text-xs text-[var(--brand-ink-soft)]">{phase.description}</p>
+                </div>
+              </div>
+
+              {phase.units.map((unit) => (
             <div key={unit.id} className="flex flex-col gap-4" data-testid={`unit-${unit.id}`}>
               <div className="border-b-2 border-[var(--brand-teal-soft)] pb-2">
                 <h2 className="text-lg font-bold text-[var(--brand-teal-ink)]">
@@ -261,6 +276,8 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
                 ))}
               </div>
             </div>
+              ))}
+            </div>
           ))}
         </div>
 
@@ -283,10 +300,10 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
                     🏆
                   </div>
                   <h4 className="mt-4 font-bold text-sm text-[var(--brand-ink)]">
-                    Phase 1 Complete!
+                    All 28 Days Complete!
                   </h4>
                   <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-                    You have successfully built your starter speaking foundation. Keep checking settings, leaderboard, and vocabulary log!
+                    You have completed both phases of your speaking foundation. Keep practising with settings, leaderboard, and vocabulary log!
                   </p>
                 </div>
               ) : recommendedCard ? (

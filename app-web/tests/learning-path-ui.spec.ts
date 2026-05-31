@@ -79,7 +79,7 @@ test.describe("Learning Path UI Shell Integration Tests", () => {
     await expect(day1Card.locator("span", { hasText: "completed" })).toBeVisible();
     await expect(day2Card.locator("span", { hasText: "recommended" })).toBeVisible();
 
-    await expect(page.locator("body")).toContainText("1 / 14 lessons completed");
+    await expect(page.locator("body")).toContainText("1 / 37 cards completed");
   });
 
   test("7. Privacy: Private fields do not appear in DOM", async ({ page }) => {
