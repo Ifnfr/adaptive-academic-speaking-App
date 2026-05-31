@@ -29,6 +29,29 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
   const [progress, setProgress] = useState<StoredLearningPathProgress | null>(null);
   const [activeCard, setActiveCard] = useState<LearningPathCard | null>(null);
 
+  const handleStartLesson = (card: LearningPathCard) => {
+    const updated = updateCardProgress(card.id, 'viewed');
+    setProgress(updated);
+    setActiveCard(card);
+  };
+
+  // Dev/Test helper to open any card in the shell for compatibility testing before Phase 2 renders in the timeline.
+  // Exists strictly in non-production environments and is deleted on unmount.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__DEV_TEST_ONLY_OPEN_CARD__ = (c: LearningPathCard) => {
+        handleStartLesson(c);
+      };
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (window as any).__DEV_TEST_ONLY_OPEN_CARD__;
+      }
+    };
+  }, [progress]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setProgress(loadProgress());
@@ -48,12 +71,6 @@ export function LearningPathView({ appLanguage }: LearningPathViewProps) {
   const flatCards = getFlatCurriculumCards();
   const completedCount = flatCards.filter(c => progress.cards[c.id]?.status === 'completed').length;
   const progressPercent = flatCards.length > 0 ? Math.round((completedCount / flatCards.length) * 100) : 0;
-
-  const handleStartLesson = (card: LearningPathCard) => {
-    const updated = updateCardProgress(card.id, 'viewed');
-    setProgress(updated);
-    setActiveCard(card);
-  };
 
   const handleCompleteCard = (cardId: string) => {
     const updated = updateCardProgress(cardId, 'completed');

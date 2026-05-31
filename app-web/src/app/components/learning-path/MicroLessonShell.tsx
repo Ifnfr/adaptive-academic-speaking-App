@@ -84,7 +84,7 @@ export function MicroLessonShell({
         <div className="flex items-center justify-between border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4">
           <div className="flex flex-col">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand-muted)]">
-              Day {card.dayNumber} · Unit {card.unitId.replace("introduce-yourself", "1").replace("my-daily-life", "2")}
+              Day {card.dayNumber} · Unit {card.unitId.replace("introduce-yourself", "1").replace("my-daily-life", "2").replace("asking-and-answering", "3").replace("expressing-preferences", "4")}
             </span>
             <span className="text-xs font-semibold text-[var(--brand-ink-soft)] uppercase tracking-wider mt-0.5">
               {card.type.replace("-", " ")}
@@ -177,12 +177,25 @@ export function MicroLessonShell({
 
               {/* Supportive Progress Status message */}
               <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 flex flex-col gap-1">
-                <span className="text-xs font-semibold text-[var(--brand-ink)]">
-                  Practice started
-                </span>
-                <p className="text-xs text-[var(--brand-ink-soft)]">
-                  Latih pengucapan frasa di atas secara mandiri dengan membaca instruksi serta contoh format yang diberikan.
-                </p>
+                {["supported-conversation", "pronunciation-awareness", "reflection-card"].includes(card.type) ? (
+                  <>
+                    <span className="text-xs font-semibold text-[var(--brand-ink)]" data-testid="phase2-fallback-alert">
+                      This lesson preview uses a safe guided mode for now.
+                    </span>
+                    <p className="text-xs text-[var(--brand-ink-soft)]" data-testid="phase2-fallback-privacy">
+                      No speech is scored or stored. Complete with support when you are ready.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs font-semibold text-[var(--brand-ink)]">
+                      Practice started
+                    </span>
+                    <p className="text-xs text-[var(--brand-ink-soft)]">
+                      Latih pengucapan frasa di atas secara mandiri dengan membaca instruksi serta contoh format yang diberikan.
+                    </p>
+                  </>
+                )}
               </div>
             </>
           )}
