@@ -481,3 +481,16 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Checklist formatting outputs standard developer checklists with validation command strings (`npm run test:e2e`).
 - [ ] Privacy QA tests (`tests/improvement-loop-privacy.spec.ts`) verify that zero raw user text, transcripts, URLs, emails, or credentials are leaked or stored.
 - [ ] Code is audited to verify zero auto-execution, self-modification, filesystem writes, or database queries.
+
+## 28. Developer Diagnostics (Foundation)
+
+> The Developer Diagnostics engine is currently a pure helper foundation. It has no UI, storage, Supabase schema, API routes, AI model dependencies, environment variable updates, or third-party packages.
+
+- [ ] Developer Diagnostics type contracts serialize only whitelisted fields.
+- [ ] Snapshot helpers create safe foundation readiness summaries.
+- [ ] Report builder produces advisory developer-facing reports only.
+- [ ] Phase 2 readiness evaluator returns safe readiness status and blockers.
+- [ ] Improvement Loop connector maps diagnostics to human-approved proposal candidates only.
+- [ ] Privacy QA confirms no transcripts, emails, owner/source IDs, raw event payloads, article URLs, raw AI corrections, recordings, provider responses, or clinical/negative labels are serialized.
+- [ ] Developer Diagnostics introduces no UI, storage, Supabase schema, API route, analytics tracking, AI/model call, package, or environment changes.
+

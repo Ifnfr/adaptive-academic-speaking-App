@@ -57,6 +57,8 @@ shown in the UI is **fonetik**.
 - **Feedback Normalization Engine (Foundation)**: A pure, side-effect-free helper pipeline that safely converts untrusted AI feedback signals into structured, normalized taxonomy categories (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It enforces strict privacy (stripping raw AI text and PII) and provides deterministic retry actions, safe summary aggregations, and Learning Path advisory hints, without modifying UI or storage yet.
 - **Adaptive Tutor Memory (Foundation)**: Pure, side-effect‑free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints. It acts as a headless, pure-helper foundation for future tutor-like personalization, with no UI, storage, Supabase, or AI/model calls added yet.
 - **Human-Approved Improvement Loop (Foundation)**: Pure, side-effect-free helper functions that detect learning and practice friction from safe aggregate metrics, compile structured improvement proposals, and format markdown checklists for developers. It has no auto-execution capability, and does not add UI, storage, schemas, API routes, or AI models.
+- **Developer Diagnostics (Foundation)**: A pure, developer-facing helper foundation that combines safe readiness snapshots, diagnostic reports, Phase 2 readiness checks, and Improvement Loop proposal candidates. It does not add UI, storage, Supabase sync, analytics tracking, API routes, or AI/model calls. Developer Diagnostics exists to help developers inspect foundation readiness before Phase 2 implementation. It is not a user analytics pipeline and does not track learner behavior.
+
 
 ## Tech Stack
 
