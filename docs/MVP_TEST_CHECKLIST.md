@@ -446,8 +446,24 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Progress persists successfully to `fonetik:learning-path-progress:v1` in `localStorage`
 - [ ] Completing a card advances the recommendation engine correctly
 - [ ] Privacy strictness: No transcripts, recordings, raw usage, email, owner IDs, or AI corrections appear in DOM or storage
-- [ ] Safe completion state appears upon finishing all Phase 1 cards
 - [ ] No AI scoring claims, final exams, or auto-pass mechanisms are presented
+
+## 24b. Learning Path (Phase 2 MVP)
+
+> Phase 2 "Everyday Interaction" extends the Learning Path with scaffolded practice and guided interactions.
+
+- [ ] Learning Path renders Phase 1 and Phase 2 sequentially.
+- [ ] Phase 2 "Everyday Interaction" appears after Phase 1.
+- [ ] Unit 3 "Asking and Answering" covers Days 15–21.
+- [ ] Unit 4 "Expressing Simple Preferences" covers Days 22–28.
+- [ ] Completing Phase 1 recommends Day 15 Card 1.
+- [ ] Fluency Sprint renders without scoring or transcript handling.
+- [ ] Progressive Sentence Builder uses fixed choices only.
+- [ ] Supported Conversation uses scripted prompts and pre-written response options only.
+- [ ] Pronunciation Awareness uses fixed minimal-pair practice without phoneme/pronunciation scoring.
+- [ ] Reflection Card uses fixed self-assessment options only.
+- [ ] Phase 2 Privacy QA confirms no transcript, speech-to-text, audio blob, recording URL, raw learner sentence, AI score, grammar score, pronunciation score, private note, or clinical/negative learner label is rendered or stored.
+- [ ] Existing Progress & Quest and Leaderboard flows still pass regression checks.
 
 ## 25. Feedback Normalization Engine (Foundation)
 

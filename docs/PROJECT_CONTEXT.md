@@ -55,11 +55,14 @@ small coaching features.
   - Opted-out signed-in users see private visibility and a simulated position (`previewRank`) while remaining hidden publicly.
   - No coins, energy, shop, extra points, or house systems are featured.
   - Only safe public fields are exposed (rank, display name/fallback, initials/avatar, level, period XP, badge counts). No email, owner IDs, source IDs, raw XP events, transcripts, or learning details are exposed.
-- **Learning Path (Phase 1 MVP)**: A local-first, static-curriculum guided journey (Beginner Confidence Ladder).
-  - Includes Unit 1 (Introduce Yourself) and Unit 2 (My Daily Life) spread across 14 days, featuring a "Today's Mission" focus.
+- **Learning Path (Phase 1 & Phase 2)**: A local-first, static-curriculum guided journey.
+  - **Phase 1: Confidence Foundation**: Includes Unit 1 (Introduce Yourself) and Unit 2 (My Daily Life) spread across Days 1-14, featuring a "Today's Mission" focus.
+  - **Phase 2: Everyday Interaction**: Extends the sequential journey to Days 15-28, featuring Unit 3 (Asking and Answering) and Unit 4 (Expressing Simple Preferences). Phase 2 appears immediately after completing Phase 1.
+  - **Phase 2 Renderers**: Introduces safe, guided interactions using Fluency Sprint, Progressive Sentence Builder, Supported Conversation, Pronunciation Awareness, and Reflection Card.
   - Progress is purely local and deterministic, stored in `fonetik:learning-path-progress:v1`.
-  - MicroLessonShell wraps interactive cards including Guided Word, Phrase Pattern, Sentence Builder, and a simulated Micro Speaking flow.
-  - Strict privacy non-goals: Does not store transcripts, recordings, email, or usage IDs in local progress. No AI scoring, planner, or Supabase cloud sync is present in the MVP.
+  - MicroLessonShell wraps interactive cards.
+  - **Privacy Boundaries**: Phase 2 uses scripted/static curriculum data and guided interactions. It does not introduce raw learner speech processing, backend audio handling, recording uploads, or AI scoring. No free speaking, open roleplay, or generative AI conversation. Stores only safe progress locally. Never stores transcripts, recordings, email, or usage IDs in local progress.
+  - MVP limitations: No adaptive unlocking yet, no Tutor Memory-driven sequencing yet, no AI planner, and no Supabase cloud sync is present in the MVP.
 - **Feedback Normalization Engine (Foundation)**: A pure, stateless helper pipeline that normalizes untrusted raw feedback signals into a safe, 10-category taxonomy (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It securely generates deterministic retry actions, summary aggregations, and Learning Path recommendation hints. Strict privacy enforcement ensures no user transcripts, PII, or raw AI text pass through the pipeline. It currently has no UI or storage integration.
 - **Adaptive Tutor Memory (Foundation)**: Pure, side-effect-free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints without UI, storage, API routes, or AI/model calls.
 

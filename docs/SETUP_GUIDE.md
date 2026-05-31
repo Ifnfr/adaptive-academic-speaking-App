@@ -253,6 +253,12 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - **Developer Diagnostics**: (Foundation only) Requires no manual setup, configuration, or integration steps. It uses no environment variables, Supabase schemas, API routes, database tables, or external AI/model provider keys. Its features function entirely as stateless, pure TypeScript helpers under `src/app/lib/developer-diagnostics/`. Its performance and privacy boundaries are validated through automated unit tests.
 
 
+## Phase 2 Learning Path
+
+Phase 2 requires no additional setup.
+
+Phase 2 Learning Path runs entirely within the existing frontend setup. It adds static curriculum data and client-side guided renderers only. No additional services, environment variables, migrations, or AI/TTS providers are required. Browser SpeechSynthesis is used for local tutor voice playback where available. If browser voice is unavailable, the UI falls back safely.
+
 ## Supabase Schema & Hybrid Cloud Status
 
 The `supabase/migrations/` folder contains Postgres schema and Row Level Security
