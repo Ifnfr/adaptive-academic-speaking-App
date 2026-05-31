@@ -241,14 +241,18 @@ export function buildLeaderboardSnapshot(params: {
         number: speakerLevel.level,
         name: speakerLevel.name,
       },
-      periodXp: xpMap.get(ownerId) || 0,
+      periodXp: normalizedPeriod === "all-time" ? totalXp : (xpMap.get(ownerId) || 0),
       badgeCount: badgeMap.get(ownerId) || 0,
     };
   };
 
   // 4. Build public leaderboard entries (only opted-in users with periodXp > 0)
   const publicProfiles = params.profiles.filter(
-    (p) => p.leaderboardOptIn === true && (xpMap.get(p.ownerId) || 0) > 0
+    (p) =>
+      p.leaderboardOptIn === true &&
+      (normalizedPeriod === "all-time"
+        ? (p.totalXp || 0) > 0
+        : (xpMap.get(p.ownerId) || 0) > 0),
   );
 
   const rawEntries = publicProfiles.map((p) => {
@@ -287,7 +291,7 @@ export function buildLeaderboardSnapshot(params: {
   const profile = currentUserId ? params.profiles.find((p) => p.ownerId === currentUserId) : null;
 
   if (profile) {
-    const userXp = xpMap.get(currentUserId!) || 0;
+    const userXp = normalizedPeriod === "all-time" ? (profile.totalXp || 0) : (xpMap.get(currentUserId!) || 0);
     const mappedUser = getProfileData(profile, currentUserId!);
 
     // Calculate public rank if opted-in and has XP

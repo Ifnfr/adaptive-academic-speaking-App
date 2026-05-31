@@ -51,11 +51,11 @@ test.describe("Leaderboard Period Normalization & Bounds", () => {
 
 test.describe("Leaderboard Aggregation Core", () => {
   const mockProfiles: LeaderboardProfileInput[] = [
-    { ownerId: "user_1", id: "uuid-1", displayName: "Alice Smith", leaderboardOptIn: true, learnerLevel: "Advanced" },
-    { ownerId: "user_2", id: "uuid-2", displayName: "Bob Jones", leaderboardOptIn: true, learnerLevel: "Beginner" },
-    { ownerId: "user_3", id: "uuid-3", displayName: "Charlie Brown", leaderboardOptIn: false, learnerLevel: "Intermediate" },
-    { ownerId: "user_4", id: "uuid-4", displayName: null, leaderboardOptIn: true, learnerLevel: "Foundation" }, // empty name
-    { ownerId: "user_5", id: "uuid-5", displayName: "Zero XP User", leaderboardOptIn: true, learnerLevel: "Foundation" },
+    { ownerId: "user_1", id: "uuid-1", displayName: "Alice Smith", leaderboardOptIn: true, learnerLevel: "Advanced", totalXp: 200 },
+    { ownerId: "user_2", id: "uuid-2", displayName: "Bob Jones", leaderboardOptIn: true, learnerLevel: "Beginner", totalXp: 100 },
+    { ownerId: "user_3", id: "uuid-3", displayName: "Charlie Brown", leaderboardOptIn: false, learnerLevel: "Intermediate", totalXp: 300 },
+    { ownerId: "user_4", id: "uuid-4", displayName: null, leaderboardOptIn: true, learnerLevel: "Foundation", totalXp: 50 }, // empty name
+    { ownerId: "user_5", id: "uuid-5", displayName: "Zero XP User", leaderboardOptIn: true, learnerLevel: "Foundation", totalXp: 0 },
   ];
 
   const mockEvents: LeaderboardEventInput[] = [
@@ -242,8 +242,8 @@ test.describe("Leaderboard Aggregation Core", () => {
       avatarUrl: null,
       initials: "CB",
       level: {
-        number: 1,
-        name: "New Speaker",
+        number: 3,
+        name: "Developing Speaker",
       },
     });
   });
@@ -315,5 +315,36 @@ test.describe("Leaderboard Aggregation Core", () => {
         "rank",
       ]);
     }
+  });
+
+  test("aggregates by profile totalXp for all-time period", () => {
+    const snapshot = buildLeaderboardSnapshot({
+      period: "all-time",
+      currentDateStr: "2026-05-29",
+      profiles: mockProfiles,
+      events: mockEvents,
+      currentUserId: "user_2",
+    });
+
+    // Alice: totalXp 200 (rank 1), Bob: totalXp 100 (rank 2), user_4: totalXp 50 (rank 3)
+    // Charlie (totalXp 300) is opted out. user_5 (totalXp 0) is excluded.
+    expect(snapshot.leaderboard).toHaveLength(3);
+
+    const alice = snapshot.leaderboard.find((u) => u.initials === "AS")!;
+    const bob = snapshot.leaderboard.find((u) => u.initials === "BJ")!;
+    const anonymous = snapshot.leaderboard.find((u) => u.displayName === "Speaker #ID-4")!;
+
+    expect(alice.rank).toBe(1);
+    expect(alice.periodXp).toBe(200);
+
+    expect(bob.rank).toBe(2);
+    expect(bob.periodXp).toBe(100);
+
+    expect(anonymous.rank).toBe(3);
+    expect(anonymous.periodXp).toBe(50);
+
+    // currentUser standing check
+    expect(snapshot.currentUser.periodXp).toBe(100); // Bob's total XP
+    expect(snapshot.currentUser.rank).toBe(2);
   });
 });

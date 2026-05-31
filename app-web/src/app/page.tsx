@@ -2846,6 +2846,7 @@ export default function Home() {
               isSignedIn={cloudAuthState.isSignedIn}
               getToken={cloudAuthState.getToken}
               ownerProfile={ownerProfile}
+              xpProfile={xpProfile}
               speakerProgress={speakerProgress}
             />
           )}

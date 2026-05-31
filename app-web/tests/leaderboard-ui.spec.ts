@@ -359,4 +359,116 @@ test.describe("Leaderboard UI Shell", () => {
       expect(content).not.toContain(`${field}=`);
     }
   });
+
+  test("Sync divergence warning displays when cloud XP is lower than local XP", async ({ page }) => {
+    // Mock API to return 0 XP all-time for currentUser
+    const mockAllTimeEmptyStandingResponse = {
+      period: "all-time",
+      leaderboard: [],
+      currentUser: {
+        isSignedIn: true,
+        optedIn: true,
+        visibility: "public",
+        rank: null,
+        previewRank: 1,
+        periodXp: 0,
+        displayName: "Mock User",
+        avatarUrl: null,
+        initials: "MU",
+        level: { number: 1, name: "New Speaker" },
+      },
+    };
+
+    await page.route("**/api/leaderboard*", async (route) => {
+      await route.fulfill({ json: mockAllTimeEmptyStandingResponse });
+    });
+
+    // Populate localStorage with local XP = 105
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        "adaptive-speaking-app:xp-profile",
+        JSON.stringify({
+          version: 1,
+          totalXp: 105,
+          pendingDailyXp: 0,
+          unclaimedPreviousXp: 0,
+          activeDate: "2026-05-29",
+          lastClaimedDate: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+      );
+    });
+
+    await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
+    await page.locator("aside button:has-text('Leaderboard')").click();
+
+    // Click All-time tab
+    await page.locator("[role='tab']:has-text('All-time')").click();
+
+    // Check warning is visible and shows correct values
+    const warning = page.locator("#leaderboard-sync-warning");
+    await expect(warning).toBeVisible();
+    await expect(warning).toContainText("local: 105 XP");
+  });
+
+  test("Standings and rankings use total XP for all-time period", async ({ page }) => {
+    const mockAllTimeResponse = {
+      period: "all-time",
+      leaderboard: [
+        {
+          rank: 1,
+          displayName: "Alice S.",
+          avatarUrl: null,
+          initials: "AS",
+          level: { number: 3, name: "Intermediate Speaker" },
+          periodXp: 200,
+          badgeCount: 2,
+        },
+        {
+          rank: 2,
+          displayName: "Mock User",
+          avatarUrl: null,
+          initials: "MU",
+          level: { number: 1, name: "New Speaker" },
+          periodXp: 105,
+          badgeCount: 0,
+        },
+      ],
+      currentUser: {
+        isSignedIn: true,
+        optedIn: true,
+        visibility: "public",
+        rank: 2,
+        previewRank: 2,
+        periodXp: 105,
+        displayName: "Mock User",
+        avatarUrl: null,
+        initials: "MU",
+        level: { number: 1, name: "New Speaker" },
+      },
+    };
+
+    await page.route("**/api/leaderboard*", async (route) => {
+      await route.fulfill({ json: mockAllTimeResponse });
+    });
+
+    await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
+    await page.locator("aside button:has-text('Leaderboard')").click();
+
+    // Click All-time tab
+    await page.locator("[role='tab']:has-text('All-time')").click();
+
+    // Check Standings Card shows 105 XP
+    const userCard = page.locator("#leaderboard-current-user-card");
+    await expect(userCard).toBeVisible();
+    await expect(userCard.locator("text=105 XP")).toBeVisible();
+
+    // Check ranking list shows 105 XP for Mock User
+    const rankingsList = page.locator("#leaderboard-list");
+    await expect(rankingsList.locator("text=Mock User")).toBeVisible();
+    await expect(rankingsList.locator("text=105 XP")).toBeVisible();
+  });
 });

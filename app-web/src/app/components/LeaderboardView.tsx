@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 import type { LeaderboardSnapshot, LeaderboardPeriod } from "../lib/leaderboard/leaderboard-aggregation";
-import type { SpeakerLevelProgress } from "../lib/gamification";
+import type { SpeakerLevelProgress, XpProfile } from "../lib/gamification";
 
 type LeaderboardViewProps = {
   isSignedIn?: boolean;
   getToken?: (() => Promise<string | null>) | null;
   ownerProfile?: { displayName?: string | null } | null;
+  xpProfile?: XpProfile | null;
   speakerProgress?: SpeakerLevelProgress | null;
   appLanguage?: AppLanguage | null;
   onGoToSettings?: () => void;
@@ -24,6 +25,7 @@ export function LeaderboardView({
   isSignedIn: propIsSignedIn,
   getToken,
   ownerProfile,
+  xpProfile,
   speakerProgress,
   appLanguage,
   onGoToSettings,
@@ -188,6 +190,15 @@ export function LeaderboardView({
                     </button>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Sync divergence warning */}
+            {isSignedIn && period === "all-time" && xpProfile && data.currentUser.periodXp < xpProfile.totalXp && (
+              <div className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold-soft)] p-4" id="leaderboard-sync-warning">
+                <p className="text-xs text-[var(--brand-ink)]">
+                  ⚠️ Some of your local achievements (local: {xpProfile.totalXp} XP) are still syncing to the cloud. The leaderboard will update shortly once backup completes.
+                </p>
               </div>
             )}
 
