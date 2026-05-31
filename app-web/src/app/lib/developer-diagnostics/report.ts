@@ -38,7 +38,7 @@ export function getOverallDiagnosticStatus(
 
   // Blocked conditions: any blocked foundation status or critical risks/recommendations
   const hasBlockedFoundation = foundationsList.some(f => f.status === "blocked");
-  const hasCriticalRisk = snapshot.risks.some(r => (r.severity as string) === "critical");
+  const hasCriticalRisk = snapshot.risks.some(r => r.severity === "critical");
   const hasCriticalRecommendation = snapshot.recommendations.some(rec => rec.priority === "critical");
 
   if (hasBlockedFoundation || hasCriticalRisk || hasCriticalRecommendation) {
@@ -114,7 +114,7 @@ export function buildRiskSection(risks: DiagnosticRisk[]): DeveloperDiagnosticRe
     return `Risk ID: ${riskId} | Area: ${r.area} | Level: ${r.severity} | Summary: ${r.description} | Mitigation: ${r.mitigation}`;
   });
 
-  const hasCriticalOrHigh = risks.some(r => r.severity === "high" || (r.severity as string) === "critical");
+  const hasCriticalOrHigh = risks.some(r => r.severity === "high" || r.severity === "critical");
   const hasMedium = risks.some(r => r.severity === "medium");
   const status = hasCriticalOrHigh ? "fail" : hasMedium ? "warning" : "pass";
 
