@@ -29,6 +29,9 @@ export interface FoundationReadinessResult {
   passedChecks: string[];
   failedChecks: string[];
   warnings: string[];
+  safeSummary: string;
+  availableSignals: DiagnosticSignalAvailability[];
+  missingSignals: DiagnosticSignalAvailability[];
 }
 
 export interface DiagnosticSignalAvailability {
@@ -81,4 +84,5 @@ export interface DeveloperDiagnosticSnapshot {
   phase2Readiness: Phase2ReadinessResult;
   improvementProposalRefs: string[]; // Reference deterministic Proposal IDs
   checklist: DiagnosticChecklistItem[];
+  safeSummary: string;
 }

@@ -19,6 +19,7 @@ const ALLOWED_KEYS = new Set([
   "phase2Readiness",
   "improvementProposalRefs",
   "checklist",
+  "safeSummary",
 
   // nested/item keys
   "learning_path",
@@ -44,7 +45,6 @@ const ALLOWED_KEYS = new Set([
   "mitigation",
   "recommendationId",
   "priority",
-  "safeSummary",
   "suggestedNextStep",
   "humanReviewRequired",
   "id",
@@ -92,6 +92,16 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
       passedChecks: ["test_check_1", "test_check_2"],
       failedChecks: [],
       warnings: ["warning_1"],
+      safeSummary: "Ready to test summary",
+      availableSignals: [
+        {
+          foundation: "learning_path",
+          signalName: "cards_completed",
+          isAvailable: true,
+          reason: "Tests verified",
+        }
+      ],
+      missingSignals: []
     };
     expect(sampleFoundationResult.status).toBe("ready");
     expect(sampleFoundationResult.readinessScore).toBe(95);
@@ -134,6 +144,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
         feedback_normalization: {
           status: "ready",
@@ -141,6 +154,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
         tutor_memory: {
           status: "ready",
@@ -148,6 +164,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
         improvement_loop: {
           status: "ready",
@@ -155,6 +174,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
         docs: {
           status: "ready",
@@ -162,6 +184,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
         tests: {
           status: "ready",
@@ -169,6 +194,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
         privacy: {
           status: "ready",
@@ -176,6 +204,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
           passedChecks: [],
           failedChecks: [],
           warnings: [],
+          safeSummary: "",
+          availableSignals: [],
+          missingSignals: []
         },
       },
       availableSignals: [
@@ -192,6 +223,7 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
       phase2Readiness: samplePhase2Result,
       improvementProposalRefs: [],
       checklist: [],
+      safeSummary: "Top-level safe summary"
     };
 
     // Verify allowed keys whitelist
@@ -202,7 +234,9 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
         key === "test_check_2" ||
         key === "warning_1" ||
         key === "cards_completed" ||
-        key === "Tests verified"
+        key === "Tests verified" ||
+        key === "Ready to test summary" ||
+        key === "Top-level safe summary"
       ) {
         continue;
       }
