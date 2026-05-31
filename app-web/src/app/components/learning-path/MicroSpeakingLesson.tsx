@@ -4,6 +4,7 @@ import type { AppLanguage } from "../../lib/i18n";
 import { LearningPathCard, CardStatus } from "../../lib/learning-path/types";
 import { MicroPracticeContract } from "../../lib/learning-path/useMicroPractice";
 import { useState } from "react";
+import { canUseTutorVoice, speakTutorPhrase } from "../../lib/speech/tutor-voice";
 
 export type MicroSpeakingLessonProps = {
   card: LearningPathCard;
@@ -17,6 +18,23 @@ export function MicroSpeakingLesson({
   contract,
 }: MicroSpeakingLessonProps) {
   const [recordState, setRecordState] = useState<"idle" | "recording" | "recorded">("idle");
+  const [listenActive, setListenActive] = useState(false);
+  const [practiceCount, setPracticeCount] = useState(0);
+
+  const handleListenModel = async () => {
+    contract.actions.startAttempt(); // Listening acts as starting an attempt
+    setListenActive(true);
+
+    if (canUseTutorVoice()) {
+      const textToSpeak = card.targetPhrases.join(", ");
+      await speakTutorPhrase(textToSpeak);
+    } else {
+      // Mock playback delay
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+
+    setListenActive(false);
+  };
 
   const handleStartRecording = () => {
     setRecordState("recording");
@@ -25,6 +43,7 @@ export function MicroSpeakingLesson({
 
   const handleStopRecording = () => {
     setRecordState("recorded");
+    setPracticeCount((prev) => prev + 1);
     contract.actions.markRecorded();
   };
 
@@ -71,6 +90,38 @@ export function MicroSpeakingLesson({
         )}
       </div>
 
+      {/* Model Listening Placeholder */}
+      <div className="flex flex-col gap-3">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--brand-muted)]">
+          Model Pronunciation
+        </h4>
+        <div className="flex items-center gap-4 rounded-xl border border-[var(--brand-border)] p-4 bg-[var(--brand-surface)]">
+          <button
+            onClick={handleListenModel}
+            disabled={listenActive}
+            className={`flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] text-lg hover:bg-[var(--brand-surface-2)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
+              listenActive ? "animate-pulse" : ""
+            }`}
+            data-testid="listen-model-btn"
+          >
+            {listenActive ? "🔊" : "▶"}
+          </button>
+          <div>
+            <span className="text-sm font-semibold text-[var(--brand-ink)]">
+              {listenActive ? "Playing..." : "Listen to the model"}
+            </span>
+            <p className="text-xs text-[var(--brand-ink-soft)] mt-0.5">
+              Dengarkan cara pengucapan penutur asli untuk melatih intonasi.
+            </p>
+            {!canUseTutorVoice() && (
+              <p className="text-xs text-amber-600 font-medium mt-1" data-testid="tutor-voice-fallback">
+                Tutor voice is not available in this browser yet.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Interactive Mock Recording Area */}
       <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8">
         <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand-muted)] self-start w-full">
@@ -100,12 +151,12 @@ export function MicroSpeakingLesson({
             )}
           </div>
           
-          <p className="text-sm font-medium text-[var(--brand-ink)]">
+          <p className="text-sm font-medium text-[var(--brand-ink)] font-mono">
             {recordState === "recording" 
-              ? "Listening... Read the phrases clearly." 
+              ? "Speaking..." 
               : recordState === "recorded"
                 ? "Attempt recorded locally."
-                : "Tap to simulate speaking attempt."}
+                : "Ready"}
           </p>
         </div>
 
@@ -116,7 +167,7 @@ export function MicroSpeakingLesson({
               className="rounded-xl px-6 py-2.5 text-sm font-semibold bg-white border border-[var(--brand-border)] text-[var(--brand-ink)] hover:border-[var(--brand-teal)] transition-colors shadow-sm focus:outline-none"
               data-testid="start-record-btn"
             >
-              Start attempt
+              Start speaking
             </button>
           )}
 
@@ -126,7 +177,7 @@ export function MicroSpeakingLesson({
               className="rounded-xl px-6 py-2.5 text-sm font-semibold bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 transition-colors shadow-sm focus:outline-none"
               data-testid="stop-record-btn"
             >
-              Stop recording
+              Stop attempt
             </button>
           )}
 
@@ -144,8 +195,18 @@ export function MicroSpeakingLesson({
 
       {/* Interactive Action CTA */}
       <div className="flex flex-col gap-4 border-t border-[var(--brand-border)] pt-5">
-        <div className="flex items-center justify-between text-[11px] text-[var(--brand-ink-soft)]">
-          <span>Complete the speaking attempt to proceed</span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between text-xs text-[var(--brand-ink-soft)]">
+            <span>Your voice is not stored or uploaded in this practice.</span>
+            {practiceCount > 0 && (
+              <span className="font-semibold text-emerald-600 font-mono text-[11px]">
+                Practiced {practiceCount} {practiceCount === 1 ? "time" : "times"}!
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] text-[var(--brand-muted)]">
+            This practice tracks completion only, not speech content.
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
