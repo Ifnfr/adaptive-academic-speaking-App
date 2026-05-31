@@ -61,6 +61,28 @@ small coaching features.
   - MicroLessonShell wraps interactive cards including Guided Word, Phrase Pattern, Sentence Builder, and a simulated Micro Speaking flow.
   - Strict privacy non-goals: Does not store transcripts, recordings, email, or usage IDs in local progress. No AI scoring, planner, or Supabase cloud sync is present in the MVP.
 - **Feedback Normalization Engine (Foundation)**: A pure, stateless helper pipeline that normalizes untrusted raw feedback signals into a safe, 10-category taxonomy (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It securely generates deterministic retry actions, summary aggregations, and Learning Path recommendation hints. Strict privacy enforcement ensures no user transcripts, PII, or raw AI text pass through the pipeline. It currently has no UI or storage integration.
+- **Adaptive Tutor Memory (Foundation)**: Pure, side-effect-free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints without UI, storage, API routes, or AI/model calls.
+
+### Adaptive Tutor Memory (Foundation Details)
+
+- **Headless & Stateless Foundation**: The Adaptive Tutor Memory engine is implemented as a pure library of stateless helper functions. It handles no direct storage, does not mutate user state, has no Supabase schema elements, does not create Next.js API routes, and does not invoke AI models.
+- **Components & Files**:
+  - `src/app/lib/tutor-memory/types.ts`: Safe type structures for profiles and recommendations.
+  - `src/app/lib/tutor-memory/build.ts`: Builds a `TutorMemoryProfile` by ingesting whitelisted `FeedbackSignalSummary` inputs and current Learning Path progress snapshots.
+  - `src/app/lib/tutor-memory/recommend.ts`: Evaluates profiles to output deterministic advisory recommendations (`TutorMemoryRecommendation`).
+  - `src/app/lib/tutor-memory/learning-path-bridge.ts`: Combines sequential Learning Path progress with the advisory recommendations. It guarantees that Learning Path order is strictly preserved and never hard-locked or bypassed.
+  - `tests/tutor-memory-privacy.spec.ts`: Dedicated privacy QA test suite ensuring absolute security compliance.
+- **Privacy Boundary**: Safe profiles and recommendations are strictly limited to category-level signals. In compliance with privacy guidelines, the foundation explicitly rejects and filters out the following forbidden patterns:
+  - Transcripts or retry transcripts
+  - Raw corrections or vocabulary sentences
+  - Article URLs
+  - User emails or account details
+  - Owner IDs, user IDs, or source IDs
+  - CSV payload contents or raw session history details
+  - Raw provider responses, prompt text, or generated feedback text
+  - Audio recordings or voice blobs
+  - Clinical, psychological, or negative learner labels (e.g. "struggling", "failing", "weakness")
+
 
 ## API Routes
 

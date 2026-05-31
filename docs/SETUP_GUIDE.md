@@ -248,6 +248,8 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - The API route runs server-side and uses a privileged service-role client only for read/select operations. It does not mutate XP, profiles, or leaderboard data.
 - Do not add real database credentials to Supabase migration files.
 - **Feedback Normalization Engine**: (Foundation only) Operates purely in memory as a stateless helper pipeline to sanitize AI output into a safe taxonomy. It does not integrate with UI or storage yet and never persists or leaks transcripts or raw AI text.
+- **Adaptive Tutor Memory**: (Foundation only) Requires no manual setup. It relies on no environment variables, no Supabase tables, no database migrations, and no cloud integration. The modules function as stateless, pure TypeScript helpers. Unit tests (including `tests/tutor-memory-privacy.spec.ts`) verify that the pure-helper behavior and privacy boundaries operate correctly and cleanly strip out forbidden data formats.
+
 
 ## Supabase Schema & Hybrid Cloud Status
 
