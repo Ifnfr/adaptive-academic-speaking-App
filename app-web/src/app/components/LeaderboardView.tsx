@@ -2,13 +2,29 @@ import { useEffect, useState } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 import type { LeaderboardSnapshot, LeaderboardPeriod } from "../lib/leaderboard/leaderboard-aggregation";
+import type { SpeakerLevelProgress } from "../lib/gamification";
 
 type LeaderboardViewProps = {
+  isSignedIn?: boolean;
+  getToken?: (() => Promise<string | null>) | null;
+  ownerProfile?: { displayName?: string | null } | null;
+  speakerProgress?: SpeakerLevelProgress | null;
   appLanguage?: AppLanguage | null;
   onGoToSettings?: () => void;
 };
 
+const getInitials = (name?: string | null) => {
+  if (!name || !name.trim()) return "S";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 export function LeaderboardView({
+  isSignedIn: propIsSignedIn,
+  getToken,
+  ownerProfile,
+  speakerProgress,
   appLanguage,
   onGoToSettings,
 }: LeaderboardViewProps) {
@@ -18,33 +34,44 @@ export function LeaderboardView({
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<LeaderboardSnapshot | null>(null);
 
+  const isSignedIn = Boolean(propIsSignedIn || data?.currentUser?.isSignedIn);
+
   useEffect(() => {
     let active = true;
 
-    fetch(`/api/leaderboard?period=${period}`)
-      .then((res) => {
+    async function loadData() {
+      try {
+        const headers: Record<string, string> = {};
+        if (propIsSignedIn && getToken) {
+          const token = await getToken();
+          if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+          }
+        }
+        const res = await fetch(`/api/leaderboard?period=${period}`, { headers });
         if (!res.ok) {
           throw new Error("Failed to fetch leaderboard data.");
         }
-        return res.json();
-      })
-      .then((snapshot: LeaderboardSnapshot) => {
+        const snapshot = await res.json();
         if (active) {
           setData(snapshot);
           setLoading(false);
         }
-      })
-      .catch((err: Error) => {
+      } catch (err: unknown) {
         if (active) {
-          setError(err.message || "Failed to load leaderboard.");
+          const errMsg = err instanceof Error ? err.message : "Failed to load leaderboard.";
+          setError(errMsg);
           setLoading(false);
         }
-      });
+      }
+    }
+
+    loadData();
 
     return () => {
       active = false;
     };
-  }, [period]);
+  }, [period, propIsSignedIn, getToken]);
 
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
@@ -131,7 +158,7 @@ export function LeaderboardView({
         {!loading && !error && data && (
           <div className="flex flex-col gap-6" id="leaderboard-ready">
             {/* Signed-out Notice */}
-            {!data.currentUser.isSignedIn && (
+            {!isSignedIn && (
               <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-center" id="leaderboard-signed-out">
                 <p className="text-sm text-[var(--brand-ink-soft)]">
                   You are currently signed out. Sign in to track your level, badges, and compete with other learners.
@@ -140,7 +167,7 @@ export function LeaderboardView({
             )}
 
             {/* Signed-in Opt-in Required / Private State Notice */}
-            {data.currentUser.isSignedIn && data.currentUser.visibility === "private" && (
+            {isSignedIn && data.currentUser.visibility === "private" && (
               <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5" id="leaderboard-private-notice">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex-1">
@@ -165,7 +192,7 @@ export function LeaderboardView({
             )}
 
             {/* Current User Card (only if signed in) */}
-            {data.currentUser.isSignedIn && (
+            {isSignedIn && (
               <div className="rounded-xl border-l-4 border-l-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4" id="leaderboard-current-user-card">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
                   Your Current Standings
@@ -173,27 +200,35 @@ export function LeaderboardView({
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-teal-soft)] text-xs font-bold text-[var(--brand-teal-ink)]">
-                      {data.currentUser.initials}
+                      {data.currentUser.isSignedIn ? data.currentUser.initials : getInitials(ownerProfile?.displayName)}
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-[var(--brand-ink)]">
-                        {data.currentUser.displayName}
+                        {data.currentUser.isSignedIn ? data.currentUser.displayName : (ownerProfile?.displayName || "You")}
                       </p>
                       <p className="text-xs text-[var(--brand-ink-soft)]">
-                        Level {data.currentUser.level.number} · {data.currentUser.level.name}
+                        {data.currentUser.isSignedIn ? (
+                          `Level ${data.currentUser.level.number} · ${data.currentUser.level.name}`
+                        ) : (
+                          speakerProgress ? `Level ${speakerProgress.currentLevel.level} · ${speakerProgress.currentLevel.name}` : "Level 1"
+                        )}
                       </p>
                     </div>
                   </div>
 
                   <div className="text-right">
                     <p className="text-sm font-semibold text-[var(--brand-ink)]">
-                      {data.currentUser.periodXp} XP
+                      {data.currentUser.isSignedIn ? data.currentUser.periodXp : 0} XP
                     </p>
                     <p className="text-xs text-[var(--brand-ink-soft)]">
-                      {data.currentUser.visibility === "private" ? (
-                        <span>Simulated Rank #{data.currentUser.previewRank}</span>
+                      {data.currentUser.isSignedIn ? (
+                        data.currentUser.visibility === "private" ? (
+                          <span>Simulated Rank #{data.currentUser.previewRank}</span>
+                        ) : (
+                          <span>Rank #{data.currentUser.rank ?? "—"}</span>
+                        )
                       ) : (
-                        <span>Rank #{data.currentUser.rank ?? "—"}</span>
+                        <span>Rank #—</span>
                       )}
                     </p>
                   </div>
@@ -252,7 +287,9 @@ export function LeaderboardView({
             {data.leaderboard.length === 0 && (
               <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center" id="leaderboard-empty">
                 <p className="text-sm text-[var(--brand-ink-soft)]">
-                  No active users on the leaderboard for this period yet. Complete a speaking session to be the first!
+                  {isSignedIn
+                    ? "No leaderboard activity for this period yet. Complete an eligible practice session to appear here."
+                    : "No active users on the leaderboard for this period yet. Complete a speaking session to be the first!"}
                 </p>
               </div>
             )}

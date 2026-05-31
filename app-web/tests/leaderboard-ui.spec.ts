@@ -127,6 +127,23 @@ const mockSignedOutResponse = {
   },
 };
 
+const mockSignedOutEmptyResponse = {
+  period: "weekly",
+  leaderboard: [],
+  currentUser: {
+    isSignedIn: false,
+    optedIn: false,
+    visibility: "signed-out",
+    rank: -1,
+    previewRank: -1,
+    periodXp: 0,
+    displayName: "",
+    avatarUrl: null,
+    initials: "S",
+    level: { number: 1, name: "New Speaker" },
+  },
+};
+
 // ---------- E2E UI Tests ----------
 
 test.describe("Leaderboard UI Shell", () => {
@@ -138,6 +155,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     const sidebar = page.locator("aside");
     await expect(sidebar.locator("button:has-text('Leaderboard')")).toBeVisible();
   });
@@ -148,6 +166,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     // Verify main headings
@@ -164,6 +183,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     // Verify tabs
@@ -187,6 +207,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     // Click "Daily" tab
@@ -205,6 +226,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     // Check loading indicator is visible
@@ -217,22 +239,39 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     await expect(page.locator("#leaderboard-error")).toBeVisible();
     await expect(page.locator("text=Failed to fetch leaderboard data")).toBeVisible();
   });
 
-  test("Empty/no-data state renders", async ({ page }) => {
+  test("Empty/no-data state renders (authenticated user with empty leaderboard)", async ({ page }) => {
     await page.route("**/api/leaderboard*", async (route) => {
       await route.fulfill({ json: mockEmptyResponse });
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     await expect(page.locator("#leaderboard-empty")).toBeVisible();
-    await expect(page.locator("text=No active users on the leaderboard")).toBeVisible();
+    await expect(page.locator("text=No leaderboard activity for this period yet. Complete an eligible practice session to appear here.")).toBeVisible();
+    await expect(page.locator("#leaderboard-signed-out")).not.toBeVisible();
+  });
+
+  test("Empty/no-data state renders (signed-out user with empty leaderboard)", async ({ page }) => {
+    await page.route("**/api/leaderboard*", async (route) => {
+      await route.fulfill({ json: mockSignedOutEmptyResponse });
+    });
+
+    await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
+    await page.locator("aside button:has-text('Leaderboard')").click();
+
+    await expect(page.locator("#leaderboard-empty")).toBeVisible();
+    await expect(page.locator("text=No active users on the leaderboard for this period yet. Complete a speaking session to be the first!")).toBeVisible();
+    await expect(page.locator("#leaderboard-signed-out")).toBeVisible();
   });
 
   test("Signed-out notice renders when currentUser is signed out", async ({ page }) => {
@@ -241,6 +280,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     await expect(page.locator("#leaderboard-signed-out")).toBeVisible();
@@ -253,6 +293,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     // Notice card
@@ -273,6 +314,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
 
     // Rankings List
@@ -289,6 +331,7 @@ test.describe("Leaderboard UI Shell", () => {
     });
 
     await page.goto("/");
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
     await page.locator("aside button:has-text('Leaderboard')").click();
     await page.waitForSelector("#leaderboard-ready");
 

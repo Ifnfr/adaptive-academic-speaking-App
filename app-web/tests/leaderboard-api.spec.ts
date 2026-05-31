@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
-import { handleLeaderboardGet } from "../src/app/api/leaderboard/route";
+import { handleLeaderboardGet } from "../src/app/api/leaderboard/helper";
 import { XP_RULES } from "../src/app/lib/gamification";
 
 // ---------- Shared Mock Data ----------

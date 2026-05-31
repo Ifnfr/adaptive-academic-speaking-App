@@ -1,0 +1,146 @@
+import {
+  buildLeaderboardSnapshot,
+  type LeaderboardProfileInput,
+  type LeaderboardEventInput,
+  type LeaderboardBadgeInput,
+  type LeaderboardSnapshot,
+} from "../../lib/leaderboard/leaderboard-aggregation";
+
+export interface ServiceClient {
+  from(table: string): {
+    select(columns: string): PromiseLike<{
+      data: unknown[] | null;
+      error: { message: string } | null;
+    }>;
+  };
+}
+
+export interface ProfileRow {
+  id: string;
+  owner_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  leaderboard_opt_in: boolean;
+}
+
+export interface XpProfileRow {
+  owner_id: string;
+  total_xp: number;
+}
+
+export interface XpEventRow {
+  owner_id: string;
+  type: string;
+  source_id: string;
+  xp: number;
+  local_date: string;
+}
+
+export interface BadgeRow {
+  owner_id: string;
+  status: string;
+}
+
+/**
+ * Core handler for the leaderboard route.
+ * Exported for unit tests and the Next.js API route GET handler.
+ */
+export async function handleLeaderboardGet(deps: {
+  period: string | null;
+  currentUserId: string | null;
+  supabase: ServiceClient;
+  currentDateStr: string;
+}): Promise<{
+  snapshot: LeaderboardSnapshot | null;
+  error: string | null;
+  status: number;
+}> {
+  const { period, currentUserId, supabase, currentDateStr } = deps;
+
+  // 1. Read profiles (minimum fields only)
+  const { data: profileRows, error: profileError } = await supabase
+    .from("profiles")
+    .select("id, owner_id, display_name, avatar_url, leaderboard_opt_in");
+
+  if (profileError) {
+    return { snapshot: null, error: "Failed to load profiles.", status: 502 };
+  }
+
+  // 2. Read xp_profiles for total_xp
+  const { data: xpProfileRows, error: xpProfileError } = await supabase
+    .from("xp_profiles")
+    .select("owner_id, total_xp");
+
+  if (xpProfileError) {
+    return {
+      snapshot: null,
+      error: "Failed to load XP profiles.",
+      status: 502,
+    };
+  }
+
+  // 3. Read xp_events
+  const { data: eventRows, error: eventError } = await supabase
+    .from("xp_events")
+    .select("owner_id, type, source_id, xp, local_date");
+
+  if (eventError) {
+    return { snapshot: null, error: "Failed to load XP events.", status: 502 };
+  }
+
+  // 4. Read badges
+  const { data: badgeRows, error: badgeError } = await supabase
+    .from("badges")
+    .select("owner_id, status");
+
+  if (badgeError) {
+    return { snapshot: null, error: "Failed to load badges.", status: 502 };
+  }
+
+  // 5. Map Supabase rows → aggregation inputs
+
+  const totalXpMap = new Map<string, number>();
+  for (const row of (xpProfileRows || []) as XpProfileRow[]) {
+    totalXpMap.set(row.owner_id, row.total_xp || 0);
+  }
+
+  const profiles: LeaderboardProfileInput[] = (
+    (profileRows || []) as ProfileRow[]
+  ).map((row) => ({
+    ownerId: row.owner_id,
+    id: row.id,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    leaderboardOptIn: row.leaderboard_opt_in === true,
+    totalXp: totalXpMap.get(row.owner_id) || 0,
+  }));
+
+  const events: LeaderboardEventInput[] = (
+    (eventRows || []) as XpEventRow[]
+  ).map((row) => ({
+    owner_id: row.owner_id,
+    type: row.type,
+    source_id: row.source_id,
+    xp: row.xp,
+    local_date: row.local_date,
+  }));
+
+  const badges: LeaderboardBadgeInput[] = (
+    (badgeRows || []) as BadgeRow[]
+  ).map((row) => ({
+    ownerId: row.owner_id,
+    status: row.status as "locked" | "earned",
+  }));
+
+  // 6. Delegate to the aggregation core — no ranking logic here
+  const snapshot = buildLeaderboardSnapshot({
+    period,
+    currentDateStr,
+    profiles,
+    events,
+    badges,
+    currentUserId,
+  });
+
+  return { snapshot, error: null, status: 200 };
+}

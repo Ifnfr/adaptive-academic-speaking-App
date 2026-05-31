@@ -2843,6 +2843,10 @@ export default function Home() {
             <LeaderboardView
               appLanguage={appLanguage}
               onGoToSettings={() => setView("settings")}
+              isSignedIn={cloudAuthState.isSignedIn}
+              getToken={cloudAuthState.getToken}
+              ownerProfile={ownerProfile}
+              speakerProgress={speakerProgress}
             />
           )}
 
