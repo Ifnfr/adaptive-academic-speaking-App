@@ -55,6 +55,8 @@ shown in the UI is **fonetik**.
   - Privacy-first: Stores only safe progress (card IDs, statuses, attempt counts, timestamps) locally. Never stores transcripts, recordings, raw usage, email, or owner IDs.
   - MVP limitations: No real speech/pronunciation scoring, no AI semantic grading, no adaptive AI planner, and no Supabase sync yet.
 - **Feedback Normalization Engine (Foundation)**: A pure, side-effect-free helper pipeline that safely converts untrusted AI feedback signals into structured, normalized taxonomy categories (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It enforces strict privacy (stripping raw AI text and PII) and provides deterministic retry actions, safe summary aggregations, and Learning Path advisory hints, without modifying UI or storage yet.
+- **Adaptive Tutor Memory (Foundation)**: Pure, side-effect‑free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints. It acts as a headless, pure-helper foundation for future tutor-like personalization, with no UI, storage, Supabase, or AI/model calls added yet.
+- **Human-Approved Improvement Loop (Foundation)**: Pure, side-effect-free helper functions that detect learning and practice friction from safe aggregate metrics, compile structured improvement proposals, and format markdown checklists for developers. It has no auto-execution capability, and does not add UI, storage, schemas, API routes, or AI models.
 
 ## Tech Stack
 
