@@ -67,7 +67,7 @@ const FORBIDDEN_PATTERNS = [
 ];
 
 // Helper to recursively collect all keys of an object
-function getAllKeys(obj: any): string[] {
+function getAllKeys(obj: unknown): string[] {
   if (obj === null || typeof obj !== "object") {
     return [];
   }
@@ -77,9 +77,10 @@ function getAllKeys(obj: any): string[] {
       keys.push(...getAllKeys(item));
     }
   } else {
-    for (const key of Object.keys(obj)) {
+    const record = obj as Record<string, unknown>;
+    for (const key of Object.keys(record)) {
       keys.push(key);
-      keys.push(...getAllKeys(obj[key]));
+      keys.push(...getAllKeys(record[key]));
     }
   }
   return keys;
