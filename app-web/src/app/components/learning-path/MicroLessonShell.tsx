@@ -11,6 +11,7 @@ import { SentenceBuilderLesson } from "./SentenceBuilderLesson";
 import { MicroSpeakingLesson } from "./MicroSpeakingLesson";
 import { SupportedConversationLesson } from "./SupportedConversationLesson";
 import { PronunciationAwarenessLesson } from "./PronunciationAwarenessLesson";
+import { ReflectionCardLesson } from "./ReflectionCardLesson";
 
 export type MicroLessonShellProps = {
   card: LearningPathCard;
@@ -147,6 +148,13 @@ export function MicroLessonShell({
             />
           ) : card.type === "pronunciation-awareness" ? (
             <PronunciationAwarenessLesson
+              card={card}
+              status={status}
+              contract={contract}
+              appLanguage={appLanguage}
+            />
+          ) : card.type === "reflection-card" ? (
+            <ReflectionCardLesson
               card={card}
               status={status}
               contract={contract}

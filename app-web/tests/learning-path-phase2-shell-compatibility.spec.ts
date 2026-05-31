@@ -85,8 +85,9 @@ test.describe("Learning Path - Phase 2 Shell Compatibility & Fallbacks (TASK-052
     await expect(shell.locator("[data-testid='lesson-learner-instruction']")).toContainText(reflectionCard.learnerInstruction);
     await expect(shell).toContainText(reflectionCard.indonesianExplanation);
 
-    await expect(shell.locator("[data-testid='phase2-fallback-alert']")).toContainText("This lesson preview uses a safe guided mode for now.");
-    await expect(shell.locator("[data-testid='phase2-fallback-privacy']")).toContainText("No speech is scored or stored. Complete with support when you are ready.");
+    // Verify MVP controls exist
+    await expect(shell.locator("[data-testid='reflection-question']")).toBeVisible();
+    await expect(shell.locator("[data-testid='continue-btn']")).toBeVisible();
   });
 
   test("4. Fallback view does not mention AI scoring or transcripts in DOM", async ({ page }) => {
