@@ -65,8 +65,10 @@ test.describe("Learning Path - Phase 2 Shell Compatibility & Fallbacks (TASK-052
     await expect(shell.locator("[data-testid='lesson-learner-instruction']")).toContainText(pronunciationAwarenessCard.learnerInstruction);
     await expect(shell).toContainText(pronunciationAwarenessCard.indonesianExplanation);
 
-    await expect(shell.locator("[data-testid='phase2-fallback-alert']")).toContainText("This lesson preview uses a safe guided mode for now.");
-    await expect(shell.locator("[data-testid='phase2-fallback-privacy']")).toContainText("No speech is scored or stored. Complete with support when you are ready.");
+    // Verify MVP controls exist
+    await expect(shell.locator("[data-testid='pronunciation-focus-sound']")).toBeVisible();
+    await expect(shell.locator("[data-testid='listen-pronunciation-model-btn']")).toBeVisible();
+    await expect(shell.locator("[data-testid='continue-btn']")).toBeVisible();
   });
 
   test("3. Shell can open a reflection-card with fallback rendering", async ({ page }) => {
