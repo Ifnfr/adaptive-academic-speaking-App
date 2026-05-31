@@ -47,6 +47,17 @@ export interface LearningPathCard {
   };
   speakingMode?: 'standard' | 'fluency-sprint';
   timeLimitsSeconds?: number[];
+  builderMode?: "standard" | "progressive";
+  progressiveSlots?: Array<{
+    id: string;
+    label: string;
+    choices: Array<{
+      id: string;
+      text: string;
+      isCorrect?: boolean;
+    }>;
+  }>;
+  preferredAnswer?: string[];
 }
 
 export interface LearningPathDay {

@@ -33,7 +33,38 @@ export const phase2Curriculum: LearningPathPhase = {
               estimatedMinutes: 3,
               completionRule: 'attempted',
               linkedEngine: 'sentence-builder',
-              mobileLayoutHint: 'standard'
+              mobileLayoutHint: 'standard',
+              builderMode: 'progressive',
+              progressiveSlots: [
+                {
+                  id: 'slot-1',
+                  label: 'Question Starter',
+                  choices: [
+                    { id: 'are', text: 'Are', isCorrect: true },
+                    { id: 'is', text: 'Is' },
+                    { id: 'do', text: 'Do' }
+                  ]
+                },
+                {
+                  id: 'slot-2',
+                  label: 'Subject',
+                  choices: [
+                    { id: 'you', text: 'you', isCorrect: true },
+                    { id: 'it', text: 'it' },
+                    { id: 'we', text: 'we' }
+                  ]
+                },
+                {
+                  id: 'slot-3',
+                  label: 'Adjective',
+                  choices: [
+                    { id: 'tired', text: 'tired', isCorrect: true },
+                    { id: 'sad', text: 'sad' },
+                    { id: 'hungry', text: 'hungry' }
+                  ]
+                }
+              ],
+              preferredAnswer: ['are', 'you', 'tired']
             },
             {
               id: 'card-d15-c2',
@@ -316,7 +347,38 @@ export const phase2Curriculum: LearningPathPhase = {
               estimatedMinutes: 4,
               completionRule: 'attempted',
               linkedEngine: 'sentence-builder',
-              mobileLayoutHint: 'standard'
+              mobileLayoutHint: 'standard',
+              builderMode: 'progressive',
+              progressiveSlots: [
+                {
+                  id: 'slot-1',
+                  label: 'Subject',
+                  choices: [
+                    { id: 'i', text: 'I', isCorrect: true },
+                    { id: 'she', text: 'She' },
+                    { id: 'they', text: 'They' }
+                  ]
+                },
+                {
+                  id: 'slot-2',
+                  label: 'Verb',
+                  choices: [
+                    { id: 'prefer', text: 'prefer', isCorrect: true },
+                    { id: 'prefers', text: 'prefers' },
+                    { id: 'like', text: 'like' }
+                  ]
+                },
+                {
+                  id: 'slot-3',
+                  label: 'Noun',
+                  choices: [
+                    { id: 'coffee', text: 'coffee', isCorrect: true },
+                    { id: 'tea', text: 'tea', isCorrect: true },
+                    { id: 'water', text: 'water' }
+                  ]
+                }
+              ],
+              preferredAnswer: ['i', 'prefer', 'coffee']
             }
           ]
         },
@@ -378,7 +440,47 @@ export const phase2Curriculum: LearningPathPhase = {
               estimatedMinutes: 4,
               completionRule: 'attempted',
               linkedEngine: 'sentence-builder',
-              mobileLayoutHint: 'standard'
+              mobileLayoutHint: 'standard',
+              builderMode: 'progressive',
+              progressiveSlots: [
+                {
+                  id: 'slot-1',
+                  label: 'Conjunction',
+                  choices: [
+                    { id: 'because', text: 'because', isCorrect: true },
+                    { id: 'so', text: 'so' },
+                    { id: 'and', text: 'and' }
+                  ]
+                },
+                {
+                  id: 'slot-2',
+                  label: 'Subject Pronoun',
+                  choices: [
+                    { id: 'it', text: 'it', isCorrect: true },
+                    { id: 'they', text: 'they' },
+                    { id: 'he', text: 'he' }
+                  ]
+                },
+                {
+                  id: 'slot-3',
+                  label: 'Linking Verb',
+                  choices: [
+                    { id: 'is', text: 'is', isCorrect: true },
+                    { id: 'are', text: 'are' },
+                    { id: 'was', text: 'was' }
+                  ]
+                },
+                {
+                  id: 'slot-4',
+                  label: 'Adjective',
+                  choices: [
+                    { id: 'good', text: 'good', isCorrect: true },
+                    { id: 'hot', text: 'hot', isCorrect: true },
+                    { id: 'bad', text: 'bad' }
+                  ]
+                }
+              ],
+              preferredAnswer: ['because', 'it', 'is', 'good']
             },
             {
               id: 'card-d24-c2',
