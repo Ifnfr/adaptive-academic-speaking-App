@@ -21,7 +21,8 @@ export type Phase2ReadinessStatus =
   | 'ready_for_static_implementation'
   | 'not_ready_for_adaptive_integration'
   | 'blocked_by_privacy_risk'
-  | 'blocked_by_missing_tests';
+  | 'blocked_by_missing_tests'
+  | 'needs_review';
 
 export interface FoundationReadinessResult {
   status: FoundationReadinessStatus;
@@ -41,9 +42,11 @@ export interface DiagnosticSignalAvailability {
   reason: string;
 }
 
+export type DiagnosticRiskSeverity = 'low' | 'medium' | 'high' | 'critical';
+
 export interface DiagnosticRisk {
   area: FoundationDiagnosticArea;
-  severity: 'low' | 'medium' | 'high';
+  severity: DiagnosticRiskSeverity;
   description: string;
   mitigation: string;
 }
@@ -68,9 +71,9 @@ export interface DiagnosticChecklistItem {
 
 export interface Phase2ReadinessResult {
   status: Phase2ReadinessStatus;
-  score: number; // 0 to 100
-  isReady: boolean;
-  blockers: string[];
+  safeSummary: string;
+  blockers: DiagnosticRisk[];
+  requiredBeforeImplementation: DiagnosticChecklistItem[];
 }
 
 export interface DeveloperDiagnosticSnapshot {

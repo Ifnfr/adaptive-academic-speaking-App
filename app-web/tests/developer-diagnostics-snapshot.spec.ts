@@ -54,9 +54,8 @@ const ALLOWED_KEYS = new Set([
   "humanReviewRequired",
   "id",
   "mandatory",
-  "score",
-  "isReady",
-  "blockers"
+  "blockers",
+  "requiredBeforeImplementation"
 ]);
 
 const FORBIDDEN_PATTERNS = [
@@ -170,9 +169,9 @@ test.describe("Developer Diagnostics Snapshot Helpers Tests", () => {
 
     const phase2: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
-      blockers: []
+      blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
 
     const snapshot = buildDeveloperDiagnosticSnapshot(
@@ -205,9 +204,9 @@ test.describe("Developer Diagnostics Snapshot Helpers Tests", () => {
     };
     const phase2: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
-      blockers: []
+      blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
 
     const inputTime = "2026-05-31T11:00:00Z";
@@ -229,9 +228,9 @@ test.describe("Developer Diagnostics Snapshot Helpers Tests", () => {
     };
     const phase2: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
-      blockers: []
+      blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
 
     const snapshot = buildDeveloperDiagnosticSnapshot("2026-05-31T10:00:00Z", foundations, [], [], phase2, [], "test");
@@ -280,9 +279,9 @@ test.describe("Developer Diagnostics Snapshot Helpers Tests", () => {
     };
     const phase2: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
-      blockers: []
+      blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
 
     const s1 = buildDeveloperDiagnosticSnapshot("2026-05-31T10:00:00Z", foundations, [], [], phase2, [], "test");
@@ -305,9 +304,9 @@ test.describe("Developer Diagnostics Snapshot Helpers Tests", () => {
     };
     const phase2: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
-      blockers: []
+      blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
 
     const snapshot = buildDeveloperDiagnosticSnapshot("2026-05-31T10:00:00Z", foundations, [], [], phase2, [], "test");
@@ -332,9 +331,9 @@ test.describe("Developer Diagnostics Snapshot Helpers Tests", () => {
     };
     const phase2: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
-      blockers: []
+      blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
 
     const snapshot = buildDeveloperDiagnosticSnapshot("2026-05-31T10:00:00Z", foundations, [], [], phase2, [], "test");

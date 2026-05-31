@@ -48,8 +48,6 @@ test.describe("Developer Diagnostics Report Builder Tests", () => {
     recommendations: [],
     phase2Readiness: {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
       blockers: [],
       safeSummary: "Ready to design",
       requiredBeforeImplementation: []

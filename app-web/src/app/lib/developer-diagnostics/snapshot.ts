@@ -171,9 +171,19 @@ export function buildDeveloperDiagnosticSnapshot(
 
   const copiedPhase2Readiness = {
     status: phase2Readiness.status,
-    score: phase2Readiness.score,
-    isReady: phase2Readiness.isReady,
-    blockers: [...phase2Readiness.blockers]
+    safeSummary: phase2Readiness.safeSummary,
+    blockers: phase2Readiness.blockers.map(r => ({
+      area: r.area,
+      severity: r.severity,
+      description: r.description,
+      mitigation: r.mitigation
+    })),
+    requiredBeforeImplementation: phase2Readiness.requiredBeforeImplementation.map(c => ({
+      id: c.id,
+      description: c.description,
+      status: c.status,
+      mandatory: c.mandatory
+    }))
   };
 
   const copiedChecklist = checklist.map(c => ({
@@ -276,9 +286,19 @@ export function getSafeDeveloperDiagnosticSnapshot(
 
   const phase2Readiness = {
     status: snapshot.phase2Readiness.status,
-    score: snapshot.phase2Readiness.score,
-    isReady: snapshot.phase2Readiness.isReady,
-    blockers: [...snapshot.phase2Readiness.blockers]
+    safeSummary: snapshot.phase2Readiness.safeSummary,
+    blockers: snapshot.phase2Readiness.blockers.map(r => ({
+      area: r.area,
+      severity: r.severity,
+      description: r.description,
+      mitigation: r.mitigation
+    })),
+    requiredBeforeImplementation: snapshot.phase2Readiness.requiredBeforeImplementation.map(c => ({
+      id: c.id,
+      description: c.description,
+      status: c.status,
+      mandatory: c.mandatory
+    }))
   };
 
   const checklist = snapshot.checklist.map(c => ({

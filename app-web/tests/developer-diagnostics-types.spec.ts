@@ -49,9 +49,8 @@ const ALLOWED_KEYS = new Set([
   "humanReviewRequired",
   "id",
   "mandatory",
-  "score",
-  "isReady",
-  "blockers"
+  "blockers",
+  "requiredBeforeImplementation"
 ]);
 
 const FORBIDDEN_PATTERNS = [
@@ -109,12 +108,11 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
     // 2. Construct sample Phase2ReadinessResult
     const samplePhase2Result: Phase2ReadinessResult = {
       status: "ready_for_research",
-      score: 80,
-      isReady: true,
       blockers: [],
+      safeSummary: "Ready to design",
+      requiredBeforeImplementation: []
     };
     expect(samplePhase2Result.status).toBe("ready_for_research");
-    expect(samplePhase2Result.score).toBe(80);
 
     // 3. Construct sample DiagnosticRecommendation (must match DiagnosticRecommendation contract)
     const sampleRecommendation: DiagnosticRecommendation = {
@@ -236,7 +234,8 @@ test.describe("Developer Diagnostics Type Contract and Serialization Tests", () 
         key === "cards_completed" ||
         key === "Tests verified" ||
         key === "Ready to test summary" ||
-        key === "Top-level safe summary"
+        key === "Top-level safe summary" ||
+        key === "Ready to design"
       ) {
         continue;
       }
