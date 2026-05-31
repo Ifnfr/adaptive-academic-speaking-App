@@ -9,6 +9,7 @@ import { GuidedWordLesson } from "./GuidedWordLesson";
 import { PhrasePatternLesson } from "./PhrasePatternLesson";
 import { SentenceBuilderLesson } from "./SentenceBuilderLesson";
 import { MicroSpeakingLesson } from "./MicroSpeakingLesson";
+import { SupportedConversationLesson } from "./SupportedConversationLesson";
 
 export type MicroLessonShellProps = {
   card: LearningPathCard;
@@ -131,6 +132,13 @@ export function MicroLessonShell({
             />
           ) : card.type === "micro-speaking" ? (
             <MicroSpeakingLesson
+              card={card}
+              status={status}
+              contract={contract}
+              appLanguage={appLanguage}
+            />
+          ) : card.type === "supported-conversation" ? (
+            <SupportedConversationLesson
               card={card}
               status={status}
               contract={contract}

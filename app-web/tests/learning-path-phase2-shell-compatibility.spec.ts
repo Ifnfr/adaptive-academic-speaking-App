@@ -44,17 +44,11 @@ test.describe("Learning Path - Phase 2 Shell Compatibility & Fallbacks (TASK-052
     await expect(shell.locator("[data-testid='lesson-card-title']")).toContainText(supportedConversationCard.title);
     await expect(shell.locator("[data-testid='lesson-learner-instruction']")).toContainText(supportedConversationCard.learnerInstruction);
     await expect(shell).toContainText(supportedConversationCard.indonesianExplanation);
-    await expect(shell).toContainText(supportedConversationCard.scaffold);
 
-    // Verify safety disclaimer
-    await expect(shell.locator("[data-testid='phase2-fallback-alert']")).toContainText("This lesson preview uses a safe guided mode for now.");
-    await expect(shell.locator("[data-testid='phase2-fallback-privacy']")).toContainText("No speech is scored or stored. Complete with support when you are ready.");
-
-    // Verify completion control buttons exist
-    await expect(shell.locator("[data-testid='mark-viewed-btn']")).toBeVisible();
-    await expect(shell.locator("[data-testid='mark-attempted-btn']")).toBeVisible();
-    await expect(shell.locator("[data-testid='continue-anyway-btn']")).toBeVisible();
-    await expect(shell.locator("[data-testid='mark-completed-btn']")).toBeVisible();
+    // Verify MVP controls exist
+    await expect(shell.locator("[data-testid='supported-conversation-prompt']")).toBeVisible();
+    await expect(shell.locator("[data-testid='listen-tutor-prompt-btn']")).toBeVisible();
+    await expect(shell.locator("[data-testid='continue-btn']")).toBeVisible();
   });
 
   test("2. Shell can open a pronunciation-awareness card with fallback rendering", async ({ page }) => {
