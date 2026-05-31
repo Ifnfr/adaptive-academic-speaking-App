@@ -1,4 +1,5 @@
 import { phase1Curriculum } from './phase1-curriculum';
+import { phase2Curriculum } from './phase2-curriculum';
 import { StoredLearningPathProgress, CardStatus, LearningPathCard } from './types';
 
 export interface RecommendationResult {
@@ -7,22 +8,40 @@ export interface RecommendationResult {
   cardStatuses: Record<string, CardStatus>;
 }
 
-export function getFlatCurriculumCards(): LearningPathCard[] {
-  const phase = phase1Curriculum.phases[0];
-  if (!phase) return [];
+export function getFlatCurriculumCards(options?: { includePhase2?: boolean }): LearningPathCard[] {
   const cards: LearningPathCard[] = [];
-  for (const unit of phase.units) {
-    for (const day of unit.days) {
-      for (const card of day.cards) {
-        cards.push(card);
+  
+  // Phase 1
+  const phase1 = phase1Curriculum.phases[0];
+  if (phase1) {
+    for (const unit of phase1.units) {
+      for (const day of unit.days) {
+        for (const card of day.cards) {
+          cards.push(card);
+        }
       }
     }
   }
+
+  // Phase 2 (Optional)
+  if (options?.includePhase2) {
+    for (const unit of phase2Curriculum.units) {
+      for (const day of unit.days) {
+        for (const card of day.cards) {
+          cards.push(card);
+        }
+      }
+    }
+  }
+
   return cards;
 }
 
-export function getRecommendation(progress: StoredLearningPathProgress): RecommendationResult {
-  const flatCards = getFlatCurriculumCards();
+export function getRecommendation(
+  progress: StoredLearningPathProgress,
+  options?: { includePhase2?: boolean }
+): RecommendationResult {
+  const flatCards = getFlatCurriculumCards(options);
   const cardStatuses: Record<string, CardStatus> = {};
 
   if (flatCards.length === 0) {
