@@ -83,6 +83,36 @@ small coaching features.
   - Audio recordings or voice blobs
   - Clinical, psychological, or negative learner labels (e.g. "struggling", "failing", "weakness")
 
+- **Human-Approved Improvement Loop (Foundation)**: Pure, side-effect-free helper functions that detect learning and practice friction from safe aggregate metrics, compile structured improvement proposals, and format markdown checklists for developers. It has no auto-execution capability, and does not add UI, storage, schemas, API routes, or AI models.
+- **Developer Diagnostics (Foundation)**: A pure, developer-facing helper foundation that combines safe readiness snapshots, diagnostic reports, Phase 2 readiness checks, and Improvement Loop proposal candidates without modifying UI, storage, Supabase, API routes, or AI models.
+
+### Human-Approved Improvement Loop (Foundation Details)
+
+- **Pure Helper Library**: Operates completely in memory as a set of stateless functions under `src/app/lib/improvement-loop/`. It does not modify files automatically, does not integrate with database tables or API routes, and does not make AI calls.
+- **Key Modules**:
+  - `types.ts`: Safe TS interface and union definitions for proposals.
+  - `build.ts`: Builds standardized proposal structures with deterministic proposal IDs.
+  - `friction.ts`: Detects friction triggers from aggregate counts (completion rates, card retry counts, category recurrence).
+  - `checklist.ts`: Formats developer-facing checklist markdown with explicit manual verification items.
+  - `tests/improvement-loop-privacy.spec.ts`: Audits the codebase to block private learner leakage, database queries, and LLM requests.
+- **Privacy Boundary**: In compliance with strict security requirements, the Improvement Loop works strictly with safe aggregate metrics and counts. It is forbidden to serialize or ingest: transcripts, retry transcripts, exact user sentences, raw AI corrections, URLs, emails, owner/source IDs, CSV records, recordings, or clinical/negative learner labels.
+
+### Developer Diagnostics (Foundation Details)
+
+- **Pure Helper Foundation**: Operates completely in memory as a set of stateless analysis and assessment functions under `src/app/lib/developer-diagnostics/`. It does not modify application files, database tables, or localStorage, has no UI integration, and does not call any LLM models or API endpoints.
+- **Key Modules**:
+  - `developer-diagnostics/types`: Safe type structures, contracts, and a runtime snapshot validator.
+  - `developer-diagnostics/snapshot`: Aggregates safe metrics and metadata from other foundations into a standardized snapshot.
+  - `developer-diagnostics/report`: Compiles structured, developer-facing markdown diagnostic and advisory reports.
+  - `developer-diagnostics/phase2-readiness`: Evaluates technical readiness levels and blockers for future adaptive features.
+  - `developer-diagnostics/improvement-connector`: Maps diagnostic snapshots to human-approved improvement loop proposal candidates.
+  - `developer-diagnostics privacy tests`: Dedicated test suites verifying strict security and serialization boundaries.
+- **System Relationships**:
+  - **Learning Path & Micro-Practice**: Collects safe aggregate counts (completed cards, attempts, reset events) to assess engine stability.
+  - **Feedback Normalization & Tutor Memory**: Reads category-level signal presence to verify that advisory bridge contracts are complete.
+  - **Human-Approved Improvement Loop**: Supplies formatted snapshots that can be converted into human-approved improvement candidates.
+  - **Phase 2 Curriculum Planning**: Serves as a gateway/blocker evaluator before static curriculum bridges are replaced with adaptive paths.
+- **Privacy Boundary & Safe Input Scope**: Read access is strictly limited to safe aggregate metrics, available categories, and readiness metadata. The system is prohibited from serializing, storing, or processing: user/owner/session/source IDs, emails, transcripts, raw AI corrections, user sentences, article URLs, raw event payloads, recordings, raw provider responses, or clinical/negative learner labels.
 
 ## API Routes
 

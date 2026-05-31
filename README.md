@@ -29,7 +29,6 @@ shown in the UI is **fonetik**.
 - Foundation-level calibration for Feedback, Diagnostic, Weekly Review, and Mental Model outputs
 - Robust JSON parsing for Weekly Review and Mental Model provider responses
 - **Vocabulary Notebook 2.0**: A local-first notebook featuring:
-- **Adaptive Tutor Memory foundation**: Pure, side-effect‑free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints. No UI, storage, or API routes added.
 
   - **Recent Vocabulary Preview**: Displays only the 5 most recently added items on the dashboard to prevent overcrowding.
   - **View All / Dictionary Mode**: Shows all saved vocabulary items and displays comprehensive metadata (part of speech, level, source, example, usage note/collocations, reuse counts, correct use counts, saved date, last practiced date, and sentence history), with delete and status controls.
@@ -56,8 +55,9 @@ shown in the UI is **fonetik**.
   - Includes `Guided Word`, `Phrase Pattern`, `Sentence Builder`, and a basic simulated `Micro Speaking` lesson flow, wrapped in a generic `MicroLessonShell`.
   - Privacy-first: Stores only safe progress (card IDs, statuses, attempt counts, timestamps) locally. Never stores transcripts, recordings, raw usage, email, or owner IDs.
   - MVP limitations: No real speech/pronunciation scoring, no AI semantic grading, no adaptive AI planner, and no Supabase sync yet.
-- **Feedback Normalization Engine (Foundation)**: A pure, side-effect-free helper pipeline that safely converts untrusted AI feedback signals into structured, normalized taxonomy categories (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It enforces strict privacy (stripping raw AI text and PII) and provides deterministic retry actions, safe summary aggregations, and Learning Path advisory hints, without modifying UI or storage yet.
-- **Adaptive Tutor Memory foundation**: Pure, side-effect‑free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints. It acts as a headless, pure-helper foundation for future tutor-like personalization, with no UI, storage, Supabase, or AI/model calls added yet.
+- **Adaptive Tutor Memory (Foundation)**: Pure, side-effect‑free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints. It acts as a headless, pure-helper foundation for future tutor-like personalization, with no UI, storage, Supabase, or AI/model calls added yet.
+- **Human-Approved Improvement Loop (Foundation)**: Pure, side-effect-free helper functions that detect learning and practice friction from safe aggregate metrics, compile structured improvement proposals, and format markdown checklists for developers. It has no auto-execution capability, and does not add UI, storage, schemas, API routes, or AI models.
+- **Developer Diagnostics (Foundation)**: A pure, developer-facing helper foundation that combines safe readiness snapshots, diagnostic reports, Phase 2 readiness checks, and Improvement Loop proposal candidates. It does not add UI, storage, Supabase sync, analytics tracking, API routes, or AI/model calls. Developer Diagnostics exists to help developers inspect foundation readiness before Phase 2 implementation. It is not a user analytics pipeline and does not track learner behavior.
 
 ## Tech Stack
 

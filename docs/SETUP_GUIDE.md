@@ -249,6 +249,8 @@ shows a safe fallback message and you can type or paste the transcript manually.
 - Do not add real database credentials to Supabase migration files.
 - **Feedback Normalization Engine**: (Foundation only) Operates purely in memory as a stateless helper pipeline to sanitize AI output into a safe taxonomy. It does not integrate with UI or storage yet and never persists or leaks transcripts or raw AI text.
 - **Adaptive Tutor Memory**: (Foundation only) Requires no manual setup. It relies on no environment variables, no Supabase tables, no database migrations, and no cloud integration. The modules function as stateless, pure TypeScript helpers. Unit tests (including `tests/tutor-memory-privacy.spec.ts`) verify that the pure-helper behavior and privacy boundaries operate correctly and cleanly strip out forbidden data formats.
+- **Human-Approved Improvement Loop**: (Foundation only) Requires no manual setup, env vars, database schemas, API keys, or cloud resources. It runs fully locally as in-memory helpers, and its privacy/security boundaries are validated via dedicated automated QA tests (`tests/improvement-loop-privacy.spec.ts`).
+- **Developer Diagnostics**: (Foundation only) Requires no manual setup, configuration, or integration steps. It uses no environment variables, Supabase schemas, API routes, database tables, or external AI/model provider keys. Its features function entirely as stateless, pure TypeScript helpers under `src/app/lib/developer-diagnostics/`. Its performance and privacy boundaries are validated through automated unit tests.
 
 
 ## Supabase Schema & Hybrid Cloud Status

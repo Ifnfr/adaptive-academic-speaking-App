@@ -471,4 +471,26 @@ Manual checks to run before declaring the local MVP stable.
 - [ ] Learning Path advisory bridge combines sequential progress with tutor memory recommendations while strictly preserving the sequential card recommendation order without hard-locking or bypassing it.
 - [ ] Privacy QA tests (`tests/tutor-memory-privacy.spec.ts`) confirm that zero forbidden data elements (transcripts, raw corrections, article URLs, vocabulary sentences, emails, owner/source IDs, CSV/session raw content, raw provider responses, prompt text, recordings, or negative learner labels) are serialized or exposed.
 
+## 27. Human-Approved Improvement Loop (Foundation)
+
+> The Human-Approved Improvement Loop engine is currently a pure helper foundation. It has no UI, storage, Supabase schema, API routes, AI model dependencies, environment variable updates, or third-party packages.
+
+- [ ] Type contracts strictly serialize only whitelisted category-level signals and proposal metadata.
+- [ ] Builder helpers correctly generate structured proposals with deterministic `proposalId` formats.
+- [ ] Friction detection helpers identify pacing, retries, documentation, and category recurrence triggers accurately from mock aggregates.
+- [ ] Checklist formatting outputs standard developer checklists with validation command strings (`npm run test:e2e`).
+- [ ] Privacy QA tests (`tests/improvement-loop-privacy.spec.ts`) verify that zero raw user text, transcripts, URLs, emails, or credentials are leaked or stored.
+- [ ] Code is audited to verify zero auto-execution, self-modification, filesystem writes, or database queries.
+
+## 28. Developer Diagnostics (Foundation)
+
+> The Developer Diagnostics engine is currently a pure helper foundation. It has no UI, storage, Supabase schema, API routes, AI model dependencies, environment variable updates, or third-party packages.
+
+- [ ] Developer Diagnostics type contracts serialize only whitelisted fields.
+- [ ] Snapshot helpers create safe foundation readiness summaries.
+- [ ] Report builder produces advisory developer-facing reports only.
+- [ ] Phase 2 readiness evaluator returns safe readiness status and blockers.
+- [ ] Improvement Loop connector maps diagnostics to human-approved proposal candidates only.
+- [ ] Privacy QA confirms no transcripts, emails, owner/source IDs, raw event payloads, article URLs, raw AI corrections, recordings, provider responses, or clinical/negative labels are serialized.
+- [ ] Developer Diagnostics introduces no UI, storage, Supabase schema, API route, analytics tracking, AI/model call, package, or environment changes.
 
