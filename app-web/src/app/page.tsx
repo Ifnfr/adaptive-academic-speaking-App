@@ -2479,7 +2479,7 @@ export default function Home() {
     : "Configure a session, choose a mode, and start practicing.";
 
   return (
-    <div className="min-h-screen w-full">
+    <div className="min-h-screen w-full lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col">
       {CLERK_ENABLED && (
         <SessionCloudAuthBridge
           authRef={sessionCloudAuthRef}
@@ -2494,7 +2494,7 @@ export default function Home() {
           }}
         />
       )}
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
         {/* Sidebar */}
         <Sidebar
           view={view}
@@ -2511,7 +2511,7 @@ export default function Home() {
           onSelectView={setView}
         />
         {/* Main */}
-        <main className="flex min-w-0 flex-1 flex-col gap-6">
+        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:h-full lg:min-h-0">
           {/* Topbar */}
           <Topbar
             subtitle={viewSubtitle(view, homeT)}
@@ -2533,7 +2533,8 @@ export default function Home() {
             }
           />
 
-          <CloudSyncStatusPanel
+          <div data-testid="main-scroll-container" className="flex-1 min-h-0 lg:overflow-y-auto lg:overscroll-contain flex flex-col gap-6 lg:pb-10 lg:pr-1">
+            <CloudSyncStatusPanel
             result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
             onConfirmRestore={handleConfirmCloudRestore}
             onConfirmImport={handleConfirmCloudImport}
@@ -2892,6 +2893,7 @@ export default function Home() {
           >
             fonetik · AI-Powered academic speaking practice · Local-only practice tool
           </footer>
+          </div>
         </main>
       </div>
     </div>

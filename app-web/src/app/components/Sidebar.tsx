@@ -93,8 +93,8 @@ export function Sidebar({
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
 
   return (
-    <aside className="lg:w-[252px] lg:flex-shrink-0">
-      <div className="flex flex-col gap-4 lg:sticky lg:top-6">
+    <aside className="lg:w-[252px] lg:flex-shrink-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pb-10 [scrollbar-width:thin]">
+      <div className="flex flex-col gap-4">
         {/* Brand */}
         <div className={card}>
           <div className="flex flex-col items-start gap-3 p-5">
