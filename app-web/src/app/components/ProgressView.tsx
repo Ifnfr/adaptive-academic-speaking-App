@@ -1,7 +1,8 @@
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 import type { LevelUpCheckResult } from "../lib/level-up";
-import type { SpeakerLevelProgress, XpProfile } from "../lib/gamification";
+import type { SpeakerLevelProgress, XpProfile, XpEvent } from "../lib/gamification";
+import type { SidebarView } from "./Sidebar";
 import { GamificationPanel } from "./GamificationPanel";
 import { LevelUpCheckPanel } from "./LevelUpCheckPanel";
 
@@ -25,6 +26,8 @@ type ProgressViewProps = {
   appLanguage?: AppLanguage | null;
   onApplyNextLevel: () => void;
   onClaimXp: () => void;
+  onSelectView?: (view: SidebarView) => void;
+  xpEvents?: XpEvent[];
 };
 
 export function ProgressView({
@@ -41,6 +44,8 @@ export function ProgressView({
   appLanguage,
   onApplyNextLevel,
   onClaimXp,
+  onSelectView,
+  xpEvents,
 }: ProgressViewProps) {
   const { t } = useI18n(appLanguage);
   const total = sessions.length;
@@ -68,6 +73,9 @@ export function ProgressView({
           earnedBadgeLabels={earnedBadgeLabels}
           appLanguage={appLanguage}
           onClaimXp={onClaimXp}
+          onSelectView={onSelectView}
+          xpEvents={xpEvents}
+          sessionsCount={total}
         />
       </div>
 

@@ -3,6 +3,8 @@ import { test, expect } from "@playwright/test";
 test.describe("Independent Scrolling Layout", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
+    // Wait for hydration to complete
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
   });
 
   test("should have independent scroll containers on desktop viewports", async ({ page }) => {

@@ -57,13 +57,16 @@ test.describe("i18n E2E default language", () => {
   test("sidebar, topbar and layouts render in English by default for signed-out users", async ({ page }) => {
     await page.goto("/");
 
+    // Wait for hydration to complete
+    await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
+
     // Verify initial layout is English
     await expect(page.locator("aside")).toContainText("Settings");
     await expect(page.locator("aside")).toContainText("Active Session");
     await expect(page.locator("header")).toContainText("Active Practice");
 
     // Navigate to Progress view
-    await page.getByRole("button", { name: "Progress" }).click();
+    await page.getByRole("button", { name: "Progress & Quest" }).click();
 
     // Verify localized titles inside Progress View render in English
     await expect(page.locator("body")).toContainText("Local readiness check");

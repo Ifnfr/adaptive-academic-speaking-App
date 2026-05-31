@@ -2780,6 +2780,8 @@ export default function Home() {
                   appLanguage={appLanguage}
                   onApplyNextLevel={handleApplyLevelUp}
                   onClaimXp={handleClaimXp}
+                  onSelectView={setView}
+                  xpEvents={xpEvents}
                 />
               </div>
             </section>
