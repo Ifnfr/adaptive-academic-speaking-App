@@ -48,7 +48,7 @@ test.describe("Learning Path - Micro Speaking Lesson Tests", () => {
     await lesson.locator("[data-testid='start-record-btn']").click();
     
     // UI should show listening state
-    await expect(lesson).toContainText("Speaking...");
+    await expect(lesson).toContainText("Listening... Read the phrases clearly.");
     await expect(lesson.locator("[data-testid='stop-record-btn']")).toBeVisible();
     
     // shell status tag should update to In Progress
