@@ -636,19 +636,42 @@ test.describe("Phase 2 Privacy QA (TASK-052L)", () => {
       "src/app/components/learning-path/SupportedConversationLesson.tsx",
       "src/app/components/learning-path/PronunciationAwarenessLesson.tsx",
     ];
+    const tutorVoiceHelper = "src/app/lib/speech/tutor-voice.ts";
+    const helperSrc = readSrc(tutorVoiceHelper);
+
+    expect(helperSrc, "Tutor voice helper should use browser SpeechSynthesis").toContain("SpeechSynthesisUtterance");
+    expect(helperSrc, "Tutor voice helper should speak through browser speechSynthesis").toContain("window.speechSynthesis.speak");
+    expect(helperSrc, "Tutor voice helper should have unsupported-browser fallback").toContain("canUseTutorVoice");
+    expect(helperSrc, "Tutor voice helper must not call external TTS API").not.toMatch(/fetch\s*\(\s*['"]https?:\/\/.*tts/i);
+    expect(helperSrc, "Tutor voice helper must not import TTS SDK").not.toMatch(/from ['"]@google-cloud\/text-to-speech|elevenlabs|deepgram/i);
+    expect(helperSrc, "Tutor voice helper must not capture microphone input").not.toMatch(/getUserMedia\s*\(|MediaRecorder|SpeechRecognition|webkitSpeechRecognition/);
+    expect(helperSrc, "Tutor voice helper must not store or upload audio").not.toMatch(/upload.*audio|audioBlob|recordingUrl/i);
+    expect(helperSrc, "Tutor voice helper must not perform speech scoring").not.toMatch(/score|phoneme|pronunciationAccuracy/i);
 
     for (const relPath of renderers) {
       const src = readSrc(relPath);
-      // Must use browser SpeechSynthesis
-      expect(src, `${relPath} should use SpeechSynthesisUtterance`).toContain("SpeechSynthesisUtterance");
+      const usesInlineSpeechSynthesis = src.includes("SpeechSynthesisUtterance");
+      const usesTutorVoiceHelper = src.includes("speakTutorPhrase") || src.includes("speechSynthesis");
+
+      // May use browser SpeechSynthesis directly or via the shared tutor voice helper.
+      expect(
+        usesInlineSpeechSynthesis || usesTutorVoiceHelper,
+        `${relPath} should use browser-native tutor voice directly or via helper`
+      ).toBe(true);
       // Must NOT use fetch to an external TTS endpoint
       expect(src, `${relPath} must not call external TTS API`).not.toMatch(/fetch\s*\(\s*['"]https?:\/\/.*tts/i);
       // Must NOT import any TTS SDK
       expect(src, `${relPath} must not import TTS SDK`).not.toMatch(/from ['"]@google-cloud\/text-to-speech|elevenlabs|deepgram/i);
       // Must NOT upload audio
-      expect(src, `${relPath} must not upload audio`).not.toMatch(/upload.*audio|audioBlob/i);
+      expect(src, `${relPath} must not upload audio`).not.toMatch(/upload.*audio|audioBlob|recordingUrl/i);
+      // Must NOT capture or score learner speech
+      expect(src, `${relPath} must not capture microphone input`).not.toMatch(/getUserMedia\s*\(|MediaRecorder|SpeechRecognition|webkitSpeechRecognition/);
+      expect(src, `${relPath} must not perform speech scoring`).not.toMatch(/phoneme|pronunciationAccuracy|aiScore/i);
       // Must have fallback for unsupported browsers (setTimeout fallback)
-      expect(src, `${relPath} should have fallback for unsupported TTS`).toContain("setTimeout");
+      expect(
+        src.includes("setTimeout") || src.includes("canUseTutorVoice"),
+        `${relPath} should have fallback for unsupported TTS directly or via helper`
+      ).toBe(true);
     }
   });
 
