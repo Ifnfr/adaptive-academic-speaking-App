@@ -4,6 +4,7 @@ import type { AppLanguage } from "../../lib/i18n";
 import { LearningPathCard, CardStatus } from "../../lib/learning-path/types";
 import { MicroPracticeContract } from "../../lib/learning-path/useMicroPractice";
 import { useState } from "react";
+import { canUseTutorVoice, speakTutorPhrase } from "../../lib/speech/tutor-voice";
 
 export type SentenceBuilderLessonProps = {
   card: LearningPathCard;
@@ -53,20 +54,16 @@ export function SentenceBuilderLesson({
   const [isResetAllowed, setIsResetAllowed] = useState(false);
 
   // Model voice synthesis playback
-  const handleListenModel = () => {
+  const handleListenModel = async () => {
     setListenActive(true);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(card.targetPhrases.join(". "));
-      utterance.lang = "en-US";
-      utterance.onend = () => setListenActive(false);
-      utterance.onerror = () => setListenActive(false);
-      window.speechSynthesis.speak(utterance);
+
+    if (canUseTutorVoice()) {
+      await speakTutorPhrase(card.targetPhrases.join(". "));
     } else {
-      setTimeout(() => {
-        setListenActive(false);
-      }, 1500);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     }
+
+    setListenActive(false);
   };
 
   // Standard token selection

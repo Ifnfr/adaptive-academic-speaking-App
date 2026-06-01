@@ -57,7 +57,7 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
 
       // Click listen
       await listenBtn.click();
-      await expect(shell).toContainText("Playing model audio...");
+      await expect(shell).toContainText("Playing...");
       await expect(listenBtn).toBeDisabled();
 
       // Wait for play to finish (1.2s timeout)
@@ -74,18 +74,23 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       await day1Card.getByRole("button", { name: "Preview Lesson" }).click();
 
       const shell = page.locator("[data-testid='micro-lesson-shell']");
-      const practiceBtn = shell.locator("[data-testid='practice-phrase-btn']");
+      const startBtn = shell.locator("[data-testid='start-record-btn']");
+      const stopBtn = shell.locator("[data-testid='stop-record-btn']");
 
-      await practiceBtn.click();
+      await startBtn.click();
+      await stopBtn.click();
       await expect(shell).toContainText("Practiced 1 time!");
 
-      await practiceBtn.click();
+      const retryBtn = shell.locator("[data-testid='retry-record-btn']");
+      await retryBtn.click();
+      await startBtn.click();
+      await stopBtn.click();
       await expect(shell).toContainText("Practiced 2 times!");
 
-      // Check localStorage has marked it attempted
+      // Check localStorage has marked it recorded
       const rawProgress = await page.evaluate(() => localStorage.getItem("fonetik:learning-path-progress:v1"));
       const parsed = JSON.parse(rawProgress!);
-      expect(parsed.cards["card-d1-c1"].status).toBe("attempted");
+      expect(parsed.cards["card-d1-c1"].status).toBe("recorded");
     });
 
     test("4. Complete action marks card completed", async ({ page }) => {
@@ -93,8 +98,10 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       await day1Card.getByRole("button", { name: "Preview Lesson" }).click();
 
       const shell = page.locator("[data-testid='micro-lesson-shell']");
-      const completeBtn = shell.locator("[data-testid='complete-btn']");
+      await shell.locator("[data-testid='start-record-btn']").click();
+      await shell.locator("[data-testid='stop-record-btn']").click();
 
+      const completeBtn = shell.locator("[data-testid='complete-btn']");
       await completeBtn.click();
 
       // Shell should close and card should be completed
@@ -177,7 +184,7 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       // Try pattern button exists
       const tryBtn = phrasePatternLesson.locator("[data-testid='try-pattern-btn']");
       await expect(tryBtn).toBeVisible();
-      await expect(phrasePatternLesson).toContainText("Try the pattern");
+      await expect(phrasePatternLesson).toContainText("Start speaking");
 
       // No claims of real AI validation/scoring
       const bodyText = await shell.innerText();
@@ -194,12 +201,13 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       const tryBtn = shell.locator("[data-testid='try-pattern-btn']");
 
       await tryBtn.click();
+      await shell.locator("[data-testid='stop-record-btn']").click();
       await expect(shell).toContainText("Tried pattern 1 time!");
 
       // Updates progress
       const rawProgress = await page.evaluate(() => localStorage.getItem("fonetik:learning-path-progress:v1"));
       const parsed = JSON.parse(rawProgress!);
-      expect(parsed.cards["card-d3-c1"].status).toBe("attempted");
+      expect(parsed.cards["card-d3-c1"].status).toBe("recorded");
     });
 
     test("3. Complete action marks card completed", async ({ page }) => {
@@ -207,8 +215,10 @@ test.describe("Learning Path - Guided Word & Phrase Pattern Specialized Renderer
       await day3Card.getByRole("button", { name: "Preview Lesson" }).click();
 
       const shell = page.locator("[data-testid='micro-lesson-shell']");
-      const completeBtn = shell.locator("[data-testid='complete-btn']");
+      await shell.locator("[data-testid='try-pattern-btn']").click();
+      await shell.locator("[data-testid='stop-record-btn']").click();
 
+      const completeBtn = shell.locator("[data-testid='complete-btn']");
       await completeBtn.click();
 
       // Shell should close and card should be completed
