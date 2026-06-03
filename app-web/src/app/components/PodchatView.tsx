@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type PodchatPhase =
   | "setup"
@@ -51,10 +51,17 @@ const DIFFICULTIES: readonly PodchatDifficulty[] = [
   "Advanced",
 ];
 
-const DIFFICULTY_TURNS: Record<PodchatDifficulty, number> = {
-  Beginner: 3,
-  Intermediate: 5,
-  Advanced: 7,
+/** Duration-based session limits — replaces the old max-turn model. */
+const DIFFICULTY_DURATION: Record<PodchatDifficulty, number> = {
+  Beginner: 180,    // 3 minutes
+  Intermediate: 300, // 5 minutes
+  Advanced: 420,    // 7 minutes
+};
+
+const DIFFICULTY_LABEL: Record<PodchatDifficulty, string> = {
+  Beginner: "3-minute session",
+  Intermediate: "5-minute session",
+  Advanced: "7-minute session",
 };
 
 const HOST_OPENERS: Record<PodchatTopic, string> = {
@@ -100,6 +107,12 @@ function nextTurnId(turns: ReadonlyArray<PodchatTurn>): string {
   return `podchat-turn-${turns.length + 1}`;
 }
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(Math.max(0, seconds) / 60);
+  const s = Math.max(0, seconds) % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 export function PodchatView() {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
@@ -110,14 +123,20 @@ export function PodchatView() {
   const [submittedUserTurns, setSubmittedUserTurns] = useState(0);
   const [draftLearnerText, setDraftLearnerText] = useState("");
 
-  // New API/Feedback Integration States
+  // Duration-based session state
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionActiveRef = useRef(false);
+
+  // API / feedback states
   const [turnError, setTurnError] = useState<string | null>(null);
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [evalData, setEvalData] = useState<PodchatEvaluateResponse | null>(null);
 
-  const maxUserTurns = DIFFICULTY_TURNS[difficulty];
-  const progressTurn = Math.min(submittedUserTurns + 1, maxUserTurns);
+  const durationSeconds = DIFFICULTY_DURATION[difficulty];
+  const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds);
+  const isTimeExpired = remainingSeconds === 0;
   const rollingTurns = turns.slice(-3);
   const fullTranscript = useMemo(
     () =>
@@ -136,6 +155,54 @@ export function PodchatView() {
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
 
+  // --- Timer management ---
+  function startTimer() {
+    sessionActiveRef.current = true;
+    timerRef.current = setInterval(() => {
+      if (!sessionActiveRef.current) return;
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+  }
+
+  function stopTimer() {
+    sessionActiveRef.current = false;
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => stopTimer();
+  }, []);
+
+  // When time expires during speaking, allow End Session automatically if
+  // the user is idle and has at least one learner turn.
+  // State updates are deferred via setTimeout to avoid calling setState
+  // synchronously inside an effect (react-hooks/set-state-in-effect).
+  useEffect(() => {
+    if (phase !== "speaking") return;
+    if (!isTimeExpired) return;
+    if (status === "submitting") return; // let the in-flight request finish
+    if (status === "complete") return;
+    const hasLearnerTurn = turns.some((t) => t.speaker === "learner");
+    if (hasLearnerTurn) {
+      stopTimer();
+      const currentTurns = turns;
+      setTimeout(() => {
+        setStatus("complete");
+        setPhase("evaluation");
+        triggerEvaluation(currentTurns);
+      }, 0);
+    } else {
+      setTimeout(() => {
+        setTurnError("Time is up. At least one turn is needed for evaluation. Please start a new Podchat.");
+      }, 0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTimeExpired, phase, status]);
+
   function startPodchat() {
     const opener: PodchatTurn = {
       id: "podchat-turn-1",
@@ -145,26 +212,30 @@ export function PodchatView() {
     setTurns([opener]);
     setSubmittedUserTurns(0);
     setDraftLearnerText("");
+    setElapsedSeconds(0);
     setStatus("user_turn");
     setPhase("speaking");
     setTurnError(null);
     setEvalError(null);
     setEvalData(null);
+    startTimer();
   }
 
   function resetPodchat() {
+    stopTimer();
     setPhase("setup");
     setStatus("host_turn");
     setTurns([]);
     setSubmittedUserTurns(0);
     setDraftLearnerText("");
+    setElapsedSeconds(0);
     setTurnError(null);
     setEvalError(null);
     setEvalData(null);
   }
 
   function mockLearnerAnswer() {
-    const index = Math.min(submittedUserTurns, maxUserTurns - 1);
+    const index = Math.min(submittedUserTurns, LEARNER_REPLIES[topic].length - 1);
     setDraftLearnerText(LEARNER_REPLIES[topic][index]);
   }
 
@@ -195,6 +266,20 @@ export function PodchatView() {
     }
   }
 
+  function buildTurnPayload(currentTurns: PodchatTurn[], currentIndex: number) {
+    const elapsed = elapsedSeconds;
+    const remaining = Math.max(0, durationSeconds - elapsed);
+    return {
+      topic,
+      difficulty,
+      turnIndex: currentIndex,
+      durationSeconds,
+      elapsedSeconds: elapsed,
+      remainingSeconds: remaining,
+      turns: currentTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
+    };
+  }
+
   async function retryLastTurn() {
     setTurnError(null);
     setStatus("submitting");
@@ -202,13 +287,7 @@ export function PodchatView() {
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic,
-          difficulty,
-          turnIndex: submittedUserTurns,
-          maxUserTurns,
-          turns: turns.map((t) => ({ speaker: t.speaker, text: t.text })),
-        }),
+        body: JSON.stringify(buildTurnPayload(turns, submittedUserTurns)),
       });
       if (!response.ok) {
         const errText = await response.json().catch(() => ({}));
@@ -224,14 +303,7 @@ export function PodchatView() {
       setTurns(updatedTurns);
       const nextSubmittedCount = submittedUserTurns + 1;
       setSubmittedUserTurns(nextSubmittedCount);
-
-      if (nextSubmittedCount >= maxUserTurns) {
-        setStatus("complete");
-        setPhase("evaluation");
-        triggerEvaluation(updatedTurns);
-      } else {
-        setStatus("user_turn");
-      }
+      setStatus("user_turn");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTurnError(msg || "An error occurred. Please try again.");
@@ -257,13 +329,7 @@ export function PodchatView() {
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic,
-          difficulty,
-          turnIndex: submittedUserTurns,
-          maxUserTurns,
-          turns: updatedTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
-        }),
+        body: JSON.stringify(buildTurnPayload(updatedTurns, submittedUserTurns)),
       });
       if (!response.ok) {
         const errText = await response.json().catch(() => ({}));
@@ -279,14 +345,8 @@ export function PodchatView() {
       setTurns(finalTurns);
       const nextSubmittedCount = submittedUserTurns + 1;
       setSubmittedUserTurns(nextSubmittedCount);
-
-      if (nextSubmittedCount >= maxUserTurns) {
-        setStatus("complete");
-        setPhase("evaluation");
-        triggerEvaluation(finalTurns);
-      } else {
-        setStatus("user_turn");
-      }
+      // Duration controls session end, not turn count
+      setStatus("user_turn");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTurnError(msg || "An error occurred. Please try again.");
@@ -300,6 +360,7 @@ export function PodchatView() {
       setTurnError("Complete at least one turn before evaluation.");
       return;
     }
+    stopTimer();
     setStatus("complete");
     setPhase("evaluation");
     triggerEvaluation(turns);
@@ -316,10 +377,10 @@ export function PodchatView() {
             Start a Podchat
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
-            Choose a topic and difficulty, then practice a short local-only
-            conversation. This Phase 1 preview uses deterministic mock turns and
-            does not use microphone capture, audio recording, providers, or
-            cloud storage.
+            Choose a topic and difficulty, then practice a timed conversation.
+            Keep speaking until time runs out. This Phase 1 preview uses
+            deterministic mock turns and does not use microphone capture, audio
+            recording, or cloud storage.
           </p>
         </div>
         <div className="p-6">
@@ -372,8 +433,11 @@ export function PodchatView() {
                   }
                 >
                   <span className="text-sm font-semibold">{option}</span>
-                  <span className="mt-1 block text-xs text-[var(--brand-ink-soft)]">
-                    {DIFFICULTY_TURNS[option]} learner turns
+                  <span
+                    className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                    data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
+                  >
+                    {DIFFICULTY_LABEL[option]}
                   </span>
                 </button>
               ))}
@@ -463,8 +527,8 @@ export function PodchatView() {
                   <div className="mt-2 flex flex-col gap-3">
                     {evalData.corrections.map((c: PodchatCorrection, i: number) => (
                       <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
-                        <p className="text-xs text-red-600 line-through">“{c.original}”</p>
-                        <p className="mt-1 text-sm font-medium text-emerald-700">“{c.improved}”</p>
+                        <p className="text-xs text-red-600 line-through">&quot;{c.original}&quot;</p>
+                        <p className="mt-1 text-sm font-medium text-emerald-700">&quot;{c.improved}&quot;</p>
                         <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">{c.explanation}</p>
                       </div>
                     ))}
@@ -492,7 +556,7 @@ export function PodchatView() {
                         <p className="text-sm font-semibold text-[var(--brand-ink)]">
                           Instead of <span className="underline decoration-red-500">{v.originalOrBasic}</span>, try: <span className="text-[var(--brand-teal)]">{v.suggestion}</span>
                         </p>
-                        <p className="mt-2 text-xs italic text-[var(--brand-ink-soft)]">Example: “{v.example}”</p>
+                        <p className="mt-2 text-xs italic text-[var(--brand-ink-soft)]">Example: &quot;{v.example}&quot;</p>
                       </div>
                     ))}
                   </div>
@@ -506,7 +570,7 @@ export function PodchatView() {
                     {evalData.recurringErrors.map((re: PodchatRecurringError, i: number) => (
                       <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
                         <p className="text-sm font-semibold text-[var(--brand-ink)]">{re.label}</p>
-                        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">Evidence: <span className="italic">“{re.evidence}”</span></p>
+                        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">Evidence: <span className="italic">&quot;{re.evidence}&quot;</span></p>
                         <p className="mt-2 text-xs text-[var(--brand-teal-ink)]">Practice: {re.practiceFocus}</p>
                       </div>
                     ))}
@@ -543,15 +607,28 @@ export function PodchatView() {
               Speaking screen
             </p>
             <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
-              {topic} Podchat · {difficulty}
+              {topic} Podchat · {DIFFICULTY_LABEL[difficulty]}
             </h2>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-medium">
             <span
-              className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-[var(--brand-ink)]"
-              data-testid="podchat-turn-progress"
+              className={
+                "rounded-full border px-3 py-1 " +
+                (isTimeExpired
+                  ? "border-red-300 bg-red-50 text-red-700"
+                  : remainingSeconds <= 60
+                    ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)]")
+              }
+              data-testid="podchat-time-left"
             >
-              Turn {progressTurn} of {maxUserTurns}
+              {isTimeExpired ? "Time's up" : `Time left: ${formatTime(remainingSeconds)}`}
+            </span>
+            <span
+              className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-[var(--brand-ink)]"
+              data-testid="podchat-turns-completed"
+            >
+              Turns completed: {submittedUserTurns}
             </span>
             <span
               className="rounded-full border border-[var(--brand-teal)]/40 bg-[var(--brand-teal-soft)] px-3 py-1 text-[var(--brand-teal-ink)]"
@@ -604,14 +681,15 @@ export function PodchatView() {
 
           <div className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
             <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-              Local mock learner turn
+              Mock learner turn (Stop Recording simulation)
             </h3>
             <p className="mt-1 text-xs leading-5 text-[var(--brand-ink-soft)]">
-              Phase 1 uses deterministic local text only. No microphone, audio,
-              provider route, or cloud write is used.
+              Phase 1 uses deterministic local text to simulate a future Stop
+              Recording result. No microphone, audio, provider route, or cloud
+              write is used.
             </p>
             <div className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3 text-sm leading-6 text-[var(--brand-ink)]">
-              {draftLearnerText || "Click Mock learner answer to prepare this turn."}
+              {draftLearnerText || "Click \u201cMock learner answer\u201d to prepare this turn."}
             </div>
             {turnError && (
               <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800" data-testid="podchat-turn-error">

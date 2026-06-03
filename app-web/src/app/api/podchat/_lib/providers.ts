@@ -11,7 +11,9 @@ type MockTurnRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
   turnIndex: number;
-  maxUserTurns: number;
+  durationSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number;
   turns: PodchatTurn[];
 };
 
@@ -28,11 +30,10 @@ function mockDifficultyPhrase(difficulty: PodchatDifficulty): string {
 }
 
 export function buildMockPodchatTurn(req: MockTurnRequest): string {
-  const nextTurn = req.turnIndex + 1;
-  const finalTurnNote =
-    nextTurn >= req.maxUserTurns
-      ? "This is a good moment to make your final point."
-      : "Let's keep the conversation moving.";
+  const isClosing = req.remainingSeconds <= 60;
+  const finalTurnNote = isClosing
+    ? "We are nearly out of time — this is a good moment to wrap up."
+    : "Let's keep the conversation moving.";
 
   return JSON.stringify({
     hostText: `Local mock host: your ${req.topic.toLowerCase()} point is clear. ${finalTurnNote}`,

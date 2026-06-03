@@ -8,6 +8,7 @@ const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
 const originalProvider = process.env.PODCHAT_AI_PROVIDER;
 const originalFetch = globalThis.fetch;
 
+// Default valid duration-based payload for Beginner (durationSeconds = 180)
 function buildRequest(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/podchat/turn", {
     method: "POST",
@@ -15,8 +16,10 @@ function buildRequest(body: Record<string, unknown>): Request {
     body: JSON.stringify({
       topic: "Economics",
       difficulty: "Beginner",
-      maxUserTurns: 3,
       turnIndex: 0,
+      durationSeconds: 180,
+      elapsedSeconds: 30,
+      remainingSeconds: 150,
       turns: [
         { speaker: "host", text: "Welcome to Podchat. What is your favorite economic concept?" },
         { speaker: "learner", text: "I like demand and supply because it dictates prices." }
@@ -131,7 +134,9 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("valid request returns hostText and followUpQuestion", async () => {
+  // ── Duration schema validation ──────────────────────────────────────────────
+
+  test("valid request with duration fields returns hostText and followUpQuestion", async () => {
     const capture: { body?: Record<string, unknown> } = {};
     mockClaudeResponse(200, JSON.stringify({
       hostText: "That is a brilliant starting point. Supply and demand really makes the world go round.",
@@ -143,12 +148,102 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     const data = (await response.json()) as { hostText: string; followUpQuestion: string };
     expect(data.hostText).toBe("That is a brilliant starting point. Supply and demand really makes the world go round.");
     expect(data.followUpQuestion).toBe("Can you think of a recent price change you noticed in a shop?");
-    
+
     expect(JSON.stringify(capture.body)).not.toContain("audio");
     expect(JSON.stringify(capture.body)).not.toContain("recording");
     expect(JSON.stringify(capture.body)).not.toContain("email");
     expect(JSON.stringify(capture.body)).not.toContain("userId");
   });
+
+  test("old maxUserTurns-only request (without duration fields) rejects with 400", async () => {
+    // Simulate old payload: has maxUserTurns but missing durationSeconds/elapsedSeconds/remainingSeconds
+    const request = new Request("http://localhost/api/podchat/turn", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        topic: "Economics",
+        difficulty: "Beginner",
+        turnIndex: 0,
+        maxUserTurns: 3,
+        turns: [
+          { speaker: "host", text: "Welcome to Podchat." },
+          { speaker: "learner", text: "Hello." }
+        ],
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    // Should fail on missing/invalid durationSeconds
+    expect(data.error).toContain("durationSeconds");
+  });
+
+  test("durationSeconds mismatch for difficulty rejects with 400", async () => {
+    // Intermediate requires 300 but we send 180
+    const response = await POST(buildRequest({ difficulty: "Intermediate", durationSeconds: 180, remainingSeconds: 150 }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("durationSeconds");
+  });
+
+  test("Advanced difficulty with correct durationSeconds (420) passes schema", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "A trade-off worth exploring.",
+      followUpQuestion: "What is the wider implication of that?"
+    }), capture);
+
+    const response = await POST(buildRequest({
+      difficulty: "Advanced",
+      durationSeconds: 420,
+      elapsedSeconds: 100,
+      remainingSeconds: 320,
+    }));
+    expect(response.status).toBe(200);
+  });
+
+  test("negative elapsedSeconds rejects with 400", async () => {
+    const response = await POST(buildRequest({ elapsedSeconds: -1 }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("elapsedSeconds");
+  });
+
+  test("elapsedSeconds exceeding durationSeconds rejects with 400", async () => {
+    const response = await POST(buildRequest({ elapsedSeconds: 200, remainingSeconds: 0 }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("elapsedSeconds");
+  });
+
+  test("negative remainingSeconds rejects with 400", async () => {
+    const response = await POST(buildRequest({ remainingSeconds: -1 }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("remainingSeconds");
+  });
+
+  test("inconsistent remainingSeconds outside tolerance rejects with 400", async () => {
+    // durationSeconds=180, elapsedSeconds=30 → expected remaining=150, but we send 100 (diff=50 > 5)
+    const response = await POST(buildRequest({ remainingSeconds: 100 }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("remainingSeconds");
+  });
+
+  test("remainingSeconds within 5s tolerance passes", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "A reasonable point.",
+      followUpQuestion: "Could you give an example?"
+    }), capture);
+
+    // elapsedSeconds=30, durationSeconds=180 → expected=150, send 153 (diff=3 ≤ 5)
+    const response = await POST(buildRequest({ remainingSeconds: 153 }));
+    expect(response.status).toBe(200);
+  });
+
+  // ── Core validation ──────────────────────────────────────────────────────────
 
   test("invalid topic rejects with 400", async () => {
     const response = await POST(buildRequest({ topic: "InvalidTopic" }));
@@ -164,15 +259,19 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(data.error).toContain("difficulty");
   });
 
-  test("maxUserTurns mismatch rejects with 400", async () => {
-    const response = await POST(buildRequest({ maxUserTurns: 5 }));
-    expect(response.status).toBe(400);
-    const data = (await response.json()) as { error: string };
-    expect(data.error).toContain("maxUserTurns");
-  });
-
   test("empty turns rejects with 400", async () => {
     const response = await POST(buildRequest({ turns: [] }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("turns");
+  });
+
+  test("turns exceeding max length 20 rejects with 400", async () => {
+    const manyTurns = Array.from({ length: 21 }, (_, i) => ({
+      speaker: i % 2 === 0 ? "host" : "learner",
+      text: "Sample text."
+    }));
+    const response = await POST(buildRequest({ turns: manyTurns }));
     expect(response.status).toBe(400);
     const data = (await response.json()) as { error: string };
     expect(data.error).toContain("turns");
@@ -237,6 +336,30 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(data.error).toContain("Learner turn count");
   });
 
+  test("user can submit many turns without fixed max-turn ending (turnIndex=9 accepted)", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "Excellent point.",
+      followUpQuestion: "What else would you add?"
+    }), capture);
+
+    // Build 20-turn transcript: 10 host + 10 learner interleaved, ending with learner
+    const manyTurns: Array<{ speaker: string; text: string }> = [];
+    for (let i = 0; i < 10; i++) {
+      manyTurns.push({ speaker: "host", text: `Host question ${i + 1}.` });
+      manyTurns.push({ speaker: "learner", text: `Learner answer ${i + 1}.` });
+    }
+    const response = await POST(buildRequest({
+      turnIndex: 9,
+      elapsedSeconds: 90,
+      remainingSeconds: 90,
+      turns: manyTurns,
+    }));
+    expect(response.status).toBe(200);
+  });
+
+  // ── Provider: missing key ───────────────────────────────────────────────────
+
   test("missing CLAUDE_API_KEY returns 503, not 400", async () => {
     process.env.CLAUDE_API_KEY = "";
     const response = await POST(buildRequest({}));
@@ -244,6 +367,8 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     const data = (await response.json()) as { error: string };
     expect(data.error).toContain("Provider is not configured");
   });
+
+  // ── Mock provider ────────────────────────────────────────────────────────────
 
   test("mock provider returns deterministic host response without key or fetch", async () => {
     process.env.PODCHAT_AI_PROVIDER = "mock";
@@ -271,6 +396,20 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(JSON.stringify(data)).not.toMatch(/audio|blob|recording|userId|email/i);
   });
 
+  test("mock provider with low remainingSeconds returns closing context", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "mock";
+    process.env.CLAUDE_API_KEY = "";
+
+    // Send with 30s remaining (≤60 threshold)
+    const response = await POST(buildRequest({
+      elapsedSeconds: 150,
+      remainingSeconds: 30,
+    }));
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { hostText: string; followUpQuestion: string };
+    expect(data.hostText).toContain("nearly out of time");
+  });
+
   test("mock provider still rejects malformed request before response", async () => {
     process.env.PODCHAT_AI_PROVIDER = "mock";
     let fetchCalled = false;
@@ -284,6 +423,8 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(response.status).toBe(400);
     expect(fetchCalled).toBe(false);
   });
+
+  // ── Claude ───────────────────────────────────────────────────────────────────
 
   test("Claude non-OK response returns sanitized 502", async () => {
     mockClaudeResponse(500, "Internal Server Error");
@@ -326,6 +467,8 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
       expect(source).not.toContain(term);
     }
   });
+
+  // ── Gemini ───────────────────────────────────────────────────────────────────
 
   test("valid Gemini request returns hostText and followUpQuestion", async () => {
     process.env.PODCHAT_AI_PROVIDER = "gemini";
@@ -380,6 +523,8 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(502);
   });
+
+  // ── DeepSeek ─────────────────────────────────────────────────────────────────
 
   test("valid DeepSeek request returns hostText and followUpQuestion", async () => {
     process.env.PODCHAT_AI_PROVIDER = "deepseek";

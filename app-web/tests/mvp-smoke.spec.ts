@@ -94,9 +94,10 @@ test.describe("MVP Smoke Flows", () => {
 
     await page.getByRole("button", { name: "Start a Podchat" }).click();
     await expect(page.getByTestId("podchat-speaking")).toBeVisible();
-    await expect(page.getByTestId("podchat-turn-progress")).toContainText(
-      "Turn 1 of 7",
-    );
+    // Duration-based session: time left shown instead of turn count
+    await expect(page.getByTestId("podchat-time-left")).toBeVisible();
+    await expect(page.getByTestId("podchat-time-left")).toContainText("Time left:");
+    await expect(page.getByTestId("podchat-turns-completed")).toContainText("Turns completed:");
     await page.getByRole("button", { name: "Mock learner answer" }).click();
     await page.getByRole("button", { name: "Submit Turn" }).click();
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText(

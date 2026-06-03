@@ -7,10 +7,10 @@ import {
 
 export const runtime = "nodejs";
 
-const DIFFICULTY_TURNS = {
-  Beginner: 3,
-  Intermediate: 5,
-  Advanced: 7,
+const DIFFICULTY_DURATION: Record<string, number> = {
+  Beginner: 180,
+  Intermediate: 300,
+  Advanced: 420,
 };
 
 type PodchatTopic = "Economics" | "Technology";
@@ -24,8 +24,10 @@ type PodchatTurn = {
 type PodchatTurnRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
-  maxUserTurns: number;
   turnIndex: number;
+  durationSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number;
   turns: PodchatTurn[];
 };
 
@@ -47,19 +49,37 @@ function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequ
   }
   const validDifficulty: PodchatDifficulty = difficulty;
 
-  const maxUserTurns = b.maxUserTurns;
-  if (typeof maxUserTurns !== "number" || maxUserTurns !== DIFFICULTY_TURNS[validDifficulty]) {
-    return { valid: false, error: "Invalid maxUserTurns." };
+  const expectedDuration = DIFFICULTY_DURATION[validDifficulty];
+
+  const durationSeconds = b.durationSeconds;
+  if (typeof durationSeconds !== "number" || !Number.isInteger(durationSeconds) || durationSeconds !== expectedDuration) {
+    return { valid: false, error: `Invalid durationSeconds. Must be ${expectedDuration} for ${validDifficulty}.` };
+  }
+
+  const elapsedSeconds = b.elapsedSeconds;
+  if (typeof elapsedSeconds !== "number" || !Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > durationSeconds) {
+    return { valid: false, error: "Invalid elapsedSeconds. Must be a non-negative integer <= durationSeconds." };
+  }
+
+  const remainingSeconds = b.remainingSeconds;
+  if (typeof remainingSeconds !== "number" || !Number.isInteger(remainingSeconds) || remainingSeconds < 0 || remainingSeconds > durationSeconds) {
+    return { valid: false, error: "Invalid remainingSeconds. Must be a non-negative integer <= durationSeconds." };
+  }
+
+  // Allow ±5 second tolerance for clock drift / round-trip latency
+  const expectedRemaining = durationSeconds - elapsedSeconds;
+  if (Math.abs(remainingSeconds - expectedRemaining) > 5) {
+    return { valid: false, error: "remainingSeconds is inconsistent with durationSeconds - elapsedSeconds (tolerance: 5s)." };
   }
 
   const turnIndex = b.turnIndex;
-  if (typeof turnIndex !== "number" || !Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= maxUserTurns) {
-    return { valid: false, error: "Invalid turnIndex." };
+  if (typeof turnIndex !== "number" || !Number.isInteger(turnIndex) || turnIndex < 0) {
+    return { valid: false, error: "Invalid turnIndex. Must be a non-negative integer." };
   }
 
   const turns = b.turns;
-  if (!Array.isArray(turns) || turns.length === 0 || turns.length > 12) {
-    return { valid: false, error: "turns must be a non-empty array with max length 12." };
+  if (!Array.isArray(turns) || turns.length === 0 || turns.length > 20) {
+    return { valid: false, error: "turns must be a non-empty array with max length 20." };
   }
 
   let learnerCount = 0;
@@ -97,8 +117,10 @@ function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequ
     request: {
       topic: validTopic,
       difficulty: validDifficulty,
-      maxUserTurns,
       turnIndex,
+      durationSeconds,
+      elapsedSeconds,
+      remainingSeconds,
       turns: turns.map((t: unknown) => {
         const turnObj = t as Record<string, unknown>;
         return {
@@ -149,9 +171,20 @@ function buildUserPrompt(req: PodchatTurnRequest): string {
     .map((t) => `${t.speaker === "host" ? "AI Host" : "Learner"}: ${t.text}`)
     .join("\n\n");
 
+  let timeNote = "";
+  if (req.remainingSeconds <= 30) {
+    timeNote = "NOTE: Very little time remains. Guide the conversation toward a natural close.";
+  } else if (req.remainingSeconds <= 90) {
+    timeNote = "NOTE: The session is nearly over. Ask a concise closing-style follow-up question.";
+  } else {
+    timeNote = "NOTE: The session has plenty of time remaining. Continue the discussion naturally.";
+  }
+
   return [
     "CONVERSATION TRANSCRIPT SO FAR:",
     formattedTurns,
+    "",
+    timeNote,
     "",
     "TASK:",
     "As the AI Host, write your next conversational turn reacting to the last Learner response.",
