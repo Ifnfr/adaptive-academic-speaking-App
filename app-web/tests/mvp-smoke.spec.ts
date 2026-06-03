@@ -14,81 +14,78 @@ test.describe("MVP Smoke Flows", () => {
     ).toHaveCount(0);
   });
 
-  // Test B: Active Session basic flow
-  test("B. Active Session basic flow with mocked feedback", async ({ page }) => {
-    // Intercept feedback API
-    await page.route("**/api/feedback", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          mainWeakness: "Speaks too fast occasionally.",
-          evidence: "Fluency score is slightly lowered.",
-          betterPhrase: "Slow down your rate of delivery.",
-          retryTask: "Practice reading the sentence with deliberate pauses.",
-          providerUsed: "Mock Claude",
-          scores: {
-            fluency: 4,
-            grammar: 5,
-            coherence: 4,
-            vocabulary: 4,
-            argument: 4,
-            academicTone: 4,
+  // Test B: Podchat Phase 1 basic flow
+  test("B. Podchat Phase 1 local flow without providers or audio", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: {
+          getUserMedia() {
+            (window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean })
+              .__PODCHAT_MIC_REQUESTED__ = true;
+            return Promise.reject(new Error("Microphone must not be requested"));
           },
-        }),
+        },
       });
+    });
+
+    page.on("request", (request) => {
+      const url = request.url();
+      if (
+        url.includes("/api/feedback") ||
+        url.includes("/api/diagnostic") ||
+        url.includes("/api/podchat") ||
+        url.includes("anthropic.com") ||
+        url.includes("deepgram.com") ||
+        url.includes("polly")
+      ) {
+        providerCalls.push(url);
+      }
     });
 
     await page.goto("/");
 
-    // Fill in Today's Target
-    const targetTextarea = page.locator("#target");
-    await targetTextarea.fill("Improve fluency");
-
-    // Start session
-    await page.click("button:has-text(\"Start Session\")");
-
-    // Verify Step 2 (Speaking prompt) and Step 3 (Speaking attempt) are visible
-    await expect(page.locator("h2:has-text(\"Speaking prompt\")")).toBeVisible();
-    await expect(page.locator("h2:has-text(\"Speaking attempt\")")).toBeVisible();
-
-    // Fill in transcript
-    const transcriptTextarea = page.locator("#transcript");
-    await transcriptTextarea.fill(
-      "I think academic research must be conducted with integrity and clarity.",
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await page.getByRole("radio", { name: "Economics" }).click();
+    await expect(page.getByRole("radio", { name: "Economics" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await page.getByRole("radio", { name: /Advanced/ }).click();
+    await expect(page.getByRole("radio", { name: /Advanced/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
     );
 
-    // Submit attempt
-    await page.click("button:has-text(\"Submit Attempt\")");
-
-    // Wait for "Get AI Feedback" button to appear in step 4 and click it
-    await page.click("button:has-text(\"Get AI Feedback\")");
-
-    // Verify feedback is visible
-    await expect(page.locator("h3:has-text(\"Quick feedback\")")).toBeVisible();
-    await expect(
-      page.locator("dt:has-text(\"Main Weakness\")").locator("xpath=../dd"),
-    ).toContainText("Speaks too fast occasionally.");
-
-    // Step 5 (Retry attempt) panel should appear
-    await expect(page.locator("h2:has-text(\"Retry attempt\")")).toBeVisible();
-    const retryTextarea = page.locator("#retry-transcript");
-    await retryTextarea.fill(
-      "I think academic research must be conducted with deliberate pausing, integrity, and clarity.",
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await expect(page.getByTestId("podchat-speaking")).toBeVisible();
+    await expect(page.getByTestId("podchat-turn-progress")).toContainText(
+      "Turn 1 of 7",
     );
-
-    // Submit retry
-    await page.click("button:has-text(\"Submit Retry\")");
-
-    // Step 6 (Retry captured) panel should appear and offer "End Session"
-    await expect(page.locator("h2:has-text(\"Retry captured\")")).toBeVisible();
-    await page.click("button:has-text(\"End Session\")");
-
-    // Step 7 (Session summary) should show the generated CSV
-    await expect(page.locator("h2:has-text(\"Session summary\")")).toBeVisible();
-    await expect(page.locator("pre")).toContainText(
-      "Date,Level,Mode,Fluency",
+    await page.getByRole("button", { name: "Mock learner answer" }).click();
+    await page.getByRole("button", { name: "Submit Turn" }).click();
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText(
+      "Learner",
     );
+    await page.getByRole("button", { name: "End Session" }).click();
+    await expect(page.getByTestId("podchat-evaluation")).toBeVisible();
+    await expect(page.getByText("Grammar notes")).toBeVisible();
+
+    const microphoneRequested = await page.evaluate(() =>
+      Boolean(
+        (window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean })
+          .__PODCHAT_MIC_REQUESTED__,
+      ),
+    );
+    const storageSnapshot = await page.evaluate(() => JSON.stringify(localStorage));
+
+    expect(microphoneRequested).toBe(false);
+    expect(providerCalls).toEqual([]);
+    expect(storageSnapshot).not.toMatch(/audioBlob|recordingUrl|blob:/i);
   });
 
   // Test C: Vocabulary Notebook
@@ -194,8 +191,10 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.locator("button:has-text(\"Claim XP\")")).toBeVisible();
   });
 
-  // Test F: Article -> Active Session Bridge
-  test("F. Article Practice to Active Session bridge works", async ({ page }) => {
+  // Test F: Article -> Podchat navigation
+  test("F. Article Practice opens Podchat without starting capture", async ({
+    page,
+  }) => {
     // Intercept article-practice API
     await page.route("**/api/article-practice", async (route) => {
       await route.fulfill({
@@ -239,33 +238,17 @@ test.describe("MVP Smoke Flows", () => {
     // Click bridge button
     await page.click("button:has-text(\"Practice This Speaking Task\")");
 
-    // Verifications:
-    // 1. Should navigate to Active Session view
-    await expect(page.locator("h2:has-text(\"Session setup\")")).toBeVisible();
-
-    // 2. Today's target should be populated with the article practice info
-    const targetValue = await page.locator("#target").inputValue();
-    expect(targetValue).toContain(
-      "Article speaking task: Synthesize the Findings",
-    );
-    expect(targetValue).toContain("Source: Test Article Title (example.com)");
-
-    // 3. Mode should be set to Reading-to-Speaking
-    // Let's verify the Reading-to-Speaking mode button is checked
-    const readingToSpeakingButton = page.locator(
-      "button[role=\"radio\"]:has-text(\"Reading-to-Speaking\")",
-    );
-    await expect(readingToSpeakingButton).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-
-    // 4. Verify it does not auto-start recording/timer
+    // The bridge now lands on the Podchat setup, without old Active Practice UI
+    // and without auto-starting capture or a speaking screen.
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Economics" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Technology" })).toBeVisible();
     await expect(
       page.locator("h2:has-text(\"Speaking prompt\")"),
     ).not.toBeVisible();
     await expect(
       page.locator("h2:has-text(\"Speaking attempt\")"),
     ).not.toBeVisible();
+    await expect(page.getByTestId("podchat-speaking")).toHaveCount(0);
   });
 });

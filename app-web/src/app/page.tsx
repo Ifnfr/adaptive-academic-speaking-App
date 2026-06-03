@@ -11,12 +11,7 @@ import type { MutableRefObject } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { buildLevelUpCheck } from "./lib/level-up";
 import { LEVEL_PHASE, nextLevelHint } from "./lib/levels";
-import { buildCoachRecommendation } from "./lib/coach";
 import { computeDayStreak } from "./lib/streak";
-import {
-  buildSpeakingPrompt,
-  type SpeakingPrompt,
-} from "./lib/speaking-prompt";
 import {
   addUserSentence,
   buildVocabularyPracticeQueue,
@@ -58,12 +53,7 @@ import { LeaderboardView } from "./components/LeaderboardView";
 import { Sidebar, type SidebarView } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
-import { SessionSetup } from "./components/SessionSetup";
-import { CoachPanels } from "./components/CoachPanels";
-import { SpeakingPromptCard } from "./components/SpeakingPromptCard";
-import { SpeakingAttemptCard } from "./components/SpeakingAttemptCard";
-import { AttemptResultPanels } from "./components/AttemptResultPanels";
-import { RetryAndSummaryPanels } from "./components/RetryAndSummaryPanels";
+import { PodchatView } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
 import {
   ArticlePracticeView,
@@ -77,7 +67,6 @@ import {
 import { storage } from "./lib/storage";
 import {
   DISABLED_SESSION_CLOUD_AUTH,
-  writeCompletedSessionToCloud,
   type SessionCloudAuthState,
 } from "./lib/storage/session-cloud-runtime";
 import {
@@ -118,109 +107,18 @@ import {
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
 
-// ----- Minimal Web Speech API types -----
-// The Web Speech API isn't in lib.dom.d.ts in all TS versions, so we define
-// just enough surface to use it safely without `any`.
-type SpeechRecognitionAlternative = { transcript: string };
-type SpeechRecognitionResult = {
-  isFinal: boolean;
-  0: SpeechRecognitionAlternative;
-  length: number;
-};
-type SpeechRecognitionResultList = {
-  length: number;
-  [index: number]: SpeechRecognitionResult;
-};
-type SpeechRecognitionEvent = {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-};
-type SpeechRecognitionErrorEvent = { error: string; message?: string };
-
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onstart: ((event: Event) => void) | null;
-  onend: ((event: Event) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-// Both Chromium-based browsers and Safari expose webkitSpeechRecognition;
-// some Edge builds also expose the unprefixed name.
-function getSpeechRecognitionCtor(): SpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-// Option lists kept as plain string arrays so they are easy to edit later.
-const LEVELS = ["Foundation", "Beginner", "Intermediate", "Advanced", "Expert"] as const;
-const MODES = ["Fluency Sprint", "Argument Drill", "Reading-to-Speaking", "Debate", "Diagnostic"] as const;
-const FEEDBACK_TYPES = ["Quick", "Deep"] as const;
-const SESSION_TYPES = ["Micro", "Standard", "Deep"] as const;
-const AI_PROVIDERS = ["Claude", "DeepSeek", "Gemini"] as const;
 const CLERK_ENABLED = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-type Level = (typeof LEVELS)[number];
-type Mode = (typeof MODES)[number];
-type FeedbackType = (typeof FEEDBACK_TYPES)[number];
-type SessionType = (typeof SESSION_TYPES)[number];
-type AIProvider = (typeof AI_PROVIDERS)[number];
-
-// Snapshot of the form values at the moment Start Session is pressed.
-// Keeping it as a single object makes the Active Session panel easy to render.
-type SessionSetup = {
-  level: Level;
-  mode: Mode;
-  feedbackType: FeedbackType;
-  sessionType: SessionType;
-  aiProvider: AIProvider;
-  target: string;
-  // True only when the target was auto-filled from the previous session's
-  // retry task because the user left Today's Target blank.
-  autoFilledFromPrevious: boolean;
-};
-
-type CapturedAttempt = {
-  transcript: string;
-  durationSeconds: number;
-};
-
-type FeedbackResult = {
-  mainWeakness: string;
-  evidence: string;
-  betterPhrase: string;
-  retryTask: string;
-  providerUsed: string;
-  scores: FeedbackScores;
-};
-
-type DiagnosticScoresShape = {
-  fluency: number;
-  grammar: number;
-  vocabulary: number;
-  coherence: number;
-  argument: number;
-  academicTone: number;
-};
-
-type DiagnosticResult = {
-  recommendedLevel: Level;
-  mainBottleneck: string;
-  summary: string;
-  scores: DiagnosticScoresShape;
-  sevenDayFocusPlan: string[];
-};
+type Level = "Foundation" | "Beginner" | "Intermediate" | "Advanced" | "Expert";
+type Mode =
+  | "Fluency Sprint"
+  | "Argument Drill"
+  | "Reading-to-Speaking"
+  | "Debate"
+  | "Diagnostic";
+type FeedbackType = "Quick" | "Deep";
+type SessionType = "Micro" | "Standard" | "Deep";
+type AIProvider = "Claude" | "DeepSeek" | "Gemini";
 
 type WeeklyReviewSessionSummary = {
   date: string;
@@ -237,59 +135,6 @@ type VocabularyCorrectionResult = Omit<
   VocabSentenceCorrection,
   "checkedAt" | "providerUsed"
 >;
-
-// Score dimensions per level. Order in arrays matches CSV column order.
-const FOUNDATION_SCORE_KEYS = ["fluency", "coherence"] as const;
-const BEGINNER_SCORE_KEYS = ["fluency", "grammar", "coherence"] as const;
-const ADVANCED_SCORE_KEYS = [
-  "fluency",
-  "grammar",
-  "vocabulary",
-  "coherence",
-  "argument",
-  "academicTone",
-] as const;
-
-type ScoreKey =
-  | (typeof FOUNDATION_SCORE_KEYS)[number]
-  | (typeof BEGINNER_SCORE_KEYS)[number]
-  | (typeof ADVANCED_SCORE_KEYS)[number];
-
-// Scores arrive as a partial map keyed by dimension name. The frontend uses
-// a permissive shape so it can accept any of the three level shapes; the
-// API has already normalized values to integers in [1, 5].
-type FeedbackScores = Partial<Record<ScoreKey, number>>;
-
-function scoreKeysForLevel(level: Level): readonly ScoreKey[] {
-  if (level === "Foundation") return FOUNDATION_SCORE_KEYS;
-  if (level === "Beginner") return BEGINNER_SCORE_KEYS;
-  return ADVANCED_SCORE_KEYS;
-}
-
-// Clamp to 1-5 integer with a 3 fallback. Mirrors the server-side logic so
-// stored history stays consistent if a record predates a backend change.
-function safeScore(value: unknown): number {
-  const FALLBACK = 3;
-  const n =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value)
-        : NaN;
-  if (!Number.isFinite(n)) return FALLBACK;
-  const r = Math.round(n);
-  if (r < 1) return 1;
-  if (r > 5) return 5;
-  return r;
-}
-
-type CapturedRetry = {
-  transcript: string;
-};
-
-type SessionSummary = {
-  csv: string;
-};
 
 // Full record persisted to localStorage at end of a completed session.
 type SessionRecord = {
@@ -366,10 +211,6 @@ const BADGE_BY_EVENT: Partial<Record<XpEventType, string>> = {
 
 const MAX_STORED_SESSIONS = 20;
 const CLOUD_WRITE_SUPPRESSION_RELEASE_MS = 100;
-
-function countWords(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
 
 function stableTextKey(text: string): string {
   const trimmed = text.trim().toLowerCase();
@@ -456,23 +297,6 @@ function saveSessions(sessions: SessionRecord[]): void {
   storage.saveSessions(sessions);
 }
 
-// ---------- External stores for useSyncExternalStore ----------
-// These keep page.tsx lint-clean: instead of calling setState inside
-// useEffect to load values from window APIs, we expose subscribe + getter
-// functions and let React subscribe through useSyncExternalStore.
-
-const subscribeNoop = () => () => {};
-
-function getSpeechSupportedClient(): boolean {
-  return getSpeechRecognitionCtor() !== null;
-}
-
-function getSpeechSupportedServer(): boolean {
-  // SSR has no Web Speech API. Treat as unsupported on the server so the
-  // initial markup matches what we'd render before hydration would change.
-  return false;
-}
-
 // In-memory cache of the sessions array so getSessionsClient is referentially
 // stable between renders unless updateSessions changes it.
 const EMPTY_SESSIONS: SessionRecord[] = [];
@@ -516,144 +340,6 @@ function updateSessions(next: SessionRecord[]): void {
   sessionsHydrated = true;
   saveSessions(sessionsCache);
   notifySessionsListeners();
-}
-
-function generateSessionId(): string {
-  // crypto.randomUUID is available in modern browsers; fall back to a
-  // timestamp-plus-random combo for environments without it.
-  if (
-    typeof crypto !== "undefined" &&
-    typeof crypto.randomUUID === "function"
-  ) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-// CSV cell escaping per RFC 4180: wrap in quotes and double any inner quotes
-// when the value contains a comma, quote, or newline.
-function csvEscape(value: string): string {
-  const needsQuoting = /[",\n\r]/.test(value);
-  const escaped = value.replace(/"/g, '""');
-  return needsQuoting ? `"${escaped}"` : escaped;
-}
-
-function csvRow(cells: string[]): string {
-  return cells.map(csvEscape).join(",");
-}
-
-function todayISODate(): string {
-  // Local date in YYYY-MM-DD so the CSV reflects the user's day.
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildCsv(
-  level: Level,
-  mode: Mode,
-  feedback: FeedbackResult,
-): string {
-  const date = todayISODate();
-  const scores = feedback.scores ?? {};
-  const fluency = String(safeScore(scores.fluency));
-  const grammar = String(safeScore(scores.grammar));
-  const vocabulary = String(safeScore(scores.vocabulary));
-  const coherence = String(safeScore(scores.coherence));
-  const argument = String(safeScore(scores.argument));
-  const academicTone = String(safeScore(scores.academicTone));
-
-  if (level === "Foundation") {
-    const header = [
-      "Date",
-      "Level",
-      "Mode",
-      "Fluency",
-      "Coherence",
-      "Main_Weakness",
-      "Evidence",
-      "Next_Target",
-    ];
-    const row = [
-      date,
-      level,
-      mode,
-      fluency,
-      coherence,
-      feedback.mainWeakness,
-      feedback.evidence,
-      feedback.retryTask,
-    ];
-    return `${csvRow(header)}\n${csvRow(row)}`;
-  }
-
-  if (level === "Beginner") {
-    const header = [
-      "Date",
-      "Level",
-      "Mode",
-      "Fluency",
-      "Grammar",
-      "Coherence",
-      "Main_Weakness",
-      "Evidence",
-      "Next_Target",
-    ];
-    const row = [
-      date,
-      level,
-      mode,
-      fluency,
-      grammar,
-      coherence,
-      feedback.mainWeakness,
-      feedback.evidence,
-      feedback.retryTask,
-    ];
-    return `${csvRow(header)}\n${csvRow(row)}`;
-  }
-
-  // Intermediate, Advanced, Expert
-  const header = [
-    "Date",
-    "Level",
-    "Mode",
-    "Fluency",
-    "Grammar",
-    "Vocabulary",
-    "Coherence",
-    "Argument",
-    "AcademicTone",
-    "Main_Weakness",
-    "Evidence",
-    "Next_Target",
-  ];
-  const row = [
-    date,
-    level,
-    mode,
-    fluency,
-    grammar,
-    vocabulary,
-    coherence,
-    argument,
-    academicTone,
-    feedback.mainWeakness,
-    feedback.evidence,
-    feedback.retryTask,
-  ];
-  return `${csvRow(header)}\n${csvRow(row)}`;
-}
-
-function formatTime(totalSeconds: number): string {
-  const safe = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  const mm = String(minutes).padStart(2, "0");
-  const ss = String(seconds).padStart(2, "0");
-  return `${mm}:${ss}`;
 }
 
 // Trim long upstream provider errors and strip stack-trace-like noise so the UI
@@ -714,75 +400,8 @@ export default function Home() {
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
   const [mode, setMode] = useState<Mode>("Fluency Sprint");
-  const [feedbackType, setFeedbackType] = useState<FeedbackType>("Quick");
-  const [sessionType, setSessionType] = useState<SessionType>("Standard");
-  const [aiProvider, setAiProvider] = useState<AIProvider>("Claude");
+  const [aiProvider] = useState<AIProvider>("Claude");
   const [target, setTarget] = useState("");
-
-  // --- Active session state ---
-  const [activeSession, setActiveSession] = useState<SessionSetup | null>(null);
-
-  // --- Speaking prompt (local, no AI) ---
-  const [speakingPrompt, setSpeakingPrompt] = useState<SpeakingPrompt | null>(
-    null,
-  );
-  const [promptVariantIndex, setPromptVariantIndex] = useState(0);
-
-  // --- Speaking attempt state ---
-  const [transcript, setTranscript] = useState("");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // --- Speech-to-text (browser only) ---
-  const [isListening, setIsListening] = useState(false);
-  const [speechError, setSpeechError] = useState<string | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-
-  // Detect browser support via useSyncExternalStore. The value is read on the
-  // client at hydration time and is stable for the lifetime of the page, so
-  // the subscribe function is a no-op. This is SSR-safe and lint-clean
-  // (no setState inside useEffect).
-  const speechSupported = useSyncExternalStore(
-    subscribeNoop,
-    getSpeechSupportedClient,
-    getSpeechSupportedServer,
-  );
-
-  // Make sure any active recognition is torn down on unmount.
-  useEffect(() => {
-    return () => {
-      const rec = recognitionRef.current;
-      if (rec) {
-        try {
-          rec.onstart = null;
-          rec.onend = null;
-          rec.onerror = null;
-          rec.onresult = null;
-          rec.abort();
-        } catch {
-          // Ignore: instance was already cleaned up.
-        }
-        recognitionRef.current = null;
-      }
-    };
-  }, []);
-
-  // --- Captured attempt (after Submit) ---
-  const [capturedAttempt, setCapturedAttempt] = useState<CapturedAttempt | null>(
-    null,
-  );
-
-  // --- AI feedback state ---
-  const [feedback, setFeedback] = useState<FeedbackResult | null>(null);
-  const [feedbackLoading, setFeedbackLoading] = useState(false);
-  const [feedbackError, setFeedbackError] = useState<string | null>(null);
-
-  // --- Diagnostic mode state ---
-  const [diagnosticResult, setDiagnosticResult] =
-    useState<DiagnosticResult | null>(null);
-  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
-  const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
 
   // --- Weekly Review Agent state ---
   const [weeklyReviewResult, setWeeklyReviewResult] =
@@ -808,18 +427,6 @@ export default function Home() {
   const [articlePracticeError, setArticlePracticeError] = useState<
     string | null
   >(null);
-  const [articlePracticeBridgeMessage, setArticlePracticeBridgeMessage] =
-    useState<string | null>(null);
-
-  // --- Retry loop state ---
-  const [retryTranscript, setRetryTranscript] = useState("");
-  const [capturedRetry, setCapturedRetry] = useState<CapturedRetry | null>(null);
-
-  // --- End session / CSV state ---
-  const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(
-    null,
-  );
-  const [csvCopied, setCsvCopied] = useState(false);
 
   // --- Gamification state (local, deterministic, no AI) ---
   const [xpProfile, setXpProfile] = useState<XpProfile>(() =>
@@ -1167,10 +774,6 @@ export default function Home() {
       return { status: "failed" };
     }
 
-    if (activeSession) {
-      return { status: "aborted-active-session" };
-    }
-
     const localSnapshot: LocalSnapshotTarget = {
       sessions,
       vocabularyItems,
@@ -1237,9 +840,6 @@ export default function Home() {
   // Lightweight day-streak derived from session.date strings. No new storage.
   const dayStreak = computeDayStreak(sessions);
 
-  // Local Coach Engine: deterministic, rule-based recommendation derived
-  // from session history and the currently selected level. No AI call.
-  const coachRecommendation = buildCoachRecommendation(sessions, level);
   const levelUpCheck = buildLevelUpCheck(sessions, level);
   const mentalModelDefaultFocus =
     target.trim() ||
@@ -1737,13 +1337,6 @@ export default function Home() {
     }
   };
 
-  const handleUseRecommendation = () => {
-    setMode(coachRecommendation.recommendedMode);
-    setSessionType(coachRecommendation.recommendedSessionType);
-    setTarget(coachRecommendation.focus);
-    setArticlePracticeBridgeMessage(null);
-  };
-
   const handleApplyLevelUp = () => {
     if (levelUpCheck.status !== "Ready" || !levelUpCheck.nextLevel) return;
     const oldLevel = level;
@@ -1752,7 +1345,6 @@ export default function Home() {
     setTarget(
       `Start ${levelUpCheck.nextLevel} practice with clear structure and steady evidence.`,
     );
-    setArticlePracticeBridgeMessage(null);
     setView("active");
     awardGamificationEvent(
       "level_up_applied",
@@ -1769,350 +1361,10 @@ export default function Home() {
     updateBadges(null, claimed.profile);
   };
 
-  // Timer effect: only one interval at a time, cleaned up on unmount or when paused.
-  useEffect(() => {
-    if (!isTimerRunning) return;
-
-    intervalRef.current = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
-
-    return () => {
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [isTimerRunning]);
-
-  const handleTargetChange = (value: string) => {
-    setTarget(value);
-    setArticlePracticeBridgeMessage(null);
-  };
-
   const handlePracticeArticleSpeakingTask = (result: ArticlePracticeResult) => {
     setTarget(buildArticleSpeakingTarget(result));
     setMode("Reading-to-Speaking");
     setView("active");
-    setArticlePracticeBridgeMessage(
-      activeSession
-        ? "Article speaking task copied to Session setup. Click Restart Session when you are ready to switch tasks."
-        : "Article speaking task copied to Session setup. Click Start Session when ready.",
-    );
-  };
-
-  const handleStart = () => {
-    const userTypedTarget = target.trim();
-    const fallbackTarget = previousSession?.retryTask?.trim() ?? "";
-    const shouldAutoFill =
-      userTypedTarget.length === 0 && fallbackTarget.length > 0;
-    const finalTarget = shouldAutoFill ? fallbackTarget : target;
-
-    setArticlePracticeBridgeMessage(null);
-    setActiveSession({
-      level,
-      mode,
-      feedbackType,
-      sessionType,
-      aiProvider,
-      target: finalTarget,
-      autoFilledFromPrevious: shouldAutoFill,
-    });
-    // Generate the local speaking prompt for this session. No AI call.
-    setPromptVariantIndex(0);
-    setSpeakingPrompt(
-      buildSpeakingPrompt(level, mode, sessionType, finalTarget, 0),
-    );
-    // Reset attempt-related state so a fresh session starts clean.
-    setTranscript("");
-    setElapsedSeconds(0);
-    setIsTimerRunning(false);
-    setCapturedAttempt(null);
-    setFeedback(null);
-    setFeedbackError(null);
-    setFeedbackLoading(false);
-    setRetryTranscript("");
-    setCapturedRetry(null);
-    setSessionSummary(null);
-    setCsvCopied(false);
-    // Speech-to-text: stop any active session before starting a new one.
-    stopRecognitionInstance();
-    setSpeechError(null);
-    // Diagnostic mode: reset the standalone diagnostic result/error.
-    setDiagnosticResult(null);
-    setDiagnosticError(null);
-    setDiagnosticLoading(false);
-    // Note: sessions history is intentionally NOT cleared on restart.
-  };
-
-  const handleStartTimer = () => setIsTimerRunning(true);
-  const handleStopTimer = () => setIsTimerRunning(false);
-  const handleResetTimer = () => {
-    setIsTimerRunning(false);
-    setElapsedSeconds(0);
-  };
-
-  const handleRegeneratePrompt = () => {
-    if (!activeSession) return;
-    // Cycle through the next variant. The pool has 3 entries per level so
-    // pressing Regenerate repeatedly walks through them then loops back.
-    const nextIndex = promptVariantIndex + 1;
-    setPromptVariantIndex(nextIndex);
-    setSpeakingPrompt(
-      buildSpeakingPrompt(
-        activeSession.level,
-        activeSession.mode,
-        activeSession.sessionType,
-        activeSession.target,
-        nextIndex,
-      ),
-    );
-    // Note: transcript and timer are intentionally NOT touched here.
-  };
-
-  // --- Speech input handlers ---
-  const stopRecognitionInstance = () => {
-    const rec = recognitionRef.current;
-    if (!rec) return;
-    try {
-      rec.stop();
-    } catch {
-      // Ignore: nothing was running.
-    }
-  };
-
-  const handleStartSpeechInput = () => {
-    if (isListening) return;
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) {
-      return;
-    }
-
-    setSpeechError(null);
-
-    // Tear down any previous instance first to avoid duplicates.
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch {
-        // Ignore.
-      }
-      recognitionRef.current = null;
-    }
-
-    const recognition = new Ctor();
-    recognition.lang =
-      typeof navigator !== "undefined" && navigator.language
-        ? navigator.language
-        : "en-US";
-    recognition.continuous = true;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-    };
-    recognition.onerror = (event) => {
-      setIsListening(false);
-      const code = event.error || "unknown";
-      const message =
-        code === "not-allowed" || code === "service-not-allowed"
-          ? "Microphone access was denied. Allow it in the browser address bar to use speech input."
-          : code === "no-speech"
-            ? "No speech detected. Try speaking again."
-            : code === "audio-capture"
-              ? "No microphone detected. Check your input device."
-              : `Speech input error: ${code}`;
-      setSpeechError(message);
-    };
-    recognition.onresult = (event) => {
-      // Append only final segments. Interim results are noisy and the spec
-      // already disables them.
-      let appended = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          appended += result[0].transcript;
-        }
-      }
-      const cleaned = appended.trim();
-      if (cleaned.length === 0) return;
-      setTranscript((prev) => {
-        if (prev.length === 0) return cleaned;
-        // Preserve a trailing newline if the user already added one,
-        // otherwise join with a single space.
-        const sep = /\s$/.test(prev) ? "" : " ";
-        return `${prev}${sep}${cleaned}`;
-      });
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch (err) {
-      setIsListening(false);
-      recognitionRef.current = null;
-      const message =
-        err instanceof Error ? err.message : "Could not start speech input.";
-      setSpeechError(message);
-    }
-  };
-
-  const handleStopSpeechInput = () => {
-    stopRecognitionInstance();
-  };
-
-  const trimmedTranscript = transcript.trim();
-  const canSubmit = trimmedTranscript.length > 0 && capturedAttempt === null;
-
-  const handleSubmitAttempt = () => {
-    if (!canSubmit) return;
-    setIsTimerRunning(false);
-    stopRecognitionInstance();
-    setCapturedAttempt({
-      transcript: trimmedTranscript,
-      durationSeconds: elapsedSeconds,
-    });
-    setFeedback(null);
-    setFeedbackError(null);
-  };
-
-  const handleGetFeedback = async () => {
-    if (!activeSession || !capturedAttempt) return;
-    setFeedbackLoading(true);
-    setFeedbackError(null);
-    setFeedback(null);
-
-    try {
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          level: activeSession.level,
-          mode: activeSession.mode,
-          feedbackType: activeSession.feedbackType,
-          sessionType: activeSession.sessionType,
-          provider: activeSession.aiProvider,
-          todayTarget: activeSession.target,
-          transcript: capturedAttempt.transcript,
-          durationSeconds: capturedAttempt.durationSeconds,
-          feedbackLanguage: normalizeFeedbackLanguage(
-            ownerProfile?.feedbackLanguage,
-          ),
-          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
-        }),
-      });
-
-      const data = (await res.json().catch(() => null)) as
-        | (FeedbackResult & { error?: string })
-        | { error?: string }
-        | null;
-
-      if (!res.ok || !data || ("error" in data && data.error)) {
-        const rawMessage =
-          (data && "error" in data && data.error) ||
-          `Request failed with status ${res.status}.`;
-        setFeedbackError(sanitizeErrorMessage(rawMessage));
-        return;
-      }
-
-      const result = data as FeedbackResult;
-      if (
-        !result.mainWeakness ||
-        !result.evidence ||
-        !result.betterPhrase ||
-        !result.retryTask ||
-        !result.providerUsed
-      ) {
-        setFeedbackError("Feedback response was incomplete. Try again.");
-        return;
-      }
-
-      // Defensive normalization: even though the server clamps, we guard
-      // against an older route or a hand-tested response shape.
-      const rawScores =
-        result.scores && typeof result.scores === "object" ? result.scores : {};
-      const safeScores: FeedbackScores = {};
-      for (const key of scoreKeysForLevel(activeSession.level)) {
-        safeScores[key] = safeScore(
-          (rawScores as Record<string, unknown>)[key],
-        );
-      }
-      setFeedback({ ...result, scores: safeScores });
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Network error while contacting the API.";
-      setFeedbackError(sanitizeErrorMessage(message));
-    } finally {
-      setFeedbackLoading(false);
-    }
-  };
-
-  const handleRunDiagnostic = async () => {
-    if (!activeSession || !capturedAttempt) return;
-    setDiagnosticLoading(true);
-    setDiagnosticError(null);
-    setDiagnosticResult(null);
-
-    try {
-      const res = await fetch("/api/diagnostic", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          provider: activeSession.aiProvider,
-          transcript: capturedAttempt.transcript,
-          durationSeconds: capturedAttempt.durationSeconds,
-          currentLevel: activeSession.level,
-          todayTarget: activeSession.target,
-          feedbackLanguage: normalizeFeedbackLanguage(
-            ownerProfile?.feedbackLanguage,
-          ),
-          targetLanguage: normalizeTargetLanguage(ownerProfile?.targetLanguage),
-        }),
-      });
-
-      const data = (await res.json().catch(() => null)) as
-        | (DiagnosticResult & { error?: string })
-        | { error?: string }
-        | null;
-
-      if (!res.ok || !data || ("error" in data && data.error)) {
-        const rawMessage =
-          (data && "error" in data && data.error) ||
-          `Request failed with status ${res.status}.`;
-        setDiagnosticError(sanitizeErrorMessage(rawMessage));
-        return;
-      }
-
-      const result = data as DiagnosticResult;
-      if (
-        !result.recommendedLevel ||
-        !result.mainBottleneck ||
-        !result.summary ||
-        !Array.isArray(result.sevenDayFocusPlan)
-      ) {
-        setDiagnosticError("Diagnostic response was incomplete. Try again.");
-        return;
-      }
-      setDiagnosticResult(result);
-      if (countWords(capturedAttempt.transcript) >= 30) {
-        awardGamificationEvent(
-          "diagnostic_completed",
-          `diagnostic-${getLocalDateString()}-${capturedAttempt.durationSeconds}-${stableTextKey(capturedAttempt.transcript)}`,
-          "diagnostic",
-          "Completed a diagnostic assessment.",
-        );
-      }
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Network error while contacting the API.";
-      setDiagnosticError(sanitizeErrorMessage(message));
-    } finally {
-      setDiagnosticLoading(false);
-    }
   };
 
   const handleRunWeeklyReview = async () => {
@@ -2363,96 +1615,6 @@ export default function Home() {
     }
   };
 
-  const handleApplyRecommendedLevel = () => {
-    if (!diagnosticResult) return;
-    setLevel(diagnosticResult.recommendedLevel);
-    setTarget(diagnosticResult.mainBottleneck);
-    setArticlePracticeBridgeMessage(null);
-  };
-
-
-
-  const trimmedRetryTranscript = retryTranscript.trim();
-  const canSubmitRetry =
-    trimmedRetryTranscript.length > 0 && capturedRetry === null;
-
-  const handleSubmitRetry = () => {
-    if (!canSubmitRetry) return;
-    setCapturedRetry({ transcript: trimmedRetryTranscript });
-    if (activeSession && capturedAttempt && countWords(trimmedRetryTranscript) >= 8) {
-      awardGamificationEvent(
-        "retry_completed",
-        `retry-${activeSession.level}-${activeSession.mode}-${capturedAttempt.durationSeconds}-${stableTextKey(trimmedRetryTranscript)}`,
-        "retry",
-        "Completed a retry attempt with enough speaking content.",
-      );
-    }
-  };
-
-  const handleEndSession = () => {
-    if (!activeSession || !feedback || !capturedAttempt || !capturedRetry) {
-      return;
-    }
-    const csv = buildCsv(activeSession.level, activeSession.mode, feedback);
-    setSessionSummary({ csv });
-    setCsvCopied(false);
-
-    // Persist the completed session at the front of the history.
-    const record: SessionRecord = {
-      id: generateSessionId(),
-      date: todayISODate(),
-      level: activeSession.level,
-      mode: activeSession.mode,
-      feedbackType: activeSession.feedbackType,
-      sessionType: activeSession.sessionType,
-      provider: activeSession.aiProvider,
-      todayTarget: activeSession.target,
-      durationSeconds: capturedAttempt.durationSeconds,
-      transcript: capturedAttempt.transcript,
-      mainWeakness: feedback.mainWeakness,
-      evidence: feedback.evidence,
-      betterPhrase: feedback.betterPhrase,
-      retryTask: feedback.retryTask,
-      retryTranscript: capturedRetry.transcript,
-      csv,
-    };
-    // Persist + notify subscribers via the external store helper.
-    const next = [record, ...sessions].slice(0, MAX_STORED_SESSIONS);
-    updateSessions(next);
-    if (activeSession.mode !== "Diagnostic") {
-      void writeCompletedSessionToCloud({
-        auth: sessionCloudAuthRef.current,
-        session: record,
-      });
-
-      awardGamificationEvent(
-        "normal_session_completed",
-        record.id,
-        "session",
-        "Completed a normal speaking session.",
-      );
-    }
-  };
-
-  const handleCopyCsv = async () => {
-    if (!sessionSummary) return;
-    try {
-      if (
-        typeof navigator !== "undefined" &&
-        navigator.clipboard &&
-        typeof navigator.clipboard.writeText === "function"
-      ) {
-        await navigator.clipboard.writeText(sessionSummary.csv);
-        setCsvCopied(true);
-        // Reset the "Copied" hint after a short moment.
-        setTimeout(() => setCsvCopied(false), 1500);
-      }
-    } catch {
-      // Stay silent; the CSV is still visible in the code block for manual copy.
-      setCsvCopied(false);
-    }
-  };
-
   const handleCopyLastCsv = async () => {
     const last = sessions[0];
     if (!last) return;
@@ -2470,13 +1632,6 @@ export default function Home() {
       setLastCsvCopied(false);
     }
   };
-
-  const isDiagnosticMode = activeSession?.mode === "Diagnostic";
-  const subtitle = activeSession
-    ? isDiagnosticMode
-      ? "Complete the diagnostic transcript, then run baseline assessment."
-      : "Session in progress. Work the prompt, then submit your transcript for AI feedback."
-    : "Configure a session, choose a mode, and start practicing.";
 
   return (
     <div className="min-h-screen w-full lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col">
@@ -2516,8 +1671,8 @@ export default function Home() {
           <Topbar
             subtitle={viewSubtitle(view, homeT)}
             title={viewTitle(view, homeT)}
-            description={view === "active" ? subtitle : viewDescription(view, homeT)}
-            hasActiveSession={Boolean(activeSession)}
+            description={viewDescription(view, homeT)}
+            hasActiveSession={view === "active"}
             mode={mode}
             level={level}
             appLanguage={appLanguage}
@@ -2542,152 +1697,7 @@ export default function Home() {
 
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
-            <>
-
-          {/* Active Session Hero (only when active) */}
-          {activeSession && (
-            <section className={`${card} overflow-hidden border-l-4 border-l-[var(--brand-teal)]`}>
-              <div className={cardHeader}>
-                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                  Active session
-                </p>
-                <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-                  {activeSession.mode} · {activeSession.level}
-                </h2>
-              </div>
-              <div className={`${cardBody} grid grid-cols-2 gap-4 sm:grid-cols-4`}>
-                <SummaryCell label="Level" value={activeSession.level} />
-                <SummaryCell label="Mode" value={activeSession.mode} />
-                <SummaryCell
-                  label="Session Type"
-                  value={activeSession.sessionType}
-                />
-                <SummaryCell
-                  label="Duration"
-                  value={formatTime(elapsedSeconds)}
-                  mono
-                />
-              </div>
-              <div className="px-6 pb-6">
-                <SummaryCell
-                  label="Today's Target"
-                  value={
-                    activeSession.target.trim().length > 0
-                      ? activeSession.target
-                      : "—"
-                  }
-                  multiline
-                />
-                {activeSession.autoFilledFromPrevious && (
-                  <p className="mt-3 rounded-lg border border-[var(--brand-gold)]/40 bg-[var(--brand-gold-soft)] px-3 py-2 text-xs text-[var(--brand-ink)]">
-                    Today we target:{" "}
-                    <span className="font-medium">{activeSession.target}</span>
-                  </p>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Session Setup (hidden visually demoted while active but kept for restart) */}
-          {articlePracticeBridgeMessage && (
-            <div
-              role="status"
-              className="rounded-xl border border-[var(--brand-teal)]/30 bg-[var(--brand-teal-soft)] px-4 py-3 text-sm text-[var(--brand-teal-ink)]"
-            >
-              {articlePracticeBridgeMessage}
-            </div>
-          )}
-          <SessionSetup
-            level={level}
-            mode={mode}
-            feedbackType={feedbackType}
-            sessionType={sessionType}
-            aiProvider={aiProvider}
-            target={target}
-            hasActiveSession={Boolean(activeSession)}
-            hasPreviousSession={Boolean(previousSession)}
-            levels={LEVELS}
-            modes={MODES}
-            feedbackTypes={FEEDBACK_TYPES}
-            sessionTypes={SESSION_TYPES}
-            aiProviders={AI_PROVIDERS}
-            appLanguage={appLanguage}
-            onLevelChange={(value) => setLevel(value as Level)}
-            onModeChange={(value) => setMode(value as Mode)}
-            onFeedbackTypeChange={(value) => setFeedbackType(value as FeedbackType)}
-            onSessionTypeChange={(value) => setSessionType(value as SessionType)}
-            onAiProviderChange={(value) => setAiProvider(value as AIProvider)}
-            onTargetChange={handleTargetChange}
-            onStartSession={handleStart}
-          />
-          {/* Coach + Previous Weakness (only before a session is active) */}
-          {!activeSession && (
-            <CoachPanels
-              coachRecommendation={coachRecommendation}
-              previousSession={previousSession}
-              onUseRecommendation={handleUseRecommendation}
-            />
-          )}
-
-          {/* Speaking Prompt (local, no AI) */}
-          {activeSession && speakingPrompt && !capturedAttempt && (
-            <SpeakingPromptCard
-              speakingPrompt={speakingPrompt}
-              onRegeneratePrompt={handleRegeneratePrompt}
-            />
-          )}
-
-          {/* Speaking Attempt */}
-          {activeSession && !capturedAttempt && (
-            <SpeakingAttemptCard
-              transcript={transcript}
-              displayTime={formatTime(elapsedSeconds)}
-              isTimerRunning={isTimerRunning}
-              speechSupported={speechSupported}
-              isListening={isListening}
-              speechError={speechError}
-              canSubmit={canSubmit}
-              onTranscriptChange={setTranscript}
-              onStartTimer={handleStartTimer}
-              onStopTimer={handleStopTimer}
-              onResetTimer={handleResetTimer}
-              onStartSpeechInput={handleStartSpeechInput}
-              onStopSpeechInput={handleStopSpeechInput}
-              onSubmitAttempt={handleSubmitAttempt}
-            />
-          )}
-
-          {/* Captured Attempt + Feedback / Diagnostic */}
-          {capturedAttempt && (
-            <AttemptResultPanels
-              capturedAttempt={capturedAttempt}
-              activeLevel={activeSession?.level ?? null}
-              isDiagnosticMode={isDiagnosticMode}
-              feedback={feedback}
-              feedbackLoading={feedbackLoading}
-              feedbackError={feedbackError}
-              diagnosticResult={diagnosticResult}
-              diagnosticLoading={diagnosticLoading}
-              diagnosticError={diagnosticError}
-              onGetFeedback={handleGetFeedback}
-              onRunDiagnostic={handleRunDiagnostic}
-              onApplyRecommendedLevel={handleApplyRecommendedLevel}
-            />
-          )}
-          <RetryAndSummaryPanels
-            feedback={feedback}
-            isDiagnosticMode={isDiagnosticMode}
-            retryTranscript={retryTranscript}
-            canSubmitRetry={canSubmitRetry}
-            capturedRetry={capturedRetry}
-            sessionSummary={sessionSummary}
-            csvCopied={csvCopied}
-            onRetryTranscriptChange={setRetryTranscript}
-            onSubmitRetry={handleSubmitRetry}
-            onEndSession={handleEndSession}
-            onCopyCsv={handleCopyCsv}
-          />
-            </>
+            <PodchatView key={`${mode}:${target}`} />
           )}
 
           {/* ===================== Vocabulary Notebook view ===================== */}
@@ -3175,38 +2185,6 @@ function cloudSnapshotStatusLabel(
     default:
       return "Local only";
   }
-}
-
-type SummaryCellProps = {
-  label: string;
-  value: string;
-  multiline?: boolean;
-  mono?: boolean;
-};
-
-function SummaryCell({
-  label,
-  value,
-  multiline = false,
-  mono = false,
-}: SummaryCellProps) {
-  return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
-        {label}
-      </dt>
-      <dd
-        className={
-          (multiline
-            ? "whitespace-pre-wrap break-words text-sm text-[var(--brand-ink)]"
-            : "text-sm text-[var(--brand-ink)]") +
-          (mono ? " font-mono tabular-nums" : "")
-        }
-      >
-        {value}
-      </dd>
-    </div>
-  );
 }
 
 // ---------- Topbar copy helpers ----------

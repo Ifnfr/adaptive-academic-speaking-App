@@ -66,6 +66,8 @@ test.describe("Progress & Quest UI Clarity Tests", () => {
     const sidebarActiveSessionBtn = page.locator("aside button:has-text(\"Active Session\")");
     await expect(sidebarActiveSessionBtn).toBeVisible();
     await sidebarActiveSessionBtn.click();
-    await expect(page.locator("h2:has-text(\"Session setup\")")).toBeVisible();
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Economics" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Intermediate/ })).toBeVisible();
   });
 });
