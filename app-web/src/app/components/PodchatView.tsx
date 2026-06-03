@@ -96,9 +96,9 @@ function speakerLabel(speaker: PodchatSpeaker): string {
   return speaker === "host" ? "AI host" : "Learner";
 }
 
-function statusLabel(status: PodchatStatus): string {
+function statusLabel(status: PodchatStatus, isTtsSpeaking: boolean): string {
   if (status === "host_turn") return "Host speaking";
-  if (status === "user_turn") return "Your turn";
+  if (status === "user_turn") return isTtsSpeaking ? "Host speaking..." : "Your turn";
   if (status === "submitting") return "Processing";
   return "Complete";
 }
@@ -133,6 +133,12 @@ export function PodchatView() {
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [evalData, setEvalData] = useState<PodchatEvaluateResponse | null>(null);
+
+  // TTS audio playback states and refs
+  const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const durationSeconds = DIFFICULTY_DURATION[difficulty];
   const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds);
@@ -172,9 +178,85 @@ export function PodchatView() {
     }
   }
 
-  // Clean up timer on unmount
+  function cleanupAudio() {
+    setIsTtsSpeaking(false);
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+      } catch {
+        // ignore
+      }
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      try {
+        URL.revokeObjectURL(objectUrlRef.current);
+      } catch {
+        // ignore
+      }
+      objectUrlRef.current = null;
+    }
+  }
+
+  async function playTts(text: string) {
+    cleanupAudio();
+    setTtsError(null);
+    setIsTtsSpeaking(true);
+
+    try {
+      const response = await fetch("/api/podchat/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) {
+        throw new Error("TTS request failed");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      objectUrlRef.current = objectUrl;
+
+      const audio = new Audio(objectUrl);
+      audioRef.current = audio;
+
+      audio.addEventListener("ended", () => {
+        setIsTtsSpeaking(false);
+        if (objectUrlRef.current === objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrlRef.current = null;
+        }
+      });
+
+      audio.addEventListener("error", () => {
+        setIsTtsSpeaking(false);
+        setTtsError("Voice unavailable. Continuing with text.");
+        if (objectUrlRef.current === objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrlRef.current = null;
+        }
+      });
+
+      await audio.play();
+    } catch {
+      setIsTtsSpeaking(false);
+      setTtsError("Voice unavailable. Continuing with text.");
+      if (objectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(objectUrlRef.current);
+        } catch {
+          // ignore
+        }
+        objectUrlRef.current = null;
+      }
+    }
+  }
+
+  // Clean up timer and audio on unmount
   useEffect(() => {
-    return () => stopTimer();
+    return () => {
+      stopTimer();
+      cleanupAudio();
+    };
   }, []);
 
   // When time expires during speaking, allow End Session automatically if
@@ -191,6 +273,7 @@ export function PodchatView() {
       stopTimer();
       const currentTurns = turns;
       setTimeout(() => {
+        cleanupAudio();
         setStatus("complete");
         setPhase("evaluation");
         triggerEvaluation(currentTurns);
@@ -204,6 +287,7 @@ export function PodchatView() {
   }, [isTimeExpired, phase, status]);
 
   function startPodchat() {
+    cleanupAudio();
     const opener: PodchatTurn = {
       id: "podchat-turn-1",
       speaker: "host",
@@ -223,6 +307,7 @@ export function PodchatView() {
 
   function resetPodchat() {
     stopTimer();
+    cleanupAudio();
     setPhase("setup");
     setStatus("host_turn");
     setTurns([]);
@@ -304,6 +389,7 @@ export function PodchatView() {
       const nextSubmittedCount = submittedUserTurns + 1;
       setSubmittedUserTurns(nextSubmittedCount);
       setStatus("user_turn");
+      playTts(`${data.hostText} ${data.followUpQuestion}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTurnError(msg || "An error occurred. Please try again.");
@@ -347,6 +433,7 @@ export function PodchatView() {
       setSubmittedUserTurns(nextSubmittedCount);
       // Duration controls session end, not turn count
       setStatus("user_turn");
+      playTts(`${data.hostText} ${data.followUpQuestion}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setTurnError(msg || "An error occurred. Please try again.");
@@ -361,6 +448,7 @@ export function PodchatView() {
       return;
     }
     stopTimer();
+    cleanupAudio();
     setStatus("complete");
     setPhase("evaluation");
     triggerEvaluation(turns);
@@ -634,7 +722,7 @@ export function PodchatView() {
               className="rounded-full border border-[var(--brand-teal)]/40 bg-[var(--brand-teal-soft)] px-3 py-1 text-[var(--brand-teal-ink)]"
               data-testid="podchat-status"
             >
-              {statusLabel(status)}
+              {statusLabel(status, isTtsSpeaking)}
             </span>
           </div>
         </div>
@@ -694,6 +782,11 @@ export function PodchatView() {
             {turnError && (
               <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800" data-testid="podchat-turn-error">
                 {turnError}
+              </div>
+            )}
+            {ttsError && (
+              <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800" data-testid="podchat-tts-error">
+                {ttsError}
               </div>
             )}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
