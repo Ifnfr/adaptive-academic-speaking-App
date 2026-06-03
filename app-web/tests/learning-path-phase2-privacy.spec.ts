@@ -675,6 +675,255 @@ test.describe("Phase 2 Privacy QA (TASK-052L)", () => {
     }
   });
 
+  test("13a. Tutor voice helper calls browser speak after voiceschanged and applies sane utterance settings", async ({ page }) => {
+    await page.addInitScript(() => {
+      type MockVoice = { name: string; lang: string };
+      type MockUtterance = {
+        text: string;
+        lang: string;
+        volume: number;
+        rate: number;
+        pitch: number;
+        voice: MockVoice | null;
+        onend: (() => void) | null;
+        onerror: (() => void) | null;
+      };
+
+      const calls: MockUtterance[] = [];
+      const listeners: Array<() => void> = [];
+      const state = {
+        voicesReady: false,
+        calls,
+        dispatchVoicesChanged() {
+          state.voicesReady = true;
+          for (const listener of [...listeners]) listener();
+        },
+      };
+
+      class MockSpeechSynthesisUtterance implements MockUtterance {
+        text: string;
+        lang = "";
+        volume = 1;
+        rate = 1;
+        pitch = 1;
+        voice: MockVoice | null = null;
+        onend: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+
+        constructor(text: string) {
+          this.text = text;
+        }
+      }
+
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: MockSpeechSynthesisUtterance,
+      });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: {
+          cancel() {},
+          getVoices() {
+            return state.voicesReady
+              ? [{ name: "Fallback Bahasa", lang: "id-ID" }]
+              : [];
+          },
+          addEventListener(event: string, listener: () => void) {
+            if (event === "voiceschanged") listeners.push(listener);
+          },
+          removeEventListener(event: string, listener: () => void) {
+            if (event !== "voiceschanged") return;
+            const index = listeners.indexOf(listener);
+            if (index >= 0) listeners.splice(index, 1);
+          },
+          speak(utterance: MockUtterance) {
+            calls.push(utterance);
+            window.setTimeout(() => utterance.onend?.(), 0);
+          },
+        },
+      });
+      Object.defineProperty(window, "__TUTOR_VOICE_TEST__", {
+        configurable: true,
+        value: state,
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Learning Path" }).click();
+
+    await page.evaluate(() => {
+      const hook = (window as unknown as Record<string, unknown>)["__DEV_TEST_ONLY_OPEN_CARD__"];
+      if (typeof hook === "function") {
+        hook({
+          id: "voice-qa-guided-word",
+          dayNumber: 17,
+          unitId: "asking-and-answering",
+          type: "guided-word",
+          title: "Tutor Voice QA",
+          targetPhrases: ["How are you?."],
+          learnerInstruction: "Listen to the model.",
+          indonesianExplanation: "Dengarkan.",
+          scaffold: "How are you?",
+          cta: "Listen",
+          estimatedMinutes: 2,
+          completionRule: "completed",
+          linkedEngine: "guided-word",
+          mobileLayoutHint: "standard",
+        });
+      }
+    });
+
+    const shell = page.locator("[data-testid='micro-lesson-shell']");
+    await expect(shell).toBeVisible();
+    await shell.getByTestId("listen-model-btn").click();
+
+    await page.waitForTimeout(50);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = (window as unknown as {
+            __TUTOR_VOICE_TEST__: { calls: unknown[] };
+          }).__TUTOR_VOICE_TEST__;
+          return state.calls.length;
+        })
+      )
+      .toBe(0);
+
+    await page.evaluate(() => {
+      const state = (window as unknown as {
+        __TUTOR_VOICE_TEST__: { dispatchVoicesChanged: () => void };
+      }).__TUTOR_VOICE_TEST__;
+      state.dispatchVoicesChanged();
+    });
+
+    const call = await page.evaluate(() => {
+      const state = (window as unknown as {
+        __TUTOR_VOICE_TEST__: {
+          calls: Array<{
+            text: string;
+            lang: string;
+            volume: number;
+            rate: number;
+            pitch: number;
+            voice: { lang: string } | null;
+          }>;
+        };
+      }).__TUTOR_VOICE_TEST__;
+      const utterance = state.calls[0];
+      return {
+        text: utterance.text,
+        lang: utterance.lang,
+        volume: utterance.volume,
+        rate: utterance.rate,
+        pitch: utterance.pitch,
+        voice: utterance.voice,
+      };
+    });
+
+    expect(call).toEqual({
+      text: "How are you?",
+      lang: "en-US",
+      volume: 1,
+      rate: 1,
+      pitch: 1,
+      voice: null,
+    });
+  });
+
+  test("13b. Tutor voice helper does not call speak for empty text and reports error semantics in source", async ({ page }) => {
+    await page.addInitScript(() => {
+      const state = { speakCalls: 0 };
+      class MockSpeechSynthesisUtterance {
+        text: string;
+        lang = "";
+        volume = 1;
+        rate = 1;
+        pitch = 1;
+        voice = null;
+        onend: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+
+        constructor(text: string) {
+          this.text = text;
+        }
+      }
+
+      Object.defineProperty(window, "SpeechSynthesisUtterance", {
+        configurable: true,
+        value: MockSpeechSynthesisUtterance,
+      });
+      Object.defineProperty(window, "speechSynthesis", {
+        configurable: true,
+        value: {
+          cancel() {},
+          getVoices() {
+            return [{ name: "English", lang: "en-US" }];
+          },
+          addEventListener() {},
+          removeEventListener() {},
+          speak() {
+            state.speakCalls += 1;
+          },
+        },
+      });
+      Object.defineProperty(window, "__TUTOR_VOICE_EMPTY_TEXT_TEST__", {
+        configurable: true,
+        value: state,
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Learning Path" }).click();
+    await page.evaluate(() => {
+      const hook = (window as unknown as Record<string, unknown>)["__DEV_TEST_ONLY_OPEN_CARD__"];
+      if (typeof hook === "function") {
+        hook({
+          id: "voice-empty-guided-word",
+          dayNumber: 17,
+          unitId: "asking-and-answering",
+          type: "guided-word",
+          title: "Tutor Voice Empty Text QA",
+          targetPhrases: ["   "],
+          learnerInstruction: "Listen to the model.",
+          indonesianExplanation: "Dengarkan.",
+          scaffold: "",
+          cta: "Listen",
+          estimatedMinutes: 2,
+          completionRule: "completed",
+          linkedEngine: "guided-word",
+          mobileLayoutHint: "standard",
+        });
+      }
+    });
+
+    const shell = page.locator("[data-testid='micro-lesson-shell']");
+    await expect(shell).toBeVisible();
+    await shell.getByTestId("listen-model-btn").click();
+    await page.waitForTimeout(50);
+
+    const speakCalls = await page.evaluate(() => {
+      const state = (window as unknown as {
+        __TUTOR_VOICE_EMPTY_TEXT_TEST__: { speakCalls: number };
+      }).__TUTOR_VOICE_EMPTY_TEXT_TEST__;
+      return state.speakCalls;
+    });
+    expect(speakCalls).toBe(0);
+
+    const helperSrc = readSrc("src/app/lib/speech/tutor-voice.ts");
+    expect(helperSrc).toContain("activeUtterance");
+    expect(helperSrc).toContain("voiceschanged");
+    expect(helperSrc).toContain("VOICE_LOAD_TIMEOUT_MS");
+    expect(helperSrc).toContain('reason: "empty-text"');
+    expect(helperSrc).toContain('reason: "speech-unavailable"');
+    expect(helperSrc).toContain('reason: "speak-error"');
+    expect(helperSrc).toMatch(/utterance\.onerror[\s\S]*ok:\s*false[\s\S]*started:\s*false[\s\S]*speak-error/);
+    expect(helperSrc).toContain('utterance.lang = "en-US"');
+    expect(helperSrc).toContain("utterance.volume = 1");
+    expect(helperSrc).toContain("utterance.rate = 1");
+    expect(helperSrc).toContain("utterance.pitch = 1");
+    expect(helperSrc).not.toMatch(/console\.(log|warn|error|info)/);
+  });
+
   // -------------------------------------------------------------------------
   // 14. Copy safety: no harsh/punitive wording in Phase 2 source files
   // -------------------------------------------------------------------------

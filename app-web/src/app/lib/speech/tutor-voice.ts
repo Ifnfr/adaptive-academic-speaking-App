@@ -1,5 +1,17 @@
 "use client";
 
+export type TutorVoicePlaybackResult =
+  | { ok: true; started: true }
+  | {
+      ok: false;
+      started: false;
+      reason: "speech-unavailable" | "empty-text" | "speak-error";
+    };
+
+const VOICE_LOAD_TIMEOUT_MS = 350;
+
+let activeUtterance: SpeechSynthesisUtterance | null = null;
+
 /**
  * Checks if browser-native SpeechSynthesis is available in the current client context.
  */
@@ -17,6 +29,7 @@ export function canUseTutorVoice(): boolean {
 export function stopTutorVoice(): void {
   if (canUseTutorVoice()) {
     try {
+      activeUtterance = null;
       window.speechSynthesis.cancel();
     } catch {
       // Ignored: safe fallback for browser API irregularities
@@ -24,54 +37,117 @@ export function stopTutorVoice(): void {
   }
 }
 
+function normalizeTutorPhrase(text: string): string {
+  return text
+    .replace(/\?\.(?=\s|$)/g, "?")
+    .replace(/!\.(?=\s|$)/g, "!")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getUsableVoices(): SpeechSynthesisVoice[] {
+  try {
+    return window.speechSynthesis.getVoices().filter((voice) => voice.lang);
+  } catch {
+    return [];
+  }
+}
+
+function waitForVoices(): Promise<SpeechSynthesisVoice[]> {
+  const voices = getUsableVoices();
+  if (voices.length > 0) {
+    return Promise.resolve(voices);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.speechSynthesis.removeEventListener("voiceschanged", finish);
+      resolve(getUsableVoices());
+    };
+
+    window.speechSynthesis.addEventListener("voiceschanged", finish, {
+      once: true,
+    });
+    window.setTimeout(finish, VOICE_LOAD_TIMEOUT_MS);
+  });
+}
+
+function selectEnglishVoice(
+  voices: ReadonlyArray<SpeechSynthesisVoice>,
+): SpeechSynthesisVoice | null {
+  return (
+    voices.find((voice) => voice.lang.toLowerCase().startsWith("en-us")) ??
+    voices.find((voice) => voice.lang.toLowerCase().startsWith("en-gb")) ??
+    voices.find((voice) => voice.lang.toLowerCase().startsWith("en")) ??
+    null
+  );
+}
+
 /**
  * Speaks a given text phrase using the browser-native SpeechSynthesis API.
  * Resolves the returned promise once playback completes or fails.
- * 
+ *
  * @param text The text string to speak.
- * @param lang The language code, defaults to "en-US".
  */
-export function speakTutorPhrase(text: string, lang = "en-US"): Promise<void> {
-  return new Promise((resolve) => {
-    if (!canUseTutorVoice()) {
-      resolve();
-      return;
-    }
+export async function speakTutorPhrase(
+  text: string,
+): Promise<TutorVoicePlaybackResult> {
+  const phrase = normalizeTutorPhrase(text);
 
+  if (!phrase) {
+    return { ok: false, started: false, reason: "empty-text" };
+  }
+
+  if (!canUseTutorVoice()) {
+    return { ok: false, started: false, reason: "speech-unavailable" };
+  }
+
+  let voices: SpeechSynthesisVoice[] = [];
+  try {
+    voices = await waitForVoices();
+  } catch {
+    voices = [];
+  }
+
+  return new Promise((resolve) => {
     try {
       window.speechSynthesis.cancel();
 
-      if (!text || !text.trim()) {
-        resolve();
-        return;
-      }
+      const utterance = new SpeechSynthesisUtterance(phrase);
+      activeUtterance = utterance;
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
+      utterance.lang = "en-US";
+      utterance.volume = 1;
+      utterance.rate = 1;
+      utterance.pitch = 1;
 
-      // Try selecting an English voice if available
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find(
-        (v) =>
-          v.lang.toLowerCase().startsWith("en-us") ||
-          v.lang.toLowerCase().startsWith("en-gb") ||
-          v.lang.toLowerCase().startsWith("en")
-      );
+      const englishVoice = selectEnglishVoice(voices);
       if (englishVoice) {
         utterance.voice = englishVoice;
       }
 
       utterance.onend = () => {
-        resolve();
+        if (activeUtterance === utterance) {
+          activeUtterance = null;
+        }
+        resolve({ ok: true, started: true });
       };
 
       utterance.onerror = () => {
-        resolve();
+        if (activeUtterance === utterance) {
+          activeUtterance = null;
+        }
+        resolve({ ok: false, started: false, reason: "speak-error" });
       };
 
       window.speechSynthesis.speak(utterance);
     } catch {
-      resolve();
+      activeUtterance = null;
+      resolve({ ok: false, started: false, reason: "speak-error" });
     }
   });
 }
