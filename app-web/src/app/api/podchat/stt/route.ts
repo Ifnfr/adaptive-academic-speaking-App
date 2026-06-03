@@ -60,6 +60,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const provider = process.env.PODCHAT_STT_PROVIDER?.trim().toLowerCase();
+  if (provider === "mock") {
+    return NextResponse.json(
+      { transcript: "I use technology to learn English and practise speaking every day." },
+      { status: 200 }
+    );
+  }
+
   const apiKey = process.env.DEEPGRAM_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(

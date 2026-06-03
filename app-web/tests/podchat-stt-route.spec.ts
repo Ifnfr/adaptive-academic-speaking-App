@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { POST } from "../src/app/api/podchat/stt/route";
 
 const originalApiKey = process.env.DEEPGRAM_API_KEY;
+const originalProvider = process.env.PODCHAT_STT_PROVIDER;
 const originalFetch = globalThis.fetch;
 
 function buildSttRequest(options: {
@@ -53,6 +54,7 @@ function mockDeepgramResponse(
 test.describe("Podchat STT Route", () => {
   test.afterEach(() => {
     process.env.DEEPGRAM_API_KEY = originalApiKey;
+    process.env.PODCHAT_STT_PROVIDER = originalProvider;
     globalThis.fetch = originalFetch;
   });
 
@@ -232,5 +234,52 @@ test.describe("Podchat STT Route", () => {
     for (const term of forbidden) {
       expect(source).not.toContain(term);
     }
+  });
+
+  test("13. PODCHAT_STT_PROVIDER=mock returns deterministic transcript and does not require Deepgram key or call fetch", async () => {
+    process.env.PODCHAT_STT_PROVIDER = "mock";
+    process.env.DEEPGRAM_API_KEY = "";
+
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    const audioBytes = new Uint8Array([1, 2, 3]);
+    const audioBlob = new Blob([audioBytes], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { transcript: string };
+    expect(data.transcript).toBe("I use technology to learn English and practise speaking every day.");
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("14. mock provider mode still validates multipart/form-data, presence of audio, size, and MIME type", async () => {
+    process.env.PODCHAT_STT_PROVIDER = "mock";
+
+    const reqJson = buildSttRequest({ useRawBody: "{}" });
+    const resJson = await POST(reqJson);
+    expect(resJson.status).toBe(400);
+
+    const reqNoAudio = buildSttRequest({});
+    const resNoAudio = await POST(reqNoAudio);
+    expect(resNoAudio.status).toBe(400);
+
+    const emptyBlob = new Blob([], { type: "audio/webm" });
+    const reqEmpty = buildSttRequest({ audio: emptyBlob });
+    const resEmpty = await POST(reqEmpty);
+    expect(resEmpty.status).toBe(400);
+
+    const largeBlob = new Blob([new Uint8Array(2.1 * 1024 * 1024)], { type: "audio/webm" });
+    const reqLarge = buildSttRequest({ audio: largeBlob });
+    const resLarge = await POST(reqLarge);
+    expect(resLarge.status).toBe(400);
+
+    const pngBlob = new Blob([new Uint8Array([1])], { type: "image/png" });
+    const reqPng = buildSttRequest({ audio: pngBlob });
+    const resPng = await POST(reqPng);
+    expect(resPng.status).toBe(400);
   });
 });
