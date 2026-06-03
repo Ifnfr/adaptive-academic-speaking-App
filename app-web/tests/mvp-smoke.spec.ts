@@ -98,8 +98,10 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.getByTestId("podchat-time-left")).toBeVisible();
     await expect(page.getByTestId("podchat-time-left")).toContainText("Time left:");
     await expect(page.getByTestId("podchat-turns-completed")).toContainText("Turns completed:");
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await page.getByRole("button", { name: "Submit Turn" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
+    await page.getByTestId("podchat-submit-turn").click();
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText(
       "Learner",
     );

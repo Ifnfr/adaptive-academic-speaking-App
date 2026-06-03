@@ -178,9 +178,35 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // 3. Confirm no TTS is called for setup opener text
     expect(ttsPayloads.length).toBe(0);
 
-    // 4. Submit Turn calls /api/podchat/turn and then triggers TTS
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await page.getByRole("button", { name: "Submit Turn" }).click();
+    // Verify Start Recording button is initially visible
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+
+    // 4. Click Start Recording
+    await page.getByTestId("podchat-start-recording").click();
+
+    // Verify Recording indicator and Stop Recording button
+    await expect(page.getByTestId("podchat-recording-indicator")).toBeVisible();
+    await expect(page.getByTestId("podchat-stop-recording")).toBeVisible();
+
+    // Verify no microphone userMedia requests or MediaRecorder initialization occurred
+    const micRequested = await page.evaluate(
+      () => Boolean((window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean }).__PODCHAT_MIC_REQUESTED__)
+    );
+    expect(micRequested).toBe(false);
+
+    // Click Stop Recording
+    await page.getByTestId("podchat-stop-recording").click();
+
+    // Wait for the locked transcript panel to appear
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
+    await expect(page.getByTestId("podchat-transcript-disclaimer")).toBeVisible();
+
+    // Verify transcript is read-only / non-editable (no textareas or inputs are present)
+    const editableCount = await page.locator("textarea, input[type='text']").count();
+    expect(editableCount).toBe(0);
+
+    // Submit Turn
+    await page.getByTestId("podchat-submit-turn").click();
 
     // Wait for text to render immediately (text-first)
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("This is a mocked host response. What is your next point?");
@@ -223,8 +249,10 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByTestId("podchat-status")).toContainText("Your turn");
 
     // 5. Submit second turn
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await page.getByRole("button", { name: "Submit Turn" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
+    await page.getByTestId("podchat-submit-turn").click();
 
     await expect.poll(() => ttsPayloads.length).toBe(2);
 
@@ -241,11 +269,6 @@ test.describe("Podchat Phase 1 connected UI", () => {
     expect(ttsPayloads.length).toBe(2);
 
     // 7. Verify no privacy leaks
-    const microphoneRequested = await page.evaluate(
-      () => Boolean((window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean }).__PODCHAT_MIC_REQUESTED__)
-    );
-    expect(microphoneRequested).toBe(false);
-
     const storageSnapshot = await page.evaluate(() => JSON.stringify(localStorage));
     expect(storageSnapshot).not.toMatch(/audioBlob|recordingUrl|blob:/i);
     expect(providerCalls).toEqual([]);
@@ -275,8 +298,10 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     await page.goto("/");
     await page.getByRole("button", { name: "Start a Podchat" }).click();
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await page.getByRole("button", { name: "Submit Turn" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
+    await page.getByTestId("podchat-submit-turn").click();
 
     // Confirm text is still rendered
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Immediate text here. Can you read this?");
@@ -284,9 +309,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // Confirm quiet fallback warning is displayed
     await expect(page.getByTestId("podchat-tts-error")).toContainText("Voice unavailable. Continuing with text.");
 
-    // Confirm we can still proceed with text conversation
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await expect(page.getByRole("button", { name: "Submit Turn" })).toBeEnabled();
+    // Confirm we can still proceed to record another turn
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
   });
 
   test("cleans up audio and revokes ObjectURL on reset", async ({ page }) => {
@@ -308,8 +332,9 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     await page.goto("/");
     await page.getByRole("button", { name: "Start a Podchat" }).click();
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await page.getByRole("button", { name: "Submit Turn" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await page.getByTestId("podchat-submit-turn").click();
 
     // Verify audio is playing
     await expect(page.getByTestId("podchat-status")).toContainText("Host speaking...");
@@ -357,8 +382,9 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     await page.goto("/");
     await page.getByRole("button", { name: "Start a Podchat" }).click();
-    await page.getByRole("button", { name: "Mock learner answer" }).click();
-    await page.getByRole("button", { name: "Submit Turn" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await page.getByTestId("podchat-submit-turn").click();
 
     await expect(page.getByTestId("podchat-turn-error")).toContainText("Provider turn error simulated.");
     await expect(page.getByRole("button", { name: "Retry Turn" })).toBeVisible();

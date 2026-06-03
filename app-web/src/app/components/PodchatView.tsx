@@ -10,6 +10,7 @@ type PodchatTopic = "Economics" | "Technology";
 type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
 type PodchatStatus = "host_turn" | "user_turn" | "submitting" | "complete";
 type PodchatSpeaker = "host" | "learner";
+type RecordingState = "idle" | "recording" | "transcribing" | "ready";
 
 type PodchatTurn = {
   id: string;
@@ -121,7 +122,8 @@ export function PodchatView() {
   const [status, setStatus] = useState<PodchatStatus>("host_turn");
   const [turns, setTurns] = useState<PodchatTurn[]>([]);
   const [submittedUserTurns, setSubmittedUserTurns] = useState(0);
-  const [draftLearnerText, setDraftLearnerText] = useState("");
+  const [recordingState, setRecordingState] = useState<RecordingState>("idle");
+  const [lockedTranscript, setLockedTranscript] = useState<string | null>(null);
 
   // Duration-based session state
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -295,13 +297,14 @@ export function PodchatView() {
     };
     setTurns([opener]);
     setSubmittedUserTurns(0);
-    setDraftLearnerText("");
     setElapsedSeconds(0);
     setStatus("user_turn");
     setPhase("speaking");
     setTurnError(null);
     setEvalError(null);
     setEvalData(null);
+    setRecordingState("idle");
+    setLockedTranscript(null);
     startTimer();
   }
 
@@ -312,16 +315,32 @@ export function PodchatView() {
     setStatus("host_turn");
     setTurns([]);
     setSubmittedUserTurns(0);
-    setDraftLearnerText("");
     setElapsedSeconds(0);
     setTurnError(null);
     setEvalError(null);
     setEvalData(null);
+    setRecordingState("idle");
+    setLockedTranscript(null);
   }
 
-  function mockLearnerAnswer() {
+  function startRecording() {
+    setRecordingState("recording");
+    setLockedTranscript(null);
+  }
+
+  function stopRecording() {
+    setRecordingState("transcribing");
     const index = Math.min(submittedUserTurns, LEARNER_REPLIES[topic].length - 1);
-    setDraftLearnerText(LEARNER_REPLIES[topic][index]);
+    const mockAnswer = LEARNER_REPLIES[topic][index];
+    setTimeout(() => {
+      setLockedTranscript(mockAnswer);
+      setRecordingState("ready");
+    }, 200);
+  }
+
+  function discardRecording() {
+    setRecordingState("idle");
+    setLockedTranscript(null);
   }
 
   async function triggerEvaluation(finalTurns: PodchatTurn[]) {
@@ -399,7 +418,7 @@ export function PodchatView() {
 
   async function submitTurn() {
     if (status !== "user_turn") return;
-    const learnerText = draftLearnerText || LEARNER_REPLIES[topic][0];
+    const learnerText = lockedTranscript || LEARNER_REPLIES[topic][0];
     const learnerTurn: PodchatTurn = {
       id: nextTurnId(turns),
       speaker: "learner",
@@ -407,7 +426,8 @@ export function PodchatView() {
     };
     const updatedTurns = [...turns, learnerTurn];
     setTurns(updatedTurns);
-    setDraftLearnerText("");
+    setLockedTranscript(null);
+    setRecordingState("idle");
     setTurnError(null);
     setStatus("submitting");
 
@@ -769,16 +789,47 @@ export function PodchatView() {
 
           <div className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
             <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-              Mock learner turn (Stop Recording simulation)
+              Speaking Practice
             </h3>
             <p className="mt-1 text-xs leading-5 text-[var(--brand-ink-soft)]">
-              Phase 1 uses deterministic local text to simulate a future Stop
-              Recording result. No microphone, audio, provider route, or cloud
-              write is used.
+              Record your spoken response. The transcript will be generated automatically.
             </p>
-            <div className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3 text-sm leading-6 text-[var(--brand-ink)]">
-              {draftLearnerText || "Click \u201cMock learner answer\u201d to prepare this turn."}
-            </div>
+
+            {/* Recording State Views */}
+            {recordingState === "recording" && (
+              <div className="mt-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 animate-pulse" data-testid="podchat-recording-indicator">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                </span>
+                <span className="text-sm font-medium">Recording spoken response...</span>
+              </div>
+            )}
+
+            {recordingState === "transcribing" && (
+              <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-[var(--brand-muted)]" data-testid="podchat-transcribing-status">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-[var(--brand-teal)] border-t-transparent"></div>
+                <span className="text-sm font-medium">Transcribing spoken answer...</span>
+              </div>
+            )}
+
+            {recordingState === "ready" && lockedTranscript && (
+              <div className="mt-4 flex flex-col gap-2">
+                <div
+                  className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3 text-sm leading-6 text-[var(--brand-ink)] font-medium"
+                  data-testid="podchat-locked-transcript"
+                >
+                  {lockedTranscript}
+                </div>
+                <p
+                  className="text-xs text-[var(--brand-muted)] italic"
+                  data-testid="podchat-transcript-disclaimer"
+                >
+                  Transcript is generated automatically and may contain recognition errors.
+                </p>
+              </div>
+            )}
+
             {turnError && (
               <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800" data-testid="podchat-turn-error">
                 {turnError}
@@ -789,23 +840,52 @@ export function PodchatView() {
                 {ttsError}
               </div>
             )}
+
+            {/* Action Buttons */}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={mockLearnerAnswer}
-                disabled={status !== "user_turn"}
-                className={buttonSecondary}
-              >
-                Mock learner answer
-              </button>
-              <button
-                type="button"
-                onClick={submitTurn}
-                disabled={status !== "user_turn" || !draftLearnerText}
-                className={buttonPrimary}
-              >
-                Submit Turn
-              </button>
+              {status === "user_turn" && recordingState === "idle" && (
+                <button
+                  type="button"
+                  onClick={startRecording}
+                  className={buttonPrimary}
+                  data-testid="podchat-start-recording"
+                >
+                  Start Recording
+                </button>
+              )}
+
+              {status === "user_turn" && recordingState === "recording" && (
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+                  data-testid="podchat-stop-recording"
+                >
+                  Stop Recording
+                </button>
+              )}
+
+              {status === "user_turn" && recordingState === "ready" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={submitTurn}
+                    className={buttonPrimary}
+                    data-testid="podchat-submit-turn"
+                  >
+                    Submit Turn
+                  </button>
+                  <button
+                    type="button"
+                    onClick={discardRecording}
+                    className={buttonSecondary}
+                    data-testid="podchat-re-record"
+                  >
+                    Re-record
+                  </button>
+                </>
+              )}
+
               {turnError && (
                 <button
                   type="button"
@@ -816,14 +896,17 @@ export function PodchatView() {
                   Retry Turn
                 </button>
               )}
-              <button
-                type="button"
-                onClick={endSession}
-                disabled={status === "submitting"}
-                className={buttonSecondary}
-              >
-                End Session
-              </button>
+
+              {recordingState !== "transcribing" && (
+                <button
+                  type="button"
+                  onClick={endSession}
+                  disabled={status === "submitting"}
+                  className={buttonSecondary}
+                >
+                  End Session
+                </button>
+              )}
             </div>
           </div>
         </div>
