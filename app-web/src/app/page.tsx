@@ -2494,7 +2494,7 @@ export default function Home() {
           }}
         />
       )}
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:flex-row lg:gap-8 lg:px-8 lg:py-10 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
+      <div className="flex w-full flex-col gap-6 px-4 py-6 lg:h-screen lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:py-0 lg:min-h-0">
         {/* Sidebar */}
         <Sidebar
           view={view}
@@ -2511,7 +2511,7 @@ export default function Home() {
           onSelectView={setView}
         />
         {/* Main */}
-        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:h-full lg:min-h-0">
+        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:h-full lg:min-h-0 lg:px-8 lg:py-8">
           {/* Topbar */}
           <Topbar
             subtitle={viewSubtitle(view, homeT)}
