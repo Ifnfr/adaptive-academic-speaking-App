@@ -1,3 +1,88 @@
+type PodchatTopic = "Economics" | "Technology";
+type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
+type PodchatSpeaker = "host" | "learner";
+
+type PodchatTurn = {
+  speaker: PodchatSpeaker;
+  text: string;
+};
+
+type MockTurnRequest = {
+  topic: PodchatTopic;
+  difficulty: PodchatDifficulty;
+  turnIndex: number;
+  maxUserTurns: number;
+  turns: PodchatTurn[];
+};
+
+type MockEvaluateRequest = {
+  topic: PodchatTopic;
+  difficulty: PodchatDifficulty;
+  turns: PodchatTurn[];
+};
+
+function mockDifficultyPhrase(difficulty: PodchatDifficulty): string {
+  if (difficulty === "Beginner") return "simple everyday example";
+  if (difficulty === "Intermediate") return "clear reason or example";
+  return "trade-off or wider implication";
+}
+
+export function buildMockPodchatTurn(req: MockTurnRequest): string {
+  const nextTurn = req.turnIndex + 1;
+  const finalTurnNote =
+    nextTurn >= req.maxUserTurns
+      ? "This is a good moment to make your final point."
+      : "Let's keep the conversation moving.";
+
+  return JSON.stringify({
+    hostText: `Local mock host: your ${req.topic.toLowerCase()} point is clear. ${finalTurnNote}`,
+    followUpQuestion: `Could you add one ${mockDifficultyPhrase(req.difficulty)}?`,
+  });
+}
+
+export function buildMockPodchatEvaluation(req: MockEvaluateRequest): string {
+  const topicLower = req.topic.toLowerCase();
+  const difficultyFocus =
+    req.difficulty === "Beginner"
+      ? "complete simple sentences"
+      : req.difficulty === "Intermediate"
+        ? "connect reasons and examples"
+        : "develop nuance and trade-offs";
+
+  return JSON.stringify({
+    summary: `Local mock evaluation: you completed a ${topicLower} Podchat and kept your answers understandable. Your next step is to ${difficultyFocus}.`,
+    corrections: [
+      {
+        original: "I think technology help people.",
+        improved: "I think technology helps people work and study more effectively.",
+        explanation:
+          "Use a complete sentence with accurate verb agreement and a clearer object.",
+      },
+    ],
+    betterSentences: [
+      `One stronger ${req.difficulty.toLowerCase()} answer would connect the ${topicLower} point to a specific example.`,
+    ],
+    vocabularySuggestions: [
+      {
+        originalOrBasic: "good",
+        suggestion: req.topic === "Economics" ? "beneficial" : "effective",
+        example:
+          req.topic === "Economics"
+            ? "Lower transport costs can be beneficial for students."
+            : "Digital tools can be effective when learners use them with a clear goal.",
+      },
+    ],
+    recurringErrors: [
+      {
+        label: "Short explanations",
+        evidence: "Some learner turns state an idea without adding a reason.",
+        practiceFocus: `Add one ${mockDifficultyPhrase(req.difficulty)} before ending each answer.`,
+      },
+    ],
+    nextPracticeFocus: `In your next Podchat, give one clear claim and one ${mockDifficultyPhrase(req.difficulty)} about ${topicLower}.`,
+  });
+}
+
 export async function callGemini(
   apiKey: string,
   system: string,

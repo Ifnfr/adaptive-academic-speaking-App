@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { callGemini, callDeepSeek } from "../_lib/providers";
+import {
+  buildMockPodchatTurn,
+  callDeepSeek,
+  callGemini,
+} from "../_lib/providers";
 
 export const runtime = "nodejs";
 
@@ -239,6 +243,20 @@ export async function POST(request: Request) {
   }
 
   const provider = (process.env.PODCHAT_AI_PROVIDER || "claude").toLowerCase();
+  const validatedReq = validation.request;
+
+  if (provider === "mock") {
+    const text = buildMockPodchatTurn(validatedReq);
+    const outputValidation = validateClaudeOutput(text);
+    if (!outputValidation.valid) {
+      console.error(`Mock output validation failed: ${outputValidation.error}. Raw: ${text}`);
+      return NextResponse.json(
+        { error: "Invalid provider response format. Please try again." },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json(outputValidation.response);
+  }
 
   if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -249,7 +267,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const validatedReq = validation.request;
     const systemPrompt = buildSystemPrompt(validatedReq.topic, validatedReq.difficulty);
     const userPrompt = buildUserPrompt(validatedReq);
 
@@ -283,7 +300,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const validatedReq = validation.request;
     const systemPrompt = buildSystemPrompt(validatedReq.topic, validatedReq.difficulty);
     const userPrompt = buildUserPrompt(validatedReq);
 
@@ -318,7 +334,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const validatedReq = validation.request;
   const systemPrompt = buildSystemPrompt(validatedReq.topic, validatedReq.difficulty);
   const userPrompt = buildUserPrompt(validatedReq);
 

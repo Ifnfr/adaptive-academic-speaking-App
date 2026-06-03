@@ -281,6 +281,44 @@ test.describe("Podchat Evaluate Route", () => {
     expect(data.error).toBe("Provider is not configured. Please try again later.");
   });
 
+  test("mock provider returns deterministic evaluation without key or fetch", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "mock";
+    process.env.CLAUDE_API_KEY = "";
+    process.env.GEMINI_API_KEY = "";
+    process.env.DEEPSEEK_API_KEY = "";
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("should not be called", { status: 500 });
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as ReturnType<typeof validEvaluation>;
+    const serialized = JSON.stringify(data);
+
+    expect(response.status).toBe(200);
+    expect(fetchCalled).toBe(false);
+    expect(data.summary).toContain("Local mock evaluation");
+    expect(data.summary).toContain("technology");
+    expect(data.corrections).toHaveLength(1);
+    expect(data.recurringErrors[0].label).toBe("Short explanations");
+    expect(serialized).not.toMatch(/"score|"scores|pronunciation|phoneme|audio|blob|recording|userId|email/i);
+  });
+
+  test("mock provider still rejects malformed request before response", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "mock";
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("should not be called", { status: 500 });
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({ turns: [] }));
+
+    expect(response.status).toBe(400);
+    expect(fetchCalled).toBe(false);
+  });
+
   test("Claude non-OK response returns sanitized 502", async () => {
     mockClaudeResponse(500, "raw provider failure with internal detail");
 
