@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { callGemini } from "../_lib/providers";
+import { callGemini, callDeepSeek } from "../_lib/providers";
 
 export const runtime = "nodejs";
 
@@ -443,6 +443,41 @@ export async function POST(request: Request) {
       );
     }
   }
+
+  if (provider === "deepseek") {
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Provider is not configured. Please try again later." },
+        { status: 503 },
+      );
+    }
+
+    const validatedReq = validation.request;
+    const systemPrompt = buildSystemPrompt(validatedReq);
+    const userPrompt = buildUserPrompt(validatedReq);
+
+    try {
+      const text = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+      const outputValidation = validateClaudeOutput(text);
+      if (!outputValidation.valid) {
+        console.error(`DeepSeek output validation failed: ${outputValidation.error}. Raw: ${text}`);
+        return NextResponse.json(
+          { error: "Invalid provider response format. Please try again." },
+          { status: 502 }
+        );
+      }
+      return NextResponse.json(outputValidation.response);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Unexpected DeepSeek error: ${message}`);
+      return NextResponse.json(
+        { error: "Provider request failed. Please try again later." },
+        { status: 502 }
+      );
+    }
+  }
+
 
   // Claude Default
   const apiKey = process.env.CLAUDE_API_KEY;
