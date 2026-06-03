@@ -17,6 +17,33 @@ type PodchatTurn = {
   text: string;
 };
 
+type PodchatCorrection = {
+  original: string;
+  improved: string;
+  explanation: string;
+};
+
+type PodchatVocabularySuggestion = {
+  originalOrBasic: string;
+  suggestion: string;
+  example: string;
+};
+
+type PodchatRecurringError = {
+  label: string;
+  evidence: string;
+  practiceFocus: string;
+};
+
+type PodchatEvaluateResponse = {
+  summary: string;
+  corrections: PodchatCorrection[];
+  betterSentences: string[];
+  vocabularySuggestions: PodchatVocabularySuggestion[];
+  recurringErrors: PodchatRecurringError[];
+  nextPracticeFocus: string;
+};
+
 const TOPICS: readonly PodchatTopic[] = ["Economics", "Technology"];
 const DIFFICULTIES: readonly PodchatDifficulty[] = [
   "Beginner",
@@ -35,27 +62,6 @@ const HOST_OPENERS: Record<PodchatTopic, string> = {
     "Welcome to Podchat. Let's discuss how everyday prices influence the choices people make. What example from daily life would you like to start with?",
   Technology:
     "Welcome to Podchat. Let's explore how technology changes the way people study and work. Which technology trend feels most important to you right now?",
-};
-
-const HOST_REPLIES: Record<PodchatTopic, readonly string[]> = {
-  Economics: [
-    "That is a useful example because it connects personal choice with wider market pressure. How could you explain the trade-off more clearly?",
-    "Good direction. Try linking the example to supply, demand, or incentives. What consequence would you expect next?",
-    "You are building a clearer economic argument now. Which group benefits most from that situation, and why?",
-    "That answer gives us a practical angle. How would you compare this with a different market or country?",
-    "Nice. Add one sentence about risk or uncertainty to make the point more academic. What risk should listeners notice?",
-    "Your explanation is becoming more structured. What final claim would you make about this economic issue?",
-    "Strong closing direction. Let's move to feedback and identify the clearest improvement for your next Podchat.",
-  ],
-  Technology: [
-    "That is a relevant starting point because it shows technology changing a real habit. How could you make the benefit more specific?",
-    "Good. Try adding one concrete example of a tool, platform, or workflow. What example would support your idea?",
-    "You are making the topic easier to follow. What challenge or limitation should also be mentioned?",
-    "That balance helps the conversation feel more thoughtful. How might this technology affect students or workers differently?",
-    "Nice development. Add one sentence about privacy, access, or trust to deepen the answer. Which concern matters most?",
-    "Your explanation is now more complete. What prediction would you make about this technology in the next few years?",
-    "Strong closing direction. Let's move to feedback and identify the clearest improvement for your next Podchat.",
-  ],
 };
 
 const LEARNER_REPLIES: Record<PodchatTopic, readonly string[]> = {
@@ -104,6 +110,12 @@ export function PodchatView() {
   const [submittedUserTurns, setSubmittedUserTurns] = useState(0);
   const [draftLearnerText, setDraftLearnerText] = useState("");
 
+  // New API/Feedback Integration States
+  const [turnError, setTurnError] = useState<string | null>(null);
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalError, setEvalError] = useState<string | null>(null);
+  const [evalData, setEvalData] = useState<PodchatEvaluateResponse | null>(null);
+
   const maxUserTurns = DIFFICULTY_TURNS[difficulty];
   const progressTurn = Math.min(submittedUserTurns + 1, maxUserTurns);
   const rollingTurns = turns.slice(-3);
@@ -135,6 +147,9 @@ export function PodchatView() {
     setDraftLearnerText("");
     setStatus("user_turn");
     setPhase("speaking");
+    setTurnError(null);
+    setEvalError(null);
+    setEvalData(null);
   }
 
   function resetPodchat() {
@@ -143,6 +158,9 @@ export function PodchatView() {
     setTurns([]);
     setSubmittedUserTurns(0);
     setDraftLearnerText("");
+    setTurnError(null);
+    setEvalError(null);
+    setEvalData(null);
   }
 
   function mockLearnerAnswer() {
@@ -150,45 +168,146 @@ export function PodchatView() {
     setDraftLearnerText(LEARNER_REPLIES[topic][index]);
   }
 
-  function submitTurn() {
+  async function triggerEvaluation(finalTurns: PodchatTurn[]) {
+    setEvalLoading(true);
+    setEvalError(null);
+    try {
+      const response = await fetch("/api/podchat/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          difficulty,
+          turns: finalTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.json().catch(() => ({}));
+        throw new Error(errText.error || "Failed to evaluate session.");
+      }
+      const data = await response.json();
+      setEvalData(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setEvalError(msg || "An error occurred during evaluation.");
+    } finally {
+      setEvalLoading(false);
+    }
+  }
+
+  async function retryLastTurn() {
+    setTurnError(null);
+    setStatus("submitting");
+    try {
+      const response = await fetch("/api/podchat/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          difficulty,
+          turnIndex: submittedUserTurns,
+          maxUserTurns,
+          turns: turns.map((t) => ({ speaker: t.speaker, text: t.text })),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.json().catch(() => ({}));
+        throw new Error(errText.error || "Failed to submit turn.");
+      }
+      const data = await response.json();
+      const hostTurn: PodchatTurn = {
+        id: `podchat-turn-${turns.length + 1}`,
+        speaker: "host",
+        text: `${data.hostText} ${data.followUpQuestion}`,
+      };
+      const updatedTurns = [...turns, hostTurn];
+      setTurns(updatedTurns);
+      const nextSubmittedCount = submittedUserTurns + 1;
+      setSubmittedUserTurns(nextSubmittedCount);
+
+      if (nextSubmittedCount >= maxUserTurns) {
+        setStatus("complete");
+        setPhase("evaluation");
+        triggerEvaluation(updatedTurns);
+      } else {
+        setStatus("user_turn");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTurnError(msg || "An error occurred. Please try again.");
+      setStatus("user_turn");
+    }
+  }
+
+  async function submitTurn() {
     if (status !== "user_turn") return;
     const learnerText = draftLearnerText || LEARNER_REPLIES[topic][0];
-    const nextSubmittedCount = submittedUserTurns + 1;
     const learnerTurn: PodchatTurn = {
       id: nextTurnId(turns),
       speaker: "learner",
       text: learnerText,
     };
-
-    if (nextSubmittedCount >= maxUserTurns) {
-      setTurns((current) => [...current, learnerTurn]);
-      setSubmittedUserTurns(nextSubmittedCount);
-      setDraftLearnerText("");
-      setStatus("complete");
-      setPhase("evaluation");
-      return;
-    }
-
-    const hostTurn: PodchatTurn = {
-      id: `podchat-turn-${turns.length + 2}`,
-      speaker: "host",
-      text: HOST_REPLIES[topic][nextSubmittedCount - 1],
-    };
-    setStatus("submitting");
-    setTurns((current) => [...current, learnerTurn, hostTurn]);
-    setSubmittedUserTurns(nextSubmittedCount);
+    const updatedTurns = [...turns, learnerTurn];
+    setTurns(updatedTurns);
     setDraftLearnerText("");
-    setStatus("user_turn");
+    setTurnError(null);
+    setStatus("submitting");
+
+    try {
+      const response = await fetch("/api/podchat/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          difficulty,
+          turnIndex: submittedUserTurns,
+          maxUserTurns,
+          turns: updatedTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.json().catch(() => ({}));
+        throw new Error(errText.error || "Failed to submit turn.");
+      }
+      const data = await response.json();
+      const hostTurn: PodchatTurn = {
+        id: `podchat-turn-${updatedTurns.length + 1}`,
+        speaker: "host",
+        text: `${data.hostText} ${data.followUpQuestion}`,
+      };
+      const finalTurns = [...updatedTurns, hostTurn];
+      setTurns(finalTurns);
+      const nextSubmittedCount = submittedUserTurns + 1;
+      setSubmittedUserTurns(nextSubmittedCount);
+
+      if (nextSubmittedCount >= maxUserTurns) {
+        setStatus("complete");
+        setPhase("evaluation");
+        triggerEvaluation(finalTurns);
+      } else {
+        setStatus("user_turn");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTurnError(msg || "An error occurred. Please try again.");
+      setStatus("user_turn");
+    }
   }
 
   function endSession() {
+    const hasLearnerTurn = turns.some((t) => t.speaker === "learner");
+    if (!hasLearnerTurn) {
+      setTurnError("Complete at least one turn before evaluation.");
+      return;
+    }
     setStatus("complete");
     setPhase("evaluation");
+    triggerEvaluation(turns);
   }
 
   if (phase === "setup") {
     return (
-      <section className={`${card} overflow-hidden`} data-testid="podchat-setup">
+      <section className={card} data-testid="podchat-setup">
         <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
             Podchat Phase 1
@@ -284,11 +403,8 @@ export function PodchatView() {
               Evaluation
             </p>
             <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
-              Podchat transcript and local placeholder feedback
+              Podchat transcript and AI feedback
             </h2>
-            <p className="mt-2 text-sm text-[var(--brand-ink-soft)]">
-              These feedback sections are local placeholders for Phase 1 only.
-            </p>
           </div>
           <div className="p-6">
             <h3 className={labelClass}>Full transcript</h3>
@@ -301,38 +417,119 @@ export function PodchatView() {
           </div>
         </section>
 
-        <section className={card}>
-          <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-            {[
-              ["Summary", "You completed a local Podchat preview and practiced keeping answers connected to the topic."],
-              ["Grammar notes", "Placeholder: future feedback will identify one or two grammar patterns from the transcript text."],
-              ["Better sentence examples", "Placeholder: future feedback will suggest clearer academic sentence alternatives."],
-              ["Vocabulary suggestions", "Placeholder: future feedback will recommend topic-specific vocabulary."],
-              ["Next practice focus", "Placeholder: future feedback will choose one focused speaking goal for the next session."],
-            ].map(([title, body]) => (
-              <div
-                key={title}
-                className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
+        {evalLoading && (
+          <section className={`${card} p-6 flex flex-col items-center justify-center min-h-[200px]`} data-testid="podchat-evaluation-loading">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-teal)]"></div>
+            <p className="mt-4 text-sm text-[var(--brand-ink-soft)]">Evaluating transcript...</p>
+          </section>
+        )}
+
+        {evalError && (
+          <section className={`${card} p-6`} data-testid="podchat-evaluation-error">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+              <h3 className="text-sm font-semibold text-red-800">Evaluation Error</h3>
+              <p className="mt-2 text-sm text-red-700">{evalError}</p>
+              <button
+                type="button"
+                onClick={() => triggerEvaluation(turns)}
+                className={`${buttonPrimary} mt-4`}
               >
-                <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-                  {title}
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-soft)]">
-                  {body}
-                </p>
+                Retry Evaluation
+              </button>
+            </div>
+            <div className="mt-6 border-t border-[var(--brand-border)] pt-5">
+              <button
+                type="button"
+                onClick={resetPodchat}
+                className={buttonSecondary}
+              >
+                Start New Podchat
+              </button>
+            </div>
+          </section>
+        )}
+
+        {evalData && (
+          <section className={card} data-testid="podchat-evaluation-success">
+            <div className="p-6 flex flex-col gap-6">
+              <div>
+                <h3 className={labelClass}>Summary</h3>
+                <p className="text-sm leading-6 text-[var(--brand-ink-soft)]">{evalData.summary}</p>
               </div>
-            ))}
-          </div>
-          <div className="border-t border-[var(--brand-border)] px-6 py-5">
-            <button
-              type="button"
-              onClick={resetPodchat}
-              className={buttonSecondary}
-            >
-              Start New Podchat
-            </button>
-          </div>
-        </section>
+
+              {evalData.corrections.length > 0 && (
+                <div>
+                  <h3 className={labelClass}>Corrections / Grammar Notes</h3>
+                  <div className="mt-2 flex flex-col gap-3">
+                    {evalData.corrections.map((c: PodchatCorrection, i: number) => (
+                      <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                        <p className="text-xs text-red-600 line-through">“{c.original}”</p>
+                        <p className="mt-1 text-sm font-medium text-emerald-700">“{c.improved}”</p>
+                        <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">{c.explanation}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {evalData.betterSentences.length > 0 && (
+                <div>
+                  <h3 className={labelClass}>Better sentence examples</h3>
+                  <ul className="mt-2 list-disc pl-5 text-sm text-[var(--brand-ink-soft)] space-y-2">
+                    {evalData.betterSentences.map((s: string, i: number) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {evalData.vocabularySuggestions.length > 0 && (
+                <div>
+                  <h3 className={labelClass}>Vocabulary suggestions</h3>
+                  <div className="mt-2 flex flex-col gap-3">
+                    {evalData.vocabularySuggestions.map((v: PodchatVocabularySuggestion, i: number) => (
+                      <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                        <p className="text-sm font-semibold text-[var(--brand-ink)]">
+                          Instead of <span className="underline decoration-red-500">{v.originalOrBasic}</span>, try: <span className="text-[var(--brand-teal)]">{v.suggestion}</span>
+                        </p>
+                        <p className="mt-2 text-xs italic text-[var(--brand-ink-soft)]">Example: “{v.example}”</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {evalData.recurringErrors.length > 0 && (
+                <div>
+                  <h3 className={labelClass}>Recurring Errors</h3>
+                  <div className="mt-2 flex flex-col gap-3">
+                    {evalData.recurringErrors.map((re: PodchatRecurringError, i: number) => (
+                      <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                        <p className="text-sm font-semibold text-[var(--brand-ink)]">{re.label}</p>
+                        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">Evidence: <span className="italic">“{re.evidence}”</span></p>
+                        <p className="mt-2 text-xs text-[var(--brand-teal-ink)]">Practice: {re.practiceFocus}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h3 className={labelClass}>Next practice focus</h3>
+                <p className="text-sm leading-6 text-[var(--brand-ink-soft)]">{evalData.nextPracticeFocus}</p>
+              </div>
+            </div>
+            <div className="border-t border-[var(--brand-border)] px-6 py-5">
+              <button
+                type="button"
+                onClick={resetPodchat}
+                className={buttonSecondary}
+              >
+                Start New Podchat
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     );
   }
@@ -394,6 +591,15 @@ export function PodchatView() {
                 </article>
               );
             })}
+
+            {status === "submitting" && (
+              <div className="flex items-center gap-2 p-4 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] animate-pulse" data-testid="podchat-loading-turn">
+                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                <span className="text-xs text-[var(--brand-muted)]">Host is thinking...</span>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
@@ -407,6 +613,11 @@ export function PodchatView() {
             <div className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3 text-sm leading-6 text-[var(--brand-ink)]">
               {draftLearnerText || "Click Mock learner answer to prepare this turn."}
             </div>
+            {turnError && (
+              <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800" data-testid="podchat-turn-error">
+                {turnError}
+              </div>
+            )}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
@@ -424,9 +635,20 @@ export function PodchatView() {
               >
                 Submit Turn
               </button>
+              {turnError && (
+                <button
+                  type="button"
+                  onClick={retryLastTurn}
+                  disabled={status === "submitting"}
+                  className={buttonPrimary}
+                >
+                  Retry Turn
+                </button>
+              )}
               <button
                 type="button"
                 onClick={endSession}
+                disabled={status === "submitting"}
                 className={buttonSecondary}
               >
                 End Session

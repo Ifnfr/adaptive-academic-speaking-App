@@ -36,15 +36,46 @@ test.describe("MVP Smoke Flows", () => {
     page.on("request", (request) => {
       const url = request.url();
       if (
-        url.includes("/api/feedback") ||
-        url.includes("/api/diagnostic") ||
-        url.includes("/api/podchat") ||
         url.includes("anthropic.com") ||
         url.includes("deepgram.com") ||
         url.includes("polly")
       ) {
         providerCalls.push(url);
       }
+    });
+
+    // Mock API Turn Route
+    await page.route("**/api/podchat/turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hostText: "This is a mocked host response.",
+          followUpQuestion: "What is your next point?"
+        })
+      });
+    });
+
+    // Mock API Evaluate Route
+    await page.route("**/api/podchat/evaluate", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "This is a mocked summary evaluation.",
+          corrections: [
+            { original: "wrong grammar", improved: "correct grammar", explanation: "Because of rules." }
+          ],
+          betterSentences: ["Better academic sentence."],
+          vocabularySuggestions: [
+            { originalOrBasic: "good", suggestion: "excellent", example: "It is excellent." }
+          ],
+          recurringErrors: [
+            { label: "Grammar mistake", evidence: "wrong grammar", practiceFocus: "Practice rules." }
+          ],
+          nextPracticeFocus: "Focus on academic vocabulary."
+        })
+      });
     });
 
     await page.goto("/");
@@ -73,7 +104,7 @@ test.describe("MVP Smoke Flows", () => {
     );
     await page.getByRole("button", { name: "End Session" }).click();
     await expect(page.getByTestId("podchat-evaluation")).toBeVisible();
-    await expect(page.getByText("Grammar notes")).toBeVisible();
+    await expect(page.getByTestId("podchat-evaluation-success")).toBeVisible();
 
     const microphoneRequested = await page.evaluate(() =>
       Boolean(
