@@ -142,9 +142,16 @@ export function PodchatView() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
 
+  // MediaRecorder and microphone audio refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const durationSeconds = DIFFICULTY_DURATION[difficulty];
   const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds);
   const isTimeExpired = remainingSeconds === 0;
+  const isLastTurnLearner = turns.length > 0 && turns[turns.length - 1].speaker === "learner";
+  const hasSubmitError = !!turnError && isLastTurnLearner;
   const rollingTurns = turns.slice(-3);
   const fullTranscript = useMemo(
     () =>
@@ -198,6 +205,30 @@ export function PodchatView() {
       }
       objectUrlRef.current = null;
     }
+  }
+
+  function cleanupMedia() {
+    if (mediaRecorderRef.current) {
+      if (mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // ignore
+        }
+      }
+      mediaRecorderRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      } catch {
+        // ignore
+      }
+      mediaStreamRef.current = null;
+    }
+
+    audioChunksRef.current = [];
   }
 
   async function playTts(text: string) {
@@ -258,6 +289,7 @@ export function PodchatView() {
     return () => {
       stopTimer();
       cleanupAudio();
+      cleanupMedia();
     };
   }, []);
 
@@ -276,6 +308,7 @@ export function PodchatView() {
       const currentTurns = turns;
       setTimeout(() => {
         cleanupAudio();
+        cleanupMedia();
         setStatus("complete");
         setPhase("evaluation");
         triggerEvaluation(currentTurns);
@@ -290,6 +323,7 @@ export function PodchatView() {
 
   function startPodchat() {
     cleanupAudio();
+    cleanupMedia();
     const opener: PodchatTurn = {
       id: "podchat-turn-1",
       speaker: "host",
@@ -311,6 +345,7 @@ export function PodchatView() {
   function resetPodchat() {
     stopTimer();
     cleanupAudio();
+    cleanupMedia();
     setPhase("setup");
     setStatus("host_turn");
     setTurns([]);
@@ -323,22 +358,117 @@ export function PodchatView() {
     setLockedTranscript(null);
   }
 
-  function startRecording() {
-    setRecordingState("recording");
+  async function startRecording() {
+    setTurnError(null);
     setLockedTranscript(null);
+    audioChunksRef.current = [];
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      let mimeType = "audio/webm";
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm")) {
+          mimeType = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+          mimeType = "audio/ogg";
+        } else if (MediaRecorder.isTypeSupported("audio/wav")) {
+          mimeType = "audio/wav";
+        }
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        if (mediaStreamRef.current) {
+          try {
+            mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+          } catch {
+            // ignore
+          }
+          mediaStreamRef.current = null;
+        }
+
+        const chunks = audioChunksRef.current;
+        if (chunks.length === 0) {
+          setTurnError("No speech recorded. Please try again.");
+          setRecordingState("idle");
+          return;
+        }
+
+        const blobMimeType = recorder.mimeType || mimeType;
+        const audioBlob = new Blob(chunks, { type: blobMimeType });
+        audioChunksRef.current = [];
+
+        setRecordingState("transcribing");
+
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob, `speech.${blobMimeType.split("/")[1] || "webm"}`);
+
+          const response = await fetch("/api/podchat/stt", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const errJson = await response.json().catch(() => ({}));
+            throw new Error(errJson.error || "Transcription failed. Please try recording again.");
+          }
+
+          const data = await response.json();
+          if (data.transcript && typeof data.transcript === "string") {
+            setLockedTranscript(data.transcript);
+            setRecordingState("ready");
+          } else {
+            throw new Error("Speech transcription failed. Please try again later.");
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setTurnError(msg || "Transcription failed. Please try recording again.");
+          setRecordingState("idle");
+        }
+      };
+
+      recorder.start();
+      setRecordingState("recording");
+    } catch (err: unknown) {
+      console.error("Microphone access or recorder initialization failed:", err);
+      if (mediaStreamRef.current) {
+        try {
+          mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        } catch {
+          // ignore
+        }
+        mediaStreamRef.current = null;
+      }
+      setTurnError("Microphone access was denied. Please allow microphone access and try again.");
+      setRecordingState("idle");
+    }
   }
 
   function stopRecording() {
-    setRecordingState("transcribing");
-    const index = Math.min(submittedUserTurns, LEARNER_REPLIES[topic].length - 1);
-    const mockAnswer = LEARNER_REPLIES[topic][index];
-    setTimeout(() => {
-      setLockedTranscript(mockAnswer);
-      setRecordingState("ready");
-    }, 200);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping MediaRecorder:", e);
+      }
+    }
   }
 
   function discardRecording() {
+    cleanupMedia();
     setRecordingState("idle");
     setLockedTranscript(null);
   }
@@ -408,6 +538,11 @@ export function PodchatView() {
       const nextSubmittedCount = submittedUserTurns + 1;
       setSubmittedUserTurns(nextSubmittedCount);
       setStatus("user_turn");
+
+      // Reset recording state after successful host response
+      setLockedTranscript(null);
+      setRecordingState("idle");
+
       playTts(`${data.hostText} ${data.followUpQuestion}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -426,8 +561,6 @@ export function PodchatView() {
     };
     const updatedTurns = [...turns, learnerTurn];
     setTurns(updatedTurns);
-    setLockedTranscript(null);
-    setRecordingState("idle");
     setTurnError(null);
     setStatus("submitting");
 
@@ -451,8 +584,12 @@ export function PodchatView() {
       setTurns(finalTurns);
       const nextSubmittedCount = submittedUserTurns + 1;
       setSubmittedUserTurns(nextSubmittedCount);
-      // Duration controls session end, not turn count
       setStatus("user_turn");
+
+      // Reset recording state after successful host response
+      setLockedTranscript(null);
+      setRecordingState("idle");
+
       playTts(`${data.hostText} ${data.followUpQuestion}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -843,7 +980,7 @@ export function PodchatView() {
 
             {/* Action Buttons */}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              {status === "user_turn" && recordingState === "idle" && (
+              {status === "user_turn" && recordingState === "idle" && !hasSubmitError && (
                 <button
                   type="button"
                   onClick={startRecording}
@@ -865,7 +1002,7 @@ export function PodchatView() {
                 </button>
               )}
 
-              {status === "user_turn" && recordingState === "ready" && (
+              {status === "user_turn" && recordingState === "ready" && !hasSubmitError && (
                 <>
                   <button
                     type="button"
@@ -886,7 +1023,7 @@ export function PodchatView() {
                 </>
               )}
 
-              {turnError && (
+              {hasSubmitError && (
                 <button
                   type="button"
                   onClick={retryLastTurn}

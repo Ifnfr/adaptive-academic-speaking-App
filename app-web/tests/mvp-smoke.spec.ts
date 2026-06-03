@@ -21,15 +21,81 @@ test.describe("MVP Smoke Flows", () => {
     const providerCalls: string[] = [];
 
     await page.addInitScript(() => {
+      const customWin = window as unknown as Record<string, unknown>;
+      customWin.__PODCHAT_MIC_REQUESTED__ = false;
+      customWin.__PODCHAT_MIC_DENY__ = false;
+
+      class MockMediaStreamTrack {
+        kind = "audio";
+        enabled = true;
+        stop() {}
+      }
+
+      class MockMediaStream {
+        _tracks = [new MockMediaStreamTrack()];
+        getTracks() {
+          return this._tracks;
+        }
+      }
+
+      const mediaDevices = {
+        async getUserMedia() {
+          const w = window as unknown as Record<string, unknown>;
+          w.__PODCHAT_MIC_REQUESTED__ = true;
+          return new MockMediaStream();
+        },
+      };
+
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
-        value: {
-          getUserMedia() {
-            (window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean })
-              .__PODCHAT_MIC_REQUESTED__ = true;
-            return Promise.reject(new Error("Microphone must not be requested"));
-          },
-        },
+        value: mediaDevices,
+      });
+
+      class MockMediaRecorder {
+        stream: unknown;
+        options?: unknown;
+        state = "inactive";
+        ondataavailable: ((event: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        mimeType = "audio/webm";
+
+        constructor(stream: unknown, options?: unknown) {
+          this.stream = stream;
+          this.options = options;
+        }
+
+        static isTypeSupported(type: string) {
+          return ["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/ogg"].includes(type);
+        }
+
+        start() {
+          this.state = "recording";
+        }
+
+        stop() {
+          this.state = "inactive";
+          if (this.ondataavailable) {
+            const mockBlob = new Blob([new Uint8Array([1, 2, 3])], { type: this.mimeType });
+            this.ondataavailable({ data: mockBlob });
+          }
+          if (this.onstop) {
+            setTimeout(() => {
+              if (this.onstop) this.onstop();
+            }, 0);
+          }
+        }
+      }
+      (window as unknown as Record<string, unknown>).MediaRecorder = MockMediaRecorder;
+    });
+
+    // Mock STT Route
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          transcript: "I think prices affect daily decisions because people compare what they want with what they can afford."
+        })
       });
     });
 
@@ -117,7 +183,7 @@ test.describe("MVP Smoke Flows", () => {
     );
     const storageSnapshot = await page.evaluate(() => JSON.stringify(localStorage));
 
-    expect(microphoneRequested).toBe(false);
+    expect(microphoneRequested).toBe(true);
     expect(providerCalls).toEqual([]);
     expect(storageSnapshot).not.toMatch(/audioBlob|recordingUrl|blob:/i);
   });

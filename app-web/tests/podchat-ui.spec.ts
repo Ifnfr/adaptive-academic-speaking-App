@@ -23,17 +23,84 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // Add init script to monitor microphone access and stub Audio
     await page.addInitScript(() => {
       // Mock getUserMedia
+      const customWin = window as unknown as Record<string, unknown>;
+      customWin.__PODCHAT_MIC_REQUESTED__ = false;
+      customWin.__PODCHAT_MIC_DENY__ = false;
+      customWin.__PODCHAT_TRACK_STOPPED_COUNT__ = 0;
+
+      class MockMediaStreamTrack {
+        kind = "audio";
+        enabled = true;
+        stop() {
+          const w = window as unknown as Record<string, unknown>;
+          w.__PODCHAT_TRACK_STOPPED_COUNT__ = ((w.__PODCHAT_TRACK_STOPPED_COUNT__ as number) || 0) + 1;
+        }
+      }
+
+      class MockMediaStream {
+        _tracks = [new MockMediaStreamTrack()];
+        getTracks() {
+          return this._tracks;
+        }
+      }
+
       const mediaDevices = {
-        getUserMedia() {
-          (window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean })
-            .__PODCHAT_MIC_REQUESTED__ = true;
-          return Promise.reject(new Error("Microphone must not be requested"));
+        async getUserMedia() {
+          const w = window as unknown as Record<string, unknown>;
+          w.__PODCHAT_MIC_REQUESTED__ = true;
+          if (w.__PODCHAT_MIC_DENY__) {
+            return Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
+          }
+          return new MockMediaStream();
         },
       };
+
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
         value: mediaDevices,
       });
+
+      // Stub MediaRecorder
+      class MockMediaRecorder {
+        stream: unknown;
+        options?: unknown;
+        state = "inactive";
+        ondataavailable: ((event: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        mimeType = "audio/webm";
+
+        constructor(stream: unknown, options?: unknown) {
+          this.stream = stream;
+          this.options = options;
+          (window as unknown as Record<string, unknown>).__LAST_MEDIA_RECORDER__ = this;
+        }
+
+        static isTypeSupported(type: string) {
+          return ["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/ogg"].includes(type);
+        }
+
+        start() {
+          this.state = "recording";
+          (window as unknown as Record<string, unknown>).__MEDIA_RECORDER_STARTED__ = true;
+        }
+
+        stop() {
+          this.state = "inactive";
+          (window as unknown as Record<string, unknown>).__MEDIA_RECORDER_STOPPED__ = true;
+
+          if (this.ondataavailable) {
+            const mockBlob = new Blob([new Uint8Array([1, 2, 3])], { type: this.mimeType });
+            this.ondataavailable({ data: mockBlob });
+          }
+
+          if (this.onstop) {
+            setTimeout(() => {
+              if (this.onstop) this.onstop();
+            }, 0);
+          }
+        }
+      }
+      (window as unknown as Record<string, unknown>).MediaRecorder = MockMediaRecorder;
 
       // Stub Audio / HTMLAudioElement
       (window as unknown as { __AUDIO_PLAY_CALLED__: string[] }).__AUDIO_PLAY_CALLED__ = [];
@@ -96,6 +163,17 @@ test.describe("Podchat Phase 1 connected UI", () => {
           }
         }
       };
+    });
+
+    // Default mock for STT API
+    await page.route("**/api/podchat/stt", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          transcript: "I think technology changes learning because people can access information faster."
+        })
+      });
     });
   });
 
@@ -181,18 +259,24 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // Verify Start Recording button is initially visible
     await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
 
+    // Verify microphone was not requested on setup or initial speaking screen
+    let micRequested = await page.evaluate(
+      () => Boolean((window as unknown as Record<string, unknown>).__PODCHAT_MIC_REQUESTED__)
+    );
+    expect(micRequested).toBe(false);
+
     // 4. Click Start Recording
     await page.getByTestId("podchat-start-recording").click();
+
+    // Verify microphone was requested now
+    micRequested = await page.evaluate(
+      () => Boolean((window as unknown as Record<string, unknown>).__PODCHAT_MIC_REQUESTED__)
+    );
+    expect(micRequested).toBe(true);
 
     // Verify Recording indicator and Stop Recording button
     await expect(page.getByTestId("podchat-recording-indicator")).toBeVisible();
     await expect(page.getByTestId("podchat-stop-recording")).toBeVisible();
-
-    // Verify no microphone userMedia requests or MediaRecorder initialization occurred
-    const micRequested = await page.evaluate(
-      () => Boolean((window as unknown as { __PODCHAT_MIC_REQUESTED__?: boolean }).__PODCHAT_MIC_REQUESTED__)
-    );
-    expect(micRequested).toBe(false);
 
     // Click Stop Recording
     await page.getByTestId("podchat-stop-recording").click();
@@ -391,8 +475,137 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     await page.getByRole("button", { name: "Retry Turn" }).click();
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Turn recovered. Are we good?");
-
     const playCalls = await page.evaluate(() => (window as unknown as { __AUDIO_PLAY_CALLED__: string[] }).__AUDIO_PLAY_CALLED__);
     expect(playCalls.length).toBe(1);
+  });
+
+  test("Microphone permission denied shows safe error and does not crash", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Set permission deny flag
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>).__PODCHAT_MIC_DENY__ = true;
+    });
+
+    // Start recording - will reject
+    await page.getByTestId("podchat-start-recording").click();
+
+    // Confirm safe non-blocking error message
+    await expect(page.getByTestId("podchat-turn-error")).toContainText(
+      "Microphone access was denied. Please allow microphone access and try again."
+    );
+
+    // Recording state resets to idle and we can retry
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+    await expect(page.getByTestId("podchat-recording-indicator")).not.toBeVisible();
+  });
+
+  test("STT failure shows retryable error and does not submit fake transcript", async ({ page }) => {
+    // Mock STT Route to fail
+    await page.route("**/api/podchat/stt", async (route: Route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Transcription failed. Please try recording again." })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Start and stop recording
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+
+    // Should display STT error
+    await expect(page.getByTestId("podchat-turn-error")).toContainText(
+      "Transcription failed. Please try recording again."
+    );
+
+    // Should not have a locked transcript visible or submit turn button
+    await expect(page.getByTestId("podchat-locked-transcript")).not.toBeVisible();
+    // Start Recording button is visible again to retry
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+  });
+
+  test("MediaStream tracks are stopped after Stop Recording, and stopped on reset", async ({ page }) => {
+    // Mock API Turn Route to succeed
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hostText: "Mocked response.",
+          followUpQuestion: "Next question?"
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Start and stop recording
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+
+    // Confirm that the stop method on the track was called
+    const stopCountAfterRecording = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__PODCHAT_TRACK_STOPPED_COUNT__
+    );
+    expect(stopCountAfterRecording).toBe(1);
+
+    // Submit Turn to have at least one learner turn
+    await page.getByTestId("podchat-submit-turn").click();
+
+    // Start recording again (active media stream)
+    await page.getByTestId("podchat-start-recording").click();
+
+    // End Session (now works because we have a learner turn)
+    await page.getByRole("button", { name: "End Session" }).click();
+
+    // Reset session
+    await page.getByRole("button", { name: "Start New Podchat" }).click();
+
+    const stopCountAfterReset = await page.evaluate(
+      () => (window as unknown as Record<string, unknown>).__PODCHAT_TRACK_STOPPED_COUNT__
+    );
+    expect(stopCountAfterReset).toBe(2);
+  });
+
+  test("STT payload details, privacy and storage checks", async ({ page }) => {
+    let capturedBody: string | null = null;
+    let contentType: string | null = null;
+
+    await page.route("**/api/podchat/stt", async (route: Route) => {
+      const request = route.request();
+      contentType = request.headers()["content-type"] || "";
+      capturedBody = request.postData() || "";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ transcript: "Verified audio text." })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+
+    // Verify STT payload
+    await expect(page.getByTestId("podchat-locked-transcript")).toContainText("Verified audio text.");
+
+    expect(contentType).toContain("multipart/form-data");
+    expect(capturedBody).toContain('name="audio"');
+    // Ensure no transcript, user identity, or auth metadata is in the form payload
+    expect(capturedBody).not.toContain("transcript");
+    expect(capturedBody).not.toContain("userId");
+    expect(capturedBody).not.toContain("clerk");
+
+    // Ensure no persistent storage/objectURL is created for user audio
+    const storageKeys = await page.evaluate(() => JSON.stringify(Object.keys(localStorage)));
+    expect(storageKeys).not.toContain("audio");
+    expect(storageKeys).not.toContain("blob:");
   });
 });
