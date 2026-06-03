@@ -3,6 +3,8 @@ import { readFileSync } from "fs";
 import { POST } from "../src/app/api/podchat/turn/route";
 
 const originalClaudeKey = process.env.CLAUDE_API_KEY;
+const originalGeminiKey = process.env.GEMINI_API_KEY;
+const originalProvider = process.env.PODCHAT_AI_PROVIDER;
 const originalFetch = globalThis.fetch;
 
 function buildRequest(body: Record<string, unknown>): Request {
@@ -53,9 +55,46 @@ function mockClaudeResponse(status: number, responseText: string, capture: { bod
   }) as typeof fetch;
 }
 
+function mockGeminiResponse(status: number, responseText: string, capture: { body?: Record<string, unknown> } = {}) {
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  globalThis.fetch = (async (_url, init) => {
+    if (init && typeof init.body === "string") {
+      capture.body = JSON.parse(init.body) as Record<string, unknown>;
+    }
+    if (status === 200) {
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: responseText,
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      );
+    } else {
+      return new Response(responseText, {
+        status,
+        headers: { "content-type": "text/plain" },
+      });
+    }
+  }) as typeof fetch;
+}
+
 test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
   test.afterEach(() => {
     process.env.CLAUDE_API_KEY = originalClaudeKey;
+    process.env.GEMINI_API_KEY = originalGeminiKey;
+    process.env.PODCHAT_AI_PROVIDER = originalProvider;
     globalThis.fetch = originalFetch;
   });
 
@@ -213,5 +252,59 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     for (const term of forbidden) {
       expect(source).not.toContain(term);
     }
+  });
+
+  test("valid Gemini request returns hostText and followUpQuestion", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    const capture: { body?: Record<string, unknown> } = {};
+    mockGeminiResponse(200, JSON.stringify({
+      hostText: "Gemini is starting the discussion.",
+      followUpQuestion: "What do you think?"
+    }), capture);
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { hostText: string; followUpQuestion: string };
+    expect(data.hostText).toBe("Gemini is starting the discussion.");
+    expect(data.followUpQuestion).toBe("What do you think?");
+
+    const bodyStr = JSON.stringify(capture.body);
+    expect(bodyStr).not.toContain("audio");
+    expect(bodyStr).not.toContain("recording");
+    expect(bodyStr).not.toContain("email");
+    expect(bodyStr).not.toContain("userId");
+  });
+
+  test("missing GEMINI_API_KEY with Gemini provider returns 503", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    process.env.GEMINI_API_KEY = "";
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(503);
+  });
+
+  test("Gemini non-OK response returns sanitized 502", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    mockGeminiResponse(500, "Gemini Internal error");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toBe("Provider request failed. Please try again later.");
+  });
+
+  test("malformed Gemini JSON returns safe 502", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    mockGeminiResponse(200, "Invalid JSON");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+  });
+
+  test("Gemini response schema mismatch returns safe 502", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    mockGeminiResponse(200, JSON.stringify({
+      hostText: "",
+      followUpQuestion: "Hello?"
+    }));
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
   });
 });

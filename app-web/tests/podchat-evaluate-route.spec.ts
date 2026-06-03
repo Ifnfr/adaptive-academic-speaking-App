@@ -3,6 +3,8 @@ import { readFileSync } from "fs";
 import { POST } from "../src/app/api/podchat/evaluate/route";
 
 const originalClaudeKey = process.env.CLAUDE_API_KEY;
+const originalGeminiKey = process.env.GEMINI_API_KEY;
+const originalProvider = process.env.PODCHAT_AI_PROVIDER;
 const originalFetch = globalThis.fetch;
 
 function validEvaluation() {
@@ -92,9 +94,47 @@ function mockClaudeResponse(
   }) as typeof fetch;
 }
 
+function mockGeminiResponse(
+  status: number,
+  responseText: string,
+  capture: { body?: Record<string, unknown> } = {},
+) {
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  globalThis.fetch = (async (_url, init) => {
+    if (init && typeof init.body === "string") {
+      capture.body = JSON.parse(init.body) as Record<string, unknown>;
+    }
+
+    if (status === 200) {
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: responseText }],
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    return new Response(responseText, {
+      status,
+      headers: { "content-type": "text/plain" },
+    });
+  }) as typeof fetch;
+}
+
 test.describe("Podchat Evaluate Route", () => {
   test.afterEach(() => {
     process.env.CLAUDE_API_KEY = originalClaudeKey;
+    process.env.GEMINI_API_KEY = originalGeminiKey;
+    process.env.PODCHAT_AI_PROVIDER = originalProvider;
     globalThis.fetch = originalFetch;
   });
 
@@ -286,5 +326,57 @@ test.describe("Podchat Evaluate Route", () => {
     for (const term of forbidden) {
       expect(source).not.toContain(term);
     }
+  });
+
+  test("valid Gemini request returns full structured evaluation", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    const capture: { body?: Record<string, unknown> } = {};
+    mockGeminiResponse(200, JSON.stringify(validEvaluation()), capture);
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as ReturnType<typeof validEvaluation>;
+    expect(data.summary).toContain("conversation");
+    expect(data.corrections[0].original).toBe("Technology help student study.");
+    expect(data.betterSentences).toHaveLength(1);
+    expect(data.vocabularySuggestions[0].suggestion).toBe("beneficial");
+    expect(data.recurringErrors[0].label).toBe("Incomplete sentence endings");
+    expect(data.nextPracticeFocus).toContain("claim");
+
+    const bodyStr = JSON.stringify(capture.body);
+    expect(bodyStr).not.toMatch(/audio|blob|recordingUrl|email|userId|owner_id|auth|device/i);
+  });
+
+  test("missing GEMINI_API_KEY with Gemini provider returns 503", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    process.env.GEMINI_API_KEY = "";
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(503);
+  });
+
+  test("Gemini non-OK response returns sanitized 502", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    mockGeminiResponse(500, "Gemini Internal error");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toBe("Provider request failed. Please try again later.");
+  });
+
+  test("malformed Gemini JSON returns safe 502", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    mockGeminiResponse(200, "Invalid JSON");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+  });
+
+  test("Gemini response schema mismatch returns safe 502", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "gemini";
+    mockGeminiResponse(200, JSON.stringify({
+      ...validEvaluation(),
+      summary: ""
+    }));
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
   });
 });

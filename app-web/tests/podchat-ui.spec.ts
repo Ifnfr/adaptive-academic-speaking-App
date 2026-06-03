@@ -33,7 +33,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
     });
 
     // Mock API Turn Route
-    let receivedPayload: Record<string, unknown> | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let receivedPayload: any = null;
     await page.route("**/api/podchat/turn", async (route: Route) => {
       receivedPayload = route.request().postDataJSON();
       await route.fulfill({
@@ -47,7 +48,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
     });
 
     // Mock API Evaluate Route
-    let receivedEvalPayload: Record<string, unknown> | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let receivedEvalPayload: any = null;
     await page.route("**/api/podchat/evaluate", async (route: Route) => {
       receivedEvalPayload = route.request().postDataJSON();
       await route.fulfill({
