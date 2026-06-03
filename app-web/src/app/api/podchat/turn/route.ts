@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-const TOPICS = ["Economics", "Technology"] as const;
-const DIFFICULTIES = ["Beginner", "Intermediate", "Advanced"] as const;
 const DIFFICULTY_TURNS = {
   Beginner: 3,
   Intermediate: 5,
   Advanced: 7,
 };
 
+type PodchatTopic = "Economics" | "Technology";
+type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
 type PodchatSpeaker = "host" | "learner";
 type PodchatTurn = {
   speaker: PodchatSpeaker;
@@ -17,8 +17,8 @@ type PodchatTurn = {
 };
 
 type PodchatTurnRequest = {
-  topic: typeof TOPICS[number];
-  difficulty: typeof DIFFICULTIES[number];
+  topic: PodchatTopic;
+  difficulty: PodchatDifficulty;
   maxUserTurns: number;
   turnIndex: number;
   turns: PodchatTurn[];
@@ -34,13 +34,13 @@ function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequ
   if (topic !== "Economics" && topic !== "Technology") {
     return { valid: false, error: "Invalid topic. Must be Economics or Technology." };
   }
-  const validTopic: typeof TOPICS[number] = topic;
+  const validTopic: PodchatTopic = topic;
 
   const difficulty = b.difficulty;
   if (difficulty !== "Beginner" && difficulty !== "Intermediate" && difficulty !== "Advanced") {
     return { valid: false, error: "Invalid difficulty. Must be Beginner, Intermediate, or Advanced." };
   }
-  const validDifficulty: typeof DIFFICULTIES[number] = difficulty;
+  const validDifficulty: PodchatDifficulty = difficulty;
 
   const maxUserTurns = b.maxUserTurns;
   if (typeof maxUserTurns !== "number" || maxUserTurns !== DIFFICULTY_TURNS[validDifficulty]) {
