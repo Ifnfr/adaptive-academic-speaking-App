@@ -82,4 +82,32 @@ test.describe("Independent Scrolling Layout", () => {
     await learningPathButton.click();
     await expect(page.locator("header")).toContainText("Learning Path");
   });
+
+  test("should allow active practice setup screen to be scrollable when viewport height is small", async ({ page }) => {
+    // Set viewport with smaller height
+    await page.setViewportSize({ width: 1280, height: 500 });
+
+    // Navigate to Active Practice
+    const activePracticeBtn = page.locator("aside button:has-text(\"Active Session\")");
+    await expect(activePracticeBtn).toBeVisible();
+    await activePracticeBtn.click();
+
+    // Verify setup card is visible
+    const setupCard = page.locator("[data-testid=\"podchat-setup\"]");
+    await expect(setupCard).toBeVisible();
+
+    const mainContainer = page.getByTestId("main-scroll-container");
+    const mainOverflow = await mainContainer.evaluate((el) => window.getComputedStyle(el).overflowY);
+    expect(mainOverflow).toBe("auto");
+
+    // Scroll main container to bottom
+    await mainContainer.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await page.waitForTimeout(100);
+
+    // Verify scroll position updated successfully (confirming it is scrollable and reachable)
+    const scrollTop = await mainContainer.evaluate((el) => el.scrollTop);
+    expect(scrollTop).toBeGreaterThan(0);
+  });
 });
