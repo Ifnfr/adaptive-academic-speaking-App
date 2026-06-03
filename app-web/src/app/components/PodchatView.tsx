@@ -188,7 +188,7 @@ export function PodchatView() {
 
   if (phase === "setup") {
     return (
-      <section className={card} data-testid="podchat-setup">
+      <section className={`${card} overflow-hidden`} data-testid="podchat-setup">
         <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
             Podchat Phase 1
