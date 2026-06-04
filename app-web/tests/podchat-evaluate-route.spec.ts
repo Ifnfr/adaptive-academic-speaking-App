@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
-import { POST } from "../src/app/api/podchat/evaluate/route";
+import { POST, testHooks } from "../src/app/api/podchat/evaluate/route";
 
 const originalClaudeKey = process.env.CLAUDE_API_KEY;
 const originalGeminiKey = process.env.GEMINI_API_KEY;
@@ -163,11 +163,33 @@ function mockDeepSeekResponse(
 
 test.describe("Podchat Evaluate Route", () => {
   test.afterEach(() => {
-    process.env.CLAUDE_API_KEY = originalClaudeKey;
-    process.env.GEMINI_API_KEY = originalGeminiKey;
-    process.env.DEEPSEEK_API_KEY = originalDeepSeekKey;
-    process.env.PODCHAT_AI_PROVIDER = originalProvider;
+    if (originalClaudeKey === undefined) {
+      delete process.env.CLAUDE_API_KEY;
+    } else {
+      process.env.CLAUDE_API_KEY = originalClaudeKey;
+    }
+
+    if (originalGeminiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = originalGeminiKey;
+    }
+
+    if (originalDeepSeekKey === undefined) {
+      delete process.env.DEEPSEEK_API_KEY;
+    } else {
+      process.env.DEEPSEEK_API_KEY = originalDeepSeekKey;
+    }
+
+    if (originalProvider === undefined) {
+      delete process.env.PODCHAT_AI_PROVIDER;
+    } else {
+      process.env.PODCHAT_AI_PROVIDER = originalProvider;
+    }
+
     globalThis.fetch = originalFetch;
+    testHooks.resolveCurrentUserId = null;
+    testHooks.getDbClient = null;
   });
 
   test("valid request returns full structured evaluation", async () => {
@@ -559,5 +581,202 @@ test.describe("Podchat Evaluate Route", () => {
     expect(response.status).toBe(400);
     const data = (await response.json()) as { error: string };
     expect(data.error).toContain("articleBrief");
+  });
+
+  test("successful authenticated evaluation calls savePodchatMemory once and respects privacy boundaries", async () => {
+    mockClaudeResponse(200, JSON.stringify(validEvaluation()));
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+
+    const sessionCalls: unknown[] = [];
+    const turnCalls: unknown[] = [];
+    const errorCalls: unknown[] = [];
+
+    const mockDb = {
+      from(table: string) {
+        if (table === "podchat_sessions") {
+          return {
+            insert(data: unknown) {
+              sessionCalls.push(data);
+              return {
+                select() {
+                  return {
+                    async single() {
+                      return { data: { id: "test-podchat-session-uuid-1" }, error: null };
+                    }
+                  };
+                }
+              };
+            }
+          };
+        }
+        if (table === "podchat_turns") {
+          return {
+            async insert(data: unknown) {
+              turnCalls.push(data);
+              return { error: null };
+            }
+          };
+        }
+        if (table === "learner_error_patterns") {
+          return {
+            async insert(data: unknown) {
+              errorCalls.push(data);
+              return { error: null };
+            }
+          };
+        }
+        return {};
+      }
+    };
+
+    testHooks.getDbClient = () => mockDb;
+
+    const articleContext = {
+      articleTitle: "Economics of Scale",
+      articleBrief: "A brief about scale economies.",
+      speakingTaskTitle: "Speaking Task 1",
+      speakingTaskInstruction: "Speak about scale economies.",
+    };
+
+    const response = await POST(
+      buildRequest({
+        articleContext,
+        durationSeconds: 120,
+        elapsedSeconds: 115,
+      }),
+    );
+
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.memory?.saved).toBe(true);
+
+    expect(sessionCalls).toHaveLength(1);
+    const sessionData = sessionCalls[0] as Record<string, unknown>;
+    expect(sessionData.owner_id).toBe("mocked-clerk-user-123");
+    expect(sessionData.topic).toBe("Technology");
+    expect(sessionData.difficulty).toBe("Intermediate");
+    expect(sessionData.duration_seconds).toBe(120);
+    expect(sessionData.elapsed_seconds).toBe(115);
+    expect(sessionData.provider).toBe("claude");
+
+    expect(turnCalls).toHaveLength(1);
+    const insertedTurns = turnCalls[0] as unknown[];
+    expect(insertedTurns).toHaveLength(2);
+    expect((insertedTurns[0] as Record<string, unknown>).session_id).toBe("test-podchat-session-uuid-1");
+    expect((insertedTurns[0] as Record<string, unknown>).text).toContain("Which technology trend");
+
+    expect(errorCalls).toHaveLength(1);
+    const insertedErrors = errorCalls[0] as unknown[];
+    expect(insertedErrors).toHaveLength(1);
+    expect((insertedErrors[0] as Record<string, unknown>).label).toBe("Incomplete sentence endings");
+
+    const serializedInput = JSON.stringify(sessionData).toLowerCase();
+    for (const forbidden of [
+      "sourceurl",
+      "rawmarkdown",
+      "fullarticletext",
+      "audio",
+      "stt",
+      "tts",
+      "transcript",
+      "rawproviderpayload",
+    ]) {
+      expect(serializedInput).not.toContain(forbidden);
+    }
+  });
+
+  test("missing/unauthenticated user skips memory save and still returns evaluation", async () => {
+    mockClaudeResponse(200, JSON.stringify(validEvaluation()));
+
+    testHooks.resolveCurrentUserId = async () => null;
+
+    let clientWasCreated = false;
+    testHooks.getDbClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({}));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.memory?.saved).toBe(false);
+    expect(clientWasCreated).toBe(false);
+  });
+
+  test("memory save failure still returns evaluation response successfully", async () => {
+    mockClaudeResponse(200, JSON.stringify(validEvaluation()));
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+
+    const mockDb = {
+      from() {
+        return {
+          insert() {
+            return {
+              select() {
+                return {
+                  async single() {
+                    return { data: null, error: { message: "DB Error" } };
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+    };
+
+    testHooks.getDbClient = () => mockDb;
+
+    const response = await POST(buildRequest({}));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.memory?.saved).toBe(false);
+  });
+
+  test("provider failure does not call memory save", async () => {
+    mockClaudeResponse(500, "raw provider failure");
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+    let clientWasCreated = false;
+    testHooks.getDbClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    expect(clientWasCreated).toBe(false);
+  });
+
+  test("malformed provider output does not call memory save", async () => {
+    mockClaudeResponse(200, "not-json");
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+    let clientWasCreated = false;
+    testHooks.getDbClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    expect(clientWasCreated).toBe(false);
+  });
+
+  test("invalid request does not call memory save", async () => {
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+    let clientWasCreated = false;
+    testHooks.getDbClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({ topic: "Culture" }));
+    expect(response.status).toBe(400);
+    expect(clientWasCreated).toBe(false);
   });
 });

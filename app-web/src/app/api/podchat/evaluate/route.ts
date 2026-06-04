@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { savePodchatMemory } from "../../../lib/storage/supabase-podchat-adapter";
 import {
   buildMockPodchatEvaluation,
   callDeepSeek,
@@ -557,6 +559,44 @@ function validateClaudeOutput(
   }
 }
 
+export const testHooks = {
+  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
+  getDbClient: null as (() => unknown) | null,
+};
+
+async function resolveCurrentUserId(): Promise<string | null> {
+  if (testHooks.resolveCurrentUserId) {
+    return testHooks.resolveCurrentUserId();
+  }
+  try {
+    const { auth } = await import("@clerk/nextjs/server");
+    const session = await auth();
+    return session?.userId || null;
+  } catch {
+    return null;
+  }
+}
+
+function getDbClient(): ReturnType<typeof createClient> | null {
+  if (testHooks.getDbClient) {
+    return testHooks.getDbClient() as ReturnType<typeof createClient>;
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  try {
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   let parsedBody: unknown;
   try {
@@ -573,8 +613,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const provider = (process.env.PODCHAT_AI_PROVIDER || "claude").toLowerCase();
+  let provider = (process.env.PODCHAT_AI_PROVIDER || "claude").toLowerCase();
+  if (provider === "undefined") {
+    provider = "claude";
+  }
   const validatedReq = validation.request;
+  let evaluationResponse: PodchatEvaluateResponse;
 
   if (provider === "mock") {
     const text = buildMockPodchatEvaluation(validatedReq);
@@ -586,10 +630,8 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-    return NextResponse.json(outputValidation.response);
-  }
-
-  if (provider === "gemini") {
+    evaluationResponse = outputValidation.response;
+  } else if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -611,7 +653,7 @@ export async function POST(request: Request) {
           { status: 502 }
         );
       }
-      return NextResponse.json(outputValidation.response);
+      evaluationResponse = outputValidation.response;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Unexpected Gemini error: ${message}`);
@@ -620,9 +662,7 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-  }
-
-  if (provider === "deepseek") {
+  } else if (provider === "deepseek") {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -644,7 +684,7 @@ export async function POST(request: Request) {
           { status: 502 }
         );
       }
-      return NextResponse.json(outputValidation.response);
+      evaluationResponse = outputValidation.response;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Unexpected DeepSeek error: ${message}`);
@@ -653,68 +693,115 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-  }
-
-
-  // Claude Default
-  const apiKey = process.env.CLAUDE_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "Provider is not configured. Please try again later." },
-      { status: 503 },
-    );
-  }
-
-  const systemPrompt = buildSystemPrompt(validatedReq);
-  const userPrompt = buildUserPrompt(validatedReq);
-
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-haiku-latest",
-        max_tokens: 400,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Claude API error ${res.status}: ${errText.slice(0, 500)}`);
+  } else {
+    // Claude Default
+    const apiKey = process.env.CLAUDE_API_KEY;
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "Provider request failed. Please try again later." },
-        { status: 502 },
+        { error: "Provider is not configured. Please try again later." },
+        { status: 503 },
       );
     }
 
-    const data = (await res.json()) as {
-      content?: Array<{ type: string; text?: string }>;
-    };
-    const text = data.content?.find((content) => content.type === "text")?.text;
-    const outputValidation = validateClaudeOutput(text ?? "");
-    if (!outputValidation.valid) {
-      console.error(
-        `Claude output validation failed: ${outputValidation.error}. Raw: ${text ?? ""}`,
-      );
+    const systemPrompt = buildSystemPrompt(validatedReq);
+    const userPrompt = buildUserPrompt(validatedReq);
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-3-5-haiku-latest",
+          max_tokens: 400,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`Claude API error ${res.status}: ${errText.slice(0, 500)}`);
+        return NextResponse.json(
+          { error: "Provider request failed. Please try again later." },
+          { status: 502 },
+        );
+      }
+
+      const data = (await res.json()) as {
+        content?: Array<{ type: string; text?: string }>;
+      };
+      const text = data.content?.find((content) => content.type === "text")?.text;
+      const outputValidation = validateClaudeOutput(text ?? "");
+      if (!outputValidation.valid) {
+        console.error(
+          `Claude output validation failed: ${outputValidation.error}. Raw: ${text ?? ""}`,
+        );
+        return NextResponse.json(
+          { error: "Invalid provider response format. Please try again." },
+          { status: 502 },
+        );
+      }
+
+      evaluationResponse = outputValidation.response;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Unexpected route error: ${message}`);
       return NextResponse.json(
-        { error: "Invalid provider response format. Please try again." },
+        { error: "An unexpected error occurred. Please try again." },
         { status: 502 },
       );
     }
-
-    return NextResponse.json(outputValidation.response);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`Unexpected route error: ${message}`);
-    return NextResponse.json(
-      { error: "An unexpected error occurred. Please try again." },
-      { status: 502 },
-    );
   }
+
+  let memorySaved = false;
+  const ownerId = await resolveCurrentUserId();
+  if (ownerId) {
+    const dbClient = getDbClient();
+    if (dbClient) {
+      try {
+        const rawBody = parsedBody as Record<string, unknown>;
+        const durationSeconds = typeof rawBody.durationSeconds === "number" && rawBody.durationSeconds > 0
+          ? rawBody.durationSeconds
+          : 60;
+        const elapsedSeconds = typeof rawBody.elapsedSeconds === "number" && rawBody.elapsedSeconds >= 0
+          ? rawBody.elapsedSeconds
+          : undefined;
+
+        const saveResult = await savePodchatMemory(
+          {
+            ownerId,
+            provider,
+            topic: validatedReq.topic,
+            difficulty: validatedReq.difficulty,
+            articleContext: validatedReq.articleContext,
+            durationSeconds,
+            elapsedSeconds,
+            turns: validatedReq.turns,
+            evaluation: evaluationResponse,
+          },
+          dbClient,
+        );
+
+        if (saveResult.ok) {
+          memorySaved = true;
+        } else {
+          console.error(`savePodchatMemory failed: ${saveResult.error}`);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Error inside savePodchatMemory call: ${msg}`);
+      }
+    }
+  }
+
+  const finalResponse = {
+    ...evaluationResponse,
+    memory: { saved: memorySaved },
+  };
+
+  return NextResponse.json(finalResponse);
 }
