@@ -1,5 +1,6 @@
 
 
+import { useState } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 
@@ -94,6 +95,7 @@ export function ArticlePracticeView({
   onPracticeSpeakingTask,
   onSaveVocabularyCandidate,
 }: ArticlePracticeViewProps) {
+  const [showHelp, setShowHelp] = useState(false);
   const { t } = useI18n(appLanguage);
   const isWordSaved = (word: string): boolean => {
     return savedVocabularyWords.has(word.trim().toLowerCase());
@@ -155,6 +157,87 @@ export function ArticlePracticeView({
             <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
               {t("article.urlTagline")}
             </p>
+
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setShowHelp(!showHelp)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand-teal-ink)] hover:underline focus:outline-none"
+              >
+                <span>{showHelp ? "Hide help" : "What article links work best?"}</span>
+                <svg
+                  className={`h-3 w-3 transition-transform ${showHelp ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showHelp && (
+                <div className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-xs leading-5 text-[var(--brand-ink)]">
+                  <p className="font-semibold text-[var(--brand-ink)]">
+                    What article links work best?
+                  </p>
+                  <p className="mt-1 text-[var(--brand-ink-soft)]">
+                    Use public article pages that can be opened without login or paywall. The article should have readable text directly on the page.
+                  </p>
+
+                  <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="font-semibold text-[var(--brand-muted)] uppercase tracking-wide text-[10px]">
+                        Works best with...
+                      </p>
+                      <ul className="mt-1 list-disc pl-4 space-y-1 text-[var(--brand-ink-soft)]">
+                        <li>News articles</li>
+                        <li>Opinion essays</li>
+                        <li>Educational blogs</li>
+                        <li>Economics or technology explainers</li>
+                        <li>Research/institution blog posts</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-[var(--brand-muted)] uppercase tracking-wide text-[10px]">
+                        Avoid
+                      </p>
+                      <ul className="mt-1 list-disc pl-4 space-y-1 text-[var(--brand-ink-soft)]">
+                        <li>Instagram, TikTok, X/Twitter, LinkedIn posts</li>
+                        <li>YouTube pages</li>
+                        <li>PDF files</li>
+                        <li>Pages requiring login or heavy JavaScript</li>
+                        <li>Heavily paywalled articles</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 border-t border-[var(--brand-border)] pt-3">
+                    <p className="font-semibold text-[var(--brand-muted)] uppercase tracking-wide text-[10px]">
+                      Try public article pages from...
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <span className="font-medium text-[var(--brand-ink)] block">Indonesia:</span>
+                        <p className="mt-0.5 text-[var(--brand-ink-soft)]">
+                          The Conversation Indonesia, Katadata, CNBC Indonesia, Bisnis, Kontan, Kompas.com, Tempo.co, Tirto, Kumparan
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-[var(--brand-ink)] block">International:</span>
+                        <p className="mt-0.5 text-[var(--brand-ink-soft)]">
+                          BBC, Reuters, AP News, The Guardian, Al Jazeera, CNBC, Vox, The Conversation, MIT News, World Bank Blogs, IMF Blog, Our World in Data
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded border border-[var(--brand-coral)]/30 bg-[var(--brand-coral-soft)]/20 p-2.5 text-[var(--brand-coral)]">
+                    <span className="font-semibold block">Caution:</span> Some articles may fail because of paywalls, login walls, scripts, or anti-bot protection. Not every article from these sources will work. If extraction fails, try another public article link.
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="mt-5">
