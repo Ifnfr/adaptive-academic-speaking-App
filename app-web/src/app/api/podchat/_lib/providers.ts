@@ -7,6 +7,17 @@ type PodchatTurn = {
   text: string;
 };
 
+export type PodchatArticleContext = {
+  articleTitle: string;
+  articleBrief: string;
+  mainIdea?: string;
+  keyPoints?: string[];
+  speakingTaskTitle: string;
+  speakingTaskInstruction: string;
+  targetStructure?: string[];
+  sourceDomain?: string;
+};
+
 type MockTurnRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
@@ -15,12 +26,14 @@ type MockTurnRequest = {
   elapsedSeconds: number;
   remainingSeconds: number;
   turns: PodchatTurn[];
+  articleContext?: PodchatArticleContext;
 };
 
 type MockEvaluateRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
   turns: PodchatTurn[];
+  articleContext?: PodchatArticleContext;
 };
 
 function mockDifficultyPhrase(difficulty: PodchatDifficulty): string {
@@ -30,6 +43,13 @@ function mockDifficultyPhrase(difficulty: PodchatDifficulty): string {
 }
 
 export function buildMockPodchatTurn(req: MockTurnRequest): string {
+  if (req.articleContext) {
+    return JSON.stringify({
+      hostText: "Let's connect your answer to the article's main idea.",
+      followUpQuestion: "What is one point from the article that you agree with?",
+    });
+  }
+
   const isClosing = req.remainingSeconds <= 60;
   const finalTurnNote = isClosing
     ? "We are nearly out of time — this is a good moment to wrap up."
@@ -42,7 +62,10 @@ export function buildMockPodchatTurn(req: MockTurnRequest): string {
 }
 
 export function buildMockPodchatEvaluation(req: MockEvaluateRequest): string {
-  const topicLower = req.topic.toLowerCase();
+  const topicLabel = req.articleContext
+    ? `article "${req.articleContext.articleTitle}"`
+    : req.topic.toLowerCase();
+
   const difficultyFocus =
     req.difficulty === "Beginner"
       ? "complete simple sentences"
@@ -51,7 +74,7 @@ export function buildMockPodchatEvaluation(req: MockEvaluateRequest): string {
         : "develop nuance and trade-offs";
 
   return JSON.stringify({
-    summary: `Local mock evaluation: you completed a ${topicLower} Podchat and kept your answers understandable. Your next step is to ${difficultyFocus}.`,
+    summary: `Local mock evaluation: you completed a Podchat about ${topicLabel} and kept your answers understandable. Your next step is to ${difficultyFocus}.`,
     corrections: [
       {
         original: "I think technology help people.",
@@ -61,7 +84,9 @@ export function buildMockPodchatEvaluation(req: MockEvaluateRequest): string {
       },
     ],
     betterSentences: [
-      `One stronger ${req.difficulty.toLowerCase()} answer would connect the ${topicLower} point to a specific example.`,
+      req.articleContext
+        ? `One stronger answer about ${req.articleContext.speakingTaskTitle} would connect to the article's main idea.`
+        : `One stronger ${req.difficulty.toLowerCase()} answer would connect the ${req.topic.toLowerCase()} point to a specific example.`,
     ],
     vocabularySuggestions: [
       {
@@ -80,7 +105,9 @@ export function buildMockPodchatEvaluation(req: MockEvaluateRequest): string {
         practiceFocus: `Add one ${mockDifficultyPhrase(req.difficulty)} before ending each answer.`,
       },
     ],
-    nextPracticeFocus: `In your next Podchat, give one clear claim and one ${mockDifficultyPhrase(req.difficulty)} about ${topicLower}.`,
+    nextPracticeFocus: req.articleContext
+      ? `In your next Podchat, give one clear claim and one ${mockDifficultyPhrase(req.difficulty)} about "${req.articleContext.articleTitle}".`
+      : `In your next Podchat, give one clear claim and one ${mockDifficultyPhrase(req.difficulty)} about ${req.topic.toLowerCase()}.`,
   });
 }
 

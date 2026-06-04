@@ -3,6 +3,7 @@ import {
   buildMockPodchatTurn,
   callDeepSeek,
   callGemini,
+  type PodchatArticleContext,
 } from "../_lib/providers";
 
 export const runtime = "nodejs";
@@ -29,9 +30,142 @@ type PodchatTurnRequest = {
   elapsedSeconds: number;
   remainingSeconds: number;
   turns: PodchatTurn[];
+  articleContext?: PodchatArticleContext;
 };
 
-function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequest } | { valid: false; error: string } {
+function validateArticleContext(
+  context: unknown,
+): { valid: true; value: PodchatArticleContext } | { valid: false; error: string } {
+  if (!context || typeof context !== "object" || Array.isArray(context)) {
+    return { valid: false, error: "articleContext must be an object." };
+  }
+
+  const c = context as Record<string, unknown>;
+  const allowedKeys = [
+    "articleTitle",
+    "articleBrief",
+    "mainIdea",
+    "keyPoints",
+    "speakingTaskTitle",
+    "speakingTaskInstruction",
+    "targetStructure",
+    "sourceDomain",
+  ];
+
+  for (const key of Object.keys(c)) {
+    if (!allowedKeys.includes(key)) {
+      return { valid: false, error: `Unexpected field '${key}' in articleContext.` };
+    }
+  }
+
+  const articleTitle = c.articleTitle;
+  if (typeof articleTitle !== "string" || articleTitle.trim().length === 0) {
+    return { valid: false, error: "articleTitle must be a non-empty string." };
+  }
+  if (articleTitle.length > 160) {
+    return { valid: false, error: "articleTitle must not exceed 160 characters." };
+  }
+
+  const articleBrief = c.articleBrief;
+  if (typeof articleBrief !== "string" || articleBrief.trim().length === 0) {
+    return { valid: false, error: "articleBrief must be a non-empty string." };
+  }
+  if (articleBrief.length > 1200) {
+    return { valid: false, error: "articleBrief must not exceed 1200 characters." };
+  }
+
+  const mainIdea = c.mainIdea;
+  if (mainIdea !== undefined) {
+    if (typeof mainIdea !== "string") {
+      return { valid: false, error: "mainIdea must be a string." };
+    }
+    if (mainIdea.length > 400) {
+      return { valid: false, error: "mainIdea must not exceed 400 characters." };
+    }
+  }
+
+  const keyPoints = c.keyPoints;
+  if (keyPoints !== undefined) {
+    if (!Array.isArray(keyPoints)) {
+      return { valid: false, error: "keyPoints must be an array of strings." };
+    }
+    if (keyPoints.length > 6) {
+      return { valid: false, error: "keyPoints must not exceed 6 items." };
+    }
+    for (let i = 0; i < keyPoints.length; i++) {
+      const kp = keyPoints[i];
+      if (typeof kp !== "string") {
+        return { valid: false, error: `keyPoints at index ${i} must be a string.` };
+      }
+      if (kp.length > 240) {
+        return { valid: false, error: `keyPoints at index ${i} must not exceed 240 characters.` };
+      }
+    }
+  }
+
+  const speakingTaskTitle = c.speakingTaskTitle;
+  if (typeof speakingTaskTitle !== "string" || speakingTaskTitle.trim().length === 0) {
+    return { valid: false, error: "speakingTaskTitle must be a non-empty string." };
+  }
+  if (speakingTaskTitle.length > 160) {
+    return { valid: false, error: "speakingTaskTitle must not exceed 160 characters." };
+  }
+
+  const speakingTaskInstruction = c.speakingTaskInstruction;
+  if (typeof speakingTaskInstruction !== "string" || speakingTaskInstruction.trim().length === 0) {
+    return { valid: false, error: "speakingTaskInstruction must be a non-empty string." };
+  }
+  if (speakingTaskInstruction.length > 800) {
+    return { valid: false, error: "speakingTaskInstruction must not exceed 800 characters." };
+  }
+
+  const targetStructure = c.targetStructure;
+  if (targetStructure !== undefined) {
+    if (!Array.isArray(targetStructure)) {
+      return { valid: false, error: "targetStructure must be an array of strings." };
+    }
+    if (targetStructure.length > 6) {
+      return { valid: false, error: "targetStructure must not exceed 6 items." };
+    }
+    for (let i = 0; i < targetStructure.length; i++) {
+      const ts = targetStructure[i];
+      if (typeof ts !== "string") {
+        return { valid: false, error: `targetStructure at index ${i} must be a string.` };
+      }
+      if (ts.length > 160) {
+        return { valid: false, error: `targetStructure at index ${i} must not exceed 160 characters.` };
+      }
+    }
+  }
+
+  const sourceDomain = c.sourceDomain;
+  if (sourceDomain !== undefined) {
+    if (typeof sourceDomain !== "string") {
+      return { valid: false, error: "sourceDomain must be a string." };
+    }
+    if (sourceDomain.length > 160) {
+      return { valid: false, error: "sourceDomain must not exceed 160 characters." };
+    }
+  }
+
+  return {
+    valid: true,
+    value: {
+      articleTitle: articleTitle.trim(),
+      articleBrief: articleBrief.trim(),
+      mainIdea: mainIdea !== undefined ? mainIdea.trim() : undefined,
+      keyPoints: keyPoints !== undefined ? keyPoints.map((kp) => String(kp).trim()) : undefined,
+      speakingTaskTitle: speakingTaskTitle.trim(),
+      speakingTaskInstruction: speakingTaskInstruction.trim(),
+      targetStructure: targetStructure !== undefined ? targetStructure.map((ts) => String(ts).trim()) : undefined,
+      sourceDomain: sourceDomain !== undefined ? sourceDomain.trim() : undefined,
+    },
+  };
+}
+
+function validateRequest(
+  body: unknown,
+): { valid: true; request: PodchatTurnRequest } | { valid: false; error: string } {
   if (!body || typeof body !== "object") {
     return { valid: false, error: "Invalid request body." };
   }
@@ -44,32 +178,65 @@ function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequ
   const validTopic: PodchatTopic = topic;
 
   const difficulty = b.difficulty;
-  if (difficulty !== "Beginner" && difficulty !== "Intermediate" && difficulty !== "Advanced") {
-    return { valid: false, error: "Invalid difficulty. Must be Beginner, Intermediate, or Advanced." };
+  if (
+    difficulty !== "Beginner" &&
+    difficulty !== "Intermediate" &&
+    difficulty !== "Advanced"
+  ) {
+    return {
+      valid: false,
+      error: "Invalid difficulty. Must be Beginner, Intermediate, or Advanced.",
+    };
   }
   const validDifficulty: PodchatDifficulty = difficulty;
 
   const expectedDuration = DIFFICULTY_DURATION[validDifficulty];
 
   const durationSeconds = b.durationSeconds;
-  if (typeof durationSeconds !== "number" || !Number.isInteger(durationSeconds) || durationSeconds !== expectedDuration) {
-    return { valid: false, error: `Invalid durationSeconds. Must be ${expectedDuration} for ${validDifficulty}.` };
+  if (
+    typeof durationSeconds !== "number" ||
+    !Number.isInteger(durationSeconds) ||
+    durationSeconds !== expectedDuration
+  ) {
+    return {
+      valid: false,
+      error: `Invalid durationSeconds. Must be ${expectedDuration} for ${validDifficulty}.`,
+    };
   }
 
   const elapsedSeconds = b.elapsedSeconds;
-  if (typeof elapsedSeconds !== "number" || !Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > durationSeconds) {
-    return { valid: false, error: "Invalid elapsedSeconds. Must be a non-negative integer <= durationSeconds." };
+  if (
+    typeof elapsedSeconds !== "number" ||
+    !Number.isInteger(elapsedSeconds) ||
+    elapsedSeconds < 0 ||
+    elapsedSeconds > durationSeconds
+  ) {
+    return {
+      valid: false,
+      error: "Invalid elapsedSeconds. Must be a non-negative integer <= durationSeconds.",
+    };
   }
 
   const remainingSeconds = b.remainingSeconds;
-  if (typeof remainingSeconds !== "number" || !Number.isInteger(remainingSeconds) || remainingSeconds < 0 || remainingSeconds > durationSeconds) {
-    return { valid: false, error: "Invalid remainingSeconds. Must be a non-negative integer <= durationSeconds." };
+  if (
+    typeof remainingSeconds !== "number" ||
+    !Number.isInteger(remainingSeconds) ||
+    remainingSeconds < 0 ||
+    remainingSeconds > durationSeconds
+  ) {
+    return {
+      valid: false,
+      error: "Invalid remainingSeconds. Must be a non-negative integer <= durationSeconds.",
+    };
   }
 
   // Allow ±5 second tolerance for clock drift / round-trip latency
   const expectedRemaining = durationSeconds - elapsedSeconds;
   if (Math.abs(remainingSeconds - expectedRemaining) > 5) {
-    return { valid: false, error: "remainingSeconds is inconsistent with durationSeconds - elapsedSeconds (tolerance: 5s)." };
+    return {
+      valid: false,
+      error: "remainingSeconds is inconsistent with durationSeconds - elapsedSeconds (tolerance: 5s).",
+    };
   }
 
   const turnIndex = b.turnIndex;
@@ -112,6 +279,15 @@ function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequ
     return { valid: false, error: "Learner turn count must equal turnIndex + 1." };
   }
 
+  let articleContext: PodchatArticleContext | undefined;
+  if (b.articleContext !== undefined) {
+    const valResult = validateArticleContext(b.articleContext);
+    if (!valResult.valid) {
+      return { valid: false, error: valResult.error };
+    }
+    articleContext = valResult.value;
+  }
+
   return {
     valid: true,
     request: {
@@ -128,23 +304,52 @@ function validateRequest(body: unknown): { valid: true; request: PodchatTurnRequ
           text: (turnObj.text as string).trim(),
         };
       }),
+      articleContext,
     },
   };
 }
 
-function buildSystemPrompt(topic: string, difficulty: string): string {
+function buildSystemPrompt(
+  topic: string,
+  difficulty: string,
+  articleContext?: PodchatArticleContext,
+): string {
   let difficultyGuidance = "";
   if (difficulty === "Beginner") {
-    difficultyGuidance = "- Beginner: Use simple vocabulary and short, easy-to-understand sentences. Ask a very direct and simple question.";
+    difficultyGuidance =
+      "- Beginner: Use simple vocabulary and short, easy-to-understand sentences. Ask a very direct and simple question.";
   } else if (difficulty === "Intermediate") {
-    difficultyGuidance = "- Intermediate: Use standard vocabulary. Ask for a reason or example and ask for a clearer explanation.";
+    difficultyGuidance =
+      "- Intermediate: Use standard vocabulary. Ask for a reason or example and ask for a clearer explanation.";
   } else {
-    difficultyGuidance = "- Advanced: Use rich vocabulary. Ask about trade-offs, counterarguments, implications, or predictions.";
+    difficultyGuidance =
+      "- Advanced: Use rich vocabulary. Ask about trade-offs, counterarguments, implications, or predictions.";
+  }
+
+  let contextGuidance = `The topic of the podcast is: ${topic}`;
+  if (articleContext) {
+    contextGuidance = [
+      `The podcast conversation is based on the article: "${articleContext.articleTitle}" (Domain: ${articleContext.sourceDomain || "unknown"}).`,
+      `Article Brief: ${articleContext.articleBrief}`,
+      articleContext.mainIdea ? `Article Main Idea: ${articleContext.mainIdea}` : "",
+      articleContext.keyPoints ? `Key Points: ${articleContext.keyPoints.join(", ")}` : "",
+      `Speaking Task: "${articleContext.speakingTaskTitle}"`,
+      `Speaking Task Instruction: ${articleContext.speakingTaskInstruction}`,
+      articleContext.targetStructure
+        ? `Target structure: ${articleContext.targetStructure.join(" -> ")}`
+        : "",
+      "",
+      "ROLE & BEHAVIOR CONSTRAINTS FOR ARTICLE CONTEXT:",
+      "- You MUST react and ask questions directly related to the article's ideas and the speaking task instructions, rather than generic topic prompts.",
+      "- Do NOT include long quotes or passages from the article.",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   return [
     "You are a friendly British podcast host for a show called Podchat.",
-    `The topic of the podcast is: ${topic}`,
+    contextGuidance,
     `The learner's speaking difficulty level is: ${difficulty}`,
     "",
     "ROLE & BEHAVIOR CONSTRAINTS:",
@@ -300,7 +505,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const systemPrompt = buildSystemPrompt(validatedReq.topic, validatedReq.difficulty);
+    const systemPrompt = buildSystemPrompt(
+      validatedReq.topic,
+      validatedReq.difficulty,
+      validatedReq.articleContext,
+    );
     const userPrompt = buildUserPrompt(validatedReq);
 
     try {
@@ -333,7 +542,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const systemPrompt = buildSystemPrompt(validatedReq.topic, validatedReq.difficulty);
+    const systemPrompt = buildSystemPrompt(
+      validatedReq.topic,
+      validatedReq.difficulty,
+      validatedReq.articleContext,
+    );
     const userPrompt = buildUserPrompt(validatedReq);
 
     try {
@@ -367,7 +580,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const systemPrompt = buildSystemPrompt(validatedReq.topic, validatedReq.difficulty);
+  const systemPrompt = buildSystemPrompt(
+    validatedReq.topic,
+    validatedReq.difficulty,
+    validatedReq.articleContext,
+  );
   const userPrompt = buildUserPrompt(validatedReq);
 
   try {

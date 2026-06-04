@@ -579,4 +579,106 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(502);
   });
+
+  // ── Article Context Integration and Validation ─────────────────────────────────
+
+  test("valid request with articleContext passes validation and makes it to prompt", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "That is a brilliant starting point about the article.",
+      followUpQuestion: "What is one point from the article you agree with?"
+    }), capture);
+
+    const articleContext = {
+      articleTitle: "The Impact of AI on Study",
+      articleBrief: "AI is reshaping how people work and learn.",
+      mainIdea: "AI helps students learn faster.",
+      keyPoints: ["Speed", "Self-study"],
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful.",
+      targetStructure: ["First", "Second"],
+      sourceDomain: "study.com"
+    };
+
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(200);
+
+    const providerBody = JSON.stringify(capture.body);
+    expect(providerBody).toContain("The Impact of AI on Study");
+    expect(providerBody).toContain("AI is reshaping how people work and learn.");
+    expect(providerBody).toContain("Explain AI use");
+    expect(providerBody).toContain("Speak about why AI is useful.");
+  });
+
+  test("request with mock provider and articleContext returns mock response", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "mock";
+    process.env.CLAUDE_API_KEY = "";
+
+    const articleContext = {
+      articleTitle: "The Impact of AI on Study",
+      articleBrief: "AI is reshaping how people work and learn.",
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful."
+    };
+
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { hostText: string; followUpQuestion: string };
+    expect(data.hostText).toBe("Let's connect your answer to the article's main idea.");
+    expect(data.followUpQuestion).toBe("What is one point from the article that you agree with?");
+  });
+
+  test("malformed articleContext rejects with 400", async () => {
+    // Missing required fields like articleBrief
+    const articleContext = {
+      articleTitle: "AI Study",
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful."
+    };
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("articleBrief");
+  });
+
+  test("articleContext with unexpected fields (e.g., sourceUrl) rejects with 400", async () => {
+    const articleContext = {
+      articleTitle: "AI Study",
+      articleBrief: "Brief description",
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful.",
+      sourceUrl: "https://example.com/source"
+    };
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("Unexpected field");
+  });
+
+  test("overlong articleBrief rejects with 400", async () => {
+    const articleContext = {
+      articleTitle: "AI Study",
+      articleBrief: "a".repeat(1201),
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful."
+    };
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("articleBrief");
+  });
+
+  test("keyPoints too many rejects with 400", async () => {
+    const articleContext = {
+      articleTitle: "AI Study",
+      articleBrief: "Brief description",
+      keyPoints: ["1", "2", "3", "4", "5", "6", "7"],
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful."
+    };
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("keyPoints");
+  });
 });

@@ -3,6 +3,7 @@ import {
   buildMockPodchatEvaluation,
   callDeepSeek,
   callGemini,
+  type PodchatArticleContext,
 } from "../_lib/providers";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ type PodchatEvaluateRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
   turns: PodchatTurn[];
+  articleContext?: PodchatArticleContext;
 };
 
 type PodchatCorrection = {
@@ -56,6 +58,136 @@ type PodchatEvaluateResponse = {
 type ValidationResult =
   | { valid: true; request: PodchatEvaluateRequest }
   | { valid: false; error: string };
+
+function validateArticleContext(
+  context: unknown,
+): { valid: true; value: PodchatArticleContext } | { valid: false; error: string } {
+  if (!context || typeof context !== "object" || Array.isArray(context)) {
+    return { valid: false, error: "articleContext must be an object." };
+  }
+
+  const c = context as Record<string, unknown>;
+  const allowedKeys = [
+    "articleTitle",
+    "articleBrief",
+    "mainIdea",
+    "keyPoints",
+    "speakingTaskTitle",
+    "speakingTaskInstruction",
+    "targetStructure",
+    "sourceDomain",
+  ];
+
+  for (const key of Object.keys(c)) {
+    if (!allowedKeys.includes(key)) {
+      return { valid: false, error: `Unexpected field '${key}' in articleContext.` };
+    }
+  }
+
+  const articleTitle = c.articleTitle;
+  if (typeof articleTitle !== "string" || articleTitle.trim().length === 0) {
+    return { valid: false, error: "articleTitle must be a non-empty string." };
+  }
+  if (articleTitle.length > 160) {
+    return { valid: false, error: "articleTitle must not exceed 160 characters." };
+  }
+
+  const articleBrief = c.articleBrief;
+  if (typeof articleBrief !== "string" || articleBrief.trim().length === 0) {
+    return { valid: false, error: "articleBrief must be a non-empty string." };
+  }
+  if (articleBrief.length > 1200) {
+    return { valid: false, error: "articleBrief must not exceed 1200 characters." };
+  }
+
+  const mainIdea = c.mainIdea;
+  if (mainIdea !== undefined) {
+    if (typeof mainIdea !== "string") {
+      return { valid: false, error: "mainIdea must be a string." };
+    }
+    if (mainIdea.length > 400) {
+      return { valid: false, error: "mainIdea must not exceed 400 characters." };
+    }
+  }
+
+  const keyPoints = c.keyPoints;
+  if (keyPoints !== undefined) {
+    if (!Array.isArray(keyPoints)) {
+      return { valid: false, error: "keyPoints must be an array of strings." };
+    }
+    if (keyPoints.length > 6) {
+      return { valid: false, error: "keyPoints must not exceed 6 items." };
+    }
+    for (let i = 0; i < keyPoints.length; i++) {
+      const kp = keyPoints[i];
+      if (typeof kp !== "string") {
+        return { valid: false, error: `keyPoints at index ${i} must be a string.` };
+      }
+      if (kp.length > 240) {
+        return { valid: false, error: `keyPoints at index ${i} must not exceed 240 characters.` };
+      }
+    }
+  }
+
+  const speakingTaskTitle = c.speakingTaskTitle;
+  if (typeof speakingTaskTitle !== "string" || speakingTaskTitle.trim().length === 0) {
+    return { valid: false, error: "speakingTaskTitle must be a non-empty string." };
+  }
+  if (speakingTaskTitle.length > 160) {
+    return { valid: false, error: "speakingTaskTitle must not exceed 160 characters." };
+  }
+
+  const speakingTaskInstruction = c.speakingTaskInstruction;
+  if (typeof speakingTaskInstruction !== "string" || speakingTaskInstruction.trim().length === 0) {
+    return { valid: false, error: "speakingTaskInstruction must be a non-empty string." };
+  }
+  if (speakingTaskInstruction.length > 800) {
+    return { valid: false, error: "speakingTaskInstruction must not exceed 800 characters." };
+  }
+
+  const targetStructure = c.targetStructure;
+  if (targetStructure !== undefined) {
+    if (!Array.isArray(targetStructure)) {
+      return { valid: false, error: "targetStructure must be an array of strings." };
+    }
+    if (targetStructure.length > 6) {
+      return { valid: false, error: "targetStructure must not exceed 6 items." };
+    }
+    for (let i = 0; i < targetStructure.length; i++) {
+      const ts = targetStructure[i];
+      if (typeof ts !== "string") {
+        return { valid: false, error: `targetStructure at index ${i} must be a string.` };
+      }
+      if (ts.length > 160) {
+        return { valid: false, error: `targetStructure at index ${i} must not exceed 160 characters.` };
+      }
+    }
+  }
+
+  const sourceDomain = c.sourceDomain;
+  if (sourceDomain !== undefined) {
+    if (typeof sourceDomain !== "string") {
+      return { valid: false, error: "sourceDomain must be a string." };
+    }
+    if (sourceDomain.length > 160) {
+      return { valid: false, error: "sourceDomain must not exceed 160 characters." };
+    }
+  }
+
+  return {
+    valid: true,
+    value: {
+      articleTitle: articleTitle.trim(),
+      articleBrief: articleBrief.trim(),
+      mainIdea: mainIdea !== undefined ? mainIdea.trim() : undefined,
+      keyPoints: keyPoints !== undefined ? keyPoints.map((kp) => String(kp).trim()) : undefined,
+      speakingTaskTitle: speakingTaskTitle.trim(),
+      speakingTaskInstruction: speakingTaskInstruction.trim(),
+      targetStructure: targetStructure !== undefined ? targetStructure.map((ts) => String(ts).trim()) : undefined,
+      sourceDomain: sourceDomain !== undefined ? sourceDomain.trim() : undefined,
+    },
+  };
+}
 
 function validateRequest(body: unknown): ValidationResult {
   if (!body || typeof body !== "object") {
@@ -144,12 +276,22 @@ function validateRequest(body: unknown): ValidationResult {
     };
   }
 
+  let articleContext: PodchatArticleContext | undefined;
+  if (b.articleContext !== undefined) {
+    const valResult = validateArticleContext(b.articleContext);
+    if (!valResult.valid) {
+      return { valid: false, error: valResult.error };
+    }
+    articleContext = valResult.value;
+  }
+
   return {
     valid: true,
     request: {
       topic,
       difficulty,
       turns: normalizedTurns,
+      articleContext,
     },
   };
 }
@@ -176,10 +318,29 @@ function difficultyGuidance(difficulty: PodchatDifficulty): string {
 }
 
 function buildSystemPrompt(req: PodchatEvaluateRequest): string {
+  let contextGuidance = `Topic: ${req.topic}`;
+  if (req.articleContext) {
+    const ac = req.articleContext;
+    contextGuidance = [
+      `The conversation was based on the article: "${ac.articleTitle}" (Domain: ${ac.sourceDomain || "unknown"}).`,
+      `Article Brief: ${ac.articleBrief}`,
+      ac.mainIdea ? `Article Main Idea: ${ac.mainIdea}` : "",
+      ac.keyPoints ? `Key Points: ${ac.keyPoints.join(", ")}` : "",
+      `Speaking Task: "${ac.speakingTaskTitle}"`,
+      `Speaking Task Instruction: ${ac.speakingTaskInstruction}`,
+      ac.targetStructure ? `Target structure: ${ac.targetStructure.join(" -> ")}` : "",
+      "",
+      "EVALUATION CRITERIA FOR ARTICLE CONTEXT:",
+      "- Evaluate how well the learner's responses address the specific article's ideas and speaking task instructions, as well as general academic speaking criteria.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   return [
     "You are an academic speaking evaluator for Podchat.",
     "Evaluate only the transcript text from a completed Podchat conversation.",
-    `Topic: ${req.topic}`,
+    contextGuidance,
     `Difficulty: ${req.difficulty}`,
     "",
     "EVALUATION BEHAVIOR:",

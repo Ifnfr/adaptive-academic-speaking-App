@@ -501,4 +501,63 @@ test.describe("Podchat Evaluate Route", () => {
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(502);
   });
+
+  // ── Article Context Integration and Validation ─────────────────────────────────
+
+  test("valid request with articleContext passes validation and makes it to prompt", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify(validEvaluation()), capture);
+
+    const articleContext = {
+      articleTitle: "The Impact of AI on Study",
+      articleBrief: "AI is reshaping how people work and learn.",
+      mainIdea: "AI helps students learn faster.",
+      keyPoints: ["Speed", "Self-study"],
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful.",
+      targetStructure: ["First", "Second"],
+      sourceDomain: "study.com"
+    };
+
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(200);
+
+    const providerBody = JSON.stringify(capture.body);
+    expect(providerBody).toContain("The Impact of AI on Study");
+    expect(providerBody).toContain("AI is reshaping how people work and learn.");
+    expect(providerBody).toContain("Explain AI use");
+    expect(providerBody).toContain("Speak about why AI is useful.");
+  });
+
+  test("request with mock provider and articleContext returns mock response", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "mock";
+    process.env.CLAUDE_API_KEY = "";
+
+    const articleContext = {
+      articleTitle: "The Impact of AI on Study",
+      articleBrief: "AI is reshaping how people work and learn.",
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful."
+    };
+
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as ReturnType<typeof validEvaluation>;
+    expect(data.summary).toContain("The Impact of AI on Study");
+    expect(data.betterSentences[0]).toContain("Explain AI use");
+    expect(data.nextPracticeFocus).toContain("The Impact of AI on Study");
+  });
+
+  test("malformed articleContext rejects with 400", async () => {
+    // Missing required fields like articleBrief
+    const articleContext = {
+      articleTitle: "AI Study",
+      speakingTaskTitle: "Explain AI use",
+      speakingTaskInstruction: "Speak about why AI is useful."
+    };
+    const response = await POST(buildRequest({ articleContext }));
+    expect(response.status).toBe(400);
+    const data = (await response.json()) as { error: string };
+    expect(data.error).toContain("articleBrief");
+  });
 });
