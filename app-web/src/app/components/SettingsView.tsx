@@ -560,6 +560,31 @@ export function SettingsView({
 }: SettingsViewProps) {
   const { t } = useI18n(appLanguage);
 
+  const [providerStatus, setProviderStatus] = useState<{
+    claude: boolean;
+    gemini: boolean;
+    deepseek: boolean;
+  } | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  async function handleCheckStatus() {
+    setIsCheckingStatus(true);
+    setStatusError(null);
+    try {
+      const res = await fetch("/api/provider-status");
+      if (!res.ok) {
+        throw new Error("Failed to check status");
+      }
+      const data = await res.json();
+      setProviderStatus(data);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "Error checking status");
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  }
+
   const mainSettingsBlock = !isSignedIn ? (
     <SignedOutSettings t={t} />
   ) : (
@@ -594,7 +619,7 @@ export function SettingsView({
           </p>
         </div>
         <div className={cardBody}>
-          <div className="max-w-xs">
+          <div className="max-w-xs mb-6">
             <label className="flex flex-col gap-1.5 font-sans">
               <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
                 AI Provider
@@ -610,6 +635,49 @@ export function SettingsView({
                 <option value="DeepSeek">DeepSeek</option>
               </select>
             </label>
+          </div>
+
+          <div className="border-t border-[var(--brand-border)] pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-[var(--brand-ink)]">
+                Server Provider Status
+              </p>
+              <button
+                type="button"
+                onClick={handleCheckStatus}
+                disabled={isCheckingStatus}
+                className="rounded-lg bg-[var(--brand-surface-2)] border border-[var(--brand-border)] px-3 py-1.5 text-xs font-medium text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] disabled:opacity-50 transition-colors"
+              >
+                {isCheckingStatus ? "Checking..." : "Check Status"}
+              </button>
+            </div>
+            
+            {statusError && (
+              <p className="text-xs text-red-600 mb-3 font-sans">{statusError}</p>
+            )}
+            
+            {providerStatus && (
+              <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--brand-ink)]">Claude</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.claude ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.claude ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--brand-ink)]">Gemini</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.gemini ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.gemini ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--brand-ink)]">DeepSeek</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.deepseek ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.deepseek ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
