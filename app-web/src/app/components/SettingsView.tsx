@@ -34,6 +34,8 @@ export type SettingsViewProps = {
   profileSaveError: string | null;
   onSavePreferences: (patch: UserProfilePreferencesPatch) => void;
   onAppLanguageChange?: (language: AppLanguage) => void;
+  defaultAiProvider?: string;
+  onDefaultAiProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -553,18 +555,14 @@ export function SettingsView({
   profileSaveError,
   onSavePreferences,
   onAppLanguageChange,
+  defaultAiProvider = "Claude",
+  onDefaultAiProviderChange,
 }: SettingsViewProps) {
   const { t } = useI18n(appLanguage);
 
-  if (!isSignedIn) {
-    return (
-      <SignedOutSettings
-        t={t}
-      />
-    );
-  }
-
-  return (
+  const mainSettingsBlock = !isSignedIn ? (
+    <SignedOutSettings t={t} />
+  ) : (
     <SignedInSettings
       key={profile?.ownerId ?? "loading"}
       profile={profile}
@@ -576,5 +574,45 @@ export function SettingsView({
       t={t}
       appLanguage={appLanguage}
     />
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      {mainSettingsBlock}
+
+      {/* Global AI Provider Card */}
+      <div className={card}>
+        <div className={cardHeader}>
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+            AI Configuration
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+            Default AI Provider
+          </h2>
+          <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans">
+            Choose which server-side AI provider supported features should use. API keys stay on the server and are never stored in the browser.
+          </p>
+        </div>
+        <div className={cardBody}>
+          <div className="max-w-xs">
+            <label className="flex flex-col gap-1.5 font-sans">
+              <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                AI Provider
+              </span>
+              <select
+                id="default-ai-provider-select"
+                value={defaultAiProvider}
+                onChange={(e) => onDefaultAiProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+              >
+                <option value="Claude">Claude</option>
+                <option value="Gemini">Gemini</option>
+                <option value="DeepSeek">DeepSeek</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

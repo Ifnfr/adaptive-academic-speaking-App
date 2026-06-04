@@ -946,4 +946,103 @@ test.describe("MVP Smoke Flows", () => {
       expect(evalSerialized).not.toContain(forbidden);
     }
   });
+
+  test("G. Global AI Provider Setting flow", async ({ page }) => {
+    // 1. App loads settings page and renders Default AI Provider
+    await page.goto("/");
+    await page.click("button:has-text(\"Settings\")");
+    await expect(page.locator("h2:has-text(\"Default AI Provider\")")).toBeVisible();
+    await expect(page.locator("#default-ai-provider-select")).toBeVisible();
+    await expect(page.locator("#default-ai-provider-select")).toHaveValue("Claude");
+
+    // 2. Dropdown includes Claude, Gemini, DeepSeek, and NOT Mock
+    const options = await page.locator("#default-ai-provider-select option").allTextContents();
+    expect(options).toEqual(["Claude", "Gemini", "DeepSeek"]);
+    expect(options).not.toContain("Mock");
+
+    // 3. No API key input appears
+    await expect(page.locator("input[placeholder*=\"API Key\"], input[placeholder*=\"api-key\"]")).toHaveCount(0);
+
+    // 4. User can select Gemini
+    await page.locator("#default-ai-provider-select").selectOption("Gemini");
+    await expect(page.locator("#default-ai-provider-select")).toHaveValue("Gemini");
+
+    // 5. LocalStorage persists it and does not contain API keys
+    const storageVal = await page.evaluate(() => JSON.stringify(localStorage));
+    expect(storageVal).toContain('"defaultAiProvider":"Gemini"');
+    expect(storageVal).not.toMatch(/api_key|apikey|secret|token/i);
+
+    // 6. Refresh page and confirm selection persists
+    await page.reload();
+    await page.click("button:has-text(\"Settings\")");
+    await expect(page.locator("#default-ai-provider-select")).toHaveValue("Gemini");
+
+    // 7. Test unknown localStorage value is ignored/sanitized
+    await page.evaluate(() => {
+      localStorage.setItem("defaultAiProvider", "InvalidProviderValue");
+    });
+    await page.reload();
+    await page.click("button:has-text(\"Settings\")");
+    // Should fallback to default (Claude)
+    await expect(page.locator("#default-ai-provider-select")).toHaveValue("Claude");
+
+    // 8. Test localStorage value "Mock" sanitizes to Claude
+    await page.evaluate(() => {
+      localStorage.setItem("defaultAiProvider", "Mock");
+    });
+    await page.reload();
+    await page.click("button:has-text(\"Settings\")");
+    await expect(page.locator("#default-ai-provider-select")).toHaveValue("Claude");
+  });
+
+  test("H. AI requests use the selected global AI provider", async ({ page }) => {
+    const articlePayloads: unknown[] = [];
+    const evaluatePayloads: unknown[] = [];
+
+    // Intercept article-practice API
+    await page.route("**/api/article-practice", async (route) => {
+      articlePayloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(articlePracticeResponse()),
+      });
+    });
+
+    // Intercept article-essay-evaluate API
+    await page.route("**/api/article-essay-evaluate", async (route) => {
+      evaluatePayloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(articleEssayEvaluationResponse()),
+      });
+    });
+
+    await page.goto("/");
+    await page.click("button:has-text(\"Settings\")");
+    // Change to Gemini
+    await page.locator("#default-ai-provider-select").selectOption("Gemini");
+
+    // Navigate to Article Practice
+    await page.click("button:has-text(\"Article Practice\")");
+    await page.locator("#article-url").fill("https://example.com/test-article-settings");
+    await page.click("button:has-text(\"Generate Practice\")");
+
+    // Verify Article Practice payload used Gemini
+    expect(articlePayloads).toHaveLength(1);
+    expect((articlePayloads[0] as { provider: string }).provider).toBe("Gemini");
+
+    // Fill answers and evaluate
+    for (const question of articleEssayQuestions()) {
+      await page
+        .locator(`#article-essay-answer-${question.id}`)
+        .fill(`Answer for ${question.id}.`);
+    }
+    await page.getByRole("button", { name: "Evaluate My Writing" }).click();
+
+    // Verify Article Essay Evaluation payload used Gemini
+    expect(evaluatePayloads).toHaveLength(1);
+    expect((evaluatePayloads[0] as { provider: string }).provider).toBe("Gemini");
+  });
 });

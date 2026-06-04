@@ -401,8 +401,35 @@ export default function Home() {
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
   const [mode, setMode] = useState<Mode>("Fluency Sprint");
-  const [aiProvider] = useState<AIProvider>("Claude");
+  const [aiProvider, setAiProvider] = useState<AIProvider>("Claude");
   const [target, setTarget] = useState("");
+
+  // --- Global AI Provider Setting ---
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem("defaultAiProvider");
+        if (
+          stored === "Claude" ||
+          stored === "Gemini" ||
+          stored === "DeepSeek"
+        ) {
+          setAiProvider(stored);
+        } else if (stored === "Mock") {
+          setAiProvider("Claude");
+          window.localStorage.setItem("defaultAiProvider", "Claude");
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleDefaultAiProviderChange = (provider: AIProvider) => {
+    setAiProvider(provider);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("defaultAiProvider", provider);
+    }
+  };
 
   // --- Weekly Review Agent state ---
   const [weeklyReviewResult, setWeeklyReviewResult] =
@@ -1966,6 +1993,8 @@ export default function Home() {
                   language,
                 });
               }}
+              defaultAiProvider={aiProvider}
+              onDefaultAiProviderChange={handleDefaultAiProviderChange}
             />
           )}
 
