@@ -1819,6 +1819,13 @@ export default function Home() {
               provider={aiProvider}
               level={level}
               mode={mode}
+              feedbackLanguage={
+                normalizeFeedbackLanguage(ownerProfile?.feedbackLanguage) ===
+                "id"
+                  ? "Indonesian"
+                  : "English"
+              }
+              targetLanguage="English"
               articlePracticeResult={articlePracticeResult}
               articlePracticeLoading={articlePracticeLoading}
               articlePracticeError={articlePracticeError}

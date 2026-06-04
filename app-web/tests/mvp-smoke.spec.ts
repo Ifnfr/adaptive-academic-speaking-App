@@ -1,5 +1,96 @@
 import { test, expect } from "@playwright/test";
 
+function articleEssayQuestions() {
+  return [
+    {
+      id: "q1",
+      question: "What is the main idea of the article?",
+      expectedFocus: "Summarize the central argument using article evidence.",
+      targetSkill: "main_idea",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q2",
+      question: "Which supporting detail best explains the article's argument?",
+      expectedFocus: "Use one specific detail from the article.",
+      targetSkill: "supporting_detail",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q3",
+      question: "What can readers infer from the article's evidence?",
+      expectedFocus: "Make a reasonable inference based on the article.",
+      targetSkill: "inference",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q4",
+      question: "How is one key phrase used in the article's context?",
+      expectedFocus: "Explain a word or phrase using context clues.",
+      targetSkill: "vocabulary_in_context",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q5",
+      question: "What critical response follows from the article?",
+      expectedFocus: "Give a thoughtful response connected to the article.",
+      targetSkill: "critical_response",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+  ];
+}
+
+function articlePracticeResponse() {
+  return {
+    sourceTitle: "Test Article Title",
+    sourceUrl: "https://example.com/test-article",
+    sourceDomain: "example.com",
+    articleBrief: "Brief summary.",
+    mainIdea: "Main idea.",
+    keyPoints: ["Point 1", "Point 2"],
+    usefulVocabulary: [
+      { word: "synthesize", meaning: "combine", whyUseful: "academic" },
+    ],
+    comprehensionChecks: ["Check 1"],
+    essayQuestions: articleEssayQuestions(),
+    speakingTask: {
+      title: "Synthesize the Findings",
+      instruction: "Explain how synthesis works.",
+      timeLimitSeconds: 120,
+      targetStructure: ["Structure 1", "Structure 2"],
+    },
+    followUpQuestions: ["Follow up"],
+    warnings: [],
+  };
+}
+
+function articleEssayEvaluationResponse() {
+  return {
+    overallFeedback: "Your writing shows clear comprehension.",
+    perQuestionFeedback: articleEssayQuestions().map((question) => ({
+      questionId: question.id,
+      comprehension: "You understood the article point.",
+      topicRelevance: "The answer stays connected to the article.",
+      grammarNotes: ["Use clearer verb agreement."],
+      wordFormOrPartOfSpeechNotes: ["Use the noun form in this sentence."],
+      sentenceStructureNotes: ["Join related ideas with a connector."],
+      coherenceNotes: ["Keep the explanation in one clear sequence."],
+      vocabularyNotes: ["Choose a more precise academic verb."],
+      improvedAnswerExample:
+        "The article suggests this issue matters because it affects learners and institutions.",
+    })),
+    recurringErrors: [
+      {
+        label: "Verb agreement",
+        explanation: "Some verbs did not match the subject.",
+        exampleFromUser: "Technology help students.",
+        correction: "Technology helps students.",
+      },
+    ],
+    nextWritingFocus: "Use one claim, one article detail, and one explanation.",
+  };
+}
+
 test.describe("MVP Smoke Flows", () => {
   // Test A: App loads
   test("A. App loads and renders sidebar/navigation", async ({ page }) => {
@@ -279,6 +370,166 @@ test.describe("MVP Smoke Flows", () => {
     await expect(
       page.locator("button:has-text(\"Generate Practice\")"),
     ).toBeVisible();
+    await page.getByRole("button", { name: "What article links work best?" }).click();
+    await expect(page.getByText("Try public article pages from...")).toBeVisible();
+  });
+
+  test("D2. Article Writing Practice renders, validates, and evaluates compact payload", async ({
+    page,
+  }) => {
+    const evaluatePayloads: unknown[] = [];
+
+    await page.route("**/api/article-practice", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(articlePracticeResponse()),
+      });
+    });
+
+    await page.route("**/api/article-essay-evaluate", async (route) => {
+      evaluatePayloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(articleEssayEvaluationResponse()),
+      });
+    });
+
+    await page.goto("/");
+    await page.click("button:has-text(\"Article Practice\")");
+    await page.locator("#article-url").fill("https://example.com/test-article");
+    await page.click("button:has-text(\"Generate Practice\")");
+
+    const writingPractice = page.getByTestId("article-writing-practice");
+    await expect(writingPractice).toBeVisible();
+    await expect(page.getByTestId("article-essay-question-card")).toHaveCount(5);
+    await expect(writingPractice.getByText("Main idea", { exact: true })).toBeVisible();
+    await expect(
+      writingPractice.getByText("Supporting detail", { exact: true }),
+    ).toBeVisible();
+    await expect(writingPractice.getByText("Inference", { exact: true })).toBeVisible();
+    await expect(
+      writingPractice.getByText("Vocabulary in context", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      writingPractice.getByText("Critical response", { exact: true }),
+    ).toBeVisible();
+
+    const submitButton = page.getByRole("button", {
+      name: "Evaluate My Writing",
+    });
+    await expect(submitButton).toBeDisabled();
+
+    for (const question of articleEssayQuestions()) {
+      await page
+        .locator(`#article-essay-answer-${question.id}`)
+        .fill(`Answer for ${question.id} using article evidence.`);
+    }
+    await expect(submitButton).toBeEnabled();
+
+    await page.locator("#article-essay-answer-q1").fill("x".repeat(1201));
+    await expect(page.getByText("1201/1200 characters")).toBeVisible();
+    await expect(page.getByText("Answer must be 1200 characters or fewer.")).toBeVisible();
+    await expect(submitButton).toBeDisabled();
+
+    await page
+      .locator("#article-essay-answer-q1")
+      .fill("Answer for q1 using article evidence.");
+    await expect(submitButton).toBeEnabled();
+    await submitButton.click();
+
+    const evaluationPanel = page.getByTestId("article-writing-evaluation");
+    await expect(evaluationPanel).toBeVisible();
+    await expect(page.getByText("Your writing shows clear comprehension.")).toBeVisible();
+    await expect(evaluationPanel).toContainText("Comprehension");
+    await expect(evaluationPanel).toContainText("Topic relevance / substance");
+    await expect(evaluationPanel).toContainText("Grammar notes");
+    await expect(evaluationPanel).toContainText("Word form / part of speech notes");
+    await expect(evaluationPanel).toContainText("Sentence structure notes");
+    await expect(evaluationPanel).toContainText("Coherence notes");
+    await expect(evaluationPanel).toContainText("Vocabulary / word choice notes");
+    await expect(evaluationPanel).toContainText("Improved answer example");
+    await expect(evaluationPanel).toContainText("Verb agreement");
+    await expect(evaluationPanel).toContainText(
+      "Use one claim, one article detail, and one explanation.",
+    );
+    await expect(evaluationPanel).not.toContainText("Score");
+
+    expect(evaluatePayloads).toHaveLength(1);
+    const payload = evaluatePayloads[0] as Record<string, unknown>;
+    expect(payload.provider).toBe("Claude");
+    expect(payload.level).toBe("Intermediate");
+    expect(payload.feedbackLanguage).toBe("English");
+    expect(payload.targetLanguage).toBe("English");
+    expect(payload.articleContext).toEqual({
+      sourceTitle: "Test Article Title",
+      articleBrief: "Brief summary.",
+      mainIdea: "Main idea.",
+      keyPoints: ["Point 1", "Point 2"],
+    });
+    expect(payload.questions).toEqual(articleEssayQuestions());
+    expect(payload.answers).toEqual(
+      articleEssayQuestions().map((question) => ({
+        questionId: question.id,
+        answer: `Answer for ${question.id} using article evidence.`,
+      })),
+    );
+
+    const serializedPayload = JSON.stringify(payload).toLowerCase();
+    for (const forbidden of [
+      "fullarticletext",
+      "sourceurl",
+      "useridentity",
+      "storagepath",
+      "audio",
+      "stt",
+      "tts",
+      "transcript",
+      "files",
+    ]) {
+      expect(serializedPayload).not.toContain(forbidden);
+    }
+  });
+
+  test("D3. Article Writing Practice failure shows safe error and preserves answers", async ({
+    page,
+  }) => {
+    await page.route("**/api/article-practice", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(articlePracticeResponse()),
+      });
+    });
+
+    await page.route("**/api/article-essay-evaluate", async (route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "raw provider failure" }),
+      });
+    });
+
+    await page.goto("/");
+    await page.click("button:has-text(\"Article Practice\")");
+    await page.locator("#article-url").fill("https://example.com/test-article");
+    await page.click("button:has-text(\"Generate Practice\")");
+
+    for (const question of articleEssayQuestions()) {
+      await page
+        .locator(`#article-essay-answer-${question.id}`)
+        .fill(`Saved answer for ${question.id}.`);
+    }
+
+    await page.getByRole("button", { name: "Evaluate My Writing" }).click();
+
+    await expect(
+      page.getByText("Writing evaluation failed. Please try again."),
+    ).toBeVisible();
+    await expect(page.locator("#article-essay-answer-q1")).toHaveValue(
+      "Saved answer for q1.",
+    );
   });
 
   // Test E: Gamification UI
@@ -300,26 +551,7 @@ test.describe("MVP Smoke Flows", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          sourceTitle: "Test Article Title",
-          sourceUrl: "https://example.com/test-article",
-          sourceDomain: "example.com",
-          articleBrief: "Brief summary.",
-          mainIdea: "Main idea.",
-          keyPoints: ["Point 1", "Point 2"],
-          usefulVocabulary: [
-            { word: "synthesize", meaning: "combine", whyUseful: "academic" },
-          ],
-          comprehensionChecks: ["Check 1"],
-          speakingTask: {
-            title: "Synthesize the Findings",
-            instruction: "Explain how synthesis works.",
-            timeLimitSeconds: 120,
-            targetStructure: ["Structure 1", "Structure 2"],
-          },
-          followUpQuestions: ["Follow up"],
-          warnings: [],
-        }),
+        body: JSON.stringify(articlePracticeResponse()),
       });
     });
 
