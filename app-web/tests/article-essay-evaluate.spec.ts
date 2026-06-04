@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
-import { POST } from "../src/app/api/article-essay-evaluate/route";
+import { POST, testHooks } from "../src/app/api/article-essay-evaluate/route";
 
 const originalClaudeKey = process.env.CLAUDE_API_KEY;
 const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
@@ -154,6 +154,8 @@ test.describe("Article Essay Evaluate Route", () => {
     process.env.DEEPSEEK_API_KEY = originalDeepSeekKey;
     process.env.GEMINI_API_KEY = originalGeminiKey;
     globalThis.fetch = originalFetch;
+    testHooks.resolveCurrentUserId = null;
+    testHooks.getSupabaseClient = null;
   });
 
   test("valid request returns structured evaluation", async () => {
@@ -280,8 +282,217 @@ test.describe("Article Essay Evaluate Route", () => {
     );
   });
 
-  test("route source contains no persistence, user audio capture, or file handling behavior", () => {
+  test("route source contains no direct database write queries, user audio capture, or file handling behavior", () => {
     const source = readFileSync("src/app/api/article-essay-evaluate/route.ts", "utf8");
-    expect(source).not.toMatch(/createClient|from\(|insert\(|upsert\(|localStorage|MediaRecorder|getUserMedia|writeFile|readFile/i);
+    expect(source).not.toMatch(/from\(|insert\(|upsert\(|localStorage|MediaRecorder|getUserMedia|writeFile|readFile/i);
+  });
+
+  test("successful authenticated evaluation calls saveArticleWritingMemory and respects privacy boundaries", async () => {
+    mockDeepSeekResponse(200, JSON.stringify(validEvaluation()));
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+
+    interface MockSessionData {
+      owner_id: string;
+      level: string;
+      feedback_language: string;
+      provider: string;
+      article_context: {
+        sourceTitle: string;
+      };
+      questions: unknown[];
+    }
+    interface MockAnswerRow {
+      session_id: string;
+      owner_id: string;
+    }
+    interface MockErrorRow {
+      owner_id: string;
+      label: string;
+    }
+
+    const sessionCalls: MockSessionData[] = [];
+    const answerCalls: MockAnswerRow[][] = [];
+    const errorCalls: MockErrorRow[][] = [];
+
+    const mockSupabase = {
+      from(table: string) {
+        if (table === "article_writing_sessions") {
+          return {
+            insert(data: unknown) {
+              sessionCalls.push(data as MockSessionData);
+              return {
+                select() {
+                  return {
+                    async single() {
+                      return { data: { id: "test-session-uuid-1" }, error: null };
+                    }
+                  };
+                }
+              };
+            }
+          };
+        }
+        if (table === "article_writing_answers") {
+          return {
+            async insert(data: unknown) {
+              answerCalls.push(data as MockAnswerRow[]);
+              return { error: null };
+            }
+          };
+        }
+        if (table === "learner_error_patterns") {
+          return {
+            async insert(data: unknown) {
+              errorCalls.push(data as MockErrorRow[]);
+              return { error: null };
+            }
+          };
+        }
+        return {};
+      }
+    };
+
+    testHooks.getSupabaseClient = () => mockSupabase as unknown;
+
+    const response = await POST(buildRequest({}));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.memory?.saved).toBe(true);
+
+    // Verify session save was called once
+    expect(sessionCalls).toHaveLength(1);
+    const sessionData = sessionCalls[0];
+    expect(sessionData.owner_id).toBe("mocked-clerk-user-123");
+    expect(sessionData.level).toBe("Intermediate");
+    expect(sessionData.feedback_language).toBe("English");
+    expect(sessionData.provider).toBe("DeepSeek");
+    expect(sessionData.article_context.sourceTitle).toBe("Test Article");
+
+    // Verify questions and answers
+    expect(sessionData.questions).toHaveLength(5);
+    expect(answerCalls).toHaveLength(1);
+    expect(answerCalls[0]).toHaveLength(5);
+    expect(answerCalls[0][0].session_id).toBe("test-session-uuid-1");
+    expect(answerCalls[0][0].owner_id).toBe("mocked-clerk-user-123");
+
+    // Verify errors normalized
+    expect(errorCalls).toHaveLength(1);
+    expect(errorCalls[0]).toHaveLength(1);
+    expect(errorCalls[0][0].owner_id).toBe("mocked-clerk-user-123");
+    expect(errorCalls[0][0].label).toBe("Short explanations");
+
+    // Verify privacy boundaries (no forbidden fields passed)
+    const serializedInput = JSON.stringify(sessionData).toLowerCase();
+    for (const forbidden of [
+      "sourceurl",
+      "rawmarkdown",
+      "fullarticletext",
+      "audio",
+      "stt",
+      "tts",
+      "transcript",
+      "rawproviderpayload",
+    ]) {
+      expect(serializedInput).not.toContain(forbidden);
+    }
+  });
+
+  test("missing/unauthenticated user skips memory save and still returns evaluation", async () => {
+    mockDeepSeekResponse(200, JSON.stringify(validEvaluation()));
+
+    testHooks.resolveCurrentUserId = async () => null; // unauthenticated
+
+    let clientWasCreated = false;
+    testHooks.getSupabaseClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({}));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.overallFeedback).toContain("comprehension");
+    expect(data.memory?.saved).toBe(false);
+    expect(clientWasCreated).toBe(false); // shouldn't even call getSupabaseClient
+  });
+
+  test("memory save failure still returns evaluation response successfully", async () => {
+    mockDeepSeekResponse(200, JSON.stringify(validEvaluation()));
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+
+    // Mock client where session insert fails
+    const mockSupabase = {
+      from() {
+        return {
+          insert() {
+            return {
+              select() {
+                return {
+                  async single() {
+                    return { data: null, error: { message: "DB Error" } };
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+    };
+
+    testHooks.getSupabaseClient = () => mockSupabase;
+
+    const response = await POST(buildRequest({}));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.overallFeedback).toContain("comprehension");
+    expect(data.memory?.saved).toBe(false); // save failed, but evaluation succeeds
+  });
+
+  test("provider failure does not call memory save", async () => {
+    mockDeepSeekResponse(500, "raw provider failure");
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+    let clientWasCreated = false;
+    testHooks.getSupabaseClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    expect(clientWasCreated).toBe(false);
+  });
+
+  test("malformed provider output does not call memory save", async () => {
+    mockDeepSeekResponse(200, "not-json");
+
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+    let clientWasCreated = false;
+    testHooks.getSupabaseClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    expect(clientWasCreated).toBe(false);
+  });
+
+  test("invalid request does not call memory save", async () => {
+    testHooks.resolveCurrentUserId = async () => "mocked-clerk-user-123";
+    let clientWasCreated = false;
+    testHooks.getSupabaseClient = () => {
+      clientWasCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({ answers: [] })); // invalid answer count
+    expect(response.status).toBe(400);
+    expect(clientWasCreated).toBe(false);
   });
 });

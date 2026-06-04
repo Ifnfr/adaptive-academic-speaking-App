@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { saveArticleWritingMemory } from "../../lib/storage/supabase-article-writing-adapter";
 
 export const runtime = "nodejs";
 
@@ -722,6 +724,44 @@ function validateProviderOutput(
   }
 }
 
+export const testHooks = {
+  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
+  getSupabaseClient: null as (() => unknown) | null,
+};
+
+async function resolveCurrentUserId(): Promise<string | null> {
+  if (testHooks.resolveCurrentUserId) {
+    return testHooks.resolveCurrentUserId();
+  }
+  try {
+    const { auth } = await import("@clerk/nextjs/server");
+    const session = await auth();
+    return session?.userId || null;
+  } catch {
+    return null;
+  }
+}
+
+function getSupabaseClient() {
+  if (testHooks.getSupabaseClient) {
+    return testHooks.getSupabaseClient() as ReturnType<typeof createClient> | null;
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  try {
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   let parsed: unknown;
   try {
@@ -780,5 +820,41 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(outputValidation.response);
+  let memorySaved = false;
+  const ownerId = await resolveCurrentUserId();
+  if (ownerId) {
+    const supabaseClient = getSupabaseClient();
+    if (supabaseClient) {
+      try {
+        const saveResult = await saveArticleWritingMemory(
+          {
+            ownerId,
+            provider: validated.provider,
+            level: validated.level,
+            feedbackLanguage: validated.feedbackLanguage,
+            articleContext: validated.articleContext,
+            questions: validated.questions,
+            answers: validated.answers,
+            evaluation: outputValidation.response,
+          },
+          supabaseClient,
+        );
+        if (saveResult.ok) {
+          memorySaved = true;
+        } else {
+          console.error(`saveArticleWritingMemory failed: ${saveResult.error}`);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Error inside saveArticleWritingMemory call: ${msg}`);
+      }
+    }
+  }
+
+  const finalResponse = {
+    ...outputValidation.response,
+    memory: { saved: memorySaved },
+  };
+
+  return NextResponse.json(finalResponse);
 }
