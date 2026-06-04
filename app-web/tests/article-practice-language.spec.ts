@@ -6,6 +6,46 @@ import { getArticlePracticeRequestHash } from "../src/app/lib/cache/ai-idempoten
 const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
 const originalFetch = globalThis.fetch;
 
+function validEssayQuestions() {
+  return [
+    {
+      id: "q1",
+      question: "What is the main idea of the article?",
+      expectedFocus: "Summarize the central argument using article evidence.",
+      targetSkill: "main_idea",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q2",
+      question: "Which supporting detail best explains the article's argument?",
+      expectedFocus: "Identify and explain one important supporting detail.",
+      targetSkill: "supporting_detail",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q3",
+      question: "What can readers infer from the article's evidence?",
+      expectedFocus: "Make a reasonable inference based on the article.",
+      targetSkill: "inference",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q4",
+      question: "How is one key phrase used in the article's context?",
+      expectedFocus: "Explain the meaning of a word or phrase in context.",
+      targetSkill: "vocabulary_in_context",
+      suggestedWordCount: { min: 50, max: 120 },
+    },
+    {
+      id: "q5",
+      question: "What implication or response follows from the article?",
+      expectedFocus: "Give a critical response connected to the article.",
+      targetSkill: "critical_response",
+      suggestedWordCount: { min: 60, max: 140 },
+    },
+  ];
+}
+
 function buildRequest(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/article-practice", {
     method: "POST",
@@ -73,6 +113,7 @@ function mockFetchForArticlePractice(capture: { systemPrompt?: string }) {
                     { word: "critique", meaning: "review", whyUseful: "discussion" }
                   ],
                   comprehensionChecks: ["Check 1", "Check 2", "Check 3"],
+                  essayQuestions: validEssayQuestions(),
                   speakingTask: {
                     title: "Speaking title",
                     instruction: "Speaking instruction",
@@ -113,6 +154,8 @@ test.describe("Article Practice Feedback Language and Cache/Idempotency", () => 
     expect(response.status).toBe(200);
     expect(data.sourceTitle).toBe("Test Article Title");
     expect(data.articleBrief).toBe("Brief summary.");
+    expect(data.comprehensionChecks).toEqual(["Check 1", "Check 2", "Check 3"]);
+    expect(data.essayQuestions).toEqual(validEssayQuestions());
 
     // Check prompt policy was injected with English
     expect(capture.systemPrompt).toContain(
@@ -121,6 +164,35 @@ test.describe("Article Practice Feedback Language and Cache/Idempotency", () => 
     expect(capture.systemPrompt).toContain("usefulVocabulary.word MUST remain in English.");
     expect(capture.systemPrompt).toContain("speakingTask.targetStructure MUST remain in English.");
     expect(capture.systemPrompt).toContain("sourceTitle, sourceUrl, and sourceDomain are source-derived and MUST NOT be translated.");
+  });
+
+  test("response includes exactly 5 essay questions with valid target skills", async () => {
+    const capture: { systemPrompt?: string } = {};
+    mockFetchForArticlePractice(capture);
+
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as {
+      essayQuestions?: ReturnType<typeof validEssayQuestions>;
+      comprehensionChecks?: string[];
+    };
+
+    expect(response.status).toBe(200);
+    expect(data.comprehensionChecks).toHaveLength(3);
+    expect(data.essayQuestions).toHaveLength(5);
+    expect(data.essayQuestions?.map((question) => question.targetSkill).sort()).toEqual([
+      "critical_response",
+      "inference",
+      "main_idea",
+      "supporting_detail",
+      "vocabulary_in_context",
+    ]);
+    for (const question of data.essayQuestions ?? []) {
+      expect(question.id).toBeTruthy();
+      expect(question.question).toBeTruthy();
+      expect(question.expectedFocus).toBeTruthy();
+      expect(question.suggestedWordCount.min).toBeGreaterThanOrEqual(30);
+      expect(question.suggestedWordCount.max).toBeLessThanOrEqual(220);
+    }
   });
 
   test("invalid language fields normalize to English without 400", async () => {
@@ -220,11 +292,73 @@ test.describe("Article Practice Feedback Language and Cache/Idempotency", () => 
       "keyPoints",
       "usefulVocabulary",
       "comprehensionChecks",
+      "essayQuestions",
       "speakingTask",
       "followUpQuestions",
       "warnings",
     ].sort();
 
     expect(Object.keys(data).sort()).toEqual(expectedKeys);
+  });
+
+  test("malformed essayQuestions provider output returns sanitized 502", async () => {
+    process.env.DEEPSEEK_API_KEY = "test-key";
+    globalThis.fetch = (async (url) => {
+      const urlStr = typeof url === "string" ? url : (url as URL).toString();
+
+      if (urlStr.includes("example.com/test-article")) {
+        return new Response(
+          `<html><body><article>${"Article content. ".repeat(40)}</article></body></html>`,
+          { status: 200, headers: { "content-type": "text/html" } },
+        );
+      }
+
+      if (urlStr.includes("api.deepseek.com")) {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    sourceTitle: "Test Article Title",
+                    sourceUrl: "https://example.com/test-article",
+                    sourceDomain: "example.com",
+                    articleBrief: "Brief summary.",
+                    mainIdea: "Main idea.",
+                    keyPoints: ["Point 1", "Point 2", "Point 3"],
+                    usefulVocabulary: [
+                      { word: "synthesize", meaning: "combine", whyUseful: "academic" },
+                      { word: "evaluate", meaning: "assess", whyUseful: "analysis" },
+                      { word: "critique", meaning: "review", whyUseful: "discussion" },
+                    ],
+                    comprehensionChecks: ["Check 1", "Check 2", "Check 3"],
+                    essayQuestions: validEssayQuestions().slice(0, 4),
+                    speakingTask: {
+                      title: "Speaking title",
+                      instruction: "Speaking instruction",
+                      timeLimitSeconds: 120,
+                      targetStructure: ["Structure 1", "Structure 2"],
+                    },
+                    followUpQuestions: ["Follow up 1", "Follow up 2"],
+                    warnings: [],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response("Not found", { status: 404 });
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(502);
+    expect(data.error).toBe(
+      "Provider JSON did not match the Article Practice schema. Try again or switch provider.",
+    );
   });
 });

@@ -3,7 +3,6 @@ import {
   getArticlePracticeCacheKey,
   getGlobalCachedResponse,
   saveGlobalCachedResponse,
-  PROMPT_VERSIONS,
 } from "../../lib/cache/ai-cache";
 import {
   recordAiUsageEvent,
@@ -60,6 +59,22 @@ type SpeakingTask = {
   targetStructure: string[];
 };
 
+type ArticleEssayQuestion = {
+  id: string;
+  question: string;
+  expectedFocus: string;
+  targetSkill:
+    | "main_idea"
+    | "supporting_detail"
+    | "inference"
+    | "vocabulary_in_context"
+    | "critical_response";
+  suggestedWordCount: {
+    min: number;
+    max: number;
+  };
+};
+
 type ArticlePracticeResponse = {
   sourceTitle: string;
   sourceUrl: string;
@@ -69,6 +84,7 @@ type ArticlePracticeResponse = {
   keyPoints: string[];
   usefulVocabulary: UsefulVocabularyItem[];
   comprehensionChecks: string[];
+  essayQuestions: ArticleEssayQuestion[];
   speakingTask: SpeakingTask;
   followUpQuestions: string[];
   warnings: string[];
@@ -92,6 +108,14 @@ const ARTICLE_TEXT_CHAR_BUDGET = 10_000;
 const MIN_EXTRACTED_TEXT_CHARS = 400;
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_REDIRECTS = 3;
+const ARTICLE_PRACTICE_PROMPT_VERSION = "v1.2";
+const ESSAY_TARGET_SKILLS = [
+  "main_idea",
+  "supporting_detail",
+  "inference",
+  "vocabulary_in_context",
+  "critical_response",
+] as const;
 
 class ArticleFetchError extends Error {
   constructor(message: string) {
@@ -151,6 +175,12 @@ function buildSystemPrompt(req: ArticlePracticeRequest): string {
     "- keyPoints is an array of 3-5 short strings (each MUST be under 30 words).",
     "- usefulVocabulary is an array of 3-6 objects with word (under 5 words), meaning (under 15 words), and whyUseful (under 20 words).",
     "- comprehensionChecks is an array of 3-5 short questions (each MUST be under 20 words).",
+    "- essayQuestions is an array of exactly 5 essay-style comprehension questions.",
+    "- essayQuestions MUST cover exactly these targetSkill values once each: main_idea, supporting_detail, inference, vocabulary_in_context, critical_response.",
+    "- Each essay question requires a short paragraph answer and tests article comprehension, not random opinion only.",
+    "- Each essay question object has id, question, expectedFocus, targetSkill, and suggestedWordCount with integer min and max.",
+    "- essay question id is short and stable, for example q1, q2, q3, q4, q5.",
+    "- suggestedWordCount.min must be at least 30 and max must be at most 220.",
     "- speakingTask has title (under 10 words), instruction (concise, MUST be under 60 words), timeLimitSeconds, and targetStructure.",
     "- targetStructure is an array of 2-5 short strings (each MUST be under 12 words).",
     "- followUpQuestions is an array of 2-4 short questions (each MUST be under 25 words).",
@@ -223,11 +253,12 @@ function buildUserPrompt(
     "3. List 3-5 short key points using your own words.",
     "4. Select 3-6 useful vocabulary items from the article for speaking practice.",
     "5. Write 3-5 comprehension checks.",
-    "6. Create one level-appropriate speaking task.",
-    "7. Write 2-4 follow-up questions.",
-    "8. Add warnings only for thin article text, uncertainty, source limitations, or missing context.",
+    "6. Write exactly 5 essay-style comprehension questions for writing practice.",
+    "7. Create one level-appropriate speaking task.",
+    "8. Write 2-4 follow-up questions.",
+    "9. Add warnings only for thin article text, uncertainty, source limitations, or missing context.",
     "",
-    'Return ONLY this JSON shape: {"sourceTitle":"...","sourceUrl":"...","sourceDomain":"...","articleBrief":"...","mainIdea":"...","keyPoints":["..."],"usefulVocabulary":[{"word":"...","meaning":"...","whyUseful":"..."}],"comprehensionChecks":["..."],"speakingTask":{"title":"...","instruction":"...","timeLimitSeconds":60,"targetStructure":["..."]},"followUpQuestions":["..."],"warnings":[]}',
+    'Return ONLY this JSON shape: {"sourceTitle":"...","sourceUrl":"...","sourceDomain":"...","articleBrief":"...","mainIdea":"...","keyPoints":["..."],"usefulVocabulary":[{"word":"...","meaning":"...","whyUseful":"..."}],"comprehensionChecks":["..."],"essayQuestions":[{"id":"q1","question":"...","expectedFocus":"...","targetSkill":"main_idea","suggestedWordCount":{"min":50,"max":120}}],"speakingTask":{"title":"...","instruction":"...","timeLimitSeconds":60,"targetStructure":["..."]},"followUpQuestions":["..."],"warnings":[]}',
   ].join("\n");
 }
 
@@ -694,6 +725,79 @@ function normalizeSpeakingTask(
   return { title, instruction, timeLimitSeconds, targetStructure };
 }
 
+function isEssayTargetSkill(
+  value: unknown,
+): value is ArticleEssayQuestion["targetSkill"] {
+  return (
+    typeof value === "string" &&
+    (ESSAY_TARGET_SKILLS as readonly string[]).includes(value)
+  );
+}
+
+function normalizeEssayQuestions(raw: unknown): ArticleEssayQuestion[] | null {
+  if (!Array.isArray(raw) || raw.length !== 5) return null;
+
+  const questions: ArticleEssayQuestion[] = [];
+  const seenIds = new Set<string>();
+  const seenSkills = new Set<ArticleEssayQuestion["targetSkill"]>();
+
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const source = item as Record<string, unknown>;
+    const id = normalizeRequiredString(source.id);
+    const question = normalizeRequiredString(source.question);
+    const expectedFocus = normalizeRequiredString(source.expectedFocus);
+    const targetSkill = source.targetSkill;
+    const wordCount = source.suggestedWordCount;
+
+    if (
+      !id ||
+      id.length > 40 ||
+      seenIds.has(id) ||
+      !question ||
+      question.length > 280 ||
+      !expectedFocus ||
+      expectedFocus.length > 400 ||
+      !isEssayTargetSkill(targetSkill) ||
+      seenSkills.has(targetSkill) ||
+      !wordCount ||
+      typeof wordCount !== "object" ||
+      Array.isArray(wordCount)
+    ) {
+      return null;
+    }
+
+    const wordCountSource = wordCount as Record<string, unknown>;
+    const min = wordCountSource.min;
+    const max = wordCountSource.max;
+    if (
+      typeof min !== "number" ||
+      !Number.isInteger(min) ||
+      min < 30 ||
+      typeof max !== "number" ||
+      !Number.isInteger(max) ||
+      max > 220 ||
+      min > max
+    ) {
+      return null;
+    }
+
+    seenIds.add(id);
+    seenSkills.add(targetSkill);
+    questions.push({
+      id,
+      question,
+      expectedFocus,
+      targetSkill,
+      suggestedWordCount: { min, max },
+    });
+  }
+
+  return ESSAY_TARGET_SKILLS.every((skill) => seenSkills.has(skill))
+    ? questions
+    : null;
+}
+
 function stripCodeFence(raw: string): string {
   const trimmed = raw.trim();
   const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -775,6 +879,7 @@ function parseArticlePractice(
       24,
       220,
     );
+    const essayQuestions = normalizeEssayQuestions(data.essayQuestions);
     const speakingTask = normalizeSpeakingTask(data.speakingTask, level);
     const followUpQuestions = normalizeTextArray(
       data.followUpQuestions,
@@ -793,6 +898,7 @@ function parseArticlePractice(
       !keyPoints ||
       !usefulVocabulary ||
       !comprehensionChecks ||
+      !essayQuestions ||
       !speakingTask ||
       !followUpQuestions
     ) {
@@ -810,6 +916,7 @@ function parseArticlePractice(
         keyPoints,
         usefulVocabulary,
         comprehensionChecks,
+        essayQuestions,
         speakingTask,
         followUpQuestions,
         warnings: [
@@ -1006,7 +1113,7 @@ export async function POST(request: Request) {
       model: resolvedModel,
       mode: validated.mode,
       focus: validated.focus,
-      promptVersion: PROMPT_VERSIONS.articlePractice,
+      promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
       feedbackLanguage: validated.feedbackLanguage,
       targetLanguage: validated.targetLanguage,
     });
@@ -1026,7 +1133,7 @@ export async function POST(request: Request) {
           feature: "article-practice",
           provider: validated.provider,
           model: resolvedModel,
-          promptVersion: PROMPT_VERSIONS.articlePractice,
+          promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
           cached: true,
           requestStatus: "cache_hit",
           estimatedInputTokens: null,
@@ -1061,7 +1168,8 @@ export async function POST(request: Request) {
     validated.mode,
     validated.focus,
     validated.feedbackLanguage,
-    validated.targetLanguage
+    validated.targetLanguage,
+    ARTICLE_PRACTICE_PROMPT_VERSION
   );
   try {
     const cached = await getGlobalCachedResponse(cacheKey);
@@ -1071,7 +1179,7 @@ export async function POST(request: Request) {
         feature: "article-practice",
         provider: validated.provider,
         model: resolvedModel,
-        promptVersion: PROMPT_VERSIONS.articlePractice,
+        promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
         cached: true,
         requestStatus: "cache_hit",
         estimatedInputTokens: null,
@@ -1108,7 +1216,7 @@ export async function POST(request: Request) {
       feature: "article-practice",
       provider: validated.provider,
       model: resolvedModel,
-      promptVersion: PROMPT_VERSIONS.articlePractice,
+      promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
       cached: false,
       requestStatus: "article_fetch_failed",
       errorCode: message.slice(0, 200),
@@ -1167,7 +1275,7 @@ export async function POST(request: Request) {
       feature: "article-practice",
       provider: validated.provider,
       model: resolvedModel,
-      promptVersion: PROMPT_VERSIONS.articlePractice,
+      promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
       cached: false,
       requestStatus: "provider_failed",
       estimatedInputTokens,
@@ -1200,7 +1308,7 @@ export async function POST(request: Request) {
       feature: "article-practice",
       provider: validated.provider,
       model: resolvedModel,
-      promptVersion: PROMPT_VERSIONS.articlePractice,
+      promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
       cached: false,
       requestStatus: "provider_parse_failed",
       estimatedInputTokens,
@@ -1233,7 +1341,7 @@ export async function POST(request: Request) {
     feature: "article-practice",
     provider: validated.provider,
     model: resolvedModel,
-    promptVersion: PROMPT_VERSIONS.articlePractice,
+    promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
     cached: false,
     requestStatus: "provider_success",
     estimatedInputTokens,
