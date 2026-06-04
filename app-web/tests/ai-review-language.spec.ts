@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 import { POST as diagnosticPost } from "../src/app/api/diagnostic/route";
 import { POST as mentalModelPost } from "../src/app/api/mental-model/route";
-import { POST as weeklyReviewPost } from "../src/app/api/weekly-review/route";
+import { createWeeklyReviewPostHandler } from "../src/app/api/weekly-review/route";
+import type { FonetikSupabaseClient } from "../src/app/lib/supabase";
 
 const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
 const originalFetch = globalThis.fetch;
@@ -107,7 +108,114 @@ function weeklyResponse() {
       "Day 6: Repeat a short academic template.",
       "Day 7: Present a structured summary aloud.",
     ],
-    warnings: [],
+    warnings: [] as string[],
+  };
+}
+
+type WeeklyReviewRouteDeps = Parameters<typeof createWeeklyReviewPostHandler>[0];
+
+function weeklyMemory(overrides: Record<string, unknown> = {}) {
+  return {
+    periodStart: "2026-05-29",
+    periodEnd: "2026-06-04",
+    podchatSessionCount: 2,
+    articleWritingSessionCount: 2,
+    totalSessionCount: 4,
+    topErrorPatterns: [
+      {
+        category: "grammar",
+        label: "Verb agreement",
+        count: 2,
+        evidence: "Technology help students.",
+        correction: "Technology helps students.",
+        practiceFocus: "Use subject-verb agreement in short answers.",
+      },
+    ],
+    podchatSummaries: ["You discussed technology clearly."],
+    articleWritingSummaries: ["Your writing shows article comprehension."],
+    nextPracticeFocuses: ["Use one simple structure every session."],
+    sourceSessionIds: ["podchat-1", "podchat-2", "article-1", "article-2"],
+    ...overrides,
+  };
+}
+
+function buildWeeklyRoute(options: {
+  ownerId?: string | null;
+  cachedReview?: ReturnType<typeof weeklyResponse> | null;
+  memoryData?: ReturnType<typeof weeklyMemory>;
+  memoryError?: boolean;
+  buildResult?: ReturnType<typeof weeklyResponse>;
+  saveThrows?: boolean;
+  supabaseClient?: FonetikSupabaseClient | null;
+} = {}) {
+  const fakeSupabase =
+    options.supabaseClient === undefined
+      ? ({} as FonetikSupabaseClient)
+      : options.supabaseClient;
+  const calls: {
+    cache: Array<{ ownerId: string; periodStart: string; periodEnd: string }>;
+    memory: Array<{ ownerId: string; periodStart: string; periodEnd: string }>;
+    build: unknown[];
+    save: Array<{
+      ownerId: string;
+      periodStart: string;
+      periodEnd: string;
+      review: unknown;
+      sourceSessionIds: string[];
+    }>;
+  } = {
+    cache: [],
+    memory: [],
+    build: [],
+    save: [],
+  };
+
+  const deps: WeeklyReviewRouteDeps = {
+    resolveCurrentUserId: async () =>
+      options.ownerId === undefined ? "user_real" : options.ownerId,
+    getSupabaseClient: async () => fakeSupabase,
+    getCachedReview: async (ownerId, periodStart, periodEnd) => {
+      calls.cache.push({ ownerId, periodStart, periodEnd });
+      return options.cachedReview
+        ? { summary: options.cachedReview, source_session_ids: ["cached-1"] }
+        : null;
+    },
+    getMemory: async (input) => {
+      calls.memory.push(input);
+      if (options.memoryError) {
+        return { ok: false, error: "weekly_review_memory_failed" };
+      }
+      return { ok: true, data: options.memoryData ?? weeklyMemory() };
+    },
+    buildReview: (memory) => {
+      calls.build.push(memory);
+      return options.buildResult ?? weeklyResponse();
+    },
+    saveReview: async (
+      ownerId,
+      periodStart,
+      periodEnd,
+      review,
+      sourceSessionIds,
+    ) => {
+      calls.save.push({
+        ownerId,
+        periodStart,
+        periodEnd,
+        review,
+        sourceSessionIds,
+      });
+      if (options.saveThrows) {
+        throw new Error("cache write failed");
+      }
+      return { ok: true, id: "weekly-review-1" };
+    },
+    now: () => new Date("2026-06-04T12:00:00.000Z"),
+  };
+
+  return {
+    post: createWeeklyReviewPostHandler(deps),
+    calls,
   };
 }
 
@@ -210,12 +318,69 @@ test.describe("AI review language policy routes", () => {
     );
   });
 
-  test("weekly review old requests default to English and keep response keys", async () => {
-    const capture: Capture = {};
-    mockDeepSeekResponse(capture, weeklyResponse());
+  test("weekly review unauthenticated requests fail safely", async () => {
+    const { post, calls } = buildWeeklyRoute({ ownerId: null });
 
-    const response = await weeklyReviewPost(
-      buildRequest("/api/weekly-review", { sessions: weeklySessions() }),
+    const response = await post(buildRequest("/api/weekly-review", {}));
+    const data = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(data.error).toBe("Sign in to generate a weekly review.");
+    expect(calls.cache).toHaveLength(0);
+    expect(calls.memory).toHaveLength(0);
+    expect(calls.save).toHaveLength(0);
+  });
+
+  test("weekly review returns cached Supabase memory review without regenerating", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("AI provider should not be called");
+    }) as typeof fetch;
+    delete process.env.CLAUDE_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    const cachedReview = weeklyResponse();
+    const { post, calls } = buildWeeklyRoute({ cachedReview });
+
+    const response = await post(
+      buildRequest("/api/weekly-review", {
+        ownerId: "attacker",
+        sessions: weeklySessions(),
+      }),
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual(cachedReview);
+    expect(data.recommendedPlan).toHaveLength(7);
+    expect(calls.cache).toEqual([
+      {
+        ownerId: "user_real",
+        periodStart: "2026-05-29",
+        periodEnd: "2026-06-04",
+      },
+    ]);
+    expect(calls.memory).toHaveLength(0);
+    expect(calls.build).toHaveLength(0);
+    expect(calls.save).toHaveLength(0);
+  });
+
+  test("weekly review builds deterministic review from Supabase memory and saves cache", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("AI provider should not be called");
+    }) as typeof fetch;
+
+    const { post, calls } = buildWeeklyRoute();
+
+    const response = await post(
+      buildRequest("/api/weekly-review", {
+        ownerId: "attacker",
+        fullArticleText: "must be ignored",
+        audioBlob: "must be ignored",
+        sourceUrl: "https://example.com/private",
+        periodStart: "2026-06-01",
+        periodEnd: "2026-06-04",
+      }),
     );
     const data = await response.json();
 
@@ -229,54 +394,118 @@ test.describe("AI review language policy routes", () => {
       "summary",
       "warnings",
     ]);
-    expect(capture.systemPrompt).toContain(
-      "Write summary, recurringWeakness, bestImprovement, scoreTrend, nextWeekFocus, recommendedPlan, and warnings in English.",
-    );
-    expect(capture.systemPrompt).toContain(
-      "Keep sentence frames and reusable speaking templates in English.",
-    );
+    expect(data.recommendedPlan).toHaveLength(7);
+    expect(calls.memory).toEqual([
+      {
+        ownerId: "user_real",
+        periodStart: "2026-06-01",
+        periodEnd: "2026-06-04",
+      },
+    ]);
+    expect(calls.save).toEqual([
+      {
+        ownerId: "user_real",
+        periodStart: "2026-06-01",
+        periodEnd: "2026-06-04",
+        review: weeklyResponse(),
+        sourceSessionIds: ["podchat-1", "podchat-2", "article-1", "article-2"],
+      },
+    ]);
+
+    const serialized = JSON.stringify(data).toLowerCase();
+    for (const forbidden of [
+      "fullarticletext",
+      "sourceurl",
+      "audioblob",
+      "recordingurl",
+      "rawprovider",
+      "phoneme",
+      "pronunciation",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
   });
 
-  test("weekly review invalid languages normalize to English without a 400", async () => {
-    const capture: Capture = {};
-    mockDeepSeekResponse(capture, weeklyResponse());
+  test("weekly review cache save failure still returns deterministic review", async () => {
+    const { post, calls } = buildWeeklyRoute({ saveThrows: true });
 
-    const response = await weeklyReviewPost(
-      buildRequest("/api/weekly-review", {
-        sessions: weeklySessions(),
-        feedbackLanguage: "ja",
-        targetLanguage: "id",
-      }),
-    );
+    const response = await post(buildRequest("/api/weekly-review", {}));
+    const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(capture.systemPrompt).toContain(
-      "Write summary, recurringWeakness, bestImprovement, scoreTrend, nextWeekFocus, recommendedPlan, and warnings in English.",
-    );
-    expect(capture.systemPrompt).not.toContain(
-      "Use concise, beginner-friendly Indonesian.",
-    );
+    expect(data).toEqual(weeklyResponse());
+    expect(calls.save).toHaveLength(1);
   });
 
-  test("weekly review Indonesian policy is included", async () => {
-    const capture: Capture = {};
-    mockDeepSeekResponse(capture, weeklyResponse());
+  test("weekly review returns valid warning response when memory has too little data", async () => {
+    const lowData = weeklyMemory({
+      podchatSessionCount: 1,
+      articleWritingSessionCount: 1,
+      totalSessionCount: 2,
+      topErrorPatterns: [],
+      sourceSessionIds: ["podchat-1", "article-1"],
+    });
+    const { post } = buildWeeklyRoute({
+      memoryData: lowData,
+      buildResult: {
+        summary:
+          "You completed 2 practice session(s) this week. Keep practicing to unlock complete review insights.",
+        recurringWeakness: "Not enough sessions to analyze recurring weaknesses.",
+        bestImprovement: "Not enough sessions to analyze improvements.",
+        scoreTrend: "Not enough sessions to track score trend.",
+        nextWeekFocus: "Practice consistency.",
+        recommendedPlan: [
+          "Day 1: Complete 1 new practice session.",
+          "Day 2: Review your past feedback points.",
+          "Day 3: Complete 1 new practice session.",
+          "Day 4: Focus on speaking/writing without pausing.",
+          "Day 5: Complete 1 new practice session.",
+          "Day 6: Focus on correct subject-verb agreement.",
+          "Day 7: Complete 1 new practice session.",
+        ],
+        warnings: [
+          "Weekly Review requires at least 4 completed practice sessions. You have completed only 2.",
+        ],
+      },
+    });
 
-    const response = await weeklyReviewPost(
-      buildRequest("/api/weekly-review", {
-        sessions: weeklySessions(),
-        feedbackLanguage: "id",
-        targetLanguage: "en",
-      }),
-    );
+    const response = await post(buildRequest("/api/weekly-review", {}));
+    const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(capture.systemPrompt).toContain(
-      "Write summary, recurringWeakness, bestImprovement, scoreTrend, nextWeekFocus, recommendedPlan, and warnings in Indonesian.",
+    expect(data.recommendedPlan).toHaveLength(7);
+    expect(data.warnings[0]).toContain("requires at least 4 completed practice sessions");
+  });
+
+  test("weekly review rejects invalid date periods safely", async () => {
+    const { post, calls } = buildWeeklyRoute();
+
+    const invalidDateResponse = await post(
+      buildRequest("/api/weekly-review", {
+        periodStart: "2026-02-31",
+        periodEnd: "2026-06-04",
+      }),
     );
-    expect(capture.systemPrompt).toContain(
-      "Use concise, beginner-friendly Indonesian.",
+    const invalidDateData = await invalidDateResponse.json();
+
+    expect(invalidDateResponse.status).toBe(400);
+    expect(invalidDateData.error).toBe(
+      "periodStart and periodEnd must be valid YYYY-MM-DD dates.",
     );
+
+    const reversedResponse = await post(
+      buildRequest("/api/weekly-review", {
+        periodStart: "2026-06-05",
+        periodEnd: "2026-06-04",
+      }),
+    );
+    const reversedData = await reversedResponse.json();
+
+    expect(reversedResponse.status).toBe(400);
+    expect(reversedData.error).toBe(
+      "periodEnd must be greater than or equal to periodStart.",
+    );
+    expect(calls.memory).toHaveLength(0);
   });
 
   test("mental model old requests default to English and keep response keys", async () => {
