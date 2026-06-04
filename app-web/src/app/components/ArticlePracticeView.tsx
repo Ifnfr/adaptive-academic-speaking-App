@@ -131,7 +131,12 @@ const ARTICLE_ANSWER_MAX_LENGTH = 1200;
 const PREPARED_CONTEXT_MARKDOWN_MAX_LENGTH = 20_000;
 const PREPARED_CONTEXT_MARKDOWN_FILE_MAX_BYTES = 150 * 1024;
 
-const PREPARED_CONTEXT_CONVERSION_PROMPT = `Convert the reading material I provide into an Article Context Markdown file.
+const PREPARED_CONTEXT_CONVERSION_PROMPT = `Convert the reading material I provide into clean Article Context Markdown text.
+
+Do not create a file.
+Do not use tools, skills, code, or file-generation features.
+Output only the final Markdown content.
+Return only the Markdown content starting with "# Article Context".
 
 Do not copy the full article. Remove references, ads, navigation text, footnotes, author bio, and formatting noise.
 
@@ -267,6 +272,9 @@ export function ArticlePracticeView({
 }: ArticlePracticeViewProps) {
   const [showHelp, setShowHelp] = useState(false);
   const [showMarkdownPrompt, setShowMarkdownPrompt] = useState(false);
+  const [markdownPromptCopyStatus, setMarkdownPromptCopyStatus] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
   const [essayAnswerState, setEssayAnswerState] = useState<{
     resultKey: string;
     answers: Record<string, string>;
@@ -389,6 +397,25 @@ export function ArticlePracticeView({
       onPreparedContextMarkdownErrorChange(
         "Could not read the Markdown file. Please try again.",
       );
+    }
+  };
+
+  const handleCopyMarkdownPrompt = async () => {
+    setMarkdownPromptCopyStatus("idle");
+
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.clipboard?.writeText
+    ) {
+      setMarkdownPromptCopyStatus("failed");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(PREPARED_CONTEXT_CONVERSION_PROMPT);
+      setMarkdownPromptCopyStatus("copied");
+    } catch {
+      setMarkdownPromptCopyStatus("failed");
     }
   };
 
@@ -647,23 +674,45 @@ export function ArticlePracticeView({
                 then paste or upload the .md file here.
               </p>
 
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowMarkdownPrompt(!showMarkdownPrompt)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand-teal-ink)] hover:underline focus:outline-none"
-                >
-                  {showMarkdownPrompt
-                    ? "Hide prompt for another AI"
-                    : "Copy prompt for another AI"}
-                </button>
+              <div className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowMarkdownPrompt(!showMarkdownPrompt)}
+                    className="inline-flex items-center gap-1.5 text-left text-sm font-semibold text-[var(--brand-ink)] hover:text-[var(--brand-teal-ink)] focus:outline-none"
+                    aria-expanded={showMarkdownPrompt}
+                  >
+                    Prompt for another AI
+                    <span className="text-xs font-normal text-[var(--brand-muted)]">
+                      {showMarkdownPrompt ? "Hide" : "Show"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyMarkdownPrompt}
+                    className="w-full rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-3 py-2 text-xs font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] sm:w-auto"
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                {markdownPromptCopyStatus === "copied" && (
+                  <p className="mt-2 text-xs font-medium text-[var(--brand-teal-ink)]">
+                    Prompt copied.
+                  </p>
+                )}
+                {markdownPromptCopyStatus === "failed" && (
+                  <p className="mt-2 text-xs font-medium text-[var(--brand-coral)]">
+                    Copy failed. Please select and copy manually.
+                  </p>
+                )}
                 {showMarkdownPrompt && (
-                  <div className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3">
+                  <div className="mt-3">
                     <textarea
                       readOnly
                       rows={14}
                       value={PREPARED_CONTEXT_CONVERSION_PROMPT}
                       className={`${inputClass} resize-y font-mono text-xs leading-5`}
+                      aria-label="Prompt for another AI"
                     />
                   </div>
                 )}

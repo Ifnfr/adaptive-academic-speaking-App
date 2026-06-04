@@ -617,6 +617,18 @@ test.describe("MVP Smoke Flows", () => {
   }) => {
     const articlePayloads: unknown[] = [];
 
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value: string) {
+            (window as unknown as { __COPIED_MARKDOWN_PROMPT__?: string })
+              .__COPIED_MARKDOWN_PROMPT__ = value;
+          },
+        },
+      });
+    });
+
     await page.route("**/api/article-practice", async (route) => {
       articlePayloads.push(route.request().postDataJSON());
       await route.fulfill({
@@ -639,10 +651,33 @@ test.describe("MVP Smoke Flows", () => {
     await expect(
       page.getByText("Use a prepared Article Context Markdown"),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Copy prompt for another AI" }).click();
-    await expect(page.locator("textarea[readonly]")).toHaveValue(
-      /Convert the reading material I provide/,
+    await expect(
+      page.getByRole("button", { name: /Prompt for another AI/ }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy prompt" })).toBeVisible();
+    await page.getByRole("button", { name: /Prompt for another AI/ }).click();
+    await expect(page.getByLabel("Prompt for another AI")).toHaveValue(
+      /Convert the reading material I provide into clean Article Context Markdown text/,
     );
+    await page.getByRole("button", { name: "Copy prompt" }).click();
+    await expect(page.getByText("Prompt copied.")).toBeVisible();
+    const copiedPrompt = await page.evaluate(
+      () =>
+        (window as unknown as { __COPIED_MARKDOWN_PROMPT__?: string })
+          .__COPIED_MARKDOWN_PROMPT__,
+    );
+    expect(copiedPrompt).toContain(
+      "Convert the reading material I provide into clean Article Context Markdown text.",
+    );
+    expect(copiedPrompt).toContain("Do not create a file.");
+    expect(copiedPrompt).toContain(
+      "Do not use tools, skills, code, or file-generation features.",
+    );
+    expect(copiedPrompt).toContain("Output only the final Markdown content.");
+    expect(copiedPrompt).toContain(
+      'Return only the Markdown content starting with "# Article Context".',
+    );
+    expect(articlePayloads).toHaveLength(0);
 
     await page.locator("#article-markdown-file").setInputFiles({
       name: "reading.txt",
