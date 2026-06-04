@@ -91,6 +91,86 @@ function articleEssayEvaluationResponse() {
   };
 }
 
+function preparedArticleMarkdown() {
+  return `# Article Context
+
+## Title
+
+Prepared AI Study Context
+
+## Source
+
+Class reading packet
+
+## Short Summary
+
+This prepared context explains how technology changes study habits, including benefits for access and risks around distraction.
+
+## Main Idea
+
+Technology can support learning when students use it with clear goals.
+
+## Key Points
+
+* Digital tools can make revision more flexible.
+* Notifications can interrupt deep focus.
+* Teachers can guide students toward better study routines.
+* Learners need strategies for evaluating online information.
+* Access to resources is useful but does not replace careful thinking.
+
+## Important Vocabulary
+
+* Word/Phrase: distraction
+  Meaning: something that takes attention away
+  Why useful: helps discuss study problems
+
+## Debatable Issue
+
+Whether technology improves learning more than it distracts students.
+
+## Essay Comprehension Questions
+
+### Q1
+
+Question: What is the main idea?
+Expected focus: Explain the central claim.
+Suggested answer length: 60-100 words.
+
+### Q2
+
+Question: Which detail supports the argument?
+Expected focus: Use a specific detail.
+Suggested answer length: 60-100 words.
+
+### Q3
+
+Question: What can readers infer?
+Expected focus: Make a reasonable inference.
+Suggested answer length: 60-100 words.
+
+### Q4
+
+Question: What does distraction mean in context?
+Expected focus: Explain vocabulary in context.
+Suggested answer length: 60-100 words.
+
+### Q5
+
+Question: What critical response follows?
+Expected focus: Give a balanced response.
+Suggested answer length: 70-120 words.
+
+## Speaking Practice Prompt
+
+Explain whether technology helps students study better, using one benefit and one risk.
+
+## Follow-up Discussion Questions
+
+* What study tool helps you most?
+* How can students reduce distractions?
+* What role should teachers play?`;
+}
+
 test.describe("MVP Smoke Flows", () => {
   // Test A: App loads
   test("A. App loads and renders sidebar/navigation", async ({ page }) => {
@@ -530,6 +610,81 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.locator("#article-essay-answer-q1")).toHaveValue(
       "Saved answer for q1.",
     );
+  });
+
+  test("D4. Prepared Markdown Context mode uploads markdown and sends compact request", async ({
+    page,
+  }) => {
+    const articlePayloads: unknown[] = [];
+
+    await page.route("**/api/article-practice", async (route) => {
+      articlePayloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...articlePracticeResponse(),
+          sourceTitle: "Prepared AI Study Context",
+          sourceUrl: "prepared-markdown-context",
+          sourceDomain: "Prepared Markdown",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.click("button:has-text(\"Article Practice\")");
+    await page.getByLabel("Prepared Markdown Context").check();
+
+    await expect(page.getByTestId("article-markdown-input")).toBeVisible();
+    await expect(
+      page.getByText("Use a prepared Article Context Markdown"),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Copy prompt for another AI" }).click();
+    await expect(page.locator("textarea[readonly]")).toHaveValue(
+      /Convert the reading material I provide/,
+    );
+
+    await page.locator("#article-markdown-file").setInputFiles({
+      name: "reading.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("# Article Context"),
+    });
+    await expect(page.getByText("Only .md files are supported.")).toBeVisible();
+
+    const markdown = preparedArticleMarkdown();
+    await page.locator("#article-markdown-file").setInputFiles({
+      name: "reading.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from(markdown),
+    });
+    await expect(page.locator("#article-markdown")).toHaveValue(markdown);
+    await expect(page.getByText("Only .md files are supported.")).toHaveCount(0);
+
+    await page.click("button:has-text(\"Generate Practice\")");
+
+    await expect(
+      page.locator("dd").filter({ hasText: "Prepared AI Study Context" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("article-writing-practice")).toBeVisible();
+    expect(articlePayloads).toHaveLength(1);
+
+    const payload = articlePayloads[0] as Record<string, unknown>;
+    expect(payload.inputMode).toBe("markdown");
+    expect(payload.preparedContextMarkdown).toBe(markdown);
+    expect(payload).not.toHaveProperty("url");
+
+    const serializedPayload = JSON.stringify(payload).toLowerCase();
+    for (const forbidden of [
+      "sourceurl",
+      "fullarticletext",
+      "audio",
+      "stt",
+      "tts",
+      "transcript",
+      "storagepath",
+    ]) {
+      expect(serializedPayload).not.toContain(forbidden);
+    }
   });
 
   // Test E: Gamification UI

@@ -46,6 +46,89 @@ function validEssayQuestions() {
   ];
 }
 
+function validPreparedMarkdown(): string {
+  return `# Article Context
+
+## Title
+
+Prepared AI Study Context
+
+## Source
+
+Class reading packet
+
+## Short Summary
+
+This prepared context explains how technology changes study habits, including benefits for access and risks around distraction. It summarizes a classroom reading without copying the full text.
+
+## Main Idea
+
+Technology can support learning when students use it with clear goals and healthy boundaries.
+
+## Key Points
+
+* Digital tools can make revision more flexible.
+* Notifications can interrupt deep focus.
+* Teachers can guide students toward better study routines.
+* Access to resources is useful but does not replace careful thinking.
+* Learners need strategies for evaluating online information.
+
+## Important Vocabulary
+
+* Word/Phrase: distraction
+  Meaning: something that takes attention away
+  Why useful: helps discuss study problems
+* Word/Phrase: flexible learning
+  Meaning: learning that can happen in different times or places
+  Why useful: useful for education topics
+
+## Debatable Issue
+
+Whether technology improves learning more than it distracts students.
+
+## Essay Comprehension Questions
+
+### Q1
+
+Question: What is the main idea?
+Expected focus: Explain the central claim.
+Suggested answer length: 60-100 words.
+
+### Q2
+
+Question: Which detail supports the argument?
+Expected focus: Use a specific detail.
+Suggested answer length: 60-100 words.
+
+### Q3
+
+Question: What can readers infer?
+Expected focus: Make a reasonable inference.
+Suggested answer length: 60-100 words.
+
+### Q4
+
+Question: What does distraction mean in context?
+Expected focus: Explain vocabulary in context.
+Suggested answer length: 60-100 words.
+
+### Q5
+
+Question: What critical response follows?
+Expected focus: Give a balanced response.
+Suggested answer length: 70-120 words.
+
+## Speaking Practice Prompt
+
+Explain whether technology helps students study better, using one benefit and one risk.
+
+## Follow-up Discussion Questions
+
+* What study tool helps you most?
+* How can students reduce distractions?
+* What role should teachers play?`;
+}
+
 function buildRequest(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/article-practice", {
     method: "POST",
@@ -61,10 +144,15 @@ function buildRequest(body: Record<string, unknown>): Request {
   });
 }
 
-function mockFetchForArticlePractice(capture: { systemPrompt?: string }) {
+function mockFetchForArticlePractice(capture: {
+  systemPrompt?: string;
+  userPrompt?: string;
+  fetchUrls?: string[];
+}) {
   process.env.DEEPSEEK_API_KEY = "test-key";
   globalThis.fetch = (async (url, init) => {
     const urlStr = typeof url === "string" ? url : (url as URL).toString();
+    capture.fetchUrls = [...(capture.fetchUrls ?? []), urlStr];
 
     if (urlStr.includes("example.com/test-article")) {
       return new Response(
@@ -93,6 +181,9 @@ function mockFetchForArticlePractice(capture: { systemPrompt?: string }) {
       };
       capture.systemPrompt = body.messages?.find(
         (message) => message.role === "system",
+      )?.content;
+      capture.userPrompt = body.messages?.find(
+        (message) => message.role === "user",
       )?.content;
 
       return new Response(
@@ -224,6 +315,92 @@ test.describe("Article Practice Feedback Language and Cache/Idempotency", () => 
     expect(capture.systemPrompt).toContain("usefulVocabulary.word MUST remain in English.");
     expect(capture.systemPrompt).toContain("speakingTask.targetStructure MUST remain in English.");
     expect(capture.systemPrompt).toContain("sourceTitle, sourceUrl, and sourceDomain are source-derived and MUST NOT be translated.");
+  });
+
+  test("markdown mode with preparedContextMarkdown works without fetching URL", async () => {
+    const capture: { systemPrompt?: string; userPrompt?: string; fetchUrls?: string[] } = {};
+    mockFetchForArticlePractice(capture);
+
+    const markdown = validPreparedMarkdown();
+    const response = await POST(
+      buildRequest({
+        inputMode: "markdown",
+        url: undefined,
+        preparedContextMarkdown: markdown,
+      }),
+    );
+    const data = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(data.sourceTitle).toBe("Prepared AI Study Context");
+    expect(data.sourceUrl).toBe("prepared-markdown-context");
+    expect(data.sourceDomain).toBe("Prepared Markdown");
+    expect(data.essayQuestions).toEqual(validEssayQuestions());
+    expect(JSON.stringify(data)).not.toContain(markdown.slice(0, 80));
+    expect(capture.userPrompt).toContain("# Article Context");
+    expect(capture.userPrompt).toContain("Prepared AI Study Context");
+    expect(capture.fetchUrls ?? []).not.toContain("https://example.com/test-article");
+  });
+
+  test("markdown mode rejects missing preparedContextMarkdown", async () => {
+    const response = await POST(
+      buildRequest({
+        inputMode: "markdown",
+        url: undefined,
+        preparedContextMarkdown: "",
+      }),
+    );
+    const data = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Prepared Markdown context is required.");
+  });
+
+  test("markdown mode rejects overlong markdown", async () => {
+    const response = await POST(
+      buildRequest({
+        inputMode: "markdown",
+        url: undefined,
+        preparedContextMarkdown: `${validPreparedMarkdown()}\n${"x".repeat(20_001)}`,
+      }),
+    );
+    const data = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Prepared Markdown must be 20,000 characters or fewer.");
+  });
+
+  test("markdown mode rejects missing required headings", async () => {
+    const response = await POST(
+      buildRequest({
+        inputMode: "markdown",
+        url: undefined,
+        preparedContextMarkdown: "# Article Context\n\n## Title\n\nOnly title",
+      }),
+    );
+    const data = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain("Prepared Markdown is missing required heading");
+  });
+
+  test("markdown mode rejects forbidden request fields", async () => {
+    const response = await POST(
+      buildRequest({
+        inputMode: "markdown",
+        url: undefined,
+        preparedContextMarkdown: validPreparedMarkdown(),
+        sourceUrl: "https://example.com/raw",
+        fullArticleText: "raw full article",
+        audio: "not allowed",
+      }),
+    );
+    const data = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe(
+      "Markdown mode request contains unsupported private data.",
+    );
   });
 
   test("cache key differs for feedbackLanguage en vs id", () => {

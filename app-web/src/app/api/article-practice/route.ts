@@ -37,8 +37,10 @@ type FeedbackLanguage = "en" | "id";
 type TargetLanguage = "en";
 
 type ArticlePracticeRequest = {
+  inputMode: "url" | "markdown";
   provider: Provider;
-  url: string;
+  url?: string;
+  preparedContextMarkdown?: string;
   level: LearnerLevel;
   mode: string;
   focus: string;
@@ -105,6 +107,7 @@ type ArticlePracticeParseResult =
 const MAX_URL_LENGTH = 2000;
 const MAX_HTML_BYTES = 1_000_000;
 const ARTICLE_TEXT_CHAR_BUDGET = 10_000;
+const PREPARED_MARKDOWN_CHAR_BUDGET = 20_000;
 const MIN_EXTRACTED_TEXT_CHARS = 400;
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_REDIRECTS = 3;
@@ -115,6 +118,30 @@ const ESSAY_TARGET_SKILLS = [
   "inference",
   "vocabulary_in_context",
   "critical_response",
+] as const;
+const REQUIRED_MARKDOWN_HEADINGS = [
+  "# Article Context",
+  "## Title",
+  "## Short Summary",
+  "## Main Idea",
+  "## Key Points",
+  "## Essay Comprehension Questions",
+  "## Speaking Practice Prompt",
+] as const;
+const FORBIDDEN_MARKDOWN_MODE_KEYS = [
+  "sourceurl",
+  "fullarticletext",
+  "userid",
+  "useridentity",
+  "auth",
+  "authmetadata",
+  "storagepath",
+  "audio",
+  "stt",
+  "tts",
+  "transcript",
+  "file",
+  "files",
 ] as const;
 
 class ArticleFetchError extends Error {
@@ -169,7 +196,7 @@ function buildSystemPrompt(req: ArticlePracticeRequest): string {
     "- Respond with ONLY a single JSON object.",
     "- No markdown. No code fences. No commentary outside JSON.",
     "- The JSON object MUST have exactly these keys:",
-    '  "sourceTitle", "sourceUrl", "sourceDomain", "articleBrief", "mainIdea", "keyPoints", "usefulVocabulary", "comprehensionChecks", "speakingTask", "followUpQuestions", "warnings".',
+    '  "sourceTitle", "sourceUrl", "sourceDomain", "articleBrief", "mainIdea", "keyPoints", "usefulVocabulary", "comprehensionChecks", "essayQuestions", "speakingTask", "followUpQuestions", "warnings".',
     "- articleBrief is a concise summary of the article (MUST be under 70 words).",
     "- mainIdea is a single sentence (MUST be under 40 words).",
     "- keyPoints is an array of 3-5 short strings (each MUST be under 30 words).",
@@ -278,6 +305,89 @@ function normalizeRequiredString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function hasForbiddenMarkdownModeKey(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => hasForbiddenMarkdownModeKey(item));
+  }
+  if (!value || typeof value !== "object") return false;
+
+  return Object.entries(value as Record<string, unknown>).some(([key, nested]) => {
+    const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    return (
+      (FORBIDDEN_MARKDOWN_MODE_KEYS as readonly string[]).includes(
+        normalizedKey,
+      ) || hasForbiddenMarkdownModeKey(nested)
+    );
+  });
+}
+
+function validatePreparedMarkdown(
+  value: unknown,
+): { ok: true; markdown: string } | { ok: false; error: string } {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: false, error: "Prepared Markdown context is required." };
+  }
+
+  const markdown = value.trim();
+  if (markdown.length > PREPARED_MARKDOWN_CHAR_BUDGET) {
+    return {
+      ok: false,
+      error: "Prepared Markdown must be 20,000 characters or fewer.",
+    };
+  }
+
+  const missingHeading = REQUIRED_MARKDOWN_HEADINGS.find(
+    (heading) => !markdown.includes(heading),
+  );
+  if (missingHeading) {
+    return {
+      ok: false,
+      error: `Prepared Markdown is missing required heading: ${missingHeading}.`,
+    };
+  }
+
+  const headingCount = (markdown.match(/^#{1,3}\s+/gm) ?? []).length;
+  if (markdown.length > 5_000 && headingCount < 6) {
+    return {
+      ok: false,
+      error: "Prepared Markdown appears to be an unstructured raw document.",
+    };
+  }
+
+  return { ok: true, markdown };
+}
+
+function getMarkdownSection(markdown: string, heading: string): string {
+  const start = markdown.indexOf(heading);
+  if (start < 0) return "";
+  const afterHeading = start + heading.length;
+  const rest = markdown.slice(afterHeading);
+  const nextHeading = rest.search(/\n#{1,3}\s+/);
+  return (nextHeading >= 0 ? rest.slice(0, nextHeading) : rest).trim();
+}
+
+function firstNonEmptyLine(value: string): string {
+  return (
+    value
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? ""
+  );
+}
+
+function buildPreparedMarkdownArticle(markdown: string): ExtractedArticle {
+  const title =
+    firstNonEmptyLine(getMarkdownSection(markdown, "## Title")) ||
+    "Prepared Article Context";
+  return {
+    title: limitText(title, 200),
+    sourceUrl: "prepared-markdown-context",
+    sourceDomain: "Prepared Markdown",
+    text: limitText(markdown, PREPARED_MARKDOWN_CHAR_BUDGET),
+    wasTrimmed: markdown.trim().length > PREPARED_MARKDOWN_CHAR_BUDGET,
+  };
+}
+
 function normalizeLevel(value: unknown): LearnerLevel | null {
   if (typeof value !== "string") return null;
   const match = (LEVELS as readonly string[]).find(
@@ -289,6 +399,15 @@ function normalizeLevel(value: unknown): LearnerLevel | null {
 function validateRequest(body: unknown): ArticlePracticeRequest | string {
   if (!body || typeof body !== "object") return "Invalid request body.";
   const source = body as Record<string, unknown>;
+  const inputMode =
+    source.inputMode === undefined || source.inputMode === "url"
+      ? "url"
+      : source.inputMode === "markdown"
+        ? "markdown"
+        : null;
+  if (!inputMode) {
+    return "Unsupported inputMode. Use url or markdown.";
+  }
 
   const provider = source.provider;
   if (
@@ -304,15 +423,32 @@ function validateRequest(body: unknown): ArticlePracticeRequest | string {
     return "Unsupported level. Use Foundation, Beginner, Intermediate, Advanced, or Expert.";
   }
 
-  const url = normalizeString(source.url, MAX_URL_LENGTH);
-  if (!url) return "Article URL is required.";
+  let safeUrl = "";
+  let preparedContextMarkdown = "";
+  if (inputMode === "url") {
+    const url = normalizeString(source.url, MAX_URL_LENGTH);
+    if (!url) return "Article URL is required.";
 
-  const safeUrl = parseSafeArticleUrl(url);
-  if (typeof safeUrl === "string") return safeUrl;
+    const parsedUrl = parseSafeArticleUrl(url);
+    if (typeof parsedUrl === "string") return parsedUrl;
+    safeUrl = parsedUrl.toString();
+  } else {
+    if (hasForbiddenMarkdownModeKey(source)) {
+      return "Markdown mode request contains unsupported private data.";
+    }
+    const markdownResult = validatePreparedMarkdown(
+      source.preparedContextMarkdown,
+    );
+    if (!markdownResult.ok) return markdownResult.error;
+    preparedContextMarkdown = markdownResult.markdown;
+  }
 
   return {
+    inputMode,
     provider,
-    url: safeUrl.toString(),
+    ...(inputMode === "url"
+      ? { url: safeUrl }
+      : { preparedContextMarkdown }),
     level,
     mode: normalizeString(source.mode, 100),
     focus: normalizeString(source.focus, 300),
@@ -1098,16 +1234,18 @@ export async function POST(request: Request) {
   }
 
   const resolvedModel = resolveProviderModel(validated.provider);
+  const isUrlMode = validated.inputMode === "url";
 
   const rawIdempotencyKey = request.headers.get("x-fonetik-idempotency-key");
-  const idempotencyKeyValid = isValidIdempotencyKey(rawIdempotencyKey);
+  const idempotencyKeyValid =
+    isUrlMode && isValidIdempotencyKey(rawIdempotencyKey);
   let idempotencyKeyHash = "";
   let requestHash = "";
 
   if (idempotencyKeyValid && rawIdempotencyKey) {
     idempotencyKeyHash = computeHash(rawIdempotencyKey);
     requestHash = getArticlePracticeRequestHash({
-      url: validated.url,
+      url: validated.url ?? "",
       level: validated.level,
       provider: validated.provider,
       model: resolvedModel,
@@ -1160,18 +1298,21 @@ export async function POST(request: Request) {
     }
   }
 
-  // Check global cache
-  const cacheKey = getArticlePracticeCacheKey(
-    validated.url,
-    validated.level,
-    validated.provider,
-    validated.mode,
-    validated.focus,
-    validated.feedbackLanguage,
-    validated.targetLanguage,
-    ARTICLE_PRACTICE_PROMPT_VERSION
-  );
-  try {
+  let cacheKey = "";
+  if (isUrlMode) {
+    // Check global cache only for URL mode. Prepared markdown is user-provided
+    // context and is intentionally not persisted in the shared cache.
+    cacheKey = getArticlePracticeCacheKey(
+      validated.url ?? "",
+      validated.level,
+      validated.provider,
+      validated.mode,
+      validated.focus,
+      validated.feedbackLanguage,
+      validated.targetLanguage,
+      ARTICLE_PRACTICE_PROMPT_VERSION
+    );
+    try {
     const cached = await getGlobalCachedResponse(cacheKey);
     if (cached) {
       // Log cache hit — fire and forget
@@ -1200,40 +1341,47 @@ export async function POST(request: Request) {
 
       return NextResponse.json(cached);
     }
-  } catch {
-    // Non-blocking: ignore read errors
+    } catch {
+      // Non-blocking: ignore read errors
+    }
   }
 
   let article: ExtractedArticle;
-  try {
-    article = await fetchArticle(validated.url);
-  } catch (err) {
-    const message =
-      err instanceof ArticleFetchError
-        ? err.message
-        : "The article could not be prepared for practice.";
-    recordAiUsageEvent({
-      feature: "article-practice",
-      provider: validated.provider,
-      model: resolvedModel,
-      promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
-      cached: false,
-      requestStatus: "article_fetch_failed",
-      errorCode: message.slice(0, 200),
-    }).catch(() => {});
-
-    if (idempotencyKeyValid) {
-      saveIdempotencyRecord({
-        scopeKey: "global:article-practice",
+  if (isUrlMode) {
+    try {
+      article = await fetchArticle(validated.url ?? "");
+    } catch (err) {
+      const message =
+        err instanceof ArticleFetchError
+          ? err.message
+          : "The article could not be prepared for practice.";
+      recordAiUsageEvent({
         feature: "article-practice",
-        idempotencyKeyHash,
-        requestHash,
-        requestStatus: "failed",
-        errorCode: "article_fetch_failed",
+        provider: validated.provider,
+        model: resolvedModel,
+        promptVersion: ARTICLE_PRACTICE_PROMPT_VERSION,
+        cached: false,
+        requestStatus: "article_fetch_failed",
+        errorCode: message.slice(0, 200),
       }).catch(() => {});
-    }
 
-    return NextResponse.json({ error: message }, { status: 400 });
+      if (idempotencyKeyValid) {
+        saveIdempotencyRecord({
+          scopeKey: "global:article-practice",
+          feature: "article-practice",
+          idempotencyKeyHash,
+          requestHash,
+          requestStatus: "failed",
+          errorCode: "article_fetch_failed",
+        }).catch(() => {});
+      }
+
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  } else {
+    article = buildPreparedMarkdownArticle(
+      validated.preparedContextMarkdown ?? "",
+    );
   }
 
   const apiKey = getApiKey(validated.provider);
@@ -1354,11 +1502,13 @@ export async function POST(request: Request) {
     }),
   }).catch(() => {});
 
-  // Save successful result to global cache
-  try {
-    await saveGlobalCachedResponse(cacheKey, "article-practice", parsedPractice.value);
-  } catch {
-    // Non-blocking: ignore write errors
+  if (isUrlMode) {
+    // Save successful URL result to global cache.
+    try {
+      await saveGlobalCachedResponse(cacheKey, "article-practice", parsedPractice.value);
+    } catch {
+      // Non-blocking: ignore write errors
+    }
   }
 
   if (idempotencyKeyValid) {

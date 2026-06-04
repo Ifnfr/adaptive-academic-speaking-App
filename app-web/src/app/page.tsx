@@ -420,6 +420,12 @@ export default function Home() {
 
   // --- Article Practice state ---
   const [articleUrl, setArticleUrl] = useState("");
+  const [articleInputMode, setArticleInputMode] = useState<"url" | "markdown">(
+    "url",
+  );
+  const [preparedContextMarkdown, setPreparedContextMarkdown] = useState("");
+  const [preparedContextMarkdownError, setPreparedContextMarkdownError] =
+    useState<string | null>(null);
   const [articleFocus, setArticleFocus] = useState("");
   const [articlePracticeResult, setArticlePracticeResult] =
     useState<ArticlePracticeResult | null>(null);
@@ -1519,17 +1525,39 @@ export default function Home() {
   };
 
   const handleGenerateArticlePractice = async () => {
+    const inputMode = articleInputMode;
     const url = articleUrl.trim();
-    if (url.length === 0) {
+    const markdown = preparedContextMarkdown.trim();
+    if (inputMode === "url" && url.length === 0) {
       setArticlePracticeError("Paste an article URL before generating practice.");
       return;
+    }
+    if (inputMode === "markdown") {
+      if (preparedContextMarkdownError) {
+        setArticlePracticeError(preparedContextMarkdownError);
+        return;
+      }
+      if (markdown.length === 0) {
+        setArticlePracticeError(
+          "Paste prepared Article Context Markdown before generating practice.",
+        );
+        return;
+      }
+      if (markdown.length > 20_000) {
+        setArticlePracticeError(
+          "Prepared Markdown must be 20,000 characters or fewer.",
+        );
+        return;
+      }
     }
 
     const focus = effectiveArticleFocus.trim();
     setArticlePracticeLoading(true);
     setArticlePracticeError(null);
     setArticlePracticeResult(null);
-    setArticleUrl(url);
+    if (inputMode === "url") {
+      setArticleUrl(url);
+    }
 
     try {
       const res = await fetch("/api/article-practice", {
@@ -1537,7 +1565,10 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           provider: aiProvider,
-          url,
+          inputMode,
+          ...(inputMode === "url"
+            ? { url }
+            : { preparedContextMarkdown: markdown }),
           level,
           mode,
           focus,
@@ -1587,13 +1618,16 @@ export default function Home() {
       setArticlePracticeResult(result);
 
       // Award XP for successful article practice generation.
-      // sourceId is deterministic: normalized URL + local date only.
+      // sourceId is deterministic: normalized URL or markdown hash + local date only.
       try {
-        const normalizedUrl = normalizeArticlePracticeSourceUrl(url);
+        const sourceKey =
+          inputMode === "url"
+            ? stableTextKey(normalizeArticlePracticeSourceUrl(url))
+            : stableTextKey(markdown);
         const articleSourceId = [
           "article",
           getLocalDateString(),
-          stableTextKey(normalizedUrl),
+          sourceKey,
         ].join("-");
         awardGamificationEvent(
           "article_practice_completed",
@@ -1814,6 +1848,9 @@ export default function Home() {
           {view === "article-practice" && (
             <ArticlePracticeView
               articleUrl={articleUrl}
+              articleInputMode={articleInputMode}
+              preparedContextMarkdown={preparedContextMarkdown}
+              preparedContextMarkdownError={preparedContextMarkdownError}
               articleFocus={articleFocus}
               focusPlaceholder={articleFocusPlaceholder}
               provider={aiProvider}
@@ -1832,6 +1869,9 @@ export default function Home() {
               savedVocabularyWords={savedVocabularyWords}
               appLanguage={appLanguage}
               onArticleUrlChange={setArticleUrl}
+              onArticleInputModeChange={setArticleInputMode}
+              onPreparedContextMarkdownChange={setPreparedContextMarkdown}
+              onPreparedContextMarkdownErrorChange={setPreparedContextMarkdownError}
               onArticleFocusChange={setArticleFocus}
               onGenerateArticlePractice={handleGenerateArticlePractice}
               onPracticeSpeakingTask={handlePracticeArticleSpeakingTask}

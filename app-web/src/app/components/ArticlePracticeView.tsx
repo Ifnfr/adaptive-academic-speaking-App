@@ -1,6 +1,7 @@
 
 
 import { useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 
@@ -70,6 +71,9 @@ export type ArticlePracticeResult = {
 
 type ArticlePracticeViewProps = {
   articleUrl: string;
+  articleInputMode: "url" | "markdown";
+  preparedContextMarkdown: string;
+  preparedContextMarkdownError: string | null;
   articleFocus: string;
   focusPlaceholder: string;
   provider: string;
@@ -83,6 +87,9 @@ type ArticlePracticeViewProps = {
   savedVocabularyWords: ReadonlySet<string>;
   appLanguage?: AppLanguage | null;
   onArticleUrlChange: (value: string) => void;
+  onArticleInputModeChange: (value: "url" | "markdown") => void;
+  onPreparedContextMarkdownChange: (value: string) => void;
+  onPreparedContextMarkdownErrorChange: (value: string | null) => void;
   onArticleFocusChange: (value: string) => void;
   onGenerateArticlePractice: () => void;
   onPracticeSpeakingTask: (result: ArticlePracticeResult) => void;
@@ -121,6 +128,73 @@ function SummaryCell({
 }
 
 const ARTICLE_ANSWER_MAX_LENGTH = 1200;
+const PREPARED_CONTEXT_MARKDOWN_MAX_LENGTH = 20_000;
+const PREPARED_CONTEXT_MARKDOWN_FILE_MAX_BYTES = 150 * 1024;
+
+const PREPARED_CONTEXT_CONVERSION_PROMPT = `Convert the reading material I provide into an Article Context Markdown file.
+
+Do not copy the full article. Remove references, ads, navigation text, footnotes, author bio, and formatting noise.
+
+Use this exact Markdown structure:
+
+# Article Context
+
+## Title
+
+Write the title.
+
+## Source
+
+Write source, author, or publication if available. If unknown, write "Unknown".
+
+## Short Summary
+
+Summarize the reading in 120-180 words.
+
+## Main Idea
+
+Explain the central idea in 1-2 sentences.
+
+## Key Points
+
+Write 5-8 bullet points that capture the most important arguments, facts, causes, effects, examples, or implications.
+
+## Important Vocabulary
+
+List 8-12 useful words or phrases. For each item, include:
+
+* Word/Phrase:
+* Meaning:
+* Why useful:
+
+## Debatable Issue
+
+Write one issue from the reading that can be discussed from more than one perspective.
+
+## Essay Comprehension Questions
+
+Create exactly 5 essay questions:
+
+1. one question about the main idea
+2. one question about supporting details
+3. one inference question
+4. one vocabulary-in-context question
+5. one critical response or implication question
+
+For each question, include:
+Question:
+Expected focus:
+Suggested answer length:
+
+## Speaking Practice Prompt
+
+Create one speaking task based on the reading. The task should ask the learner to explain, agree/disagree, compare, or respond critically.
+
+## Follow-up Discussion Questions
+
+Create 3 follow-up questions for speaking practice.
+
+Keep the output concise, structured, and suitable for an English learner.`;
 
 function getFriendlyTargetSkill(skill: ArticleEssayTargetSkill): string {
   switch (skill) {
@@ -167,6 +241,9 @@ function NotesList({ items }: { items: string[] }) {
 
 export function ArticlePracticeView({
   articleUrl,
+  articleInputMode,
+  preparedContextMarkdown,
+  preparedContextMarkdownError,
   articleFocus,
   focusPlaceholder,
   provider,
@@ -180,12 +257,16 @@ export function ArticlePracticeView({
   savedVocabularyWords,
   appLanguage,
   onArticleUrlChange,
+  onArticleInputModeChange,
+  onPreparedContextMarkdownChange,
+  onPreparedContextMarkdownErrorChange,
   onArticleFocusChange,
   onGenerateArticlePractice,
   onPracticeSpeakingTask,
   onSaveVocabularyCandidate,
 }: ArticlePracticeViewProps) {
   const [showHelp, setShowHelp] = useState(false);
+  const [showMarkdownPrompt, setShowMarkdownPrompt] = useState(false);
   const [essayAnswerState, setEssayAnswerState] = useState<{
     resultKey: string;
     answers: Record<string, string>;
@@ -264,6 +345,51 @@ export function ArticlePracticeView({
   }) => {
     if (isWordSaved(candidate.word)) return;
     onSaveVocabularyCandidate(candidate);
+  };
+
+  const handlePreparedMarkdownChange = (value: string) => {
+    onPreparedContextMarkdownChange(value);
+    onPreparedContextMarkdownErrorChange(
+      value.length > PREPARED_CONTEXT_MARKDOWN_MAX_LENGTH
+        ? "Prepared Markdown must be 20,000 characters or fewer."
+        : null,
+    );
+  };
+
+  const handlePreparedMarkdownFileChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".md")) {
+      onPreparedContextMarkdownErrorChange("Only .md files are supported.");
+      return;
+    }
+
+    if (file.size > PREPARED_CONTEXT_MARKDOWN_FILE_MAX_BYTES) {
+      onPreparedContextMarkdownErrorChange(
+        "Markdown file must be 150 KB or smaller.",
+      );
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      if (text.length > PREPARED_CONTEXT_MARKDOWN_MAX_LENGTH) {
+        onPreparedContextMarkdownErrorChange(
+          "Prepared Markdown must be 20,000 characters or fewer.",
+        );
+        return;
+      }
+      onPreparedContextMarkdownChange(text);
+      onPreparedContextMarkdownErrorChange(null);
+    } catch {
+      onPreparedContextMarkdownErrorChange(
+        "Could not read the Markdown file. Please try again.",
+      );
+    }
   };
 
   const handleEssayAnswerChange = (questionId: string, answer: string) => {
@@ -375,38 +501,71 @@ export function ArticlePracticeView({
           </div>
 
           <div className="mt-5">
-            <label htmlFor="article-url" className={labelClass}>
-              {t("article.url")}
-            </label>
-            <input
-              id="article-url"
-              value={articleUrl}
-              onChange={(event) => onArticleUrlChange(event.target.value)}
-              placeholder="https://example.com/article"
-              className={inputClass}
-            />
-            <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-              {t("article.urlTagline")}
-            </p>
-
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => setShowHelp(!showHelp)}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand-teal-ink)] hover:underline focus:outline-none"
-              >
-                <span>{showHelp ? "Hide help" : "What article links work best?"}</span>
-                <svg
-                  className={`h-3 w-3 transition-transform ${showHelp ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+            <p className={labelClass}>Input mode</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {[
+                { value: "url", label: "Article URL" },
+                { value: "markdown", label: "Prepared Markdown Context" },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                    articleInputMode === option.value
+                      ? "border-[var(--brand-teal)] bg-[var(--brand-teal)]/10 text-[var(--brand-teal-ink)]"
+                      : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)]"
+                  }`}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
+                  <input
+                    type="radio"
+                    name="article-input-mode"
+                    value={option.value}
+                    checked={articleInputMode === option.value}
+                    onChange={() =>
+                      onArticleInputModeChange(
+                        option.value as "url" | "markdown",
+                      )
+                    }
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
-              {showHelp && (
+          {articleInputMode === "url" && (
+            <div className="mt-5">
+              <label htmlFor="article-url" className={labelClass}>
+                {t("article.url")}
+              </label>
+              <input
+                id="article-url"
+                value={articleUrl}
+                onChange={(event) => onArticleUrlChange(event.target.value)}
+                placeholder="https://example.com/article"
+                className={inputClass}
+              />
+              <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                {t("article.urlTagline")}
+              </p>
+
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowHelp(!showHelp)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand-teal-ink)] hover:underline focus:outline-none"
+                >
+                  <span>{showHelp ? "Hide help" : "What article links work best?"}</span>
+                  <svg
+                    className={`h-3 w-3 transition-transform ${showHelp ? "rotate-180" : ""}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showHelp && (
                 <div className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-xs leading-5 text-[var(--brand-ink)]">
                   <p className="font-semibold text-[var(--brand-ink)]">
                     What article links work best?
@@ -467,9 +626,100 @@ export function ArticlePracticeView({
                     <span className="font-semibold block">Caution:</span> Some articles may fail because of paywalls, login walls, scripts, or anti-bot protection. Not every article from these sources will work. If extraction fails, try another public article link.
                   </div>
                 </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {articleInputMode === "markdown" && (
+            <div
+              className="mt-5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4"
+              data-testid="article-markdown-input"
+            >
+              <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                Use a prepared Article Context Markdown
+              </h3>
+              <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
+                Use this when your reading material comes from a PDF, Word
+                document, textbook, journal, class material, or copied article.
+                Do not upload the raw reading. First, ask another AI tool to
+                convert the reading into the Article Context Markdown format,
+                then paste or upload the .md file here.
+              </p>
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowMarkdownPrompt(!showMarkdownPrompt)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand-teal-ink)] hover:underline focus:outline-none"
+                >
+                  {showMarkdownPrompt
+                    ? "Hide prompt for another AI"
+                    : "Copy prompt for another AI"}
+                </button>
+                {showMarkdownPrompt && (
+                  <div className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3">
+                    <textarea
+                      readOnly
+                      rows={14}
+                      value={PREPARED_CONTEXT_CONVERSION_PROMPT}
+                      className={`${inputClass} resize-y font-mono text-xs leading-5`}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="article-markdown-file" className={labelClass}>
+                  Upload .md file
+                </label>
+                <input
+                  id="article-markdown-file"
+                  type="file"
+                  accept=".md,text/markdown,text/plain"
+                  onChange={handlePreparedMarkdownFileChange}
+                  className="block w-full text-sm text-[var(--brand-ink)] file:mr-3 file:rounded-lg file:border file:border-[var(--brand-border)] file:bg-[var(--brand-surface-2)] file:px-3 file:py-2 file:text-sm file:font-medium file:text-[var(--brand-ink)]"
+                />
+                <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                  Files are read in your browser only. Maximum size: 150 KB.
+                </p>
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="article-markdown" className={labelClass}>
+                  Prepared Markdown Context
+                </label>
+                <textarea
+                  id="article-markdown"
+                  rows={12}
+                  value={preparedContextMarkdown}
+                  onChange={(event) =>
+                    handlePreparedMarkdownChange(event.target.value)
+                  }
+                  placeholder="# Article Context&#10;&#10;## Title&#10;&#10;..."
+                  className={`${inputClass} resize-y font-mono text-xs leading-5`}
+                />
+                <div className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    className={`text-xs ${
+                      preparedContextMarkdown.length >
+                      PREPARED_CONTEXT_MARKDOWN_MAX_LENGTH
+                        ? "text-[var(--brand-coral)]"
+                        : "text-[var(--brand-ink-soft)]"
+                    }`}
+                  >
+                    {preparedContextMarkdown.length}/
+                    {PREPARED_CONTEXT_MARKDOWN_MAX_LENGTH} characters
+                  </p>
+                  {preparedContextMarkdownError && (
+                    <p className="text-xs text-[var(--brand-coral)]">
+                      {preparedContextMarkdownError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-5">
             <label htmlFor="article-focus" className={labelClass}>
@@ -495,7 +745,11 @@ export function ArticlePracticeView({
             <button
               type="button"
               onClick={onGenerateArticlePractice}
-              disabled={articlePracticeLoading}
+              disabled={
+                articlePracticeLoading ||
+                (articleInputMode === "markdown" &&
+                  Boolean(preparedContextMarkdownError))
+              }
               className={`${buttonPrimary} w-full sm:w-auto`}
             >
               {articlePracticeLoading
