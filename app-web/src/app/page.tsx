@@ -54,6 +54,7 @@ import { Sidebar, type SidebarView } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
 import { PodchatView } from "./components/PodchatView";
+import type { PodchatArticleContext } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
 import {
   ArticlePracticeView,
@@ -433,6 +434,8 @@ export default function Home() {
   const [articlePracticeError, setArticlePracticeError] = useState<
     string | null
   >(null);
+  const [pendingArticleContext, setPendingArticleContext] =
+    useState<PodchatArticleContext | null>(null);
 
   // --- Gamification state (local, deterministic, no AI) ---
   const [xpProfile, setXpProfile] = useState<XpProfile>(() =>
@@ -1368,6 +1371,17 @@ export default function Home() {
   };
 
   const handlePracticeArticleSpeakingTask = (result: ArticlePracticeResult) => {
+    const context: PodchatArticleContext = {
+      articleTitle: result.sourceTitle,
+      articleBrief: result.articleBrief,
+      mainIdea: result.mainIdea,
+      keyPoints: result.keyPoints,
+      speakingTaskTitle: result.speakingTask.title,
+      speakingTaskInstruction: result.speakingTask.instruction,
+      targetStructure: result.speakingTask.targetStructure,
+      sourceDomain: result.sourceDomain,
+    };
+    setPendingArticleContext(context);
     setTarget(buildArticleSpeakingTarget(result));
     setMode("Reading-to-Speaking");
     setView("active");
@@ -1731,7 +1745,11 @@ export default function Home() {
 
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
-            <PodchatView key={`${mode}:${target}`} />
+            <PodchatView
+              key={`${mode}:${target}:${pendingArticleContext ? "article" : "generic"}`}
+              articleContext={pendingArticleContext}
+              onClearArticleContext={() => setPendingArticleContext(null)}
+            />
           )}
 
           {/* ===================== Vocabulary Notebook view ===================== */}

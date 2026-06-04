@@ -114,7 +114,26 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function PodchatView() {
+export type PodchatArticleContext = {
+  articleTitle: string;
+  articleBrief: string;
+  mainIdea?: string;
+  keyPoints?: string[];
+  speakingTaskTitle: string;
+  speakingTaskInstruction: string;
+  targetStructure?: string[];
+  sourceDomain?: string;
+};
+
+export interface PodchatViewProps {
+  articleContext?: PodchatArticleContext | null;
+  onClearArticleContext?: () => void;
+}
+
+export function PodchatView({
+  articleContext,
+  onClearArticleContext,
+}: PodchatViewProps) {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
   const [difficulty, setDifficulty] =
@@ -356,6 +375,9 @@ export function PodchatView() {
     setEvalData(null);
     setRecordingState("idle");
     setLockedTranscript(null);
+    if (onClearArticleContext) {
+      onClearArticleContext();
+    }
   }
 
   async function startRecording() {
@@ -484,6 +506,7 @@ export function PodchatView() {
           topic,
           difficulty,
           turns: finalTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
+          ...(articleContext ? { articleContext } : {}),
         }),
       });
       if (!response.ok) {
@@ -511,6 +534,7 @@ export function PodchatView() {
       elapsedSeconds: elapsed,
       remainingSeconds: remaining,
       turns: currentTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
+      ...(articleContext ? { articleContext } : {}),
     };
   }
 
@@ -612,6 +636,101 @@ export function PodchatView() {
   }
 
   if (phase === "setup") {
+    if (articleContext) {
+      return (
+        <section className={card} data-testid="podchat-setup">
+          <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+              Podchat Phase 1
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
+              Start a Podchat
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)] font-medium">
+              This Podchat will discuss your article speaking task.
+            </p>
+          </div>
+          <div className="p-6 flex flex-col gap-6">
+            <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex flex-col gap-4" data-testid="podchat-article-context-card">
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">Article Title</span>
+                <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">{articleContext.articleTitle}</span>
+              </div>
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">Article Brief</span>
+                <p className="text-sm text-[var(--brand-ink-soft)] mt-1 whitespace-pre-wrap">{articleContext.articleBrief}</p>
+              </div>
+              {articleContext.speakingTaskTitle && (
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">Speaking Task</span>
+                  <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">{articleContext.speakingTaskTitle}</span>
+                </div>
+              )}
+              {articleContext.speakingTaskInstruction && (
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">Instruction</span>
+                  <p className="text-sm text-[var(--brand-ink-soft)] mt-1 whitespace-pre-wrap">{articleContext.speakingTaskInstruction}</p>
+                </div>
+              )}
+              {articleContext.targetStructure && articleContext.targetStructure.length > 0 && (
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">Target Structure</span>
+                  <ul className="list-disc pl-5 mt-1 text-sm text-[var(--brand-ink-soft)] space-y-1">
+                    {articleContext.targetStructure.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <fieldset>
+              <legend className={labelClass}>Difficulty / Duration</legend>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                role="radiogroup"
+                aria-label="Podchat difficulty"
+              >
+                {DIFFICULTIES.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={difficulty === option}
+                    onClick={() => setDifficulty(option)}
+                    className={
+                      "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                      (difficulty === option
+                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                    }
+                  >
+                    <span className="text-sm font-semibold">{option}</span>
+                    <span
+                      className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                      data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
+                    >
+                      {DIFFICULTY_LABEL[option]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="flex justify-center mt-2">
+              <button
+                type="button"
+                onClick={startPodchat}
+                className={buttonPrimary}
+              >
+                Start a Podchat
+              </button>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section className={card} data-testid="podchat-setup">
         <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">

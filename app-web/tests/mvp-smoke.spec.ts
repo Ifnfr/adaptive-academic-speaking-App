@@ -698,15 +698,133 @@ test.describe("MVP Smoke Flows", () => {
   });
 
   // Test F: Article -> Podchat navigation
-  test("F. Article Practice opens Podchat without starting capture", async ({
+  test("F. Article Practice opens Podchat with compact context and runs speaking task", async ({
     page,
   }) => {
+    const turnPayloads: unknown[] = [];
+    const evaluatePayloads: unknown[] = [];
+
+    await page.addInitScript(() => {
+      const customWin = window as unknown as Record<string, unknown>;
+      customWin.__PODCHAT_MIC_REQUESTED__ = false;
+      customWin.__PODCHAT_MIC_DENY__ = false;
+
+      class MockMediaStreamTrack {
+        kind = "audio";
+        enabled = true;
+        stop() {}
+      }
+
+      class MockMediaStream {
+        _tracks = [new MockMediaStreamTrack()];
+        getTracks() {
+          return this._tracks;
+        }
+      }
+
+      const mediaDevices = {
+        async getUserMedia() {
+          const w = window as unknown as Record<string, unknown>;
+          w.__PODCHAT_MIC_REQUESTED__ = true;
+          return new MockMediaStream();
+        },
+      };
+
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: mediaDevices,
+      });
+
+      class MockMediaRecorder {
+        stream: unknown;
+        options?: unknown;
+        state = "inactive";
+        ondataavailable: ((event: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        mimeType = "audio/webm";
+
+        constructor(stream: unknown, options?: unknown) {
+          this.stream = stream;
+          this.options = options;
+        }
+
+        static isTypeSupported(type: string) {
+          return ["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/ogg"].includes(type);
+        }
+
+        start() {
+          this.state = "recording";
+        }
+
+        stop() {
+          this.state = "inactive";
+          if (this.ondataavailable) {
+            const mockBlob = new Blob([new Uint8Array([1, 2, 3])], { type: this.mimeType });
+            this.ondataavailable({ data: mockBlob });
+          }
+          if (this.onstop) {
+            setTimeout(() => {
+              if (this.onstop) this.onstop();
+            }, 0);
+          }
+        }
+      }
+      (window as unknown as Record<string, unknown>).MediaRecorder = MockMediaRecorder;
+    });
+
     // Intercept article-practice API
     await page.route("**/api/article-practice", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(articlePracticeResponse()),
+      });
+    });
+
+    // Mock STT Route
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          transcript: "This is my spoken response about the article task."
+        })
+      });
+    });
+
+    // Mock API Turn Route
+    await page.route("**/api/podchat/turn", async (route) => {
+      turnPayloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hostText: "This is a mocked host response about the article.",
+          followUpQuestion: "What is your next point?"
+        })
+      });
+    });
+
+    // Mock API Evaluate Route
+    await page.route("**/api/podchat/evaluate", async (route) => {
+      evaluatePayloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "This is a mocked summary evaluation of the article task.",
+          corrections: [
+            { original: "wrong grammar", improved: "correct grammar", explanation: "Because of rules." }
+          ],
+          betterSentences: ["Better academic sentence."],
+          vocabularySuggestions: [
+            { originalOrBasic: "good", suggestion: "excellent", example: "It is excellent." }
+          ],
+          recurringErrors: [
+            { label: "Grammar mistake", evidence: "wrong grammar", practiceFocus: "Practice rules." }
+          ],
+          nextPracticeFocus: "Focus on academic vocabulary."
+        })
       });
     });
 
@@ -725,17 +843,72 @@ test.describe("MVP Smoke Flows", () => {
     // Click bridge button
     await page.click("button:has-text(\"Practice This Speaking Task\")");
 
-    // The bridge now lands on the Podchat setup, without old Active Practice UI
-    // and without auto-starting capture or a speaking screen.
+    // Assert Podchat shows article-context setup card
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
-    await expect(page.getByRole("radio", { name: "Economics" })).toBeVisible();
-    await expect(page.getByRole("radio", { name: "Technology" })).toBeVisible();
-    await expect(
-      page.locator("h2:has-text(\"Speaking prompt\")"),
-    ).not.toBeVisible();
-    await expect(
-      page.locator("h2:has-text(\"Speaking attempt\")"),
-    ).not.toBeVisible();
-    await expect(page.getByTestId("podchat-speaking")).toHaveCount(0);
+    await expect(page.getByTestId("podchat-article-context-card")).toBeVisible();
+    await expect(page.getByText("This Podchat will discuss your article speaking task.")).toBeVisible();
+
+    // Assert generic topic cards are not the main setup in article-context mode
+    await expect(page.getByRole("radio", { name: "Economics" })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: "Technology" })).toHaveCount(0);
+
+    // Start Podchat
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await expect(page.getByTestId("podchat-speaking")).toBeVisible();
+
+    // Complete one recording/STT flow
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
+    await page.getByTestId("podchat-submit-turn").click();
+
+    // Assert /api/podchat/turn payload
+    expect(turnPayloads).toHaveLength(1);
+    const turnPayload = turnPayloads[0] as Record<string, unknown>;
+    expect(turnPayload).toHaveProperty("articleContext");
+    const articleCtx = turnPayload.articleContext as Record<string, unknown>;
+    expect(articleCtx.articleTitle).toBe("Test Article Title");
+    expect(articleCtx.articleBrief).toBe("Brief summary.");
+    expect(articleCtx.speakingTaskTitle).toBe("Synthesize the Findings");
+    expect(articleCtx.speakingTaskInstruction).toBe("Explain how synthesis works.");
+
+    // Assert payload does NOT include forbidden fields
+    const turnSerialized = JSON.stringify(turnPayload).toLowerCase();
+    for (const forbidden of [
+      "sourceurl",
+      "raw markdown",
+      "fullarticletext",
+      "useridentity",
+      "storagepath",
+      "files",
+      "audio",
+    ]) {
+      expect(turnSerialized).not.toContain(forbidden);
+    }
+
+    // End session
+    await page.getByRole("button", { name: "End Session" }).click();
+    await expect(page.getByTestId("podchat-evaluation")).toBeVisible();
+    await expect(page.getByTestId("podchat-evaluation-success")).toBeVisible();
+
+    // Assert /api/podchat/evaluate payload
+    expect(evaluatePayloads).toHaveLength(1);
+    const evaluatePayload = evaluatePayloads[0] as Record<string, unknown>;
+    expect(evaluatePayload).toHaveProperty("articleContext");
+    const evalArticleCtx = evaluatePayload.articleContext as Record<string, unknown>;
+    expect(evalArticleCtx.articleTitle).toBe("Test Article Title");
+
+    const evalSerialized = JSON.stringify(evaluatePayload).toLowerCase();
+    for (const forbidden of [
+      "sourceurl",
+      "raw markdown",
+      "fullarticletext",
+      "useridentity",
+      "storagepath",
+      "files",
+      "audio",
+    ]) {
+      expect(evalSerialized).not.toContain(forbidden);
+    }
   });
 });
