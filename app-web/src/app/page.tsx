@@ -120,6 +120,7 @@ type Mode =
 type FeedbackType = "Quick" | "Deep";
 type SessionType = "Micro" | "Standard" | "Deep";
 type AIProvider = "Claude" | "DeepSeek" | "Gemini";
+type TtsProvider = "polly" | "elevenlabs";
 
 type VocabularyCorrectionResult = Omit<
   VocabSentenceCorrection,
@@ -417,6 +418,38 @@ export default function Home() {
     setAiProvider(provider);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("defaultAiProvider", provider);
+    }
+  };
+
+  // --- Global TTS Provider Setting ---
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>("polly");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem("defaultTtsProvider");
+        if (stored === "polly" || stored === "elevenlabs") {
+          setTtsProvider(stored);
+        } else if (stored === "Polly") {
+          setTtsProvider("polly");
+          window.localStorage.setItem("defaultTtsProvider", "polly");
+        } else if (stored === "ElevenLabs") {
+          setTtsProvider("elevenlabs");
+          window.localStorage.setItem("defaultTtsProvider", "elevenlabs");
+        } else if (stored) {
+          // invalid value, sanitize to polly
+          setTtsProvider("polly");
+          window.localStorage.setItem("defaultTtsProvider", "polly");
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleDefaultTtsProviderChange = (provider: TtsProvider) => {
+    setTtsProvider(provider);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("defaultTtsProvider", provider);
     }
   };
 
@@ -1749,6 +1782,7 @@ export default function Home() {
               key={`${mode}:${target}:${pendingArticleContext ? "article" : "generic"}`}
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
+              ttsProvider={ttsProvider}
             />
           )}
 
@@ -1967,6 +2001,8 @@ export default function Home() {
               }}
               defaultAiProvider={aiProvider}
               onDefaultAiProviderChange={handleDefaultAiProviderChange}
+              defaultTtsProvider={ttsProvider}
+              onDefaultTtsProviderChange={handleDefaultTtsProviderChange}
             />
           )}
 

@@ -36,6 +36,8 @@ export type SettingsViewProps = {
   onAppLanguageChange?: (language: AppLanguage) => void;
   defaultAiProvider?: string;
   onDefaultAiProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  defaultTtsProvider?: "polly" | "elevenlabs";
+  onDefaultTtsProviderChange?: (provider: "polly" | "elevenlabs") => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -557,6 +559,8 @@ export function SettingsView({
   onAppLanguageChange,
   defaultAiProvider = "Claude",
   onDefaultAiProviderChange,
+  defaultTtsProvider = "polly",
+  onDefaultTtsProviderChange,
 }: SettingsViewProps) {
   const { t } = useI18n(appLanguage);
 
@@ -564,6 +568,10 @@ export function SettingsView({
     claude: boolean;
     gemini: boolean;
     deepseek: boolean;
+    ttsProviders?: {
+      Polly: { configured: boolean };
+      ElevenLabs: { configured: boolean };
+    };
   } | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -676,8 +684,55 @@ export function SettingsView({
                     {providerStatus.deepseek ? 'Configured' : 'Missing'}
                   </span>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--brand-ink)]">AWS Polly (TTS)</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.ttsProviders?.Polly?.configured ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--brand-ink)]">ElevenLabs (TTS)</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.ttsProviders?.ElevenLabs?.configured ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* TTS Provider Card */}
+      <div className={card}>
+        <div className={cardHeader}>
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+            Voice Configuration
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+            Text-to-Speech Provider
+          </h2>
+          <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans">
+            Choose which server-side voice engine reads AI host responses aloud. API keys stay on the server and are never stored in the browser.
+          </p>
+        </div>
+        <div className={cardBody}>
+          <div className="max-w-xs">
+            <label className="flex flex-col gap-1.5 font-sans">
+              <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                TTS Provider
+              </span>
+              <select
+                id="default-tts-provider-select"
+                value={defaultTtsProvider}
+                onChange={(e) =>
+                  onDefaultTtsProviderChange?.(e.target.value as "polly" | "elevenlabs")
+                }
+                className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+              >
+                <option value="polly">AWS Polly</option>
+                <option value="elevenlabs">ElevenLabs</option>
+              </select>
+            </label>
           </div>
         </div>
       </div>

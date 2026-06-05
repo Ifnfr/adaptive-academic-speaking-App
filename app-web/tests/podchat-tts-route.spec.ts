@@ -7,6 +7,8 @@ const originalSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
 const originalRegion = process.env.AWS_REGION;
 const originalVoice = process.env.POLLY_VOICE_ID;
 const originalEngine = process.env.POLLY_ENGINE;
+const originalElevenLabsKey = process.env.ELEVENLABS_API_KEY;
+const originalElevenLabsVoice = process.env.ELEVENLABS_VOICE_ID;
 const originalFetch = globalThis.fetch;
 
 function buildRequest(body: Record<string, unknown>): Request {
@@ -42,6 +44,49 @@ function clearAwsEnv() {
   process.env.AWS_REGION = "";
   process.env.POLLY_VOICE_ID = "";
   process.env.POLLY_ENGINE = "";
+}
+
+function configureElevenLabsEnv(
+  overrides: Record<string, string | undefined> = {},
+) {
+  process.env.ELEVENLABS_API_KEY =
+    overrides.ELEVENLABS_API_KEY ?? "test-el-key";
+  process.env.ELEVENLABS_VOICE_ID =
+    overrides.ELEVENLABS_VOICE_ID ?? "test-voice-id";
+}
+
+function clearElevenLabsEnv() {
+  process.env.ELEVENLABS_API_KEY = "";
+  process.env.ELEVENLABS_VOICE_ID = "";
+}
+
+function mockElevenLabsResponse(
+  status: number,
+  body: string | Uint8Array,
+  capture: { url?: string; headers?: Headers; body?: Record<string, unknown> } = {},
+) {
+  globalThis.fetch = (async (url, init) => {
+    capture.url = String(url);
+    capture.headers = new Headers(init?.headers);
+    if (init && typeof init.body === "string") {
+      capture.body = JSON.parse(init.body) as Record<string, unknown>;
+    }
+
+    let responseBody: BodyInit;
+    if (typeof body === "string") {
+      responseBody = body;
+    } else {
+      const copy = new ArrayBuffer(body.byteLength);
+      new Uint8Array(copy).set(body);
+      responseBody = copy;
+    }
+    return new Response(responseBody, {
+      status,
+      headers: {
+        "content-type": status === 200 ? "audio/mpeg" : "application/json",
+      },
+    });
+  }) as typeof fetch;
 }
 
 function mockPollyResponse(
@@ -80,6 +125,8 @@ test.describe("Podchat TTS Route", () => {
     process.env.AWS_REGION = originalRegion;
     process.env.POLLY_VOICE_ID = originalVoice;
     process.env.POLLY_ENGINE = originalEngine;
+    process.env.ELEVENLABS_API_KEY = originalElevenLabsKey;
+    process.env.ELEVENLABS_VOICE_ID = originalElevenLabsVoice;
     globalThis.fetch = originalFetch;
   });
 
@@ -266,5 +313,301 @@ test.describe("Podchat TTS Route", () => {
     for (const term of forbidden) {
       expect(source).not.toContain(term);
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // ElevenLabs provider tests
+  // ---------------------------------------------------------------------------
+
+  test("polly provider (explicit) still returns audio/mpeg", async () => {
+    configureAwsEnv();
+    mockPollyResponse(200, new Uint8Array([10, 20, 30]));
+
+    const response = await POST(
+      buildRequest({ ttsProvider: "polly" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("audio/mpeg");
+  });
+
+  test("invalid ttsProvider falls back safely to polly", async () => {
+    configureAwsEnv();
+    mockPollyResponse(200, new Uint8Array([11, 22, 33]));
+
+    const response = await POST(buildRequest({ ttsProvider: "GoogleCloud" }));
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("audio/mpeg");
+    expect(Array.from(bytes)).toEqual([11, 22, 33]);
+  });
+
+  test("ElevenLabs provider returns audio/mpeg", async () => {
+    configureElevenLabsEnv();
+    mockElevenLabsResponse(200, new Uint8Array([40, 50, 60]));
+
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs" }),
+    );
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("audio/mpeg");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(Array.from(bytes)).toEqual([40, 50, 60]);
+  });
+
+  test("ElevenLabs missing env returns sanitized 503", async () => {
+    clearElevenLabsEnv();
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs" }),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(503);
+    expect(data.error).toBe(
+      "Text-to-speech is not configured. Please try again later.",
+    );
+  });
+
+  test("ElevenLabs upstream failure returns sanitized 502", async () => {
+    configureElevenLabsEnv();
+    mockElevenLabsResponse(
+      500,
+      JSON.stringify({ secret: "raw elevenlabs detail" }),
+    );
+
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs" }),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(data.error).toBe(
+      "Text-to-speech request failed. Please try again later.",
+    );
+    expect(data.error).not.toMatch(/elevenlabs|secret|raw/i);
+  });
+
+  test("ElevenLabs request uses xi-api-key auth header", async () => {
+    const capture: {
+      url?: string;
+      headers?: Headers;
+      body?: Record<string, unknown>;
+    } = {};
+    configureElevenLabsEnv();
+    mockElevenLabsResponse(200, new Uint8Array([70]), capture);
+
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs", text: "ElevenLabs host text." }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(capture.url).toContain("api.elevenlabs.io");
+    expect(capture.url).toContain("test-voice-id");
+    const xiKey = capture.headers?.get("xi-api-key") ?? "";
+    expect(xiKey).toBe("test-el-key");
+    // Raw key must never appear in the response
+    const responseText = JSON.stringify(await response.arrayBuffer());
+    expect(responseText).not.toContain("test-el-key");
+  });
+
+  test("ElevenLabs response does not expose API key or voice ID in error", async () => {
+    configureElevenLabsEnv();
+    mockElevenLabsResponse(
+      403,
+      JSON.stringify({
+        apiKey: "test-el-key",
+        voiceId: "test-voice-id",
+        stack: "internal detail",
+      }),
+    );
+
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs" }),
+    );
+    const serialized = JSON.stringify(await response.json());
+
+    expect(serialized).not.toContain("test-el-key");
+    expect(serialized).not.toContain("test-voice-id");
+    expect(serialized).not.toMatch(/stack|internal/i);
+  });
+
+  test("uses env fallback when request ttsProvider is missing or invalid", async () => {
+    const originalFallback = process.env.PODCHAT_TTS_PROVIDER;
+    try {
+      process.env.PODCHAT_TTS_PROVIDER = "elevenlabs";
+      configureElevenLabsEnv();
+      mockElevenLabsResponse(200, new Uint8Array([8, 9]));
+
+      const response = await POST(buildRequest({ ttsProvider: undefined }));
+      const bytes = new Uint8Array(await response.arrayBuffer());
+
+      expect(response.status).toBe(200);
+      expect(Array.from(bytes)).toEqual([8, 9]);
+    } finally {
+      process.env.PODCHAT_TTS_PROVIDER = originalFallback;
+    }
+  });
+
+  test(".env.example contains only placeholders", () => {
+    const envExample = readFileSync(".env.example", "utf8");
+    expect(envExample).not.toMatch(/sk-[a-zA-Z0-9]{32,}/);
+    expect(envExample).toContain("PODCHAT_TTS_PROVIDER=polly");
+    expect(envExample).toContain("AWS_ACCESS_KEY_ID=");
+    expect(envExample).toContain("ELEVENLABS_API_KEY=");
+  });
+});
+
+test.describe("Podchat TTS Browser Integration", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      class MockMediaStreamTrack {
+        kind = "audio";
+        enabled = true;
+        stop() {}
+      }
+      class MockMediaStream {
+        getTracks() {
+          return [new MockMediaStreamTrack()];
+        }
+      }
+      const mediaDevices = {
+        async getUserMedia() {
+          return new MockMediaStream();
+        },
+      };
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: mediaDevices,
+      });
+
+      class MockMediaRecorder {
+        state = "inactive";
+        ondataavailable: ((event: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+        static isTypeSupported(type: string) {
+          return ["audio/webm", "audio/mp4", "audio/mpeg", "audio/wav", "audio/ogg"].includes(type);
+        }
+        start() {
+          this.state = "recording";
+        }
+        stop() {
+          this.state = "inactive";
+          if (this.ondataavailable) {
+            const mockBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" });
+            this.ondataavailable({ data: mockBlob });
+          }
+          if (this.onstop) {
+            setTimeout(() => {
+              if (this.onstop) this.onstop();
+            }, 0);
+          }
+        }
+      }
+      (window as unknown as { MediaRecorder: unknown }).MediaRecorder = MockMediaRecorder;
+
+      (window as unknown as { Audio: unknown }).Audio = function () {
+        return {
+          play: async () => Promise.resolve(),
+          pause: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        };
+      };
+    });
+
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ transcript: "Hello host." }),
+      });
+    });
+
+    await page.route("**/api/podchat/turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hostText: "This is a response.",
+          followUpQuestion: "Any questions?",
+        }),
+      });
+    });
+  });
+
+  test("Settings saves canonical lowercase provider to localStorage and does not expose keys", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toContain("API Key");
+    expect(page.locator("input[placeholder*='ElevenLabs']")).toHaveCount(0);
+    expect(page.locator("input[placeholder*='elevenlabs']")).toHaveCount(0);
+
+    const select = page.locator("#default-tts-provider-select");
+    await select.selectOption("elevenlabs");
+
+    const stored = await page.evaluate(() => localStorage.getItem("defaultTtsProvider"));
+    expect(stored).toBe("elevenlabs");
+
+    await expect(select).toHaveValue("elevenlabs");
+
+    const hasKeys = await page.evaluate(() => {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || "";
+        if (key.toLowerCase().includes("api") || key.toLowerCase().includes("key")) return true;
+      }
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i) || "";
+        if (key.toLowerCase().includes("api") || key.toLowerCase().includes("key")) return true;
+      }
+      return false;
+    });
+    expect(hasKeys).toBe(false);
+  });
+
+  test("Invalid localStorage defaultTtsProvider sanitizes to polly", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.setItem("defaultTtsProvider", "GoogleCloud");
+    });
+    await page.reload();
+    await page.waitForTimeout(100);
+
+    const stored = await page.evaluate(() => localStorage.getItem("defaultTtsProvider"));
+    expect(stored).toBe("polly");
+  });
+
+  test("Podchat TTS request sends canonical provider value", async ({ page }) => {
+    let requestPayload: { ttsProvider?: string } | null = null;
+    await page.route("**/api/podchat/tts", async (route) => {
+      requestPayload = JSON.parse(route.request().postData() || "{}");
+      await route.fulfill({
+        status: 200,
+        contentType: "audio/mpeg",
+        body: Buffer.from([1, 2, 3]),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
+
+    await page.getByRole("button", { name: "Active Session" }).click();
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Trigger turn submission to fire TTS
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await page.getByTestId("podchat-submit-turn").click();
+
+    // Wait for requestPayload to populate
+    await expect.poll(() => requestPayload).not.toBeNull();
+
+    const payload = requestPayload as unknown as { ttsProvider?: string };
+    expect(payload.ttsProvider).toBe("elevenlabs");
   });
 });

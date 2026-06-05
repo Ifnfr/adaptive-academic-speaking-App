@@ -10,10 +10,12 @@ const POLLY_PATH = "/v1/speech";
 const SIGNING_ALGORITHM = "AWS4-HMAC-SHA256";
 
 type PodchatTtsVoice = (typeof VALID_VOICES)[number];
+type TtsProvider = "polly" | "elevenlabs";
 
 type PodchatTtsRequest = {
   text: string;
   voice: PodchatTtsVoice;
+  ttsProvider: TtsProvider;
 };
 
 type AwsConfig = {
@@ -21,6 +23,12 @@ type AwsConfig = {
   secretAccessKey: string;
   region: string;
   engine: string;
+};
+
+type ElevenLabsConfig = {
+  apiKey: string;
+  voiceId: string;
+  modelId: string;
 };
 
 function isValidVoice(value: unknown): value is PodchatTtsVoice {
@@ -31,6 +39,25 @@ function defaultVoice(): PodchatTtsVoice {
   return isValidVoice(process.env.POLLY_VOICE_ID)
     ? process.env.POLLY_VOICE_ID
     : "Brian";
+}
+
+function getTargetProvider(source: Record<string, unknown>): TtsProvider {
+  const raw = source.provider !== undefined ? source.provider : source.ttsProvider;
+  if (typeof raw === "string") {
+    const norm = raw.trim().toLowerCase();
+    if (norm === "polly" || norm === "elevenlabs") {
+      return norm;
+    }
+  }
+  // Fallback to env variable
+  const envVal = process.env.PODCHAT_TTS_PROVIDER;
+  if (typeof envVal === "string") {
+    const norm = envVal.trim().toLowerCase();
+    if (norm === "polly" || norm === "elevenlabs") {
+      return norm;
+    }
+  }
+  return "polly";
 }
 
 function validateRequest(
@@ -56,14 +83,21 @@ function validateRequest(
     return { valid: false, error: "Invalid voice." };
   }
 
+  const ttsProvider = getTargetProvider(source);
+
   return {
     valid: true,
     request: {
       text,
       voice: source.voice === undefined ? defaultVoice() : source.voice,
+      ttsProvider,
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// AWS Polly helpers
+// ---------------------------------------------------------------------------
 
 function getAwsConfig(): AwsConfig | null {
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
@@ -186,6 +220,58 @@ async function synthesizeSpeech(
   return response.arrayBuffer();
 }
 
+// ---------------------------------------------------------------------------
+// ElevenLabs helpers
+// ---------------------------------------------------------------------------
+
+function getElevenLabsConfig(): ElevenLabsConfig | null {
+  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+  const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim();
+  const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_flash_v2_5";
+
+  if (!apiKey || !voiceId) {
+    return null;
+  }
+
+  return { apiKey, voiceId, modelId };
+}
+
+async function synthesizeSpeechElevenLabs(
+  text: string,
+  config: ElevenLabsConfig,
+): Promise<ArrayBuffer> {
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(config.voiceId)}`;
+  const body = JSON.stringify({
+    text,
+    model_id: config.modelId,
+    output_format: "mp3_44100_128",
+  });
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "xi-api-key": config.apiKey,
+      "content-type": "application/json",
+      accept: "audio/mpeg",
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    console.error(
+      `ElevenLabs request failed with status ${response.status}: ${errorText.slice(0, 500)}`,
+    );
+    throw new Error("ElevenLabs request failed.");
+  }
+
+  return response.arrayBuffer();
+}
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
+
 export async function POST(request: Request) {
   let parsedBody: unknown;
   try {
@@ -202,15 +288,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const config = getAwsConfig();
-  if (!config) {
-    return NextResponse.json(
-      { error: "Text-to-speech is not configured. Please try again later." },
-      { status: 503 },
-    );
-  }
+  const { ttsProvider } = validation.request;
 
   try {
+    if (ttsProvider === "elevenlabs") {
+      const elevenLabsConfig = getElevenLabsConfig();
+      if (!elevenLabsConfig) {
+        return NextResponse.json(
+          { error: "Text-to-speech is not configured. Please try again later." },
+          { status: 503 },
+        );
+      }
+      const audioBytes = await synthesizeSpeechElevenLabs(
+        validation.request.text,
+        elevenLabsConfig,
+      );
+      return new Response(audioBytes, {
+        status: 200,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "audio/mpeg",
+        },
+      });
+    }
+
+    // Default: AWS Polly
+    const config = getAwsConfig();
+    if (!config) {
+      return NextResponse.json(
+        { error: "Text-to-speech is not configured. Please try again later." },
+        { status: 503 },
+      );
+    }
     const audioBytes = await synthesizeSpeech(validation.request, config);
     return new Response(audioBytes, {
       status: 200,
@@ -221,7 +330,7 @@ export async function POST(request: Request) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`Unexpected Polly TTS error: ${message}`);
+    console.error(`Unexpected TTS error: ${message}`);
     return NextResponse.json(
       { error: "Text-to-speech request failed. Please try again later." },
       { status: 502 },

@@ -151,11 +151,13 @@ export type PodchatArticleContext = {
 export interface PodchatViewProps {
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
+  ttsProvider?: "polly" | "elevenlabs";
 }
 
 export function PodchatView({
   articleContext,
   onClearArticleContext,
+  ttsProvider = "polly",
 }: PodchatViewProps) {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
@@ -282,7 +284,7 @@ export function PodchatView({
       const response = await fetch("/api/podchat/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, ttsProvider }),
       });
       if (!response.ok) {
         throw new Error("TTS request failed");
