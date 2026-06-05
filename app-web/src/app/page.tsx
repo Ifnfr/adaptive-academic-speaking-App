@@ -60,6 +60,7 @@ import {
   ArticlePracticeView,
   type ArticlePracticeResult,
 } from "./components/ArticlePracticeView";
+import { CoverPage } from "./components/CoverPage";
 import {
   CloudSyncStatusPanel,
   type CloudImportActionResult,
@@ -375,6 +376,43 @@ export default function Home() {
   const bootstrappedUserRef = useRef<string | null>(null);
   const [clerkUser, setClerkUser] = useState<ClerkUserType>(null);
   const [isClerkUserLoaded, setIsClerkUserLoaded] = useState(false);
+
+  // --- Landing / Login Cover Page State ---
+  const [coverState, setCoverState] = useState<"landing" | "login" | "app">("landing");
+
+  useEffect(() => {
+    // Non-production test bypass using gated query parameter
+    if (process.env.NODE_ENV !== "production") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const showCover = urlParams.get("showCover") === "true";
+      if (urlParams.get("mockAuth") === "true" && !showCover) {
+        setTimeout(() => setCoverState("app"), 0);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (CLERK_ENABLED) {
+      if (isClerkUserLoaded) {
+        if (clerkUser) {
+          setTimeout(() => setCoverState("app"), 0);
+        } else {
+          // If Clerk is enabled but user is signed out, force cover page
+          // (Only allow bypass if explicitly gated in non-production test mode)
+          let isTestBypass = false;
+          if (process.env.NODE_ENV !== "production") {
+            const urlParams = new URLSearchParams(window.location.search);
+            const showCover = urlParams.get("showCover") === "true";
+            isTestBypass = urlParams.get("mockAuth") === "true" && !showCover;
+          }
+
+          if (!isTestBypass) {
+            setTimeout(() => setCoverState((prev) => (prev === "app" ? "landing" : prev)), 0);
+          }
+        }
+      }
+    }
+  }, [clerkUser, isClerkUserLoaded]);
 
   // --- Owner profile state (Supabase, non-blocking) ---
   const [ownerProfile, setOwnerProfile] = useState<UserProfile | null>(null);
@@ -1746,7 +1784,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen w-full lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col">
+    <>
       {CLERK_ENABLED && (
         <SessionCloudAuthBridge
           authRef={sessionCloudAuthRef}
@@ -1761,7 +1799,15 @@ export default function Home() {
           }}
         />
       )}
-      <div className="flex w-full flex-col gap-6 px-4 py-6 lg:h-screen lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:py-0 lg:min-h-0">
+
+      {coverState !== "app" ? (
+        <CoverPage
+          CLERK_ENABLED={CLERK_ENABLED}
+          onLoginSuccess={() => setCoverState("app")}
+        />
+      ) : (
+        <div className="min-h-screen w-full lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col">
+          <div className="flex w-full flex-col gap-6 px-4 py-6 lg:h-screen lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:py-0 lg:min-h-0">
         {/* Sidebar */}
         <Sidebar
           view={view}
@@ -2050,6 +2096,8 @@ export default function Home() {
         </main>
       </div>
     </div>
+      )}
+    </>
   );
 }
 

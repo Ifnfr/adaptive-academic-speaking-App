@@ -172,6 +172,26 @@ Explain whether technology helps students study better, using one benefit and on
 }
 
 test.describe("MVP Smoke Flows", () => {
+  test.beforeEach(async ({ page }) => {
+    // Intercept document requests to "/" and append mockAuth=true to bypass the cover page safely in E2E tests
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+      } else {
+        await route.continue();
+      }
+    });
+  });
+
   // Test A: App loads
   test("A. App loads and renders sidebar/navigation", async ({ page }) => {
     await page.goto("/");
