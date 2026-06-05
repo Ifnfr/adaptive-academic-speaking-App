@@ -48,6 +48,20 @@ type PodchatRecurringError = {
   practiceFocus: string;
 };
 
+type PodchatAspectStatus = "excellent" | "needs_improvement";
+
+type PodchatAspectFeedbackItem = {
+  status: PodchatAspectStatus;
+  message: string;
+};
+
+type PodchatAspectFeedback = {
+  sentenceStructure: PodchatAspectFeedbackItem;
+  grammar: PodchatAspectFeedbackItem;
+  coherence: PodchatAspectFeedbackItem;
+  topicRelevance: PodchatAspectFeedbackItem;
+};
+
 type PodchatEvaluateResponse = {
   summary: string;
   corrections: PodchatCorrection[];
@@ -55,6 +69,7 @@ type PodchatEvaluateResponse = {
   vocabularySuggestions: PodchatVocabularySuggestion[];
   recurringErrors: PodchatRecurringError[];
   nextPracticeFocus: string;
+  aspectFeedback?: PodchatAspectFeedback;
 };
 
 type ValidationResult =
@@ -361,13 +376,18 @@ function buildSystemPrompt(req: PodchatEvaluateRequest): string {
     "- Respond with ONLY a single JSON object.",
     "- No markdown, code fences, or commentary outside JSON.",
     "- The JSON object MUST have exactly these top-level keys:",
-    '  "summary", "corrections", "betterSentences", "vocabularySuggestions", "recurringErrors", "nextPracticeFocus".',
+    '  "summary", "corrections", "betterSentences", "vocabularySuggestions", "recurringErrors", "nextPracticeFocus", "aspectFeedback".',
     "- summary: one supportive summary, <= 800 characters.",
     "- corrections: array of up to 5 objects with original, improved, explanation.",
     "- betterSentences: array of up to 5 stronger academic sentence strings.",
     "- vocabularySuggestions: array of up to 5 objects with originalOrBasic, suggestion, example.",
     "- recurringErrors: array of up to 5 objects with label, evidence, practiceFocus.",
     "- nextPracticeFocus: one clear practice suggestion, <= 300 characters.",
+    "- aspectFeedback: object with sentenceStructure, grammar, coherence, and topicRelevance.",
+    '- Each aspectFeedback item must have status "excellent" or "needs_improvement" and a short message.',
+    '- If an aspect is strong, use status "excellent" and message "Excellent".',
+    "- If an aspect needs improvement, give one short, specific, actionable suggestion.",
+    "- Avoid vague advice such as \"improve grammar\".",
     "- Do not include scores, pronunciation fields, phoneme fields, raw provider content, or hidden metadata.",
   ].join("\n");
 }
@@ -490,6 +510,41 @@ function normalizeRecurringErrors(raw: unknown): PodchatRecurringError[] | null 
   return result;
 }
 
+function normalizeAspectFeedbackItem(raw: unknown): PodchatAspectFeedbackItem | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const source = raw as Record<string, unknown>;
+  const status = source.status;
+  if (status !== "excellent" && status !== "needs_improvement") return null;
+
+  const message = readShortString(source, "message", 240);
+  if (!message) return null;
+  if (status === "needs_improvement" && message.toLowerCase() === "improve grammar") {
+    return null;
+  }
+
+  return { status, message };
+}
+
+function normalizeAspectFeedback(raw: unknown): PodchatAspectFeedback | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const source = raw as Record<string, unknown>;
+  const sentenceStructure = normalizeAspectFeedbackItem(source.sentenceStructure);
+  const grammar = normalizeAspectFeedbackItem(source.grammar);
+  const coherence = normalizeAspectFeedbackItem(source.coherence);
+  const topicRelevance = normalizeAspectFeedbackItem(source.topicRelevance);
+
+  if (!sentenceStructure || !grammar || !coherence || !topicRelevance) {
+    return null;
+  }
+
+  return {
+    sentenceStructure,
+    grammar,
+    coherence,
+    topicRelevance,
+  };
+}
+
 function hasForbiddenOutputKeys(data: Record<string, unknown>): boolean {
   const forbidden = [
     "score",
@@ -527,6 +582,10 @@ function validateClaudeOutput(
     );
     const recurringErrors = normalizeRecurringErrors(data.recurringErrors);
     const nextPracticeFocus = readShortString(data, "nextPracticeFocus", 300);
+    const aspectFeedback =
+      data.aspectFeedback === undefined
+        ? undefined
+        : normalizeAspectFeedback(data.aspectFeedback);
 
     if (
       !summary ||
@@ -534,7 +593,8 @@ function validateClaudeOutput(
       !betterSentences ||
       !vocabularySuggestions ||
       !recurringErrors ||
-      !nextPracticeFocus
+      !nextPracticeFocus ||
+      (data.aspectFeedback !== undefined && !aspectFeedback)
     ) {
       return { valid: false, error: "Provider response schema is invalid." };
     }
@@ -548,6 +608,7 @@ function validateClaudeOutput(
         vocabularySuggestions,
         recurringErrors,
         nextPracticeFocus,
+        aspectFeedback: aspectFeedback ?? undefined,
       },
     };
   } catch (err: unknown) {
@@ -557,6 +618,27 @@ function validateClaudeOutput(
       error: `Failed to parse provider output: ${message}`,
     };
   }
+}
+
+function buildMockAspectFeedback(): PodchatAspectFeedback {
+  return {
+    sentenceStructure: {
+      status: "needs_improvement",
+      message: "Use a complete sentence with a clear subject and verb.",
+    },
+    grammar: {
+      status: "needs_improvement",
+      message: "Check subject-verb agreement in your main idea.",
+    },
+    coherence: {
+      status: "needs_improvement",
+      message: "Add one reason or example after your main idea.",
+    },
+    topicRelevance: {
+      status: "excellent",
+      message: "Excellent",
+    },
+  };
 }
 
 export const testHooks = {
@@ -630,7 +712,10 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-    evaluationResponse = outputValidation.response;
+    evaluationResponse = {
+      ...outputValidation.response,
+      aspectFeedback: buildMockAspectFeedback(),
+    };
   } else if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {

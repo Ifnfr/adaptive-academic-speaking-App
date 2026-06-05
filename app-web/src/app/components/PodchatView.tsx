@@ -36,6 +36,18 @@ type PodchatRecurringError = {
   practiceFocus: string;
 };
 
+type PodchatAspectFeedbackItem = {
+  status: "excellent" | "needs_improvement";
+  message: string;
+};
+
+type PodchatAspectFeedback = {
+  sentenceStructure: PodchatAspectFeedbackItem;
+  grammar: PodchatAspectFeedbackItem;
+  coherence: PodchatAspectFeedbackItem;
+  topicRelevance: PodchatAspectFeedbackItem;
+};
+
 type PodchatEvaluateResponse = {
   summary: string;
   corrections: PodchatCorrection[];
@@ -43,6 +55,7 @@ type PodchatEvaluateResponse = {
   vocabularySuggestions: PodchatVocabularySuggestion[];
   recurringErrors: PodchatRecurringError[];
   nextPracticeFocus: string;
+  aspectFeedback?: PodchatAspectFeedback;
 };
 
 const TOPICS: readonly PodchatTopic[] = ["Economics", "Technology"];
@@ -64,6 +77,16 @@ const DIFFICULTY_LABEL: Record<PodchatDifficulty, string> = {
   Intermediate: "5-minute session",
   Advanced: "7-minute session",
 };
+
+const ASPECT_FEEDBACK_LABELS: Array<{
+  key: keyof PodchatAspectFeedback;
+  label: string;
+}> = [
+  { key: "sentenceStructure", label: "Sentence Structure" },
+  { key: "grammar", label: "Grammar" },
+  { key: "coherence", label: "Coherence" },
+  { key: "topicRelevance", label: "Topic Relevance / Substance" },
+];
 
 const HOST_OPENERS: Record<PodchatTopic, string> = {
   Economics:
@@ -884,6 +907,33 @@ export function PodchatView({
                 <h3 className={labelClass}>Summary</h3>
                 <p className="text-sm leading-6 text-[var(--brand-ink-soft)]">{evalData.summary}</p>
               </div>
+
+              {evalData.aspectFeedback && (
+                <div>
+                  <h3 className={labelClass}>Aspect Feedback</h3>
+                  <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {ASPECT_FEEDBACK_LABELS.map(({ key, label }) => {
+                      const item = evalData.aspectFeedback?.[key];
+                      if (!item?.message) return null;
+                      const displayText =
+                        item.status === "excellent" ? "Excellent" : item.message;
+                      return (
+                        <div
+                          key={key}
+                          className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
+                        >
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
+                            {label}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-soft)]">
+                            {displayText}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {evalData.corrections.length > 0 && (
                 <div>

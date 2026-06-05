@@ -40,6 +40,24 @@ function validEvaluation() {
     ],
     nextPracticeFocus:
       "Give one clear claim, one reason, and one short example in each answer.",
+    aspectFeedback: {
+      sentenceStructure: {
+        status: "needs_improvement",
+        message: "Use a complete sentence with a clear subject and verb.",
+      },
+      grammar: {
+        status: "needs_improvement",
+        message: "Check subject-verb agreement in your main idea.",
+      },
+      coherence: {
+        status: "needs_improvement",
+        message: "Add one reason or example after your main idea.",
+      },
+      topicRelevance: {
+        status: "excellent",
+        message: "Excellent",
+      },
+    },
   };
 }
 
@@ -206,6 +224,8 @@ test.describe("Podchat Evaluate Route", () => {
     expect(data.vocabularySuggestions[0].suggestion).toBe("beneficial");
     expect(data.recurringErrors[0].label).toBe("Incomplete sentence endings");
     expect(data.nextPracticeFocus).toContain("claim");
+    expect(data.aspectFeedback.grammar.status).toBe("needs_improvement");
+    expect(data.aspectFeedback.topicRelevance.message).toBe("Excellent");
 
     const providerBody = JSON.stringify(capture.body);
     expect(providerBody).not.toMatch(
@@ -324,6 +344,8 @@ test.describe("Podchat Evaluate Route", () => {
     expect(data.summary).toContain("technology");
     expect(data.corrections).toHaveLength(1);
     expect(data.recurringErrors[0].label).toBe("Short explanations");
+    expect(data.aspectFeedback.topicRelevance.message).toBe("Excellent");
+    expect(data.aspectFeedback.grammar.message).toContain("subject-verb agreement");
     expect(serialized).not.toMatch(/"score|"scores|pronunciation|phoneme|audio|blob|recording|userId|email/i);
   });
 
@@ -363,6 +385,42 @@ test.describe("Podchat Evaluate Route", () => {
     mockClaudeResponse(
       200,
       JSON.stringify({ ...validEvaluation(), summary: "" }),
+    );
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+  });
+
+  test("missing aspectFeedback remains backward compatible", async () => {
+    const legacyEvaluation: Partial<ReturnType<typeof validEvaluation>> = {
+      ...validEvaluation(),
+    };
+    delete legacyEvaluation.aspectFeedback;
+    mockClaudeResponse(200, JSON.stringify(legacyEvaluation));
+
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as Partial<ReturnType<typeof validEvaluation>>;
+
+    expect(response.status).toBe(200);
+    expect(data.summary).toContain("conversation");
+    expect(data.aspectFeedback).toBeUndefined();
+    expect(data.corrections?.[0].original).toBe("Technology help student study.");
+  });
+
+  test("invalid aspectFeedback status returns safe 502", async () => {
+    const evaluation = validEvaluation();
+    mockClaudeResponse(
+      200,
+      JSON.stringify({
+        ...evaluation,
+        aspectFeedback: {
+          ...evaluation.aspectFeedback,
+          grammar: {
+            status: "okay",
+            message: "Check subject-verb agreement in your main idea.",
+          },
+        },
+      }),
     );
 
     const response = await POST(buildRequest({}));
@@ -434,6 +492,7 @@ test.describe("Podchat Evaluate Route", () => {
     expect(data.vocabularySuggestions[0].suggestion).toBe("beneficial");
     expect(data.recurringErrors[0].label).toBe("Incomplete sentence endings");
     expect(data.nextPracticeFocus).toContain("claim");
+    expect(data.aspectFeedback.coherence.message).toContain("reason or example");
 
     const bodyStr = JSON.stringify(capture.body);
     expect(bodyStr).not.toMatch(/audio|blob|recordingUrl|email|userId|owner_id|auth|device/i);
@@ -486,6 +545,7 @@ test.describe("Podchat Evaluate Route", () => {
     expect(data.vocabularySuggestions[0].suggestion).toBe("beneficial");
     expect(data.recurringErrors[0].label).toBe("Incomplete sentence endings");
     expect(data.nextPracticeFocus).toContain("claim");
+    expect(data.aspectFeedback.sentenceStructure.message).toContain("complete sentence");
 
     const bodyStr = JSON.stringify(capture.body);
     expect(bodyStr).not.toMatch(/audio|blob|recordingUrl|email|userId|owner_id|auth|device/i);
