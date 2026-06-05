@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { POST as diagnosticPost } from "../src/app/api/diagnostic/route";
 import { POST as mentalModelPost } from "../src/app/api/mental-model/route";
 import { createWeeklyReviewPostHandler } from "../src/app/api/weekly-review/route";
@@ -593,5 +593,16 @@ test.describe("AI review language policy routes", () => {
       expect(routeSource).not.toContain("getGlobalCachedResponse");
       expect(routeSource).not.toContain("saveGlobalCachedResponse");
     }
+  });
+
+  test("Clerk proxy config enables auth context for API routes", () => {
+    expect(existsSync("src/proxy.ts")).toBe(true);
+    const proxySource = readFileSync("src/proxy.ts", "utf8");
+
+    expect(proxySource).toContain("clerkMiddleware");
+    expect(proxySource).toContain("export default clerkMiddleware()");
+    expect(proxySource).toContain("\"/(api|trpc)(.*)\"");
+    expect(proxySource).not.toContain("CLERK_SECRET_KEY");
+    expect(proxySource).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 });

@@ -185,6 +185,99 @@ test.describe("MVP Smoke Flows", () => {
     ).toHaveCount(0);
   });
 
+  test("A2. Weekly Review uses server memory instead of local session count", async ({
+    page,
+  }) => {
+    const requestBodies: Record<string, unknown>[] = [];
+    let weeklyReviewCalls = 0;
+
+    await page.addInitScript(() => {
+      localStorage.clear();
+    });
+
+    await page.route("**/api/weekly-review", async (route) => {
+      weeklyReviewCalls += 1;
+      requestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+
+      if (weeklyReviewCalls === 1) {
+        await route.fulfill({
+          json: {
+            summary:
+              "You completed 1 practice session this week. Keep practicing to unlock complete review insights.",
+            recurringWeakness:
+              "Not enough sessions to analyze recurring weaknesses.",
+            bestImprovement: "Not enough sessions to analyze improvements.",
+            scoreTrend: "Not enough sessions to track score trend.",
+            nextWeekFocus: "Practice consistency.",
+            recommendedPlan: [
+              "Day 1: Complete 1 new practice session.",
+              "Day 2: Review your past feedback points.",
+              "Day 3: Complete 1 new practice session.",
+              "Day 4: Focus on speaking/writing without pausing.",
+              "Day 5: Complete 1 new practice session.",
+              "Day 6: Focus on correct subject-verb agreement.",
+              "Day 7: Complete 1 new practice session.",
+            ],
+            warnings: [
+              "Weekly Review requires at least 4 completed practice sessions. You have completed only 1.",
+            ],
+          },
+        });
+        return;
+      }
+
+      await route.fulfill({
+        json: {
+          summary:
+            "You completed 2 speaking sessions and 2 writing sessions this week.",
+          recurringWeakness:
+            "Your most recurring issue is in grammar under verb agreement.",
+          bestImprovement:
+            "You showed steady engagement across practice formats.",
+          scoreTrend: "Score trends are stable across the week.",
+          nextWeekFocus: "Use subject-verb agreement in short answers.",
+          recommendedPlan: [
+            "Day 1: Review your weekly review summary.",
+            "Day 2: Practise verb agreement.",
+            "Day 3: Complete a new practice session.",
+            "Day 4: Do a short focus session.",
+            "Day 5: Review past corrections.",
+            "Day 6: Speak for 60 seconds.",
+            "Day 7: Complete a new session.",
+          ],
+          warnings: [],
+        },
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Weekly Review" }).click();
+
+    const runButton = page.getByRole("button", { name: "Run Weekly Review" });
+    await expect(page.getByText("Server memory")).toBeVisible();
+    await expect(page.getByText(/0\/4 completed sessions/i)).toHaveCount(0);
+    await expect(runButton).toBeEnabled();
+
+    await runButton.click();
+    await expect(
+      page.getByText(/Weekly Review requires at least 4 completed practice sessions/i),
+    ).toBeVisible();
+
+    await runButton.click();
+    await expect(
+      page.getByText("You completed 2 speaking sessions and 2 writing sessions this week."),
+    ).toBeVisible();
+
+    expect(weeklyReviewCalls).toBe(2);
+    for (const body of requestBodies) {
+      expect(body).not.toHaveProperty("sessions");
+      expect(body).not.toHaveProperty("provider");
+      expect(body).not.toHaveProperty("fullArticleText");
+      expect(body).not.toHaveProperty("audioBlob");
+      expect(body).not.toHaveProperty("transcript");
+    }
+  });
+
   // Test B: Podchat Phase 1 basic flow
   test("B. Podchat Phase 1 local flow without providers or audio", async ({
     page,

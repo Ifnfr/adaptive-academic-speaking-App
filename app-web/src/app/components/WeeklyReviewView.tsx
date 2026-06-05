@@ -12,7 +12,6 @@ export type WeeklyReviewResult = {
 };
 
 type WeeklyReviewViewProps = {
-  sessionsCount: number;
   provider: string;
   weeklyReviewResult: WeeklyReviewResult | null;
   weeklyReviewLoading: boolean;
@@ -49,7 +48,6 @@ function SummaryCell({
 }
 
 export function WeeklyReviewView({
-  sessionsCount,
   provider,
   weeklyReviewResult,
   weeklyReviewLoading,
@@ -83,44 +81,33 @@ export function WeeklyReviewView({
           </p>
         </div>
         <span className="inline-flex w-fit rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-xs text-[var(--brand-ink-soft)]">
-          {Math.min(sessionsCount, 4)}/4 {t("review.completedSessions")}
+          Server memory
         </span>
       </div>
       <div className={`${cardBody} flex flex-col gap-5`}>
-        {sessionsCount < 4 ? (
-          <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center">
-            <p className="text-sm font-medium text-[var(--brand-ink)]">
-              {t("review.requires4")}
-            </p>
-            <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
-              {t("review.unlockMore")}
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className={labelClass}>{t("common.readyToReview")}</p>
-                <p className="text-sm text-[var(--brand-ink)]">
-                  {t("review.usesLatest")} ({provider})
-                </p>
-                <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-                  {t("review.transcriptsNotSent")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onRunWeeklyReview}
-                disabled={weeklyReviewLoading}
-                className={`${buttonPrimary} w-full sm:w-auto`}
-              >
-                {weeklyReviewLoading
-                  ? t("review.running")
-                  : t("review.runBtn")}
-              </button>
+        <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className={labelClass}>{t("common.readyToReview")}</p>
+              <p className="text-sm text-[var(--brand-ink)]">
+                {t("review.usesLatest")} ({provider})
+              </p>
+              <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+                {t("review.transcriptsNotSent")}
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={onRunWeeklyReview}
+              disabled={weeklyReviewLoading}
+              className={`${buttonPrimary} w-full sm:w-auto`}
+            >
+              {weeklyReviewLoading
+                ? t("review.running")
+                : t("review.runBtn")}
+            </button>
           </div>
-        )}
+        </div>
 
         {weeklyReviewError && (
           <div
@@ -135,7 +122,7 @@ export function WeeklyReviewView({
               <button
                 type="button"
                 onClick={onRunWeeklyReview}
-                disabled={weeklyReviewLoading || sessionsCount < 4}
+                disabled={weeklyReviewLoading}
                 className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {weeklyReviewLoading ? t("review.tryingAgain") : t("review.tryAgain")}

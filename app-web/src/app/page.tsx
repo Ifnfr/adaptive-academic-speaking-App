@@ -121,17 +121,6 @@ type FeedbackType = "Quick" | "Deep";
 type SessionType = "Micro" | "Standard" | "Deep";
 type AIProvider = "Claude" | "DeepSeek" | "Gemini";
 
-type WeeklyReviewSessionSummary = {
-  date: string;
-  level: Level;
-  mode: Mode;
-  durationSeconds: number;
-  mainWeakness: string;
-  evidence: string;
-  retryTask: string;
-  csv: string;
-};
-
 type VocabularyCorrectionResult = Omit<
   VocabSentenceCorrection,
   "checkedAt" | "providerUsed"
@@ -1415,31 +1404,15 @@ export default function Home() {
   };
 
   const handleRunWeeklyReview = async () => {
-    if (sessions.length < 4) return;
     setWeeklyReviewLoading(true);
     setWeeklyReviewError(null);
     setWeeklyReviewResult(null);
-
-    const sessionSummaries: WeeklyReviewSessionSummary[] = sessions
-      .slice(0, 7)
-      .map((session) => ({
-        date: session.date,
-        level: session.level,
-        mode: session.mode,
-        durationSeconds: session.durationSeconds,
-        mainWeakness: session.mainWeakness,
-        evidence: session.evidence,
-        retryTask: session.retryTask,
-        csv: session.csv,
-      }));
 
     try {
       const res = await fetch("/api/weekly-review", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          provider: aiProvider,
-          sessions: sessionSummaries,
           feedbackLanguage: normalizeFeedbackLanguage(
             ownerProfile?.feedbackLanguage,
           ),
@@ -1478,7 +1451,7 @@ export default function Home() {
       setWeeklyReviewResult(result);
       awardGamificationEvent(
         "weekly_review_completed",
-        `weekly-review-${getLocalDateString()}-${sessions[0]?.id ?? "no-session"}-${sessions.length}`,
+        `weekly-review-${getLocalDateString()}`,
         "weekly-review",
         "Generated a weekly review.",
       );
@@ -1879,7 +1852,6 @@ export default function Home() {
           {/* ===================== Weekly Review ===================== */}
           {view === "weekly-review" && (
             <WeeklyReviewView
-              sessionsCount={sessions.length}
               provider={aiProvider}
               weeklyReviewResult={weeklyReviewResult}
               weeklyReviewLoading={weeklyReviewLoading}
