@@ -11,6 +11,10 @@ const VALID_MIME_TYPES = [
   "audio/ogg",
 ];
 
+function normalizeAudioMimeType(mimeType: string) {
+  return mimeType.trim().toLowerCase().split(";")[0].trim();
+}
+
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") || "";
   if (!contentType.includes("multipart/form-data")) {
@@ -52,10 +56,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const mimeType = audio.type;
+  const mimeType = normalizeAudioMimeType(audio.type);
   if (!VALID_MIME_TYPES.includes(mimeType)) {
     return NextResponse.json(
-      { error: `Invalid audio format: ${mimeType}. Supported formats: webm, mp4, mpeg, wav, ogg.` },
+      { error: `Invalid audio format: ${mimeType || "unknown"}. Supported formats: webm, mp4, mpeg, wav, ogg.` },
       { status: 400 }
     );
   }

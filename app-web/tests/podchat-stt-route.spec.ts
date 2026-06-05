@@ -87,6 +87,79 @@ test.describe("Podchat STT Route", () => {
     const data = (await response.json()) as { transcript: string };
     expect(data.transcript).toBe("Academic speaking is key.");
     expect(capture.url).toBe("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true");
+    expect(capture.headers?.get("content-type")).toBe("audio/webm");
+  });
+
+  test("1a. accepts browser WebM MIME type with codec parameters", async () => {
+    process.env.DEEPGRAM_API_KEY = "test-deepgram-key";
+    const capture: { headers?: Headers } = {};
+    mockDeepgramResponse(
+      200,
+      {
+        results: {
+          channels: [{ alternatives: [{ transcript: "browser webm audio" }] }],
+        },
+      },
+      capture,
+    );
+
+    const audioBlob = new Blob([new Uint8Array([10, 20, 30])], {
+      type: "audio/webm;codecs=opus",
+    });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { transcript: string };
+    expect(data.transcript).toBe("browser webm audio");
+    expect(capture.headers?.get("content-type")).toBe("audio/webm");
+  });
+
+  test("1b. accepts Ogg MIME type with codec parameters", async () => {
+    process.env.DEEPGRAM_API_KEY = "test-deepgram-key";
+    const capture: { headers?: Headers } = {};
+    mockDeepgramResponse(
+      200,
+      {
+        results: {
+          channels: [{ alternatives: [{ transcript: "ogg audio" }] }],
+        },
+      },
+      capture,
+    );
+
+    const audioBlob = new Blob([new Uint8Array([10, 20, 30])], {
+      type: "audio/ogg; codecs=opus",
+    });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { transcript: string };
+    expect(data.transcript).toBe("ogg audio");
+    expect(capture.headers?.get("content-type")).toBe("audio/ogg");
+  });
+
+  test("1c. normalizes uppercase and whitespace MIME type safely", async () => {
+    process.env.DEEPGRAM_API_KEY = "test-deepgram-key";
+    const capture: { headers?: Headers } = {};
+    mockDeepgramResponse(
+      200,
+      {
+        results: {
+          channels: [{ alternatives: [{ transcript: "normalized audio" }] }],
+        },
+      },
+      capture,
+    );
+
+    const audioBlob = new Blob([new Uint8Array([10, 20, 30])], {
+      type: " AUDIO/WEBM ; CODECS=OPUS ",
+    });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { transcript: string };
+    expect(data.transcript).toBe("normalized audio");
+    expect(capture.headers?.get("content-type")).toBe("audio/webm");
   });
 
   test("2. missing DEEPGRAM_API_KEY returns safe 503", async () => {
@@ -135,6 +208,28 @@ test.describe("Podchat STT Route", () => {
     expect(response.status).toBe(400);
     const data = (await response.json()) as { error: string };
     expect(data.error).toContain("Invalid audio format");
+  });
+
+  test("6a. unsupported text and video MIME types reject with normalized safe error", async () => {
+    process.env.DEEPGRAM_API_KEY = "key";
+
+    const textBlob = new Blob([new Uint8Array([1, 2])], {
+      type: "text/plain; charset=utf-8",
+    });
+    const textResponse = await POST(buildSttRequest({ audio: textBlob }));
+    const textData = (await textResponse.json()) as { error: string };
+    expect(textResponse.status).toBe(400);
+    expect(textData.error).toContain("Invalid audio format: text/plain.");
+    expect(textData.error).not.toContain("charset");
+
+    const videoBlob = new Blob([new Uint8Array([1, 2])], {
+      type: "video/mp4; codecs=avc1",
+    });
+    const videoResponse = await POST(buildSttRequest({ audio: videoBlob }));
+    const videoData = (await videoResponse.json()) as { error: string };
+    expect(videoResponse.status).toBe(400);
+    expect(videoData.error).toContain("Invalid audio format: video/mp4.");
+    expect(videoData.error).not.toContain("codecs");
   });
 
   test("7. Deepgram non-OK returns sanitized 502", async () => {
@@ -248,6 +343,27 @@ test.describe("Podchat STT Route", () => {
 
     const audioBytes = new Uint8Array([1, 2, 3]);
     const audioBlob = new Blob([audioBytes], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { transcript: string };
+    expect(data.transcript).toBe("I use technology to learn English and practise speaking every day.");
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("13a. mock provider accepts normalized browser WebM MIME type", async () => {
+    process.env.PODCHAT_STT_PROVIDER = "mock";
+    process.env.DEEPGRAM_API_KEY = "";
+
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+
+    const audioBlob = new Blob([new Uint8Array([1, 2, 3])], {
+      type: "audio/webm;codecs=opus",
+    });
     const response = await POST(buildSttRequest({ audio: audioBlob }));
 
     expect(response.status).toBe(200);
