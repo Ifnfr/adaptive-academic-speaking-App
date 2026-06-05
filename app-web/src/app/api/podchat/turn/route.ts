@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   buildMockPodchatTurn,
-  callDeepSeek,
-  callGemini,
   type PodchatArticleContext,
 } from "../_lib/providers";
 
@@ -32,6 +30,66 @@ type PodchatTurnRequest = {
   turns: PodchatTurn[];
   articleContext?: PodchatArticleContext;
 };
+
+type ProviderErrorCategory =
+  | "unauthorized"
+  | "rate_limited"
+  | "provider_unavailable"
+  | "invalid_provider_response"
+  | "missing_configuration"
+  | "unknown";
+
+type ProviderName = "Claude" | "Gemini" | "DeepSeek";
+
+type SafeProviderError = {
+  provider: ProviderName;
+  category: ProviderErrorCategory;
+  status: number;
+};
+
+const PROVIDER_FAILURE_MESSAGE = "Provider request failed. Please try again later.";
+
+function mapProviderStatus(status: number): ProviderErrorCategory {
+  if (status === 401 || status === 403) return "unauthorized";
+  if (status === 429) return "rate_limited";
+  if (status === 400 || status === 500 || status === 502 || status === 503 || status === 504) {
+    return "provider_unavailable";
+  }
+  return "unknown";
+}
+
+function logProviderError(providerError: SafeProviderError) {
+  console.error(
+    `Provider error: provider=${providerError.provider}, category=${providerError.category}, status=${providerError.status}`,
+  );
+}
+
+function providerErrorResponse(providerError: SafeProviderError) {
+  logProviderError(providerError);
+  return NextResponse.json(
+    {
+      error: PROVIDER_FAILURE_MESSAGE,
+      providerError,
+    },
+    { status: providerError.status },
+  );
+}
+
+function invalidProviderResponse(provider: ProviderName) {
+  return providerErrorResponse({
+    provider,
+    category: "invalid_provider_response",
+    status: 502,
+  });
+}
+
+function missingProviderConfiguration(provider: ProviderName) {
+  return providerErrorResponse({
+    provider,
+    category: "missing_configuration",
+    status: 503,
+  });
+}
 
 function validateArticleContext(
   context: unknown,
@@ -461,6 +519,159 @@ function validateClaudeOutput(text: string): { valid: true; response: { hostText
   }
 }
 
+async function callDeepSeekSafely(
+  apiKey: string,
+  system: string,
+  user: string,
+): Promise<{ ok: true; text: string } | { ok: false; providerError: SafeProviderError }> {
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  let res: Response;
+
+  try {
+    res = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+  } catch {
+    return {
+      ok: false,
+      providerError: {
+        provider: "DeepSeek",
+        category: "provider_unavailable",
+        status: 503,
+      },
+    };
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      providerError: {
+        provider: "DeepSeek",
+        category: mapProviderStatus(res.status),
+        status: res.status,
+      },
+    };
+  }
+
+  try {
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const text = data.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return {
+        ok: false,
+        providerError: {
+          provider: "DeepSeek",
+          category: "invalid_provider_response",
+          status: 502,
+        },
+      };
+    }
+    return { ok: true, text };
+  } catch {
+    return {
+      ok: false,
+      providerError: {
+        provider: "DeepSeek",
+        category: "invalid_provider_response",
+        status: 502,
+      },
+    };
+  }
+}
+
+async function callGeminiSafely(
+  apiKey: string,
+  system: string,
+  user: string,
+): Promise<{ ok: true; text: string } | { ok: false; providerError: SafeProviderError }> {
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=` +
+    encodeURIComponent(apiKey);
+  let res: Response;
+
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { role: "system", parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+        },
+      }),
+    });
+  } catch {
+    return {
+      ok: false,
+      providerError: {
+        provider: "Gemini",
+        category: "provider_unavailable",
+        status: 503,
+      },
+    };
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      providerError: {
+        provider: "Gemini",
+        category: mapProviderStatus(res.status),
+        status: res.status,
+      },
+    };
+  }
+
+  try {
+    const data = (await res.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+    };
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((part) => part.text ?? "")
+      .join("");
+    if (text.trim().length === 0) {
+      return {
+        ok: false,
+        providerError: {
+          provider: "Gemini",
+          category: "invalid_provider_response",
+          status: 502,
+        },
+      };
+    }
+    return { ok: true, text };
+  } catch {
+    return {
+      ok: false,
+      providerError: {
+        provider: "Gemini",
+        category: "invalid_provider_response",
+        status: 502,
+      },
+    };
+  }
+}
+
 export async function POST(request: Request) {
   let parsedBody: unknown;
   try {
@@ -487,7 +698,7 @@ export async function POST(request: Request) {
     const text = buildMockPodchatTurn(validatedReq);
     const outputValidation = validateClaudeOutput(text);
     if (!outputValidation.valid) {
-      console.error(`Mock output validation failed: ${outputValidation.error}. Raw: ${text}`);
+      console.error(`Mock output validation failed: ${outputValidation.error}`);
       return NextResponse.json(
         { error: "Invalid provider response format. Please try again." },
         { status: 502 }
@@ -499,10 +710,7 @@ export async function POST(request: Request) {
   if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "Provider is not configured. Please try again later." },
-        { status: 503 }
-      );
+      return missingProviderConfiguration("Gemini");
     }
 
     const systemPrompt = buildSystemPrompt(
@@ -512,34 +720,23 @@ export async function POST(request: Request) {
     );
     const userPrompt = buildUserPrompt(validatedReq);
 
-    try {
-      const text = await callGemini(apiKey, systemPrompt, userPrompt);
-      const outputValidation = validateClaudeOutput(text);
-      if (!outputValidation.valid) {
-        console.error(`Gemini output validation failed: ${outputValidation.error}. Raw: ${text}`);
-        return NextResponse.json(
-          { error: "Invalid provider response format. Please try again." },
-          { status: 502 }
-        );
-      }
-      return NextResponse.json(outputValidation.response);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`Unexpected Gemini error: ${msg}`);
-      return NextResponse.json(
-        { error: "Provider request failed. Please try again later." },
-        { status: 502 }
-      );
+    const providerResult = await callGeminiSafely(apiKey, systemPrompt, userPrompt);
+    if (!providerResult.ok) {
+      return providerErrorResponse(providerResult.providerError);
     }
+
+    const outputValidation = validateClaudeOutput(providerResult.text);
+    if (!outputValidation.valid) {
+      console.error(`Gemini output validation failed: ${outputValidation.error}`);
+      return invalidProviderResponse("Gemini");
+    }
+    return NextResponse.json(outputValidation.response);
   }
 
   if (provider === "deepseek") {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "Provider is not configured. Please try again later." },
-        { status: 503 }
-      );
+      return missingProviderConfiguration("DeepSeek");
     }
 
     const systemPrompt = buildSystemPrompt(
@@ -549,35 +746,24 @@ export async function POST(request: Request) {
     );
     const userPrompt = buildUserPrompt(validatedReq);
 
-    try {
-      const text = await callDeepSeek(apiKey, systemPrompt, userPrompt);
-      const outputValidation = validateClaudeOutput(text);
-      if (!outputValidation.valid) {
-        console.error(`DeepSeek output validation failed: ${outputValidation.error}. Raw: ${text}`);
-        return NextResponse.json(
-          { error: "Invalid provider response format. Please try again." },
-          { status: 502 }
-        );
-      }
-      return NextResponse.json(outputValidation.response);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`Unexpected DeepSeek error: ${msg}`);
-      return NextResponse.json(
-        { error: "Provider request failed. Please try again later." },
-        { status: 502 }
-      );
+    const providerResult = await callDeepSeekSafely(apiKey, systemPrompt, userPrompt);
+    if (!providerResult.ok) {
+      return providerErrorResponse(providerResult.providerError);
     }
+
+    const outputValidation = validateClaudeOutput(providerResult.text);
+    if (!outputValidation.valid) {
+      console.error(`DeepSeek output validation failed: ${outputValidation.error}`);
+      return invalidProviderResponse("DeepSeek");
+    }
+    return NextResponse.json(outputValidation.response);
   }
 
 
   // Claude Default
   const apiKey = process.env.CLAUDE_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "Provider is not configured. Please try again later." },
-      { status: 503 }
-    );
+    return missingProviderConfiguration("Claude");
   }
 
   const systemPrompt = buildSystemPrompt(
@@ -604,12 +790,11 @@ export async function POST(request: Request) {
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Claude API error ${res.status}: ${errText.slice(0, 500)}`);
-      return NextResponse.json(
-        { error: "Provider request failed. Please try again later." },
-        { status: 502 }
-      );
+      return providerErrorResponse({
+        provider: "Claude",
+        category: mapProviderStatus(res.status),
+        status: res.status,
+      });
     }
 
     const data = (await res.json()) as {
@@ -619,11 +804,8 @@ export async function POST(request: Request) {
 
     const outputValidation = validateClaudeOutput(text);
     if (!outputValidation.valid) {
-      console.error(`Claude output validation failed: ${outputValidation.error}. Raw: ${text}`);
-      return NextResponse.json(
-        { error: "Invalid provider response format. Please try again." },
-        { status: 502 }
-      );
+      console.error(`Claude output validation failed: ${outputValidation.error}`);
+      return invalidProviderResponse("Claude");
     }
 
     return NextResponse.json(outputValidation.response);

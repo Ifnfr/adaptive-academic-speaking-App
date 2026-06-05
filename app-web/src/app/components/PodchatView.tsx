@@ -58,6 +58,21 @@ type PodchatEvaluateResponse = {
   aspectFeedback?: PodchatAspectFeedback;
 };
 
+type ProviderErrorCategory =
+  | "unauthorized"
+  | "rate_limited"
+  | "provider_unavailable"
+  | "invalid_provider_response"
+  | "missing_configuration"
+  | "unknown";
+
+type ProviderErrorResponse = {
+  error?: string;
+  providerError?: {
+    category?: ProviderErrorCategory;
+  };
+};
+
 const TOPICS: readonly PodchatTopic[] = ["Economics", "Technology"];
 const DIFFICULTIES: readonly PodchatDifficulty[] = [
   "Beginner",
@@ -135,6 +150,36 @@ function formatTime(seconds: number): string {
   const m = Math.floor(Math.max(0, seconds) / 60);
   const s = Math.max(0, seconds) % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function providerErrorMessage(category: ProviderErrorCategory | undefined): string | null {
+  if (category === "unauthorized") {
+    return "AI provider is not authorized. Check the server-side API key.";
+  }
+  if (category === "rate_limited") {
+    return "AI provider rate limit or quota was reached.";
+  }
+  if (category === "provider_unavailable") {
+    return "AI provider is temporarily unavailable.";
+  }
+  if (category === "invalid_provider_response") {
+    return "AI provider returned an invalid response.";
+  }
+  if (category === "missing_configuration") {
+    return "AI provider is not configured.";
+  }
+  if (category === "unknown") {
+    return "Provider request failed. Please try again later.";
+  }
+  return null;
+}
+
+function turnResponseErrorMessage(data: ProviderErrorResponse): string {
+  return (
+    providerErrorMessage(data.providerError?.category) ||
+    data.error ||
+    "Failed to submit turn."
+  );
 }
 
 export type PodchatArticleContext = {
@@ -585,8 +630,8 @@ export function PodchatView({
         body: JSON.stringify(buildTurnPayload(turns, submittedUserTurns)),
       });
       if (!response.ok) {
-        const errText = await response.json().catch(() => ({}));
-        throw new Error(errText.error || "Failed to submit turn.");
+        const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
+        throw new Error(turnResponseErrorMessage(errJson));
       }
       const data = await response.json();
       const hostTurn: PodchatTurn = {
@@ -632,8 +677,8 @@ export function PodchatView({
         body: JSON.stringify(buildTurnPayload(updatedTurns, submittedUserTurns)),
       });
       if (!response.ok) {
-        const errText = await response.json().catch(() => ({}));
-        throw new Error(errText.error || "Failed to submit turn.");
+        const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
+        throw new Error(turnResponseErrorMessage(errJson));
       }
       const data = await response.json();
       const hostTurn: PodchatTurn = {

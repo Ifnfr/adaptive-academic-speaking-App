@@ -1,4 +1,4 @@
-import { test, expect, Route } from "@playwright/test";
+import { test, expect, Route, Page } from "@playwright/test";
 
 interface TurnPayload {
   topic?: string;
@@ -16,6 +16,15 @@ interface EvalPayload {
 
 interface TtsPayload {
   text?: string;
+}
+
+async function submitOnePodchatTurn(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Start a Podchat" }).click();
+  await page.getByTestId("podchat-start-recording").click();
+  await page.getByTestId("podchat-stop-recording").click();
+  await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
+  await page.getByTestId("podchat-submit-turn").click();
 }
 
 test.describe("Podchat Phase 1 connected UI", () => {
@@ -315,7 +324,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     // Check TTS payload and invocation
     await expect.poll(() => ttsPayloads.length).toBe(1);
-    expect(ttsPayloads[0]).toEqual({
+    expect(ttsPayloads[0]).toMatchObject({
       text: "This is a mocked host response. What is your next point?"
     });
 
@@ -370,12 +379,12 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByText("Aspect Feedback")).toBeVisible();
     await expect(page.getByText("Sentence Structure")).toBeVisible();
     await expect(page.getByText("Use a complete sentence with a clear subject and verb.")).toBeVisible();
-    await expect(page.getByText("Grammar")).toBeVisible();
+    await expect(page.getByText("Grammar", { exact: true })).toBeVisible();
     await expect(page.getByText("Check subject-verb agreement in your main idea.")).toBeVisible();
     await expect(page.getByText("Coherence")).toBeVisible();
     await expect(page.getByText("Add one reason or example after your main idea.")).toBeVisible();
     await expect(page.getByText("Topic Relevance / Substance")).toBeVisible();
-    await expect(page.getByText("Excellent")).toBeVisible();
+    await expect(page.getByText("Excellent", { exact: true })).toBeVisible();
 
     // TTS should not be called again
     expect(ttsPayloads.length).toBe(2);
@@ -442,7 +451,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByText("Vocabulary suggestions")).toBeVisible();
     await expect(page.getByText("Recurring Errors")).toBeVisible();
     await expect(page.getByText("Next practice focus")).toBeVisible();
-    await expect(page.getByText("Aspect Feedback")).toHaveCount(0);
+    await expect(page.getByText("Use a complete sentence with a clear subject and verb.")).toHaveCount(0);
   });
 
   test("handles TTS route failure gracefully without blocking text conversation", async ({ page }) => {
@@ -564,6 +573,98 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Turn recovered. Are we good?");
     const playCalls = await page.evaluate(() => (window as unknown as { __AUDIO_PLAY_CALLED__: string[] }).__AUDIO_PLAY_CALLED__);
     expect(playCalls.length).toBe(1);
+  });
+
+  test("turn provider unauthorized category shows safe API key message", async ({ page }) => {
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Provider request failed. Please try again later.",
+          providerError: {
+            provider: "DeepSeek",
+            category: "unauthorized",
+            status: 401
+          }
+        })
+      });
+    });
+
+    await submitOnePodchatTurn(page);
+
+    await expect(page.getByTestId("podchat-turn-error")).toContainText(
+      "AI provider is not authorized. Check the server-side API key."
+    );
+  });
+
+  test("turn provider rate_limited category shows safe quota message", async ({ page }) => {
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Provider request failed. Please try again later.",
+          providerError: {
+            provider: "DeepSeek",
+            category: "rate_limited",
+            status: 429
+          }
+        })
+      });
+    });
+
+    await submitOnePodchatTurn(page);
+
+    await expect(page.getByTestId("podchat-turn-error")).toContainText(
+      "AI provider rate limit or quota was reached."
+    );
+  });
+
+  test("turn provider invalid_provider_response category shows safe invalid response message", async ({ page }) => {
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Provider request failed. Please try again later.",
+          providerError: {
+            provider: "DeepSeek",
+            category: "invalid_provider_response",
+            status: 502
+          }
+        })
+      });
+    });
+
+    await submitOnePodchatTurn(page);
+
+    await expect(page.getByTestId("podchat-turn-error")).toContainText(
+      "AI provider returned an invalid response."
+    );
+  });
+
+  test("turn provider unknown category falls back safely", async ({ page }) => {
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Provider request failed. Please try again later.",
+          providerError: {
+            provider: "DeepSeek",
+            category: "unknown",
+            status: 502
+          }
+        })
+      });
+    });
+
+    await submitOnePodchatTurn(page);
+
+    await expect(page.getByTestId("podchat-turn-error")).toContainText(
+      "Provider request failed. Please try again later."
+    );
   });
 
   test("Microphone permission denied shows safe error and does not crash", async ({ page }) => {

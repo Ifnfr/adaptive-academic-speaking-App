@@ -364,8 +364,16 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     process.env.CLAUDE_API_KEY = "";
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(503);
-    const data = (await response.json()) as { error: string };
-    expect(data.error).toContain("Provider is not configured");
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "Claude",
+      category: "missing_configuration",
+      status: 503,
+    });
   });
 
   // ── Mock provider ────────────────────────────────────────────────────────────
@@ -429,17 +437,33 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
   test("Claude non-OK response returns sanitized 502", async () => {
     mockClaudeResponse(500, "Internal Server Error");
     const response = await POST(buildRequest({}));
-    expect(response.status).toBe(502);
-    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(500);
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
     expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "Claude",
+      category: "provider_unavailable",
+      status: 500,
+    });
   });
 
   test("malformed Claude JSON returns safe 502", async () => {
     mockClaudeResponse(200, "Invalid { json }");
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(502);
-    const data = (await response.json()) as { error: string };
-    expect(data.error).toBe("Invalid provider response format. Please try again.");
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "Claude",
+      category: "invalid_provider_response",
+      status: 502,
+    });
   });
 
   test("malformed Claude schema returns safe 502", async () => {
@@ -502,9 +526,17 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     process.env.PODCHAT_AI_PROVIDER = "gemini";
     mockGeminiResponse(500, "Gemini Internal error");
     const response = await POST(buildRequest({}));
-    expect(response.status).toBe(502);
-    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(500);
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
     expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "Gemini",
+      category: "provider_unavailable",
+      status: 500,
+    });
   });
 
   test("malformed Gemini JSON returns safe 502", async () => {
@@ -552,22 +584,117 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     process.env.DEEPSEEK_API_KEY = "";
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(503);
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "DeepSeek",
+      category: "missing_configuration",
+      status: 503,
+    });
   });
 
-  test("DeepSeek non-OK response returns sanitized 502", async () => {
+  test("DeepSeek 401 response maps to unauthorized", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "deepseek";
+    mockDeepSeekResponse(401, "Unauthorized raw upstream body test-deepseek-key Authorization");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(401);
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data).toEqual({
+      error: "Provider request failed. Please try again later.",
+      providerError: {
+        provider: "DeepSeek",
+        category: "unauthorized",
+        status: 401,
+      },
+    });
+  });
+
+  test("DeepSeek 403 response maps to unauthorized", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "deepseek";
+    mockDeepSeekResponse(403, "Forbidden raw upstream body");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(403);
+    const data = (await response.json()) as {
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data.providerError).toEqual({
+      provider: "DeepSeek",
+      category: "unauthorized",
+      status: 403,
+    });
+  });
+
+  test("DeepSeek 429 response maps to rate_limited", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "deepseek";
+    mockDeepSeekResponse(429, "Quota exceeded raw upstream body");
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(429);
+    const data = (await response.json()) as {
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data.providerError).toEqual({
+      provider: "DeepSeek",
+      category: "rate_limited",
+      status: 429,
+    });
+  });
+
+  test("DeepSeek 5xx response maps to provider_unavailable", async () => {
     process.env.PODCHAT_AI_PROVIDER = "deepseek";
     mockDeepSeekResponse(500, "DeepSeek Internal error");
     const response = await POST(buildRequest({}));
-    expect(response.status).toBe(502);
-    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(500);
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
     expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "DeepSeek",
+      category: "provider_unavailable",
+      status: 500,
+    });
   });
 
-  test("malformed DeepSeek JSON returns safe 502", async () => {
+  test("malformed DeepSeek response maps to invalid_provider_response", async () => {
     process.env.PODCHAT_AI_PROVIDER = "deepseek";
     mockDeepSeekResponse(200, "Invalid JSON");
     const response = await POST(buildRequest({}));
     expect(response.status).toBe(502);
+    const data = (await response.json()) as {
+      error: string;
+      providerError: { provider: string; category: string; status: number };
+    };
+    expect(data.error).toBe("Provider request failed. Please try again later.");
+    expect(data.providerError).toEqual({
+      provider: "DeepSeek",
+      category: "invalid_provider_response",
+      status: 502,
+    });
+  });
+
+  test("DeepSeek diagnostic response excludes secrets and raw provider details", async () => {
+    process.env.PODCHAT_AI_PROVIDER = "deepseek";
+    const promptText = "I like demand and supply because it dictates prices.";
+    const rawProviderBody = "raw upstream body with Authorization Bearer test-deepseek-key";
+    mockDeepSeekResponse(401, rawProviderBody);
+
+    const response = await POST(buildRequest({}));
+    const data = await response.json();
+    const responseText = JSON.stringify(data);
+
+    expect(responseText).not.toContain("test-deepseek-key");
+    expect(responseText).not.toContain("Authorization");
+    expect(responseText).not.toContain(rawProviderBody);
+    expect(responseText).not.toContain(promptText);
+    expect(responseText).not.toContain("messages");
+    expect(responseText).not.toContain("model");
   });
 
   test("DeepSeek response schema mismatch returns safe 502", async () => {
