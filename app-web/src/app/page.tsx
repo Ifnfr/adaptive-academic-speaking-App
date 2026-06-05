@@ -453,6 +453,37 @@ export default function Home() {
     }
   };
 
+  // --- ElevenLabs Model Setting ---
+  const [elevenLabsModel, setElevenLabsModel] = useState<"eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "">("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem("defaultElevenLabsModel");
+        if (stored === "eleven_flash_v2_5" || stored === "eleven_multilingual_v2" || stored === "eleven_v3") {
+          setElevenLabsModel(stored);
+        } else {
+          setElevenLabsModel("");
+          if (stored !== null) {
+            window.localStorage.removeItem("defaultElevenLabsModel");
+          }
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleDefaultElevenLabsModelChange = (model: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "") => {
+    setElevenLabsModel(model);
+    if (typeof window !== "undefined") {
+      if (model) {
+        window.localStorage.setItem("defaultElevenLabsModel", model);
+      } else {
+        window.localStorage.removeItem("defaultElevenLabsModel");
+      }
+    }
+  };
+
   // --- Weekly Review Agent state ---
   const [weeklyReviewResult, setWeeklyReviewResult] =
     useState<WeeklyReviewResult | null>(null);
@@ -1783,6 +1814,7 @@ export default function Home() {
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
               ttsProvider={ttsProvider}
+              elevenLabsModelId={elevenLabsModel}
             />
           )}
 
@@ -2003,6 +2035,8 @@ export default function Home() {
               onDefaultAiProviderChange={handleDefaultAiProviderChange}
               defaultTtsProvider={ttsProvider}
               onDefaultTtsProviderChange={handleDefaultTtsProviderChange}
+              defaultElevenLabsModel={elevenLabsModel}
+              onDefaultElevenLabsModelChange={handleDefaultElevenLabsModelChange}
             />
           )}
 

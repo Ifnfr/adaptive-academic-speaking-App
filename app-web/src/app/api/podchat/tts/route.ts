@@ -16,6 +16,7 @@ type PodchatTtsRequest = {
   text: string;
   voice: PodchatTtsVoice;
   ttsProvider: TtsProvider;
+  elevenLabsModelId?: string;
 };
 
 type AwsConfig = {
@@ -84,6 +85,7 @@ function validateRequest(
   }
 
   const ttsProvider = getTargetProvider(source);
+  const elevenLabsModelId = typeof source.elevenLabsModelId === "string" ? source.elevenLabsModelId.trim() : undefined;
 
   return {
     valid: true,
@@ -91,6 +93,7 @@ function validateRequest(
       text,
       voice: source.voice === undefined ? defaultVoice() : source.voice,
       ttsProvider,
+      elevenLabsModelId,
     },
   };
 }
@@ -224,10 +227,9 @@ async function synthesizeSpeech(
 // ElevenLabs helpers
 // ---------------------------------------------------------------------------
 
-function getElevenLabsConfig(): ElevenLabsConfig | null {
+function getElevenLabsConfig(modelId: string): ElevenLabsConfig | null {
   const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
   const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim();
-  const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_flash_v2_5";
 
   if (!apiKey || !voiceId) {
     return null;
@@ -288,14 +290,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const { ttsProvider } = validation.request;
+  const { ttsProvider, elevenLabsModelId } = validation.request;
 
   try {
     if (ttsProvider === "elevenlabs") {
-      const elevenLabsConfig = getElevenLabsConfig();
+      if (
+        !elevenLabsModelId ||
+        (elevenLabsModelId !== "eleven_flash_v2_5" &&
+          elevenLabsModelId !== "eleven_multilingual_v2" &&
+          elevenLabsModelId !== "eleven_v3")
+      ) {
+        return NextResponse.json(
+          { error: "Text-to-speech model is not selected. Continuing with text." },
+          { status: 503 },
+        );
+      }
+
+      const elevenLabsConfig = getElevenLabsConfig(elevenLabsModelId);
       if (!elevenLabsConfig) {
         return NextResponse.json(
-          { error: "Text-to-speech is not configured. Please try again later." },
+          { error: "Text-to-speech is not configured. Continuing with text." },
           { status: 503 },
         );
       }

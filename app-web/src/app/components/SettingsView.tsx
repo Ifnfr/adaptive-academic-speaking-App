@@ -38,6 +38,8 @@ export type SettingsViewProps = {
   onDefaultAiProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
   defaultTtsProvider?: "polly" | "elevenlabs";
   onDefaultTtsProviderChange?: (provider: "polly" | "elevenlabs") => void;
+  defaultElevenLabsModel?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
+  onDefaultElevenLabsModelChange?: (model: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "") => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -561,13 +563,17 @@ export function SettingsView({
   onDefaultAiProviderChange,
   defaultTtsProvider = "polly",
   onDefaultTtsProviderChange,
+  defaultElevenLabsModel = "",
+  onDefaultElevenLabsModelChange,
 }: SettingsViewProps) {
   const { t } = useI18n(appLanguage);
 
   const [providerStatus, setProviderStatus] = useState<{
-    claude: boolean;
-    gemini: boolean;
-    deepseek: boolean;
+    providers?: {
+      Claude: { configured: boolean };
+      Gemini: { configured: boolean };
+      DeepSeek: { configured: boolean };
+    };
     ttsProviders?: {
       Polly: { configured: boolean };
       ElevenLabs: { configured: boolean };
@@ -668,20 +674,20 @@ export function SettingsView({
               <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">Claude</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.claude ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {providerStatus.claude ? 'Configured' : 'Missing'}
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Claude?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.providers?.Claude?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">Gemini</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.gemini ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {providerStatus.gemini ? 'Configured' : 'Missing'}
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Gemini?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.providers?.Gemini?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">DeepSeek</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.deepseek ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {providerStatus.deepseek ? 'Configured' : 'Missing'}
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.DeepSeek?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.providers?.DeepSeek?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -733,6 +739,81 @@ export function SettingsView({
                 <option value="elevenlabs">ElevenLabs</option>
               </select>
             </label>
+          </div>
+
+          {/* ElevenLabs Model Dropdown */}
+          {defaultTtsProvider === "elevenlabs" && (
+            <div className="mt-4 max-w-xs">
+              <label className="flex flex-col gap-1.5 font-sans">
+                <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                  ElevenLabs Model
+                </span>
+                <select
+                  id="default-elevenlabs-model-select"
+                  value={defaultElevenLabsModel}
+                  onChange={(e) =>
+                    onDefaultElevenLabsModelChange?.(
+                      e.target.value as "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | ""
+                    )
+                  }
+                  className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                >
+                  <option value="">-- Select a Model --</option>
+                  <option value="eleven_flash_v2_5">
+                    eleven_flash_v2_5 (Recommended for Podchat / low latency)
+                  </option>
+                  <option value="eleven_multilingual_v2">
+                    eleven_multilingual_v2 (Higher-quality multilingual speech)
+                  </option>
+                  <option value="eleven_v3">
+                    eleven_v3 (Most expressive voice quality)
+                  </option>
+                </select>
+              </label>
+            </div>
+          )}
+
+          {/* TTS Provider Status Section */}
+          <div className="border-t border-[var(--brand-border)] mt-5 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-[var(--brand-ink)] font-sans">
+                TTS Provider Status
+              </p>
+              {!providerStatus && (
+                <button
+                  type="button"
+                  onClick={handleCheckStatus}
+                  disabled={isCheckingStatus}
+                  className="rounded-lg bg-[var(--brand-surface-2)] border border-[var(--brand-border)] px-3 py-1.5 text-xs font-medium text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] disabled:opacity-50 transition-colors"
+                >
+                  {isCheckingStatus ? "Checking..." : "Check Status"}
+                </button>
+              )}
+            </div>
+
+            {providerStatus ? (
+              <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans text-sm">
+                <div className="flex items-center justify-between" data-testid="tts-status-polly">
+                  <span className="text-[var(--brand-ink)]">AWS Polly</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.ttsProviders?.Polly?.configured ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between" data-testid="tts-status-elevenlabs">
+                  <span className="text-[var(--brand-ink)]">ElevenLabs</span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {providerStatus.ttsProviders?.ElevenLabs?.configured ? 'Configured' : 'Missing'}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-[var(--brand-ink-soft)] leading-relaxed">
+                  This checks whether server-side voice provider credentials are present. It does not validate quota, billing, or provider availability.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--brand-ink-soft)] font-sans">
+                Click Check Status above to verify server credentials.
+              </p>
+            )}
           </div>
         </div>
       </div>

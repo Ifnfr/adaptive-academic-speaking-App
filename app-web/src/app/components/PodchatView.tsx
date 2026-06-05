@@ -152,12 +152,14 @@ export interface PodchatViewProps {
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
   ttsProvider?: "polly" | "elevenlabs";
+  elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
 }
 
 export function PodchatView({
   articleContext,
   onClearArticleContext,
   ttsProvider = "polly",
+  elevenLabsModelId = "",
 }: PodchatViewProps) {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
@@ -280,11 +282,21 @@ export function PodchatView({
     setTtsError(null);
     setIsTtsSpeaking(true);
 
+    if (ttsProvider === "elevenlabs" && !elevenLabsModelId) {
+      setIsTtsSpeaking(false);
+      setTtsError("Voice unavailable. Continuing with text.");
+      return;
+    }
+
     try {
+      const requestBody = ttsProvider === "elevenlabs"
+        ? { text, ttsProvider, elevenLabsModelId }
+        : { text, ttsProvider };
+
       const response = await fetch("/api/podchat/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, ttsProvider }),
+        body: JSON.stringify(requestBody),
       });
       if (!response.ok) {
         throw new Error("TTS request failed");

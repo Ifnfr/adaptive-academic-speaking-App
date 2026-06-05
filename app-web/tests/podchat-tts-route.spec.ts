@@ -348,7 +348,7 @@ test.describe("Podchat TTS Route", () => {
     mockElevenLabsResponse(200, new Uint8Array([40, 50, 60]));
 
     const response = await POST(
-      buildRequest({ ttsProvider: "elevenlabs" }),
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: "eleven_flash_v2_5" }),
     );
     const bytes = new Uint8Array(await response.arrayBuffer());
 
@@ -358,16 +358,61 @@ test.describe("Podchat TTS Route", () => {
     expect(Array.from(bytes)).toEqual([40, 50, 60]);
   });
 
-  test("ElevenLabs missing env returns sanitized 503", async () => {
-    clearElevenLabsEnv();
+  test("ElevenLabs missing model returns safe 503", async () => {
+    configureElevenLabsEnv();
     const response = await POST(
-      buildRequest({ ttsProvider: "elevenlabs" }),
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: undefined }),
     );
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(503);
     expect(data.error).toBe(
-      "Text-to-speech is not configured. Please try again later.",
+      "Text-to-speech model is not selected. Continuing with text.",
+    );
+  });
+
+  test("ElevenLabs invalid model returns safe 503", async () => {
+    configureElevenLabsEnv();
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: "invalid_model" }),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(503);
+    expect(data.error).toBe(
+      "Text-to-speech model is not selected. Continuing with text.",
+    );
+  });
+
+  test("ElevenLabs does not fallback to ELEVENLABS_MODEL_ID", async () => {
+    const originalModelEnv = process.env.ELEVENLABS_MODEL_ID;
+    try {
+      process.env.ELEVENLABS_MODEL_ID = "eleven_flash_v2_5";
+      configureElevenLabsEnv();
+      const response = await POST(
+        buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: undefined }),
+      );
+      const data = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(503);
+      expect(data.error).toBe(
+        "Text-to-speech model is not selected. Continuing with text.",
+      );
+    } finally {
+      process.env.ELEVENLABS_MODEL_ID = originalModelEnv;
+    }
+  });
+
+  test("ElevenLabs missing env returns sanitized 503", async () => {
+    clearElevenLabsEnv();
+    const response = await POST(
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: "eleven_flash_v2_5" }),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(503);
+    expect(data.error).toBe(
+      "Text-to-speech is not configured. Continuing with text.",
     );
   });
 
@@ -379,7 +424,7 @@ test.describe("Podchat TTS Route", () => {
     );
 
     const response = await POST(
-      buildRequest({ ttsProvider: "elevenlabs" }),
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: "eleven_flash_v2_5" }),
     );
     const data = (await response.json()) as { error: string };
 
@@ -400,12 +445,13 @@ test.describe("Podchat TTS Route", () => {
     mockElevenLabsResponse(200, new Uint8Array([70]), capture);
 
     const response = await POST(
-      buildRequest({ ttsProvider: "elevenlabs", text: "ElevenLabs host text." }),
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: "eleven_flash_v2_5", text: "ElevenLabs host text." }),
     );
 
     expect(response.status).toBe(200);
     expect(capture.url).toContain("api.elevenlabs.io");
     expect(capture.url).toContain("test-voice-id");
+    expect(capture.body?.model_id).toBe("eleven_flash_v2_5");
     const xiKey = capture.headers?.get("xi-api-key") ?? "";
     expect(xiKey).toBe("test-el-key");
     // Raw key must never appear in the response
@@ -425,7 +471,7 @@ test.describe("Podchat TTS Route", () => {
     );
 
     const response = await POST(
-      buildRequest({ ttsProvider: "elevenlabs" }),
+      buildRequest({ ttsProvider: "elevenlabs", elevenLabsModelId: "eleven_flash_v2_5" }),
     );
     const serialized = JSON.stringify(await response.json());
 
@@ -441,7 +487,7 @@ test.describe("Podchat TTS Route", () => {
       configureElevenLabsEnv();
       mockElevenLabsResponse(200, new Uint8Array([8, 9]));
 
-      const response = await POST(buildRequest({ ttsProvider: undefined }));
+      const response = await POST(buildRequest({ ttsProvider: undefined, elevenLabsModelId: "eleven_flash_v2_5" }));
       const bytes = new Uint8Array(await response.arrayBuffer());
 
       expect(response.status).toBe(200);
@@ -582,7 +628,7 @@ test.describe("Podchat TTS Browser Integration", () => {
   });
 
   test("Podchat TTS request sends canonical provider value", async ({ page }) => {
-    let requestPayload: { ttsProvider?: string } | null = null;
+    let requestPayload: { ttsProvider?: string; elevenLabsModelId?: string } | null = null;
     await page.route("**/api/podchat/tts", async (route) => {
       requestPayload = JSON.parse(route.request().postData() || "{}");
       await route.fulfill({
@@ -595,6 +641,7 @@ test.describe("Podchat TTS Browser Integration", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
+    await page.locator("#default-elevenlabs-model-select").selectOption("eleven_flash_v2_5");
 
     await page.getByRole("button", { name: "Active Session" }).click();
     await page.getByRole("button", { name: "Start a Podchat" }).click();
@@ -607,7 +654,128 @@ test.describe("Podchat TTS Browser Integration", () => {
     // Wait for requestPayload to populate
     await expect.poll(() => requestPayload).not.toBeNull();
 
-    const payload = requestPayload as unknown as { ttsProvider?: string };
+    const payload = requestPayload as unknown as { ttsProvider?: string; elevenLabsModelId?: string };
     expect(payload.ttsProvider).toBe("elevenlabs");
+    expect(payload.elevenLabsModelId).toBe("eleven_flash_v2_5");
+  });
+
+  test("Settings renders TTS Provider Status and handles checking", async ({ page }) => {
+    await page.route("**/api/provider-status", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          providers: {
+            Claude: { configured: true },
+            Gemini: { configured: false },
+            DeepSeek: { configured: false }
+          },
+          ttsProviders: {
+            Polly: { configured: true },
+            ElevenLabs: { configured: false }
+          }
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    // Click check status inside settings
+    await page.getByRole("button", { name: "Check Status" }).first().click();
+
+    // Verify it renders the status
+    await expect(page.getByTestId("tts-status-polly")).toContainText("AWS Polly");
+    await expect(page.getByTestId("tts-status-polly")).toContainText("Configured");
+    await expect(page.getByTestId("tts-status-elevenlabs")).toContainText("ElevenLabs");
+    await expect(page.getByTestId("tts-status-elevenlabs")).toContainText("Missing");
+
+    // Explain text must be rendered
+    await expect(page.locator("body")).toContainText(
+      "This checks whether server-side voice provider credentials are present. It does not validate quota, billing, or provider availability."
+    );
+  });
+
+  test("ElevenLabs Model selector is rendered with Recommended label, saves to localStorage, and sanitizes invalid values", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    const providerSelect = page.locator("#default-tts-provider-select");
+    await providerSelect.selectOption("elevenlabs");
+
+    const modelSelect = page.locator("#default-elevenlabs-model-select");
+    await expect(modelSelect).toBeVisible();
+
+    // Check default is empty if localStorage is empty
+    await expect(modelSelect).toHaveValue("");
+
+    // Check eleven_flash_v2_5 shows "Recommended"
+    const recommendedOption = page.locator("#default-elevenlabs-model-select option[value='eleven_flash_v2_5']");
+    await expect(recommendedOption).toContainText("Recommended");
+
+    // Selecting a model stores allowed model ID in localStorage
+    await modelSelect.selectOption("eleven_flash_v2_5");
+    let storedModel = await page.evaluate(() => localStorage.getItem("defaultElevenLabsModel"));
+    expect(storedModel).toBe("eleven_flash_v2_5");
+
+    // Invalid localStorage model value sanitizes to empty/unset
+    await page.evaluate(() => {
+      localStorage.setItem("defaultElevenLabsModel", "invalid_model_name");
+    });
+    await page.reload();
+    await page.waitForTimeout(100);
+    storedModel = await page.evaluate(() => localStorage.getItem("defaultElevenLabsModel"));
+    expect(storedModel).toBeNull(); // sanitized/removed
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await providerSelect.selectOption("elevenlabs");
+    await expect(modelSelect).toHaveValue("");
+  });
+
+  test("Podchat sends selected elevenLabsModelId when provider is elevenlabs, and none when polly", async ({ page }) => {
+    let requestPayload: { ttsProvider?: string; elevenLabsModelId?: string } | null = null;
+    await page.route("**/api/podchat/tts", async (route) => {
+      requestPayload = JSON.parse(route.request().postData() || "{}");
+      await route.fulfill({
+        status: 200,
+        contentType: "audio/mpeg",
+        body: Buffer.from([1, 2, 3]),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
+    await page.locator("#default-elevenlabs-model-select").selectOption("eleven_multilingual_v2");
+
+    await page.getByRole("button", { name: "Active Session" }).click();
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Trigger turn submission to fire TTS
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await page.getByTestId("podchat-submit-turn").click();
+
+    // Wait for requestPayload to populate
+    await expect.poll(() => requestPayload).not.toBeNull();
+
+    expect(requestPayload!.ttsProvider).toBe("elevenlabs");
+    expect(requestPayload!.elevenLabsModelId).toBe("eleven_multilingual_v2");
+
+    // Now switch to polly and verify model ID is not sent
+    requestPayload = null;
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("#default-tts-provider-select").selectOption("polly");
+
+    await page.getByRole("button", { name: "Active Session" }).click();
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    // Re-record and submit to fire TTS
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+    await page.getByTestId("podchat-submit-turn").click();
+
+    await expect.poll(() => requestPayload).not.toBeNull();
+    expect(requestPayload!.ttsProvider).toBe("polly");
+    expect(requestPayload!.elevenLabsModelId).toBeUndefined();
   });
 });
