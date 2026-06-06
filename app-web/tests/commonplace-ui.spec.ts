@@ -67,6 +67,21 @@ type TestMainMapEdgeRow = {
   label: string | null;
 };
 
+type TestMainMapSaveCall = {
+  ownerId: string;
+  clusters: Array<{
+    localId: string;
+    subMindMapId: string;
+    positionX: number;
+    positionY: number;
+  }>;
+  edges: Array<{
+    sourceLocalId: string;
+    targetLocalId: string;
+    label?: string | null;
+  }>;
+};
+
 function installCommonplaceTestAdapter() {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
@@ -76,6 +91,7 @@ function installCommonplaceTestAdapter() {
     __COMMONPLACE_TEST_MINDMAP_EDGES__?: TestMindMapEdgeRow[];
     __COMMONPLACE_TEST_MAIN_NODES__?: TestMainMapClusterRow[];
     __COMMONPLACE_TEST_MAIN_EDGES__?: TestMainMapEdgeRow[];
+    __COMMONPLACE_TEST_MAIN_SAVE_CALLS__?: TestMainMapSaveCall[];
     __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
     __COMMONPLACE_TEST_FAIL_LOAD__?: boolean;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
@@ -88,6 +104,7 @@ function installCommonplaceTestAdapter() {
   testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ = testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ || [];
   testWindow.__COMMONPLACE_TEST_MAIN_NODES__ = testWindow.__COMMONPLACE_TEST_MAIN_NODES__ || [];
   testWindow.__COMMONPLACE_TEST_MAIN_EDGES__ = testWindow.__COMMONPLACE_TEST_MAIN_EDGES__ || [];
+  testWindow.__COMMONPLACE_TEST_MAIN_SAVE_CALLS__ = testWindow.__COMMONPLACE_TEST_MAIN_SAVE_CALLS__ || [];
 
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
     async listCommonplaceNotes(ownerId: string) {
@@ -447,21 +464,80 @@ function installCommonplaceTestAdapter() {
         },
       };
     },
-    async saveCommonplaceMainMindMapGraph(input: { ownerId: string; title?: string | null }) {
+    async saveCommonplaceMainMindMapGraph(input: TestMainMapSaveCall & { title?: string | null }) {
+      if (testWindow.__COMMONPLACE_TEST_FAIL_SAVE__) {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
+      }
+
+      testWindow.__COMMONPLACE_TEST_MAIN_SAVE_CALLS__ = [
+        ...(testWindow.__COMMONPLACE_TEST_MAIN_SAVE_CALLS__ ?? []),
+        {
+          ownerId: input.ownerId,
+          clusters: input.clusters.map((cluster) => ({ ...cluster })),
+          edges: input.edges.map((edge) => ({ ...edge })),
+        },
+      ];
+
+      const subMaps = testWindow.__COMMONPLACE_TEST_MINDMAPS__ ?? [];
+      for (const cluster of input.clusters) {
+        const subMap = subMaps.find(
+          (map) =>
+            map.ownerId === input.ownerId &&
+            map.id === cluster.subMindMapId &&
+            map.type === "sub",
+        );
+        if (!subMap) {
+          return { ok: false as const, error: "commonplace_validation_failed" as const };
+        }
+      }
+
+      const localIdToDbId = new Map<string, string>();
+      testWindow.__COMMONPLACE_TEST_MAIN_NODES__ = input.clusters.map((cluster) => {
+        const subMap = subMaps.find((map) => map.id === cluster.subMindMapId);
+        const nodeId = `main-node-${cluster.subMindMapId}`;
+        localIdToDbId.set(cluster.localId, nodeId);
+        return {
+          id: nodeId,
+          subMindMapId: cluster.subMindMapId,
+          subMindMapTitle: subMap?.title ?? "Untitled Mind Map",
+          positionX: cluster.positionX,
+          positionY: cluster.positionY,
+          updatedAt: subMap?.updatedAt ?? new Date("2026-06-06T06:00:00.000Z").toISOString(),
+        };
+      });
+
+      testWindow.__COMMONPLACE_TEST_MAIN_EDGES__ = [];
+      for (const edge of input.edges) {
+        const sourceNodeId = localIdToDbId.get(edge.sourceLocalId);
+        const targetNodeId = localIdToDbId.get(edge.targetLocalId);
+        if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) {
+          return { ok: false as const, error: "commonplace_validation_failed" as const };
+        }
+
+        testWindow.__COMMONPLACE_TEST_MAIN_EDGES__.push({
+          id: `main-edge-${sourceNodeId}-${targetNodeId}`,
+          sourceNodeId,
+          targetNodeId,
+          label: edge.label?.trim() || null,
+        });
+      }
+
+      const summary = {
+        id: "main-map-db-123",
+        ownerId: input.ownerId,
+        title: input.title || "Main Mind Map",
+        type: "main" as const,
+        parentMindMapId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
       return {
         ok: true as const,
         graph: {
-          summary: {
-            id: "main-map-db-123",
-            ownerId: input.ownerId,
-            title: input.title || "Main Mind Map",
-            type: "main" as const,
-            parentMindMapId: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          clusters: [],
-          edges: [],
+          summary,
+          clusters: testWindow.__COMMONPLACE_TEST_MAIN_NODES__,
+          edges: testWindow.__COMMONPLACE_TEST_MAIN_EDGES__,
         },
       };
     },
@@ -1525,6 +1601,62 @@ test.describe("Commonplace Library UI shell", () => {
       "akar masalah",
     );
 
+    const saveMainMapButton = page.getByTestId("commonplace-main-mindmap-save-btn");
+    await expect(saveMainMapButton).toContainText("Save Main Map");
+    await saveMainMapButton.click();
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      "Main Mind Map saved.",
+    );
+    await expect(clusterNodes).toHaveCount(2);
+    await expect(page.getByTestId("commonplace-mainmap-edge-label")).toContainText(
+      "akar masalah",
+    );
+
+    const savePayload = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAIN_SAVE_CALLS__?: TestMainMapSaveCall[];
+      };
+      return testWindow.__COMMONPLACE_TEST_MAIN_SAVE_CALLS__?.at(-1) ?? null;
+    });
+
+    expect(savePayload).not.toBeNull();
+    expect(savePayload?.clusters.map((cluster) => cluster.subMindMapId).sort()).toEqual([
+      expect.stringMatching(/^map-/),
+      expect.stringMatching(/^map-/),
+    ]);
+    expect(savePayload?.clusters).toHaveLength(2);
+    for (const cluster of savePayload?.clusters ?? []) {
+      expect(cluster.localId).toMatch(/^cluster-map-/);
+      expect(Number.isFinite(cluster.positionX)).toBe(true);
+      expect(Number.isFinite(cluster.positionY)).toBe(true);
+    }
+    expect(savePayload?.edges).toEqual([
+      expect.objectContaining({
+        sourceLocalId: expect.stringMatching(/^cluster-map-/),
+        targetLocalId: expect.stringMatching(/^cluster-map-/),
+        label: "akar masalah",
+      }),
+    ]);
+
+    await page.getByTestId("commonplace-main-mindmap-back-btn").click();
+    await page.getByTestId("commonplace-main-mindmap-btn").click();
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mainmap-cluster-node")).toHaveCount(2);
+    await expect(page.getByTestId("commonplace-mainmap-edge-label")).toContainText(
+      "akar masalah",
+    );
+
+    await page.getByTestId("commonplace-mainmap-add-cluster-btn").click();
+    await page
+      .getByTestId("commonplace-mainmap-cluster-selector")
+      .getByRole("button", { name: /Why Nations Fail/ })
+      .click();
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      "Cluster already exists on canvas.",
+    );
+
+    await connectButton.click();
+    await expect(page.getByTestId("commonplace-mainmap-connect-panel")).toBeVisible();
     await tfsCluster.click({ force: true });
     await wnfCluster.click({ force: true });
     await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
@@ -1532,12 +1664,42 @@ test.describe("Commonplace Library UI shell", () => {
     );
     await expect(page.getByTestId("commonplace-mainmap-edge-label")).toHaveCount(1);
 
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_SAVE__ = true;
+    });
+    await saveMainMapButton.click();
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      "Could not save Main Mind Map.",
+    );
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_SAVE__ = false;
+    });
+
     await connectButton.click();
     await expect(page.getByTestId("commonplace-mainmap-connect-panel")).toHaveCount(0);
     await wnfCluster.click({ force: true });
     await expect(page.getByTestId("commonplace-mindmap-view")).toBeVisible();
     await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
       'Loaded mind map: "Why Nations Fail"',
+    );
+
+    await page.getByRole("button", { name: "Back to Detail" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_LOAD__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_LOAD__ = true;
+    });
+    await page.getByTestId("commonplace-main-mindmap-btn").click();
+    await expect(page.getByTestId("commonplace-main-mindmap-error")).toContainText(
+      "Could not load Main Mind Map.",
     );
 
     await expect(page.getByText("AI Suggest")).toHaveCount(0);

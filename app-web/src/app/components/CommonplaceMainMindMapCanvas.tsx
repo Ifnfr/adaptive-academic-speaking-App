@@ -151,6 +151,7 @@ export function CommonplaceMainMindMapCanvas({
   storage,
 }: CommonplaceMainMindMapCanvasProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingMainMap, setIsSavingMainMap] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] =
     useNodesState<CommonplaceClusterNodeData>([]);
@@ -186,7 +187,7 @@ export function CommonplaceMainMindMapCanvas({
     try {
       const result = await storage.getCommonplaceMainMindMapGraph(ownerId);
       if (!result.ok) {
-        setError("Could not load Main Mind Map. Please try again.");
+        setError("Could not load Main Mind Map.");
         return;
       }
 
@@ -220,7 +221,7 @@ export function CommonplaceMainMindMapCanvas({
       setNodes(mappedNodes);
       setEdges(mappedEdges);
     } catch {
-      setError("Could not load Main Mind Map. Please try again.");
+      setError("Could not load Main Mind Map.");
     } finally {
       setIsLoading(false);
     }
@@ -367,6 +368,44 @@ export function CommonplaceMainMindMapCanvas({
     showFeedback(`Connection created with label: "${finalLabel}"`, "info");
   }, [clearConnectionState, connectSource, connectTarget, labelText, setEdges, showFeedback]);
 
+  const handleSaveMainMap = useCallback(async () => {
+    if (!storage || !ownerId || !storage.saveCommonplaceMainMindMapGraph) {
+      showFeedback("Could not save Main Mind Map.", "error");
+      return;
+    }
+
+    setIsSavingMainMap(true);
+    showFeedback("Saving...", "info");
+
+    try {
+      const result = await storage.saveCommonplaceMainMindMapGraph({
+        ownerId,
+        clusters: nodes.map((node) => ({
+          localId: node.id,
+          subMindMapId: node.data.subMindMapId,
+          positionX: node.position.x,
+          positionY: node.position.y,
+        })),
+        edges: edges.map((edge) => ({
+          sourceLocalId: edge.source,
+          targetLocalId: edge.target,
+          label: edge.label ? String(edge.label).trim() : null,
+        })),
+      });
+
+      if (!result.ok) {
+        showFeedback("Could not save Main Mind Map.", "error");
+        return;
+      }
+
+      showFeedback("Main Mind Map saved.", "info");
+    } catch {
+      showFeedback("Could not save Main Mind Map.", "error");
+    } finally {
+      setIsSavingMainMap(false);
+    }
+  }, [edges, nodes, ownerId, storage, showFeedback]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       void loadGraph();
@@ -471,11 +510,12 @@ export function CommonplaceMainMindMapCanvas({
           </div>
           <button
             type="button"
-            disabled
-            className="rounded-lg bg-gray-300 px-4 py-2 text-sm font-semibold text-gray-500 shadow-sm cursor-not-allowed"
+            onClick={() => void handleSaveMainMap()}
+            disabled={isSavingMainMap}
+            className="rounded-lg bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#413797] disabled:cursor-not-allowed disabled:opacity-75"
             data-testid="commonplace-main-mindmap-save-btn"
           >
-            Save (Coming next)
+            {isSavingMainMap ? "Saving..." : "Save Main Map"}
           </button>
           <button
             type="button"
