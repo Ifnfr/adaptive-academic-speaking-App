@@ -506,6 +506,133 @@ test.describe("Commonplace Library UI shell", () => {
     await expect(page.getByRole("button", { name: "Buka mind map" })).toBeVisible();
   });
 
+  test("connects two nodes with a labeled edge and blocks duplicates/self-connections", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected call" }),
+        });
+      });
+    }
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    // Create first note (#wn1)
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page
+      .getByLabel("Insight")
+      .fill("Inclusive institutions create stronger incentives for growth.");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#wn1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    // Create second note (#tf1)
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Thinking Fast and Slow");
+    await page
+      .getByLabel("Insight")
+      .fill("System 1 operates automatically with little effort.");
+    await page.getByLabel("Tags").fill("Psychology, Cognition");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#tf1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    // Open first note detail and enter mind map
+    await page.getByRole("button", { name: /#wn1/i }).click();
+    await page.getByRole("button", { name: "Buka mind map" }).click();
+
+    await expect(page.getByTestId("commonplace-mindmap-view")).toBeVisible();
+
+    // Add second note to canvas
+    const shortcodeInput = page.getByTestId("commonplace-mindmap-shortcode-input");
+    await shortcodeInput.fill("#tf1");
+    await shortcodeInput.press("Enter");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Added #tf1 to canvas.");
+
+    // Activate connect mode
+    const connectButton = page.getByTestId("commonplace-mindmap-connect-toggle");
+    await expect(connectButton).toBeVisible();
+    await connectButton.click();
+
+    // Verify feedback shows connect mode instructions
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Connect mode active.");
+
+    // Select source node (#wn1)
+    const wn1Node = page.locator(".react-flow__node").filter({ hasText: "#wn1" });
+    await wn1Node.click({ force: true });
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Select target node");
+
+    // Try self-connection on #wn1
+    await wn1Node.click({ force: true });
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Choose a different target node.");
+
+    // Select source node again
+    await wn1Node.click({ force: true });
+
+    // Select target node (#tf1)
+    const tf1Node = page.locator(".react-flow__node").filter({ hasText: "#tf1" });
+    await tf1Node.click({ force: true });
+
+    // Connection form should appear
+    const connForm = page.getByTestId("commonplace-mindmap-connection-form");
+    await expect(connForm).toBeVisible();
+    await expect(connForm).toContainText("#wn1");
+    await expect(connForm).toContainText("#tf1");
+
+    // Fill label and confirm
+    const edgeLabelInput = page.getByTestId("commonplace-mindmap-label-input");
+    await edgeLabelInput.fill("sebab-akibat");
+    await page.getByTestId("commonplace-mindmap-confirm-connection").click();
+
+    // Edge label should be visible on canvas
+    await expect(page.getByTestId("commonplace-mindmap-edge-label")).toContainText("sebab-akibat");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Connection created");
+
+    // Try duplicate connection A -> B
+    await wn1Node.click({ force: true });
+    await tf1Node.click({ force: true });
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Connection already exists.");
+
+    // Toggle connect mode off and on to reset selection
+    await connectButton.click();
+    await connectButton.click();
+
+    // Try duplicate connection B -> A
+    await tf1Node.click({ force: true });
+    await wn1Node.click({ force: true });
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Connection already exists.");
+
+    // Verify Back to Detail still works
+    await page.getByRole("button", { name: "Back to Detail" }).click();
+    await expect(page.getByRole("heading", { name: "Insight" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Buka mind map" })).toBeVisible();
+
+    // Verify no Laci, AI Suggest, or Main Mind Map
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText("Laci")).toHaveCount(0);
+    await expect(page.getByText("Main Mind Map")).toHaveCount(0);
+
+    // Verify no secrets or provider calls
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(providerCalls).toEqual([]);
+  });
+
   test("existing main views remain reachable from sidebar", async ({ page }) => {
     await page.goto("/");
 
