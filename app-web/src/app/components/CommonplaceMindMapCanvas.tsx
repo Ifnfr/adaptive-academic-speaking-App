@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -16,6 +16,10 @@ import type { CommonplaceNote } from "../lib/storage/supabase-commonplace-adapte
 type CommonplaceMindMapCanvasProps = {
   note: CommonplaceNote;
   onBackToDetail: () => void;
+  onLookupByShortcode: (shortcode: string) => Promise<
+    | { ok: true; note: CommonplaceNote }
+    | { ok: false; error: string }
+  >;
 };
 
 type CommonplaceMindMapNodeData = {
@@ -23,6 +27,11 @@ type CommonplaceMindMapNodeData = {
   title: string;
   insight: string;
   tags: string[];
+};
+
+type CanvasFeedback = {
+  message: string;
+  type: "error" | "info";
 };
 
 function displayTitle(note: CommonplaceNote): string {
@@ -33,6 +42,15 @@ function insightPreview(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length <= 220) return trimmed;
   return `${trimmed.slice(0, 220)}...`;
+}
+
+function noteToNodeData(note: CommonplaceNote): CommonplaceMindMapNodeData {
+  return {
+    shortcode: note.shortcode,
+    title: displayTitle(note),
+    insight: insightPreview(note.insight),
+    tags: note.tags,
+  };
 }
 
 function CommonplaceNoteNode({
@@ -72,28 +90,99 @@ const nodeTypes: NodeTypes = {
   commonplaceNote: CommonplaceNoteNode,
 };
 
+function normalizeShortcodeInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return "";
+  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+}
+
 export function CommonplaceMindMapCanvas({
   note,
   onBackToDetail,
+  onLookupByShortcode,
 }: CommonplaceMindMapCanvasProps) {
+  const [shortcodeInput, setShortcodeInput] = useState("");
+  const [isLooking, setIsLooking] = useState(false);
+  const [feedback, setFeedback] = useState<CanvasFeedback | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const initialNodes = useMemo<Node<CommonplaceMindMapNodeData>[]>(
     () => [
       {
         id: `commonplace-note-${note.id}`,
         type: "commonplaceNote",
         position: { x: 120, y: 120 },
-        data: {
-          shortcode: note.shortcode,
-          title: displayTitle(note),
-          insight: insightPreview(note.insight),
-          tags: note.tags,
-        },
+        data: noteToNodeData(note),
       },
     ],
     [note],
   );
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+
+  const showFeedback = useCallback((message: string, type: "error" | "info") => {
+    if (feedbackTimerRef.current) {
+      clearTimeout(feedbackTimerRef.current);
+    }
+    setFeedback({ message, type });
+    feedbackTimerRef.current = setTimeout(() => {
+      setFeedback(null);
+      feedbackTimerRef.current = null;
+    }, 4000);
+  }, []);
+
+  const handleShortcodeSubmit = useCallback(async () => {
+    const normalized = normalizeShortcodeInput(shortcodeInput);
+    if (normalized.length === 0) return;
+
+    // Check duplicate
+    const alreadyOnCanvas = nodes.some(
+      (n) => (n.data as CommonplaceMindMapNodeData).shortcode === normalized,
+    );
+    if (alreadyOnCanvas) {
+      showFeedback("Node already exists on canvas.", "info");
+      setShortcodeInput("");
+      return;
+    }
+
+    setIsLooking(true);
+    setFeedback(null);
+
+    const result = await onLookupByShortcode(normalized);
+
+    setIsLooking(false);
+
+    if (!result.ok) {
+      showFeedback("Shortcode not found.", "error");
+      return;
+    }
+
+    // Compute position offset from last node
+    const lastNode = nodes[nodes.length - 1];
+    const baseX = lastNode ? lastNode.position.x + 80 : 120;
+    const baseY = lastNode ? lastNode.position.y + 80 : 120;
+
+    const newNode: Node<CommonplaceMindMapNodeData> = {
+      id: `commonplace-note-${result.note.id}`,
+      type: "commonplaceNote",
+      position: { x: baseX, y: baseY },
+      data: noteToNodeData(result.note),
+    };
+
+    setNodes((current) => [...current, newNode]);
+    setShortcodeInput("");
+    showFeedback(`Added ${normalized} to canvas.`, "info");
+  }, [shortcodeInput, nodes, onLookupByShortcode, setNodes, showFeedback]);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleShortcodeSubmit();
+      }
+    },
+    [handleShortcodeSubmit],
+  );
 
   return (
     <div
@@ -106,21 +195,56 @@ export function CommonplaceMindMapCanvas({
             Sub Mind Map
           </p>
           <h3 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Early canvas shell
+            {displayTitle(note)}
           </h3>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
-            This first shell starts from the selected Commonplace note. Shortcode
-            linking and saved map layouts are coming next.
+            Add related notes by shortcode to build connections.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onBackToDetail}
-          className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
-        >
-          Back to Detail
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={shortcodeInput}
+              onChange={(e) => setShortcodeInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ketik shortcode..."
+              disabled={isLooking}
+              data-testid="commonplace-mindmap-shortcode-input"
+              className="w-44 rounded-lg border border-[#534AB7]/30 bg-white px-3 py-2 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-soft)] outline-none focus:border-[#534AB7] focus:ring-2 focus:ring-[#534AB7]/20 disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={() => void handleShortcodeSubmit()}
+              disabled={isLooking || shortcodeInput.trim().length === 0}
+              className="rounded-lg bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#413797] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLooking ? "..." : "Add"}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={onBackToDetail}
+            className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
+          >
+            Back to Detail
+          </button>
+        </div>
       </div>
+
+      {feedback && (
+        <div
+          role="status"
+          data-testid="commonplace-mindmap-feedback"
+          className={`px-5 py-2.5 text-sm font-medium ${
+            feedback.type === "error"
+              ? "bg-[#FFF4F3] text-[#8A1F15]"
+              : "bg-[#F0EFFF] text-[#332C85]"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
 
       <div className="h-[540px] bg-[#FBFAFF]" data-testid="commonplace-mindmap-canvas">
         <ReactFlow

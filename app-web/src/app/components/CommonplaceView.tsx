@@ -7,6 +7,7 @@ import {
   createCommonplaceNote,
   deleteCommonplaceNote,
   getCommonplaceNoteById,
+  getCommonplaceNoteByShortcode,
   listCommonplaceNotes,
   updateCommonplaceNote,
 } from "../lib/storage/supabase-commonplace-adapter";
@@ -40,6 +41,10 @@ type CommonplaceStorage = {
   getCommonplaceNoteById(
     ownerId: string,
     noteId: string,
+  ): Promise<CommonplaceNoteResult>;
+  getCommonplaceNoteByShortcode(
+    ownerId: string,
+    shortcode: string,
   ): Promise<CommonplaceNoteResult>;
   updateCommonplaceNote(
     input: UpdateCommonplaceNoteInput,
@@ -150,6 +155,8 @@ function createSupabaseStorage(
       createCommonplaceNote(input, supabaseClient),
     getCommonplaceNoteById: (ownerId, noteId) =>
       getCommonplaceNoteById(ownerId, noteId, supabaseClient),
+    getCommonplaceNoteByShortcode: (ownerId, shortcode) =>
+      getCommonplaceNoteByShortcode(ownerId, shortcode, supabaseClient),
     updateCommonplaceNote: (input) =>
       updateCommonplaceNote(input, supabaseClient),
     deleteCommonplaceNote: (ownerId, noteId) =>
@@ -423,6 +430,15 @@ export function CommonplaceView({
                 <CommonplaceMindMapCanvas
                   note={selectedNote}
                   onBackToDetail={() => setMode("detail")}
+                  onLookupByShortcode={async (shortcode) => {
+                    if (!storage || !effectiveOwnerId) {
+                      return { ok: false as const, error: "Storage unavailable" };
+                    }
+                    return storage.getCommonplaceNoteByShortcode(
+                      effectiveOwnerId,
+                      shortcode,
+                    );
+                  }}
                 />
               )}
             </>

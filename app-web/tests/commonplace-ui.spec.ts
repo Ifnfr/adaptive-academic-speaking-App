@@ -153,6 +153,15 @@ function installCommonplaceTestAdapter() {
       ).filter((note) => note.ownerId !== ownerId || note.id !== noteId);
       return { ok: true };
     },
+    async getCommonplaceNoteByShortcode(ownerId: string, shortcode: string) {
+      const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId && candidate.shortcode === shortcode,
+      );
+      return note
+        ? { ok: true, note }
+        : { ok: false, error: "commonplace_not_found" };
+    },
   };
 }
 
@@ -373,6 +382,125 @@ test.describe("Commonplace Library UI shell", () => {
     expect(bodyText).not.toMatch(renderedSecretLikePattern);
     expect(providerCalls).toEqual([]);
 
+    await page.getByRole("button", { name: "Back to Detail" }).click();
+    await expect(page.getByRole("heading", { name: "Insight" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Buka mind map" })).toBeVisible();
+  });
+
+  test("adds a note node by shortcode, rejects invalid and duplicate shortcodes", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected call" }),
+        });
+      });
+    }
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    // Create first note
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page
+      .getByLabel("Insight")
+      .fill("Inclusive institutions create stronger incentives for growth.");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#wn1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    // Create second note
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Thinking Fast and Slow");
+    await page
+      .getByLabel("Insight")
+      .fill("System 1 operates automatically with little effort.");
+    await page.getByLabel("Tags").fill("Psychology, Cognition");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#tf1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    // Open first note detail and enter mind map
+    await page.getByRole("button", { name: /#wn1/i }).click();
+    await page.getByRole("button", { name: "Buka mind map" }).click();
+
+    await expect(page.getByTestId("commonplace-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mindmap-canvas")).toBeVisible();
+
+    // Initial node for first note exists
+    const noteNodes = page.getByTestId("commonplace-mindmap-note-node");
+    await expect(noteNodes).toHaveCount(1);
+    await expect(noteNodes.first()).toContainText("#wn1");
+
+    // Shortcode input exists with correct placeholder
+    const shortcodeInput = page.getByTestId("commonplace-mindmap-shortcode-input");
+    await expect(shortcodeInput).toBeVisible();
+    await expect(shortcodeInput).toHaveAttribute("placeholder", "Ketik shortcode...");
+
+    // Add second note by shortcode
+    await shortcodeInput.fill("#tf1");
+    await shortcodeInput.press("Enter");
+
+    await expect(noteNodes).toHaveCount(2);
+    await expect(noteNodes.nth(1)).toContainText("#tf1");
+    await expect(noteNodes.nth(1)).toContainText(
+      "System 1 operates automatically with little effort.",
+    );
+    await expect(noteNodes.nth(1)).toContainText("#psychology");
+
+    // Feedback shows success
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      "Added #tf1 to canvas.",
+    );
+
+    // Invalid shortcode shows error
+    await shortcodeInput.fill("#nonexistent99");
+    await shortcodeInput.press("Enter");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      "Shortcode not found.",
+    );
+    await expect(noteNodes).toHaveCount(2);
+
+    // Duplicate shortcode shows info message
+    await shortcodeInput.fill("#tf1");
+    await shortcodeInput.press("Enter");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      "Node already exists on canvas.",
+    );
+    await expect(noteNodes).toHaveCount(2);
+
+    // Shortcode without # prefix also works (normalization)
+    await shortcodeInput.fill("wn1");
+    await shortcodeInput.press("Enter");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      "Node already exists on canvas.",
+    );
+    await expect(noteNodes).toHaveCount(2);
+
+    // No AI Suggest, Laci, or Main Mind Map
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText("Laci")).toHaveCount(0);
+    await expect(page.getByText("Main Mind Map")).toHaveCount(0);
+
+    // No provider calls, no secrets
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(providerCalls).toEqual([]);
+
+    // Back to Detail still works
     await page.getByRole("button", { name: "Back to Detail" }).click();
     await expect(page.getByRole("heading", { name: "Insight" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Buka mind map" })).toBeVisible();
