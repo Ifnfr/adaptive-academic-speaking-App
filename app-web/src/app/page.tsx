@@ -1921,7 +1921,14 @@ export default function Home() {
           )}
 
           {/* ===================== Commonplace Library view ===================== */}
-          {view === "commonplace" && <CommonplaceView />}
+          {view === "commonplace" && (
+            <CommonplaceView
+              ownerId={cloudAuthState.userId}
+              isSignedIn={cloudAuthState.isSignedIn}
+              getToken={cloudAuthState.getToken}
+              supabaseConfigured={isSupabaseConfigured()}
+            />
+          )}
 
           {/* ===================== Session Log view ===================== */}
           {view === "session-log" && (

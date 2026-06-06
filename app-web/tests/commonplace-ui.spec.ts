@@ -1,7 +1,159 @@
 import { expect, test } from "@playwright/test";
 
+type TestNote = {
+  id: string;
+  ownerId: string;
+  clientId: string | null;
+  shortcode: string;
+  sourceBook: string;
+  sourcePage: string | null;
+  title: string | null;
+  quote: string | null;
+  insight: string;
+  tags: string[];
+  connections: string[];
+  relevance: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function installCommonplaceTestAdapter() {
+  const testWindow = window as typeof window & {
+    __COMMONPLACE_TEST_NOTES__?: TestNote[];
+    __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
+    __COMMONPLACE_TEST_ADAPTER__?: unknown;
+  };
+
+  testWindow.__COMMONPLACE_TEST_NOTES__ = [];
+  testWindow.__COMMONPLACE_TEST_COUNTERS__ = {};
+  testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
+    async listCommonplaceNotes(ownerId: string) {
+      return {
+        ok: true,
+        notes: (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).filter(
+          (note) => note.ownerId === ownerId,
+        ),
+      };
+    },
+    async createCommonplaceNote(input: {
+      ownerId: string;
+      sourceBook?: string | null;
+      sourcePage?: string | null;
+      title?: string | null;
+      quote?: string | null;
+      insight: string;
+      tags?: string[] | null;
+      connections?: string[] | null;
+      relevance?: string | null;
+    }) {
+      if (!input.ownerId || !input.insight?.trim()) {
+        return { ok: false, error: "commonplace_validation_failed" };
+      }
+
+      const sourceBook = input.sourceBook?.trim() || "Untitled Source";
+      const prefix = sourceBook
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((word) => word[0])
+        .join("") || "us";
+      const counters = testWindow.__COMMONPLACE_TEST_COUNTERS__ ?? {};
+      const nextValue = (counters[prefix] ?? 0) + 1;
+      counters[prefix] = nextValue;
+      testWindow.__COMMONPLACE_TEST_COUNTERS__ = counters;
+
+      const now = new Date("2026-06-06T05:00:00.000Z").toISOString();
+      const note: TestNote = {
+        id: `note-${Date.now()}-${nextValue}`,
+        ownerId: input.ownerId,
+        clientId: null,
+        shortcode: `#${prefix}${nextValue}`,
+        sourceBook,
+        sourcePage: input.sourcePage?.trim() || null,
+        title: input.title?.trim() || null,
+        quote: input.quote?.trim() || null,
+        insight: input.insight.trim(),
+        tags: (input.tags ?? [])
+          .map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
+          .filter(Boolean),
+        connections: (input.connections ?? [])
+          .map((connection) => connection.trim())
+          .filter((connection) => connection.startsWith("#")),
+        relevance: input.relevance?.trim() || null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      testWindow.__COMMONPLACE_TEST_NOTES__ = [
+        note,
+        ...(testWindow.__COMMONPLACE_TEST_NOTES__ ?? []),
+      ];
+      return { ok: true, note };
+    },
+    async getCommonplaceNoteById(ownerId: string, noteId: string) {
+      const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId && candidate.id === noteId,
+      );
+      return note
+        ? { ok: true, note }
+        : { ok: false, error: "commonplace_not_found" };
+    },
+    async updateCommonplaceNote(input: {
+      ownerId: string;
+      noteId: string;
+      sourceBook?: string | null;
+      sourcePage?: string | null;
+      title?: string | null;
+      quote?: string | null;
+      insight?: string;
+      tags?: string[] | null;
+      connections?: string[] | null;
+      relevance?: string | null;
+    }) {
+      const notes = testWindow.__COMMONPLACE_TEST_NOTES__ ?? [];
+      const noteIndex = notes.findIndex(
+        (note) => note.ownerId === input.ownerId && note.id === input.noteId,
+      );
+      if (noteIndex < 0 || !input.insight?.trim()) {
+        return { ok: false, error: "commonplace_validation_failed" };
+      }
+
+      const previous = notes[noteIndex];
+      const updated: TestNote = {
+        ...previous,
+        sourceBook: input.sourceBook?.trim() || "Untitled Source",
+        sourcePage: input.sourcePage?.trim() || null,
+        title: input.title?.trim() || null,
+        quote: input.quote?.trim() || null,
+        insight: input.insight.trim(),
+        tags: (input.tags ?? [])
+          .map((tag) => tag.trim().replace(/^#+/, "").toLowerCase())
+          .filter(Boolean),
+        connections: (input.connections ?? [])
+          .map((connection) => connection.trim())
+          .filter((connection) => connection.startsWith("#")),
+        relevance: input.relevance?.trim() || null,
+        updatedAt: new Date("2026-06-06T06:00:00.000Z").toISOString(),
+      };
+      notes[noteIndex] = updated;
+      testWindow.__COMMONPLACE_TEST_NOTES__ = notes;
+      return { ok: true, note: updated };
+    },
+    async deleteCommonplaceNote(ownerId: string, noteId: string) {
+      testWindow.__COMMONPLACE_TEST_NOTES__ = (
+        testWindow.__COMMONPLACE_TEST_NOTES__ ?? []
+      ).filter((note) => note.ownerId !== ownerId || note.id !== noteId);
+      return { ok: true };
+    },
+  };
+}
+
 test.describe("Commonplace Library UI shell", () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(installCommonplaceTestAdapter);
+
     await page.route("**/*", async (route) => {
       const url = new URL(route.request().url());
       if (
@@ -21,7 +173,7 @@ test.describe("Commonplace Library UI shell", () => {
     });
   });
 
-  test("sidebar opens Commonplace library empty state safely", async ({
+  test("creates, edits, and deletes a Commonplace note safely", async ({
     page,
   }) => {
     await page.goto("/");
@@ -43,7 +195,59 @@ test.describe("Commonplace Library UI shell", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: /Tambah note/i }).click();
-    await expect(page.getByText("Note creation coming next.")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Create note" }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("Insight is required.")).toBeVisible();
+
+    await page
+      .getByLabel("Insight")
+      .fill("Institutions shape incentives over time.");
+    await page.getByLabel("Tags").fill("Politics, Institutions");
+    await page.getByRole("button", { name: "Save note" }).click();
+
+    await expect(page.getByText("#us1")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Untitled Source" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Institutions shape incentives over time."),
+    ).toBeVisible();
+    await expect(page.getByText("#politics")).toBeVisible();
+
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(
+      page.getByRole("button", {
+        name: /#us1[\s\S]*Untitled Source[\s\S]*Institutions shape/i,
+      }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /#us1/i }).click();
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByText("Shortcode #us1")).toBeVisible();
+    await page
+      .getByLabel("Insight")
+      .fill("Institutions shape long-term incentives.");
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page.getByLabel("Source page").fill("72");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+
+    await expect(page.getByText("#us1")).toBeVisible();
+    await expect(page.getByText("Why Nations Fail, p. 72")).toBeVisible();
+    await expect(
+      page.getByText("Institutions shape long-term incentives."),
+    ).toBeVisible();
+    await expect(page.getByText("#economics")).toBeVisible();
+
+    await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText("Delete this note?")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm delete" }).click();
+
+    await expect(page.getByText("Start by saving one idea from a book.")).toBeVisible();
+    await expect(page.getByText("Institutions shape long-term incentives.")).toHaveCount(0);
   });
 
   test("existing main views remain reachable from sidebar", async ({ page }) => {
