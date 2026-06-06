@@ -1413,6 +1413,140 @@ test.describe("Commonplace Library UI shell", () => {
     expect(providerCalls).toEqual([]);
   });
 
+  test("Main Mind Map connects clusters locally and keeps normal click-to-open", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected main map provider call" }),
+        });
+      });
+    }
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page
+      .getByLabel("Insight")
+      .fill("Inclusive institutions create stronger incentives for growth.");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#wn1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Thinking Fast and Slow");
+    await page
+      .getByLabel("Insight")
+      .fill("System 1 operates automatically with little effort.");
+    await page.getByLabel("Tags").fill("Psychology, Cognition");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#tf1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    await page.getByRole("button", { name: /#wn1/i }).click();
+    await page.getByRole("button", { name: "Buka mind map" }).click();
+    await page.getByTestId("commonplace-mindmap-save-btn").click();
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      "Mind map saved successfully.",
+    );
+    await page.getByRole("button", { name: "Back to Detail" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    await page.getByRole("button", { name: /#tf1/i }).click();
+    await page.getByRole("button", { name: "Buka mind map" }).click();
+    await page.getByTestId("commonplace-mindmap-save-btn").click();
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      "Mind map saved successfully.",
+    );
+    await page.getByRole("button", { name: "Back to Detail" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    await page.getByTestId("commonplace-main-mindmap-btn").click();
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+    await expect(page.getByPlaceholder("Ketik shortcode...")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-shortcode-input")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
+
+    await page.getByTestId("commonplace-mainmap-add-cluster-btn").click();
+    await page
+      .getByTestId("commonplace-mainmap-cluster-selector")
+      .getByRole("button", { name: /Why Nations Fail/ })
+      .click();
+    await page.getByTestId("commonplace-mainmap-add-cluster-btn").click();
+    await page
+      .getByTestId("commonplace-mainmap-cluster-selector")
+      .getByRole("button", { name: /Thinking Fast and Slow/ })
+      .click();
+
+    const clusterNodes = page.getByTestId("commonplace-mainmap-cluster-node");
+    await expect(clusterNodes).toHaveCount(2);
+    await expect(clusterNodes.first()).toContainText("Sub Mind Map");
+
+    const wnfCluster = page.locator(".react-flow__node").filter({ hasText: "Why Nations Fail" });
+    const tfsCluster = page.locator(".react-flow__node").filter({ hasText: "Thinking Fast and Slow" });
+    const connectButton = page.getByTestId("commonplace-mainmap-connect-toggle");
+
+    await connectButton.click();
+    await expect(connectButton).toHaveClass(/bg-\[#534AB7\]/);
+    await expect(page.getByTestId("commonplace-mainmap-connect-panel")).toContainText(
+      "Pilih dua cluster untuk dihubungkan.",
+    );
+
+    await wnfCluster.click({ force: true });
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mindmap-view")).toHaveCount(0);
+
+    await wnfCluster.click({ force: true });
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      "Choose a different target cluster.",
+    );
+
+    await tfsCluster.click({ force: true });
+    await expect(page.getByTestId("commonplace-mainmap-connect-panel")).toContainText(
+      "Label koneksi",
+    );
+    await page.getByTestId("commonplace-mainmap-label-input").fill("akar masalah");
+    await page.getByTestId("commonplace-mainmap-confirm-connection").click();
+    await expect(page.getByTestId("commonplace-mainmap-edge-label")).toContainText(
+      "akar masalah",
+    );
+
+    await tfsCluster.click({ force: true });
+    await wnfCluster.click({ force: true });
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      "Connection already exists.",
+    );
+    await expect(page.getByTestId("commonplace-mainmap-edge-label")).toHaveCount(1);
+
+    await connectButton.click();
+    await expect(page.getByTestId("commonplace-mainmap-connect-panel")).toHaveCount(0);
+    await wnfCluster.click({ force: true });
+    await expect(page.getByTestId("commonplace-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText(
+      'Loaded mind map: "Why Nations Fail"',
+    );
+
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(bodyText).not.toMatch(forbiddenCommonplaceContextFieldPattern);
+    expect(providerCalls).toEqual([]);
+  });
+
   test("Main Mind Map selector shows empty state when no sub mind maps exist", async ({
     page,
   }) => {

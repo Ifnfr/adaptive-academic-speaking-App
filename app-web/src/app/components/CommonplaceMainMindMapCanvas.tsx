@@ -129,6 +129,7 @@ function CommonplaceEdge({
               border: "1px solid rgba(83, 74, 183, 0.3)",
               pointerEvents: "all",
             }}
+            data-testid="commonplace-mainmap-edge-label"
             className="nodrag nopan rounded border border-[#534AB7]/30 bg-[#EEEDFE] px-2 py-0.5 text-[11px] font-semibold text-[#332C85] shadow-sm"
           >
             {label}
@@ -159,6 +160,11 @@ export function CommonplaceMainMindMapCanvas({
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; type: "error" | "info" } | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isConnectMode, setIsConnectMode] = useState(false);
+  const [connectSource, setConnectSource] = useState<string | null>(null);
+  const [connectTarget, setConnectTarget] = useState<string | null>(null);
+  const [showLabelForm, setShowLabelForm] = useState(false);
+  const [labelText, setLabelText] = useState("");
 
   const showFeedback = useCallback((message: string, type: "error" | "info") => {
     if (feedbackTimerRef.current) {
@@ -263,13 +269,103 @@ export function CommonplaceMainMindMapCanvas({
   }, [nodes, setNodes, showFeedback]);
 
   const handleClusterClick = useCallback(async (_event: React.MouseEvent, node: Node<CommonplaceClusterNodeData>) => {
+    if (isConnectMode) {
+      if (!connectSource) {
+        setConnectSource(node.id);
+        setNodes((current) =>
+          current.map((candidate) => ({
+            ...candidate,
+            data: {
+              ...candidate.data,
+              isHighlighted: candidate.id === node.id,
+            },
+          })),
+        );
+        showFeedback("Select target cluster to connect.", "info");
+        return;
+      }
+
+      if (node.id === connectSource) {
+        showFeedback("Choose a different target cluster.", "error");
+        return;
+      }
+
+      const isDuplicate = edges.some(
+        (edge) =>
+          (edge.source === connectSource && edge.target === node.id) ||
+          (edge.source === node.id && edge.target === connectSource),
+      );
+
+      if (isDuplicate) {
+        showFeedback("Connection already exists.", "error");
+        return;
+      }
+
+      setConnectTarget(node.id);
+      setShowLabelForm(true);
+      setLabelText("");
+      return;
+    }
+
     if (!onOpenSubMindMap) return;
 
     const didOpen = await onOpenSubMindMap(node.data.subMindMapId);
     if (!didOpen) {
       showFeedback("Could not open sub mind map.", "error");
     }
-  }, [onOpenSubMindMap, showFeedback]);
+  }, [connectSource, edges, isConnectMode, onOpenSubMindMap, setNodes, showFeedback]);
+
+  const clearConnectionState = useCallback(() => {
+    setConnectSource(null);
+    setConnectTarget(null);
+    setShowLabelForm(false);
+    setLabelText("");
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          isHighlighted: false,
+        },
+      })),
+    );
+  }, [setNodes]);
+
+  const handleToggleConnectMode = useCallback(() => {
+    setIsConnectMode((current) => {
+      const next = !current;
+      if (!next) {
+        clearConnectionState();
+      } else {
+        showFeedback("Pilih dua cluster untuk dihubungkan.", "info");
+      }
+      return next;
+    });
+  }, [clearConnectionState, showFeedback]);
+
+  const handleCancelConnection = useCallback(() => {
+    clearConnectionState();
+    showFeedback("Connection cancelled.", "info");
+  }, [clearConnectionState, showFeedback]);
+
+  const handleConfirmConnection = useCallback(() => {
+    if (!connectSource || !connectTarget) return;
+
+    const trimmedLabel = labelText.trim();
+    const finalLabel = trimmedLabel.length > 0 ? trimmedLabel : "terhubung";
+
+    const newEdge: Edge = {
+      id: `mainmap-edge-${connectSource}-${connectTarget}`,
+      source: connectSource,
+      target: connectTarget,
+      type: "commonplaceEdge",
+      label: finalLabel,
+    };
+
+    setEdges((current) => [...current, newEdge]);
+    clearConnectionState();
+    showFeedback(`Connection created with label: "${finalLabel}"`, "info");
+  }, [clearConnectionState, connectSource, connectTarget, labelText, setEdges, showFeedback]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -306,6 +402,18 @@ export function CommonplaceMainMindMapCanvas({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleToggleConnectMode}
+            className={`rounded-lg border px-4 py-2 text-sm font-semibold shadow-sm transition-all ${
+              isConnectMode
+                ? "border-[#534AB7] bg-[#534AB7] text-white hover:bg-[#413797]"
+                : "border-[#534AB7]/30 bg-white text-[#332C85] hover:bg-[#F8F7FF]"
+            }`}
+            data-testid="commonplace-mainmap-connect-toggle"
+          >
+            Hubungkan cluster
+          </button>
           <div className="relative">
             <button
               type="button"
@@ -401,6 +509,64 @@ export function CommonplaceMainMindMapCanvas({
           data-testid="commonplace-main-mindmap-feedback"
         >
           {feedback.message}
+        </div>
+      )}
+
+      {isConnectMode && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-4 border-b border-[#534AB7]/20 bg-[#F5F4FF] px-5 py-3"
+          data-testid="commonplace-mainmap-connect-panel"
+        >
+          {showLabelForm ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-[#332C85]">
+                  Label koneksi
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="text"
+                  value={labelText}
+                  onChange={(event) => setLabelText(event.target.value)}
+                  placeholder="Contoh: akar masalah"
+                  maxLength={60}
+                  data-testid="commonplace-mainmap-label-input"
+                  className="w-56 rounded-lg border border-[#534AB7]/30 bg-white px-3 py-1.5 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-soft)] outline-none focus:border-[#534AB7] focus:ring-2 focus:ring-[#534AB7]/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleConfirmConnection}
+                  data-testid="commonplace-mainmap-confirm-connection"
+                  className="rounded-lg bg-[#534AB7] px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-[#413797]"
+                >
+                  Tambah koneksi
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelConnection}
+                  data-testid="commonplace-mainmap-cancel-connection"
+                  className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-1.5 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
+                >
+                  Batal
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-[#332C85]">
+                Pilih dua cluster untuk dihubungkan.
+              </p>
+              <button
+                type="button"
+                onClick={handleCancelConnection}
+                data-testid="commonplace-mainmap-cancel-connection"
+                className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-1.5 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
+              >
+                Batal
+              </button>
+            </>
+          )}
         </div>
       )}
 
