@@ -1201,6 +1201,7 @@ test.describe("Commonplace Library UI shell", () => {
     // 3. Main Mind Map header renders.
     await expect(page.getByRole("heading", { name: "Mind Map Utama" })).toBeVisible();
     await expect(page.getByText("Connect saved sub mind maps as high-level idea clusters.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Tambah cluster" })).toBeVisible();
 
     // 4. Empty state renders when no clusters exist.
     await expect(page.getByTestId("commonplace-main-mindmap-empty")).toBeVisible();
@@ -1212,6 +1213,9 @@ test.describe("Commonplace Library UI shell", () => {
 
     // 7. Main Mind Map does not show note insertion controls.
     await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-connect-toggle")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-laci-drawer")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-note-node")).toHaveCount(0);
 
     // 8. Main Mind Map does not show AI Suggest.
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
@@ -1287,6 +1291,147 @@ test.describe("Commonplace Library UI shell", () => {
     await expect(page.getByTestId("commonplace-mindmap-note-node")).toHaveCount(0);
 
     // No provider calls made
+    expect(providerCalls).toEqual([]);
+  });
+
+  test("Main Mind Map selector shows empty state when no sub mind maps exist", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await page.getByTestId("commonplace-main-mindmap-btn").click();
+
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+
+    const addClusterBtn = page.getByTestId("commonplace-mainmap-add-cluster-btn");
+    await expect(addClusterBtn).toBeVisible();
+    await addClusterBtn.click();
+
+    // Selector open, should show empty submaps copy
+    await expect(page.getByTestId("commonplace-mainmap-cluster-selector")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mainmap-no-submaps")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mainmap-no-submaps")).toContainText(
+      "No saved sub mind maps yet."
+    );
+  });
+
+  test("Main Mind Map allows cluster insertion, draggability, and blocks duplicates", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected main map provider call" }),
+        });
+      });
+    }
+
+    // Inject mock sub mind maps into testWindow
+    await page.addInitScript(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MINDMAPS__?: TestMindMapSummary[];
+      };
+      testWindow.__COMMONPLACE_TEST_MINDMAPS__ = [
+        {
+          id: "sub-map-111",
+          ownerId: "commonplace-test-owner",
+          title: "Political Institutions Map",
+          type: "sub",
+          parentMindMapId: null,
+          createdAt: "2026-06-06T10:00:00Z",
+          updatedAt: "2026-06-06T10:30:00Z",
+        },
+        {
+          id: "sub-map-222",
+          ownerId: "commonplace-test-owner",
+          title: "Cognitive Psychology Map",
+          type: "sub",
+          parentMindMapId: null,
+          createdAt: "2026-06-06T11:00:00Z",
+          updatedAt: "2026-06-06T11:45:00Z",
+        },
+        {
+          id: "main-map-should-not-render",
+          ownerId: "commonplace-test-owner",
+          title: "Main Map Should Not Appear",
+          type: "main",
+          parentMindMapId: null,
+          createdAt: "2026-06-06T12:00:00Z",
+          updatedAt: "2026-06-06T12:45:00Z",
+        },
+      ];
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await page.getByTestId("commonplace-main-mindmap-btn").click();
+
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-main-mindmap-empty")).toBeVisible();
+
+    const addClusterBtn = page.getByTestId("commonplace-mainmap-add-cluster-btn");
+    await addClusterBtn.click();
+
+    // The selector list should appear and show both sub maps
+    const selector = page.getByTestId("commonplace-mainmap-cluster-selector");
+    await expect(selector).toBeVisible();
+    await expect(selector.getByText("Political Institutions Map")).toBeVisible();
+    await expect(selector.getByText("Cognitive Psychology Map")).toBeVisible();
+    await expect(selector.getByText("Sub Mind Map", { exact: true })).toHaveCount(2);
+    await expect(selector.locator("span").filter({ hasText: /^Updated:/ })).toHaveCount(2);
+    await expect(selector.getByText("Main Map Should Not Appear")).toHaveCount(0);
+
+    // Select the first one
+    await page.getByTestId("commonplace-mainmap-select-item-sub-map-111").click();
+
+    // Canvas empty state should disappear, cluster card node appears
+    await expect(page.getByTestId("commonplace-main-mindmap-empty")).toHaveCount(0);
+    const clusterNodes = page.getByTestId("commonplace-mainmap-cluster-node");
+    await expect(clusterNodes).toHaveCount(1);
+    await expect(clusterNodes.first()).toContainText("Political Institutions Map");
+    await expect(clusterNodes.first()).toContainText("Sub Mind Map");
+
+    // Success feedback shows up
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      'Added cluster for "Political Institutions Map"'
+    );
+
+    // Now try to insert the duplicate cluster
+    await addClusterBtn.click();
+    await page.getByTestId("commonplace-mainmap-select-item-sub-map-111").click();
+
+    // Duplicate check blocks it, cluster count remains 1, duplicate error feedback shows
+    await expect(clusterNodes).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-main-mindmap-feedback")).toContainText(
+      "Cluster already exists on canvas."
+    );
+
+    // Insert the second cluster map
+    await addClusterBtn.click();
+    await page.getByTestId("commonplace-mainmap-select-item-sub-map-222").click();
+
+    // Cluster count becomes 2
+    await expect(clusterNodes).toHaveCount(2);
+    await expect(clusterNodes.nth(1)).toContainText("Cognitive Psychology Map");
+    await expect(page.getByPlaceholder("Ketik shortcode...")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-shortcode-input")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-connect-toggle")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-laci-drawer")).toHaveCount(0);
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(bodyText).not.toMatch(forbiddenCommonplaceContextFieldPattern);
     expect(providerCalls).toEqual([]);
   });
 });
