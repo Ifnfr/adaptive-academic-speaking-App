@@ -198,7 +198,9 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.locator("img[alt=\"fonetik logo\"]")).toBeVisible();
     await expect(page.locator("aside")).toContainText("Active Session");
     await expect(page.locator("aside")).toContainText("Vocabulary Notebook");
+    await expect(page.locator("aside")).toContainText("Commonplace");
     await expect(page.locator("aside")).toContainText("Article Practice");
+    await expect(page.locator("aside")).not.toContainText("Learning Path");
     await expect(page.locator("header")).toContainText("Local only");
     await expect(
       page.getByRole("button", { name: /restore cloud data|import cloud data/i }),

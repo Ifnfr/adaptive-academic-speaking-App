@@ -56,6 +56,7 @@ import { AuthStatus } from "./components/AuthStatus";
 import { PodchatView } from "./components/PodchatView";
 import type { PodchatArticleContext } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
+import { CommonplaceView } from "./components/CommonplaceView";
 import {
   ArticlePracticeView,
   type ArticlePracticeResult,
@@ -1919,6 +1920,9 @@ export default function Home() {
             />
           )}
 
+          {/* ===================== Commonplace Library view ===================== */}
+          {view === "commonplace" && <CommonplaceView />}
+
           {/* ===================== Session Log view ===================== */}
           {view === "session-log" && (
             <SessionLogView
@@ -2379,6 +2383,8 @@ function viewTitle(view: string, translate: Translate): string {
       return translate("topbar.titleActive");
     case "vocabulary":
       return translate("topbar.titleVocabulary");
+    case "commonplace":
+      return translate("topbar.titleCommonplace");
     case "article-practice":
       return translate("topbar.titleArticlePractice");
     case "session-log":
@@ -2410,6 +2416,8 @@ function viewSubtitle(view: string, translate: Translate): string {
       return translate("sidebar.viewActive");
     case "vocabulary":
       return translate("topbar.titleVocabulary");
+    case "commonplace":
+      return translate("sidebar.viewCommonplace");
     case "article-practice":
       return translate("topbar.titleArticlePractice");
     case "session-log":
@@ -2439,6 +2447,8 @@ function viewDescription(view: string, translate: Translate): string {
   switch (view) {
     case "vocabulary":
       return translate("topbar.descVocabulary");
+    case "commonplace":
+      return translate("topbar.descCommonplace");
     case "article-practice":
       return translate("topbar.descArticlePractice");
     case "session-log":

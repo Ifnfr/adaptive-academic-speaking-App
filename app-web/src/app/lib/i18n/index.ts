@@ -56,6 +56,7 @@ const dictionaries = {
     "sidebar.groupSystem": "System",
     "sidebar.viewActive": "Active Session",
     "sidebar.viewVocabulary": "Vocabulary Notebook",
+    "sidebar.viewCommonplace": "Commonplace",
     "sidebar.viewArticlePractice": "Article Practice",
     "sidebar.viewSessionLog": "Session Log",
     "sidebar.viewProgress": "Progress & Quest",
@@ -73,6 +74,7 @@ const dictionaries = {
     // Topbar & View Titles
     "topbar.titleActive": "Active Practice",
     "topbar.titleVocabulary": "Vocabulary Notebook",
+    "topbar.titleCommonplace": "Commonplace",
     "topbar.titleArticlePractice": "Article Practice",
     "topbar.titleSessionLog": "Session Log",
     "topbar.titleProgress": "Progress & Quest",
@@ -94,6 +96,7 @@ const dictionaries = {
     "topbar.descLearningPath": "Structured learning modules to build your speaking confidence.",
     "topbar.sessionActive": "Session active",
     "topbar.idle": "Idle",
+    "topbar.descCommonplace": "Capture book ideas, connect insights, and prepare them for speaking practice.",
 
     // Session Setup
     "setup.step1": "Step 1",
@@ -339,6 +342,7 @@ const dictionaries = {
     "sidebar.groupSystem": "Sistem",
     "sidebar.viewActive": "Sesi Aktif",
     "sidebar.viewVocabulary": "Buku Kosakata",
+    "sidebar.viewCommonplace": "Commonplace",
     "sidebar.viewArticlePractice": "Latihan Artikel",
     "sidebar.viewSessionLog": "Log Sesi",
     "sidebar.viewProgress": "Progres & Quest",
@@ -356,6 +360,7 @@ const dictionaries = {
     // Topbar & View Titles
     "topbar.titleActive": "Latihan Aktif",
     "topbar.titleVocabulary": "Buku Kosakata",
+    "topbar.titleCommonplace": "Commonplace",
     "topbar.titleArticlePractice": "Latihan Artikel",
     "topbar.titleSessionLog": "Log Sesi",
     "topbar.titleProgress": "Progres & Quest",
@@ -377,6 +382,7 @@ const dictionaries = {
     "topbar.descLearningPath": "Modul belajar terstruktur untuk membangun kepercayaan diri berbicara Anda.",
     "topbar.sessionActive": "Sesi aktif",
     "topbar.idle": "Santai",
+    "topbar.descCommonplace": "Simpan ide buku, hubungkan insight, dan siapkan untuk latihan berbicara.",
 
     // Session Setup
     "setup.step1": "Langkah 1",

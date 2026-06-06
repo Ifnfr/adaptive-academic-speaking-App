@@ -5,6 +5,7 @@ import { useI18n } from "../lib/i18n";
 export type SidebarView =
   | "active"
   | "vocabulary"
+  | "commonplace"
   | "article-practice"
   | "session-log"
   | "progress"
@@ -184,6 +185,12 @@ export function Sidebar({
               onClick={() => onSelectView("vocabulary")}
             >
               {t("sidebar.viewVocabulary")}
+            </SidebarItem>
+            <SidebarItem
+              active={view === "commonplace"}
+              onClick={() => onSelectView("commonplace")}
+            >
+              {t("sidebar.viewCommonplace")}
             </SidebarItem>
             <SidebarItem
               active={view === "article-practice"}
