@@ -7,8 +7,13 @@ import {
   saveCommonplaceMindMapGraph,
   deleteCommonplaceMindMap,
   createOrGetMainMindMap,
+  createOrGetCommonplaceMainMindMap,
+  getCommonplaceMainMindMapGraph,
+  saveCommonplaceMainMindMapGraph,
+  deleteCommonplaceMainMapCluster,
   type CreateCommonplaceMindMapInput,
   type SaveCommonplaceMindMapInput,
+  type SaveCommonplaceMainMapGraphInput,
 } from "../src/app/lib/storage/supabase-commonplace-mindmap-adapter";
 
 type MockOptions = {
@@ -17,6 +22,11 @@ type MockOptions = {
   nodesRows?: Record<string, unknown>[];
   edgesRows?: Record<string, unknown>[];
   notesRows?: Record<string, unknown>[];
+
+  // Main map options:
+  mainNodesRows?: Record<string, unknown>[];
+  mainEdgesRows?: Record<string, unknown>[];
+  subMindMapsRows?: Record<string, unknown>[];
 
   mindMapInsertError?: Error | null;
   mindMapReadError?: Error | null;
@@ -29,6 +39,14 @@ type MockOptions = {
   edgeReadError?: Error | null;
   edgeDeleteError?: Error | null;
   notesReadError?: Error | null;
+
+  // Main map errors:
+  mainNodeInsertError?: Error | null;
+  mainNodeReadError?: Error | null;
+  mainNodeDeleteError?: Error | null;
+  mainEdgeInsertError?: Error | null;
+  mainEdgeReadError?: Error | null;
+  mainEdgeDeleteError?: Error | null;
 };
 
 function createMockSupabaseClient(options: MockOptions = {}) {
@@ -51,7 +69,7 @@ function createMockSupabaseClient(options: MockOptions = {}) {
         const rowsArray = Array.isArray(row) ? row : [row];
         inserted[table] = rowsArray as Record<string, unknown>[];
         insertedPayload = rowsArray[0] as Record<string, unknown>;
-        if (table === "commonplace_mindmap_nodes") {
+        if (table === "commonplace_mindmap_nodes" || table === "commonplace_main_map_nodes") {
           insertedNodesPayload = rowsArray as Record<string, unknown>[];
         }
         return query;
@@ -176,7 +194,7 @@ function createMockSupabaseClient(options: MockOptions = {}) {
             error = options.mindMapUpdateError ?? null;
           } else {
             error = options.mindMapReadError ?? null;
-            data = options.listRows ?? [
+            data = options.subMindMapsRows ?? options.listRows ?? [
               {
                 id: "map-db-123",
                 owner_id: "user_123",
@@ -210,6 +228,29 @@ function createMockSupabaseClient(options: MockOptions = {}) {
           } else {
             error = options.edgeReadError ?? null;
             data = options.edgesRows ?? [];
+          }
+        } else if (table === "commonplace_main_map_nodes") {
+          if (operation === "insert") {
+            error = options.mainNodeInsertError ?? null;
+            data = (insertedNodesPayload || []).map((n, i) => ({
+              id: `main-node-db-uuid-${i + 1}`,
+              sub_mindmap_id: n.sub_mindmap_id,
+            }));
+          } else if (operation === "delete") {
+            error = options.mainNodeDeleteError ?? null;
+          } else {
+            error = options.mainNodeReadError ?? null;
+            data = options.mainNodesRows ?? [];
+          }
+        } else if (table === "commonplace_main_map_edges") {
+          if (operation === "insert") {
+            error = options.mainEdgeInsertError ?? null;
+            data = [];
+          } else if (operation === "delete") {
+            error = options.mainEdgeDeleteError ?? null;
+          } else {
+            error = options.mainEdgeReadError ?? null;
+            data = options.mainEdgesRows ?? [];
           }
         } else if (table === "commonplace_notes") {
           error = options.notesReadError ?? null;
@@ -661,5 +702,434 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
       title: "Main Mind Map",
       type: "main",
     });
+  });
+
+  // Main Mind Map storage adapter tests
+  test("createOrGetCommonplaceMainMindMap returns existing main map", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+    });
+
+    const result = await createOrGetCommonplaceMainMindMap("user_123", mock.client);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.mindMap.id).toBe("main-map-db-123");
+    expect(result.mindMap.type).toBe("main");
+    expect(mock.calls).toContain("select:commonplace_mindmaps:*");
+    expect(mock.calls).not.toContain("insert:commonplace_mindmaps");
+  });
+
+  test("createOrGetCommonplaceMainMindMap creates main map if missing", async () => {
+    const mock = createMockSupabaseClient({ mindMapRow: null });
+
+    const result = await createOrGetCommonplaceMainMindMap("user_123", mock.client);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.mindMap.title).toBe("Main Mind Map");
+    expect(result.mindMap.type).toBe("main");
+    expect(mock.calls).toContain("insert:commonplace_mindmaps");
+  });
+
+  test("createOrGetCommonplaceMainMindMap rejects missing ownerId before Supabase call", async () => {
+    const mock = createMockSupabaseClient();
+    const result = await createOrGetCommonplaceMainMindMap("  ", mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+    expect(mock.calls).toEqual([]);
+  });
+
+  test("getCommonplaceMainMindMapGraph filters by owner_id", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+    });
+
+    await getCommonplaceMainMindMapGraph("user_123", mock.client);
+
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:user_123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:owner_id:user_123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:owner_id:user_123");
+  });
+
+  test("getCommonplaceMainMindMapGraph returns clusters referencing sub mindmaps", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+      mainNodesRows: [
+        {
+          id: "node-db-1",
+          sub_mindmap_id: "sub-map-1",
+          position_x: 15,
+          position_y: 30,
+          commonplace_mindmaps: {
+            title: "Sub Map Title",
+            updated_at: "2026-06-06T12:00:00Z",
+          },
+        },
+      ],
+    });
+
+    const result = await getCommonplaceMainMindMapGraph("user_123", mock.client);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.graph.clusters.length).toBe(1);
+    expect(result.graph.clusters[0]).toEqual({
+      id: "node-db-1",
+      subMindMapId: "sub-map-1",
+      subMindMapTitle: "Sub Map Title",
+      positionX: 15,
+      positionY: 30,
+      updatedAt: "2026-06-06T12:00:00Z",
+    });
+  });
+
+  test("getCommonplaceMainMindMapGraph returns edges", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+      mainEdgesRows: [
+        {
+          id: "edge-db-1",
+          source_node_id: "node-db-1",
+          target_node_id: "node-db-2",
+          label: "connected-label",
+        },
+      ],
+    });
+
+    const result = await getCommonplaceMainMindMapGraph("user_123", mock.client);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.graph.edges.length).toBe(1);
+    expect(result.graph.edges[0]).toEqual({
+      id: "edge-db-1",
+      sourceNodeId: "node-db-1",
+      targetNodeId: "node-db-2",
+      label: "connected-label",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph rejects invalid cluster position", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        {
+          localId: "c1",
+          subMindMapId: "sub-1",
+          positionX: NaN,
+          positionY: 100,
+        },
+      ],
+      edges: [],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph rejects edge referencing unknown cluster local ID", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+      ],
+      edges: [
+        { sourceLocalId: "c1", targetLocalId: "c_unknown", label: "link" },
+      ],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph rejects self edge", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+      ],
+      edges: [
+        { sourceLocalId: "c1", targetLocalId: "c1", label: "self" },
+      ],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph rejects duplicate undirected edge", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+        { localId: "c2", subMindMapId: "sub-2", positionX: 20, positionY: 20 },
+      ],
+      edges: [
+        { sourceLocalId: "c1", targetLocalId: "c2", label: "first" },
+        { sourceLocalId: "c2", targetLocalId: "c1", label: "second" },
+      ],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph rejects duplicate subMindMapId clusters", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+        { localId: "c2", subMindMapId: "sub-1", positionX: 20, positionY: 20 },
+      ],
+      edges: [],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph validates referenced sub mindmaps are owner-scoped", async () => {
+    const mock = createMockSupabaseClient({
+      subMindMapsRows: [
+        { id: "sub-1", owner_id: "user_123", type: "sub" },
+      ],
+    });
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+        { localId: "c2", subMindMapId: "sub-2", positionX: 20, positionY: 20 },
+      ],
+      edges: [],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph rejects referenced mindmap if type is main", async () => {
+    const mock = createMockSupabaseClient({
+      subMindMapsRows: [
+        { id: "sub-1", owner_id: "user_123", type: "main" },
+      ],
+    });
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+      ],
+      edges: [],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+  });
+
+  test("saveCommonplaceMainMindMapGraph deletes old edges before old clusters", async () => {
+    const mock = createMockSupabaseClient({
+      subMindMapsRows: [
+        { id: "sub-1", owner_id: "user_123", type: "sub" },
+      ],
+    });
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+      ],
+      edges: [],
+    };
+
+    await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    const deleteEdgesIdx = mock.calls.indexOf("delete:commonplace_main_map_edges");
+    const deleteNodesIdx = mock.calls.indexOf("delete:commonplace_main_map_nodes");
+
+    expect(deleteEdgesIdx).toBeGreaterThan(-1);
+    expect(deleteNodesIdx).toBeGreaterThan(-1);
+    expect(deleteEdgesIdx).toBeLessThan(deleteNodesIdx);
+  });
+
+  test("saveCommonplaceMainMindMapGraph inserts clusters and maps local IDs to DB node IDs for edges", async () => {
+    const mock = createMockSupabaseClient({
+      subMindMapsRows: [
+        { id: "sub-1", owner_id: "user_123", type: "sub" },
+        { id: "sub-2", owner_id: "user_123", type: "sub" },
+      ],
+    });
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+        { localId: "c2", subMindMapId: "sub-2", positionX: 20, positionY: 20 },
+      ],
+      edges: [
+        { sourceLocalId: "c1", targetLocalId: "c2", label: "cluster edge link" },
+      ],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result.ok).toBe(true);
+    expect(mock.inserted.commonplace_main_map_edges[0]).toEqual({
+      owner_id: "user_123",
+      main_mindmap_id: "map-db-123",
+      source_node_id: "main-node-db-uuid-1",
+      target_node_id: "main-node-db-uuid-2",
+      label: "cluster edge link",
+    });
+  });
+
+  test("deleteCommonplaceMainMapCluster deletes only main map node, not sub mind map", async () => {
+    const mock = createMockSupabaseClient();
+
+    const result = await deleteCommonplaceMainMapCluster("user_123", "cluster-node-123", mock.client);
+
+    expect(result).toEqual({ ok: true });
+    expect(mock.calls).toContain("from:commonplace_main_map_nodes");
+    expect(mock.calls).toContain("delete:commonplace_main_map_nodes");
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:id:cluster-node-123");
+    expect(mock.calls).not.toContain("delete:commonplace_mindmaps");
+  });
+
+  test("saveCommonplaceMainMindMapGraph returns safe commonplace_save_failed on database error", async () => {
+    const mock = createMockSupabaseClient({
+      mainNodeInsertError: new Error("DB unique constraint violation"),
+      subMindMapsRows: [
+        { id: "sub-1", owner_id: "user_123", type: "sub" },
+      ],
+    });
+    const input: SaveCommonplaceMainMapGraphInput = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+      ],
+      edges: [],
+    };
+
+    const result = await saveCommonplaceMainMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_save_failed",
+    });
+  });
+
+  test("getCommonplaceMainMindMapGraph returns safe commonplace_not_found on missing main map", async () => {
+    const mock = createMockSupabaseClient({ mindMapRow: null, mindMapInsertError: new Error("Cannot insert") });
+
+    const result = await getCommonplaceMainMindMapGraph("user_123", mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_save_failed",
+    });
+  });
+
+  test("main map save graph prevents storing forbidden fields", async () => {
+    const mock = createMockSupabaseClient({
+      subMindMapsRows: [
+        { id: "sub-1", owner_id: "user_123", type: "sub" },
+      ],
+    });
+    const payload = {
+      ownerId: "user_123",
+      clusters: [
+        { localId: "c1", subMindMapId: "sub-1", positionX: 10, positionY: 10 },
+      ],
+      edges: [],
+      api_key: "secret",
+      raw_provider_payload: {},
+      audio: "audio",
+      audio_blob: "blob",
+      recording_url: "url",
+      stt_payload: {},
+      tts_payload: {},
+      auth_metadata: {},
+    } as unknown as SaveCommonplaceMainMapGraphInput;
+
+    await saveCommonplaceMainMindMapGraph(payload, mock.client);
+
+    const updatedMap = mock.updated.commonplace_mindmaps[0] as Record<string, unknown>;
+    for (const forbidden of [
+      "api_key",
+      "raw_provider_payload",
+      "audio",
+      "audio_blob",
+      "recording_url",
+      "stt_payload",
+      "tts_payload",
+      "auth_metadata",
+    ]) {
+      expect(updatedMap[forbidden]).toBeUndefined();
+    }
   });
 });
