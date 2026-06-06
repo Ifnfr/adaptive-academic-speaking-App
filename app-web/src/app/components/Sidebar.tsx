@@ -180,12 +180,6 @@ export function Sidebar({
               {t("sidebar.viewActive")}
             </SidebarItem>
             <SidebarItem
-              active={view === "learning-path"}
-              onClick={() => onSelectView("learning-path")}
-            >
-              {t("sidebar.viewLearningPath")}
-            </SidebarItem>
-            <SidebarItem
               active={view === "vocabulary"}
               onClick={() => onSelectView("vocabulary")}
             >

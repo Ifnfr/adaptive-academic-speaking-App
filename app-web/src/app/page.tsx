@@ -96,7 +96,6 @@ import {
 } from "./lib/storage/supabase-profile-adapter";
 import { ProfileSettingsView } from "./components/ProfileSettingsView";
 import { ProfileView } from "./components/ProfileView";
-import { LearningPathView } from "./components/LearningPathView";
 import {
   DEFAULT_APP_LANGUAGE,
   normalizeAppLanguage,
@@ -958,6 +957,11 @@ export default function Home() {
     } else if ((view as string) === "level-up-check") {
       const timer = setTimeout(() => {
         setView("progress");
+      }, 0);
+      return () => clearTimeout(timer);
+    } else if (view === "learning-path") {
+      const timer = setTimeout(() => {
+        setView("active");
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -2053,12 +2057,7 @@ export default function Home() {
             />
           )}
 
-          {/* ===================== Learning Path ===================== */}
-          {view === "learning-path" && (
-            <LearningPathView
-              appLanguage={appLanguage}
-            />
-          )}
+
 
           {/* ===================== Settings ===================== */}
           {view === "settings" && (

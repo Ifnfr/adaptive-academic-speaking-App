@@ -1,107 +1,79 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Learning Path UI Shell Integration Tests", () => {
+test.describe("Learning Path Disabled Verification", () => {
   test.beforeEach(async ({ page }) => {
+    // Intercept document requests to "/" and append mockAuth=true to bypass the cover page safely in E2E tests
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+      } else {
+        await route.continue();
+      }
+    });
+  });
+
+  test("1. Sidebar does NOT show Learning Path navigation item", async ({ page }) => {
     await page.goto("/");
+    const learningPathItem = page.getByRole("button", { name: "Learning Path" });
+    await expect(learningPathItem).not.toBeVisible();
   });
 
-  test("1. Sidebar shows Learning Path and clicking it opens LearningPathView", async ({ page }) => {
-    const sidebarItem = page.getByRole("button", { name: "Learning Path" });
-    await expect(sidebarItem).toBeVisible();
-
-    await sidebarItem.click();
-
-    await expect(page.locator("header")).toContainText("Learning Path");
-    await expect(page.locator("body")).toContainText("Beginner Confidence Ladder");
-    await expect(page.locator("body")).toContainText("Membangun rasa percaya diri");
-  });
-
-  test("2. Learning Path renders Phase 1, Units, and 14 Days", async ({ page }) => {
-    await page.getByRole("button", { name: "Learning Path" }).click();
-
-    await expect(page.locator("body")).toContainText("Confidence Foundation");
-
-    await expect(page.locator("[data-testid='unit-introduce-yourself']")).toBeVisible();
-    await expect(page.locator("[data-testid='unit-my-daily-life']")).toBeVisible();
-    await expect(page.locator("body")).toContainText("Introduce Yourself");
-    await expect(page.locator("body")).toContainText("My Daily Life");
-
-    for (let day = 1; day <= 14; day++) {
-      const dayEl = page.locator(`[data-testid='day-${day}']`);
-      await expect(dayEl).toBeVisible();
-      await expect(dayEl).toContainText(`Day ${day}`);
-    }
-  });
-
-  test("3. Today's Mission and Recommended Card render safely", async ({ page }) => {
-    await page.getByRole("button", { name: "Learning Path" }).click();
-
-    const missionSidebar = page.locator("[data-testid='mission-sidebar']");
-    await expect(missionSidebar).toBeVisible();
-    await expect(missionSidebar).toContainText("Today's Mission");
-    await expect(missionSidebar).toContainText("Recommended");
-    await expect(missionSidebar).toContainText("Day 1 Recommended");
-    await expect(missionSidebar).toContainText("Greeting Someone");
-  });
-
-  test("4. Card statuses render safely and are style-appropriate", async ({ page }) => {
-    await page.getByRole("button", { name: "Learning Path" }).click();
-
-    const day1Card = page.locator("[data-testid='card-card-d1-c1']");
-    await expect(day1Card).toBeVisible();
-    await expect(day1Card.locator("span", { hasText: "recommended" })).toBeVisible();
-
-    const day2Card = page.locator("[data-testid='card-card-d2-c1']");
-    await expect(day2Card).toBeVisible();
-    await expect(day2Card.locator("span", { hasText: "upcoming" })).toBeVisible();
-  });
-
-  test("5. Interactivity - Previewing a card changes status to current", async ({ page }) => {
-    await page.getByRole("button", { name: "Learning Path" }).click();
-
-    const day1Card = page.locator("[data-testid='card-card-d1-c1']");
-    await expect(day1Card.locator("span", { hasText: "recommended" })).toBeVisible();
-
-    await day1Card.getByRole("button", { name: "Preview Lesson" }).click();
-
-    await expect(day1Card.locator("span", { hasText: "current" })).toBeVisible();
-  });
-
-  test("6. Interactivity - Completing cards updates progress and changes recommendations", async ({ page }) => {
-    await page.getByRole("button", { name: "Learning Path" }).click();
-
-    const day1Card = page.locator("[data-testid='card-card-d1-c1']");
-    const day2Card = page.locator("[data-testid='card-card-d2-c1']");
-    await expect(day1Card.locator("span", { hasText: "recommended" })).toBeVisible();
-
-    await day1Card.getByRole("button", { name: "Mark Completed" }).click();
-
-    await expect(day1Card.locator("span", { hasText: "completed" })).toBeVisible();
-    await expect(day2Card.locator("span", { hasText: "recommended" })).toBeVisible();
-
-    await expect(page.locator("body")).toContainText("1 / 37 cards completed");
-  });
-
-  test("7. Privacy: Private fields do not appear in DOM", async ({ page }) => {
-    await page.getByRole("button", { name: "Learning Path" }).click();
+  test("2. App does not render Learning Path container in the DOM", async ({ page }) => {
+    await page.goto("/");
+    const container = page.locator("[data-testid='learning-path-container']");
+    await expect(container).not.toBeVisible();
 
     const bodyText = await page.locator("body").innerText();
-    const forbidden = [
-      "retry_transcript",
-      "vocabulary_sentence",
-      "article_url",
-      "main_weakness",
-      "csv",
-      "source_id",
-      "owner_id",
-      "email"
-    ];
+    expect(bodyText).not.toContain("Beginner Confidence Ladder");
+    expect(bodyText).not.toContain("Confidence Foundation");
+  });
 
-    for (const pattern of forbidden) {
-      expect(bodyText).not.toContain(`"${pattern}"`);
-      expect(bodyText).not.toContain(`${pattern}:`);
-    }
+  test("3. Setting view state to 'learning-path' falls back safely to 'active'", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("fonetik:view", "learning-path");
+    });
 
-    expect(bodyText).not.toContain("@");
+    await page.goto("/");
+
+    // Check that we default back to the Active Session content
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+
+    // Assert the URL or other elements show active view
+    const container = page.locator("[data-testid='learning-path-container']");
+    await expect(container).not.toBeVisible();
+  });
+
+  test("4. Other navigation links in the sidebar still render and function", async ({ page }) => {
+    await page.goto("/");
+
+    // Check remaining practice items
+    await expect(page.getByRole("button", { name: "Active Session" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Vocabulary Notebook" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Article Practice" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Session Log" })).toBeVisible();
+
+    // Check analytics items
+    await expect(page.getByRole("button", { name: "Progress & Quest" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Weekly Review" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Profile" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Leaderboard" })).toBeVisible();
+
+    // Check settings
+    await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+  });
+
+  test("5. Archived component is not imported/mounted in the active application flow", async ({ page }) => {
+    await page.goto("/");
+    const archiveContainer = page.locator("[data-testid='learning-path-archive-container']");
+    await expect(archiveContainer).not.toBeVisible();
   });
 });
