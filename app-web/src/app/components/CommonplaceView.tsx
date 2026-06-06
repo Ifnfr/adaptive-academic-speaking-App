@@ -60,6 +60,14 @@ type CommonplaceViewProps = {
   isSignedIn?: boolean;
   getToken?: (() => Promise<string | null>) | null;
   supabaseConfigured?: boolean;
+  onDiscussInPodchat?: (context: {
+    source: "commonplace";
+    shortcode: string;
+    title?: string;
+    sourceBook?: string;
+    insight: string;
+    tags: string[];
+  }) => void;
 };
 
 const emptyForm: CommonplaceFormState = {
@@ -153,6 +161,7 @@ export function CommonplaceView({
   isSignedIn = false,
   getToken,
   supabaseConfigured = isSupabaseConfigured(),
+  onDiscussInPodchat,
 }: CommonplaceViewProps) {
   const [mode, setMode] = useState<CommonplaceMode>("library");
   const [notes, setNotes] = useState<CommonplaceNote[]>([]);
@@ -310,6 +319,19 @@ export function CommonplaceView({
     setMode("library");
   };
 
+  const handleDiscussInPodchat = () => {
+    if (!selectedNote || !onDiscussInPodchat) return;
+
+    onDiscussInPodchat({
+      source: "commonplace",
+      shortcode: selectedNote.shortcode,
+      title: selectedNote.title ?? undefined,
+      sourceBook: selectedNote.sourceBook || undefined,
+      insight: selectedNote.insight,
+      tags: selectedNote.tags,
+    });
+  };
+
   const updateField = (field: keyof CommonplaceFormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
@@ -381,6 +403,7 @@ export function CommonplaceView({
                   deleteConfirmVisible={deleteConfirmVisible}
                   onBack={openLibrary}
                   onEdit={openEdit}
+                  onDiscussInPodchat={onDiscussInPodchat ? handleDiscussInPodchat : undefined}
                   onAskDelete={() => setDeleteConfirmVisible(true)}
                   onCancelDelete={() => setDeleteConfirmVisible(false)}
                   onConfirmDelete={handleDelete}
@@ -614,6 +637,7 @@ function NoteDetail({
   deleteConfirmVisible,
   onBack,
   onEdit,
+  onDiscussInPodchat,
   onAskDelete,
   onCancelDelete,
   onConfirmDelete,
@@ -623,6 +647,7 @@ function NoteDetail({
   deleteConfirmVisible: boolean;
   onBack: () => void;
   onEdit: () => void;
+  onDiscussInPodchat?: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
@@ -657,6 +682,15 @@ function NoteDetail({
           >
             Edit
           </button>
+          {onDiscussInPodchat && (
+            <button
+              type="button"
+              onClick={onDiscussInPodchat}
+              className="rounded-lg border border-[#1F7A7A]/30 bg-[#EAF8F7] px-4 py-2 text-sm font-semibold text-[#155E5E] hover:bg-[#D8F0EF]"
+            >
+              Diskusi di Podchat
+            </button>
+          )}
           <button
             type="button"
             onClick={onAskDelete}

@@ -250,6 +250,68 @@ test.describe("Commonplace Library UI shell", () => {
     await expect(page.getByText("Institutions shape long-term incentives.")).toHaveCount(0);
   });
 
+  test("sends compact note context to Podchat without provider calls", async ({
+    page,
+  }) => {
+    const podchatCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+    ]) {
+      await page.route(path, async (route) => {
+        podchatCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected bridge call" }),
+        });
+      });
+    }
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page.getByLabel("Quote").fill("Private quoted source text.");
+    await page
+      .getByLabel("Insight")
+      .fill("Inclusive institutions create stronger incentives for growth.");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+
+    await expect(page.getByRole("button", { name: "Diskusi di Podchat" })).toBeVisible();
+    await page.getByRole("button", { name: "Diskusi di Podchat" }).click();
+
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toBeVisible();
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText(
+      "Commonplace context",
+    );
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText("#wn1");
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText(
+      "Why Nations Fail",
+    );
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText(
+      "Inclusive institutions create stronger incentives for growth.",
+    );
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText(
+      "#politics",
+    );
+    await expect(page.getByText(/Today, we'll discuss your Commonplace note #wn1/)).toBeVisible();
+
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toContain("Private quoted source text.");
+    expect(bodyText).not.toMatch(
+      /ownerId|clientId|auth|api[_-]?key|service[_-]?role|secret|token/i,
+    );
+    await expect(page.locator("canvas")).toHaveCount(0);
+    await expect(page.getByText(/mind map/i)).toHaveCount(0);
+    expect(podchatCalls).toEqual([]);
+  });
+
   test("existing main views remain reachable from sidebar", async ({ page }) => {
     await page.goto("/");
 

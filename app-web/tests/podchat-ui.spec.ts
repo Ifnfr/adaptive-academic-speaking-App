@@ -29,6 +29,24 @@ async function submitOnePodchatTurn(page: Page) {
 
 test.describe("Podchat Phase 1 connected UI", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+
     // Add init script to monitor microphone access and stub Audio
     await page.addInitScript(() => {
       // Mock getUserMedia
@@ -184,6 +202,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
         })
       });
     });
+
   });
 
   test("runs full setup, speaking, and evaluation with mocked API routes and TTS success", async ({ page }) => {
@@ -738,10 +757,15 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByTestId("podchat-stop-recording").click();
 
     // Confirm that the stop method on the track was called
-    const stopCountAfterRecording = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__PODCHAT_TRACK_STOPPED_COUNT__
-    );
-    expect(stopCountAfterRecording).toBe(1);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as unknown as Record<string, unknown>)
+              .__PODCHAT_TRACK_STOPPED_COUNT__,
+        ),
+      )
+      .toBe(1);
 
     // Submit Turn to have at least one learner turn
     await page.getByTestId("podchat-submit-turn").click();
@@ -755,10 +779,15 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // Reset session
     await page.getByRole("button", { name: "Start New Podchat" }).click();
 
-    const stopCountAfterReset = await page.evaluate(
-      () => (window as unknown as Record<string, unknown>).__PODCHAT_TRACK_STOPPED_COUNT__
-    );
-    expect(stopCountAfterReset).toBe(2);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as unknown as Record<string, unknown>)
+              .__PODCHAT_TRACK_STOPPED_COUNT__,
+        ),
+      )
+      .toBe(2);
   });
 
   test("STT payload details, privacy and storage checks", async ({ page }) => {
