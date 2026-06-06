@@ -317,6 +317,67 @@ test.describe("Commonplace Library UI shell", () => {
     expect(podchatCalls).toEqual([]);
   });
 
+  test("opens a local note mind map canvas shell without provider calls", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected mind map call" }),
+        });
+      });
+    }
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page
+      .getByLabel("Insight")
+      .fill("Inclusive institutions create stronger incentives for growth.");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+
+    await expect(page.getByRole("button", { name: "Buka mind map" })).toBeVisible();
+    await page.getByRole("button", { name: "Buka mind map" }).click();
+
+    await expect(page.getByTestId("commonplace-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mindmap-canvas")).toBeVisible();
+    await expect(page.locator(".react-flow")).toBeVisible();
+    await expect(page.getByTestId("commonplace-mindmap-note-node")).toContainText("#wn1");
+    await expect(page.getByTestId("commonplace-mindmap-note-node")).toContainText(
+      "Why Nations Fail",
+    );
+    await expect(page.getByTestId("commonplace-mindmap-note-node")).toContainText(
+      "Inclusive institutions create stronger incentives for growth.",
+    );
+    await expect(page.getByTestId("commonplace-mindmap-note-node")).toContainText(
+      "#politics",
+    );
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText("Laci")).toHaveCount(0);
+    await expect(page.getByText("Main Mind Map")).toHaveCount(0);
+
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(providerCalls).toEqual([]);
+
+    await page.getByRole("button", { name: "Back to Detail" }).click();
+    await expect(page.getByRole("heading", { name: "Insight" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Buka mind map" })).toBeVisible();
+  });
+
   test("existing main views remain reachable from sidebar", async ({ page }) => {
     await page.goto("/");
 

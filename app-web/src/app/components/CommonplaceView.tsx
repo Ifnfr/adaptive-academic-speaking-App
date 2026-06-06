@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import type { FonetikSupabaseClient } from "../lib/supabase";
+import { CommonplaceMindMapCanvas } from "./CommonplaceMindMapCanvas";
 import {
   createCommonplaceNote,
   deleteCommonplaceNote,
@@ -18,7 +19,7 @@ import type {
   UpdateCommonplaceNoteInput,
 } from "../lib/storage/supabase-commonplace-adapter";
 
-type CommonplaceMode = "library" | "create" | "detail" | "edit";
+type CommonplaceMode = "library" | "create" | "detail" | "edit" | "mindmap";
 
 type CommonplaceFormState = {
   sourceBook: string;
@@ -259,6 +260,13 @@ export function CommonplaceView({
     setMode("edit");
   };
 
+  const openMindMap = () => {
+    if (!selectedNote) return;
+    setDeleteConfirmVisible(false);
+    setError(null);
+    setMode("mindmap");
+  };
+
   const handleSubmit = async () => {
     if (!storage || !effectiveOwnerId) return;
     if (form.insight.trim().length === 0) {
@@ -403,10 +411,18 @@ export function CommonplaceView({
                   deleteConfirmVisible={deleteConfirmVisible}
                   onBack={openLibrary}
                   onEdit={openEdit}
+                  onOpenMindMap={openMindMap}
                   onDiscussInPodchat={onDiscussInPodchat ? handleDiscussInPodchat : undefined}
                   onAskDelete={() => setDeleteConfirmVisible(true)}
                   onCancelDelete={() => setDeleteConfirmVisible(false)}
                   onConfirmDelete={handleDelete}
+                />
+              )}
+
+              {mode === "mindmap" && selectedNote && (
+                <CommonplaceMindMapCanvas
+                  note={selectedNote}
+                  onBackToDetail={() => setMode("detail")}
                 />
               )}
             </>
@@ -637,6 +653,7 @@ function NoteDetail({
   deleteConfirmVisible,
   onBack,
   onEdit,
+  onOpenMindMap,
   onDiscussInPodchat,
   onAskDelete,
   onCancelDelete,
@@ -647,6 +664,7 @@ function NoteDetail({
   deleteConfirmVisible: boolean;
   onBack: () => void;
   onEdit: () => void;
+  onOpenMindMap: () => void;
   onDiscussInPodchat?: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
@@ -691,6 +709,13 @@ function NoteDetail({
               Diskusi di Podchat
             </button>
           )}
+          <button
+            type="button"
+            onClick={onOpenMindMap}
+            className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
+          >
+            Buka mind map
+          </button>
           <button
             type="button"
             onClick={onAskDelete}
