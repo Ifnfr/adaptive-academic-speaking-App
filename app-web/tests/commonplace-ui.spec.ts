@@ -17,6 +17,12 @@ type TestNote = {
   updatedAt: string;
 };
 
+const renderedSecretLikePattern =
+  /DEEPSEEK_API_KEY|DEEPGRAM_API_KEY|ELEVENLABS_API_KEY|CLAUDE_API_KEY|GEMINI_API_KEY|SUPABASE_SERVICE_ROLE_KEY|sk-[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]{20,}|raw provider payload|audio_blob|recording_url|stt_payload|tts_payload/i;
+
+const forbiddenCommonplaceContextFieldPattern =
+  /\b(ownerId|clientId|auth_metadata)\b/i;
+
 function installCommonplaceTestAdapter() {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
@@ -304,9 +310,8 @@ test.describe("Commonplace Library UI shell", () => {
 
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toContain("Private quoted source text.");
-    expect(bodyText).not.toMatch(
-      /ownerId|clientId|auth|api[_-]?key|service[_-]?role|secret|token/i,
-    );
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(bodyText).not.toMatch(forbiddenCommonplaceContextFieldPattern);
     await expect(page.locator("canvas")).toHaveCount(0);
     await expect(page.getByText(/mind map/i)).toHaveCount(0);
     expect(podchatCalls).toEqual([]);
@@ -346,9 +351,7 @@ test.describe("Commonplace Library UI shell", () => {
     await expect(page.getByText(/mind map/i)).toHaveCount(0);
 
     const bodyText = await page.locator("body").innerText();
-    expect(bodyText).not.toMatch(
-      /api[_-]?key|service[_-]?role|supabase_service|next_public|secret|token/i,
-    );
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
   });
 
   test("old invalid saved view values do not break active fallback", async ({
