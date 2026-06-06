@@ -317,9 +317,20 @@ function TypewriterEffect() {
   }, [currentText, isDeleting, wordIndex]);
 
   return (
-    <span className="text-[#1A554A] italic pr-2 sm:pr-4 font-serif relative inline-flex items-center">
-      <span data-testid="typewriter-word">{currentText}</span>
-      <span className="bg-[#1A554A] w-[2px] h-[0.8em] ml-1 animate-blink-cursor" />
+    <span
+      className="text-[#1A554A] italic pr-2 sm:pr-4 font-serif relative inline-grid min-h-[1.15em] leading-[1.1] align-baseline"
+      data-testid="typewriter-slot"
+    >
+      <span
+        aria-hidden="true"
+        className="invisible col-start-1 row-start-1 whitespace-nowrap"
+      >
+        listening.
+      </span>
+      <span className="col-start-1 row-start-1 inline-flex min-h-[1.15em] items-center whitespace-nowrap">
+        <span data-testid="typewriter-word">{currentText}</span>
+        <span className="bg-[#1A554A] w-[2px] h-[0.8em] ml-1 animate-blink-cursor" />
+      </span>
     </span>
   );
 }
