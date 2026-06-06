@@ -51,6 +51,22 @@ type TestMindMapEdgeRow = {
   label: string | null;
 };
 
+type TestMainMapClusterRow = {
+  id: string;
+  subMindMapId: string;
+  subMindMapTitle: string;
+  positionX: number;
+  positionY: number;
+  updatedAt: string;
+};
+
+type TestMainMapEdgeRow = {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  label: string | null;
+};
+
 function installCommonplaceTestAdapter() {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
@@ -58,6 +74,8 @@ function installCommonplaceTestAdapter() {
     __COMMONPLACE_TEST_MINDMAPS__?: TestMindMapSummary[];
     __COMMONPLACE_TEST_MINDMAP_NODES__?: TestMindMapNodeRow[];
     __COMMONPLACE_TEST_MINDMAP_EDGES__?: TestMindMapEdgeRow[];
+    __COMMONPLACE_TEST_MAIN_NODES__?: TestMainMapClusterRow[];
+    __COMMONPLACE_TEST_MAIN_EDGES__?: TestMainMapEdgeRow[];
     __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
     __COMMONPLACE_TEST_FAIL_LOAD__?: boolean;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
@@ -68,6 +86,8 @@ function installCommonplaceTestAdapter() {
   testWindow.__COMMONPLACE_TEST_MINDMAPS__ = testWindow.__COMMONPLACE_TEST_MINDMAPS__ || [];
   testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ = testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ || [];
   testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ = testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ || [];
+  testWindow.__COMMONPLACE_TEST_MAIN_NODES__ = testWindow.__COMMONPLACE_TEST_MAIN_NODES__ || [];
+  testWindow.__COMMONPLACE_TEST_MAIN_EDGES__ = testWindow.__COMMONPLACE_TEST_MAIN_EDGES__ || [];
 
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
     async listCommonplaceNotes(ownerId: string) {
@@ -372,6 +392,81 @@ function installCommonplaceTestAdapter() {
       testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ = (testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ ?? []).filter(
         (e) => e.ownerId !== ownerId || e.mindMapId !== mindMapId,
       );
+      return { ok: true as const };
+    },
+    async createOrGetCommonplaceMainMindMap(ownerId: string) {
+      return {
+        ok: true as const,
+        mindMap: {
+          id: "main-map-db-123",
+          ownerId,
+          title: "Main Mind Map",
+          type: "main" as const,
+          parentMindMapId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    },
+    async getCommonplaceMainMindMapGraph(ownerId: string) {
+      if (testWindow.__COMMONPLACE_TEST_FAIL_LOAD__) {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
+      }
+      const summary = {
+        id: "main-map-db-123",
+        ownerId,
+        title: "Main Mind Map",
+        type: "main" as const,
+        parentMindMapId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const nodes = (testWindow.__COMMONPLACE_TEST_MAIN_NODES__ ?? []).map((row) => ({
+        id: row.id,
+        subMindMapId: row.subMindMapId,
+        subMindMapTitle: row.subMindMapTitle,
+        positionX: row.positionX,
+        positionY: row.positionY,
+        updatedAt: row.updatedAt,
+      }));
+
+      const edges = (testWindow.__COMMONPLACE_TEST_MAIN_EDGES__ ?? []).map((row) => ({
+        id: row.id,
+        sourceNodeId: row.sourceNodeId,
+        targetNodeId: row.targetNodeId,
+        label: row.label,
+      }));
+
+      return {
+        ok: true as const,
+        graph: {
+          summary,
+          clusters: nodes,
+          edges,
+        },
+      };
+    },
+    async saveCommonplaceMainMindMapGraph(input: { ownerId: string; title?: string | null }) {
+      return {
+        ok: true as const,
+        graph: {
+          summary: {
+            id: "main-map-db-123",
+            ownerId: input.ownerId,
+            title: input.title || "Main Mind Map",
+            type: "main" as const,
+            parentMindMapId: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          clusters: [],
+          edges: [],
+        },
+      };
+    },
+    async deleteCommonplaceMainMapCluster(ownerId: string, mainMapNodeId: string) {
+      console.log("Mock delete cluster:", ownerId, mainMapNodeId);
       return { ok: true as const };
     },
   };
@@ -1066,7 +1161,8 @@ test.describe("Commonplace Library UI shell", () => {
     await page.getByRole("button", { name: "Commonplace" }).click();
 
     await expect(page.locator("canvas")).toHaveCount(0);
-    await expect(page.getByText(/mind map/i)).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-view")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toHaveCount(0);
 
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toMatch(renderedSecretLikePattern);
@@ -1085,5 +1181,112 @@ test.describe("Commonplace Library UI shell", () => {
 
     await expect(page.locator("aside")).not.toContainText("Learning Path");
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
+  });
+
+  test("Main Mind Map UI shell behavior (empty state, header, back button, no note inputs)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    // 1. Commonplace Library shows `Mind Map Utama` entry point.
+    const mainMapBtn = page.getByTestId("commonplace-main-mindmap-btn");
+    await expect(mainMapBtn).toBeVisible();
+    await expect(mainMapBtn).toContainText("Mind Map Utama");
+
+    // 2. Clicking `Mind Map Utama` opens Main Mind Map view.
+    await mainMapBtn.click();
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+
+    // 3. Main Mind Map header renders.
+    await expect(page.getByRole("heading", { name: "Mind Map Utama" })).toBeVisible();
+    await expect(page.getByText("Connect saved sub mind maps as high-level idea clusters.")).toBeVisible();
+
+    // 4. Empty state renders when no clusters exist.
+    await expect(page.getByTestId("commonplace-main-mindmap-empty")).toBeVisible();
+    await expect(page.getByText("No clusters yet. Add saved sub mind maps in the next step.")).toBeVisible();
+
+    // 6. Main Mind Map does not show `Ketik shortcode...`.
+    await expect(page.getByPlaceholder("Ketik shortcode...")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-shortcode-input")).toHaveCount(0);
+
+    // 7. Main Mind Map does not show note insertion controls.
+    await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);
+
+    // 8. Main Mind Map does not show AI Suggest.
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+
+    // 12. No API keys / env values are rendered.
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+
+    // 5. Back to Library works.
+    const backBtn = page.getByTestId("commonplace-main-mindmap-back-btn");
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+
+    // Verify back in Library view
+    await expect(page.getByTestId("commonplace-main-mindmap-btn")).toBeVisible();
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toHaveCount(0);
+  });
+
+  test("Main Mind Map loads existing clusters and renders custom cards", async ({
+    page,
+  }) => {
+    // 9. Ensure no provider calls during this process.
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected main map provider call" }),
+        });
+      });
+    }
+
+    // Set up a mock cluster node in testWindow
+    await page.addInitScript(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAIN_NODES__?: Record<string, unknown>[];
+      };
+      testWindow.__COMMONPLACE_TEST_MAIN_NODES__ = [
+        {
+          id: "cluster-db-1",
+          subMindMapId: "sub-map-123",
+          subMindMapTitle: "Philosophy of Science Submap",
+          positionX: 150,
+          positionY: 200,
+          updatedAt: "2026-06-06T12:30:00Z",
+        },
+      ];
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await page.getByTestId("commonplace-main-mindmap-btn").click();
+
+    await expect(page.getByTestId("commonplace-main-mindmap-view")).toBeVisible();
+    await expect(page.getByTestId("commonplace-main-mindmap-empty")).toHaveCount(0);
+
+    // 13. Cluster card renders as `Sub Mind Map`.
+    const clusterNode = page.getByTestId("commonplace-mainmap-cluster-node");
+    await expect(clusterNode).toBeVisible();
+    await expect(clusterNode).toContainText("Sub Mind Map");
+    await expect(clusterNode).toContainText("Philosophy of Science Submap");
+
+    // 14. Cluster card does not display note insight or act like note node.
+    await expect(clusterNode).not.toContainText("shape incentives over time");
+    await expect(page.getByTestId("commonplace-mindmap-note-node")).toHaveCount(0);
+
+    // No provider calls made
+    expect(providerCalls).toEqual([]);
   });
 });

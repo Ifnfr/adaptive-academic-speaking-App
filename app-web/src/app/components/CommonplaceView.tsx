@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import type { FonetikSupabaseClient } from "../lib/supabase";
 import { CommonplaceMindMapCanvas } from "./CommonplaceMindMapCanvas";
+import { CommonplaceMainMindMapCanvas } from "./CommonplaceMainMindMapCanvas";
 import {
   createCommonplaceNote,
   deleteCommonplaceNote,
@@ -25,6 +26,10 @@ import {
   getCommonplaceMindMapGraph,
   listCommonplaceSubMindMaps,
   saveCommonplaceMindMapGraph,
+  createOrGetCommonplaceMainMindMap,
+  getCommonplaceMainMindMapGraph,
+  saveCommonplaceMainMindMapGraph,
+  deleteCommonplaceMainMapCluster,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 import type {
   CommonplaceMindMapListResult,
@@ -32,9 +37,13 @@ import type {
   CommonplaceMindMapResult,
   CreateCommonplaceMindMapInput,
   SaveCommonplaceMindMapInput,
+  CommonplaceMainMapGraphResult,
+  SaveCommonplaceMainMapGraphInput,
+  CommonplaceMainMapSaveResult,
+  CommonplaceMindMapDeleteResult,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 
-type CommonplaceMode = "library" | "create" | "detail" | "edit" | "mindmap";
+type CommonplaceMode = "library" | "create" | "detail" | "edit" | "mindmap" | "main_mindmap";
 
 type CommonplaceFormState = {
   sourceBook: string;
@@ -86,6 +95,21 @@ export type CommonplaceStorage = {
     ownerId: string,
     mindMapId: string,
   ): Promise<CommonplaceDeleteResult>;
+
+  // Main mind map additions
+  createOrGetCommonplaceMainMindMap?(
+    ownerId: string,
+  ): Promise<CommonplaceMindMapResult>;
+  getCommonplaceMainMindMapGraph?(
+    ownerId: string,
+  ): Promise<CommonplaceMainMapGraphResult>;
+  saveCommonplaceMainMindMapGraph?(
+    input: SaveCommonplaceMainMapGraphInput,
+  ): Promise<CommonplaceMainMapSaveResult>;
+  deleteCommonplaceMainMapCluster?(
+    ownerId: string,
+    mainMapNodeId: string,
+  ): Promise<CommonplaceMindMapDeleteResult>;
 };
 
 declare global {
@@ -204,6 +228,14 @@ function createSupabaseStorage(
       saveCommonplaceMindMapGraph(input, supabaseClient),
     deleteCommonplaceMindMap: (ownerId, mindMapId) =>
       deleteCommonplaceMindMap(ownerId, mindMapId, supabaseClient),
+    createOrGetCommonplaceMainMindMap: (ownerId) =>
+      createOrGetCommonplaceMainMindMap(ownerId, supabaseClient),
+    getCommonplaceMainMindMapGraph: (ownerId) =>
+      getCommonplaceMainMindMapGraph(ownerId, supabaseClient),
+    saveCommonplaceMainMindMapGraph: (input) =>
+      saveCommonplaceMainMindMapGraph(input, supabaseClient),
+    deleteCommonplaceMainMapCluster: (ownerId, mainMapNodeId) =>
+      deleteCommonplaceMainMapCluster(ownerId, mainMapNodeId, supabaseClient),
   };
 }
 
@@ -434,12 +466,24 @@ export function CommonplaceView({
               )}
 
               {mode === "library" && (
-                <LibraryView
-                  notes={notes}
-                  isLoading={isLoading}
-                  onCreate={openCreate}
-                  onOpen={openDetail}
-                />
+                <div className="flex flex-col gap-6">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setMode("main_mindmap")}
+                      className="rounded-lg border border-[#534AB7]/30 bg-[#EEEDFE] px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#E3E0FF]"
+                      data-testid="commonplace-main-mindmap-btn"
+                    >
+                      Mind Map Utama
+                    </button>
+                  </div>
+                  <LibraryView
+                    notes={notes}
+                    isLoading={isLoading}
+                    onCreate={openCreate}
+                    onOpen={openDetail}
+                  />
+                </div>
               )}
 
               {(mode === "create" || mode === "edit") && (
@@ -482,6 +526,14 @@ export function CommonplaceView({
                       shortcode,
                     );
                   }}
+                  ownerId={effectiveOwnerId}
+                  storage={storage}
+                />
+              )}
+
+              {mode === "main_mindmap" && (
+                <CommonplaceMainMindMapCanvas
+                  onBackToLibrary={openLibrary}
                   ownerId={effectiveOwnerId}
                   storage={storage}
                 />
