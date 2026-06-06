@@ -19,6 +19,20 @@ import type {
   CreateCommonplaceNoteInput,
   UpdateCommonplaceNoteInput,
 } from "../lib/storage/supabase-commonplace-adapter";
+import {
+  createCommonplaceSubMindMap,
+  deleteCommonplaceMindMap,
+  getCommonplaceMindMapGraph,
+  listCommonplaceSubMindMaps,
+  saveCommonplaceMindMapGraph,
+} from "../lib/storage/supabase-commonplace-mindmap-adapter";
+import type {
+  CommonplaceMindMapListResult,
+  CommonplaceMindMapGraphResult,
+  CommonplaceMindMapResult,
+  CreateCommonplaceMindMapInput,
+  SaveCommonplaceMindMapInput,
+} from "../lib/storage/supabase-commonplace-mindmap-adapter";
 
 type CommonplaceMode = "library" | "create" | "detail" | "edit" | "mindmap";
 
@@ -33,7 +47,7 @@ type CommonplaceFormState = {
   relevance: string;
 };
 
-type CommonplaceStorage = {
+export type CommonplaceStorage = {
   listCommonplaceNotes(ownerId: string): Promise<CommonplaceNoteListResult>;
   createCommonplaceNote(
     input: CreateCommonplaceNoteInput,
@@ -52,6 +66,25 @@ type CommonplaceStorage = {
   deleteCommonplaceNote(
     ownerId: string,
     noteId: string,
+  ): Promise<CommonplaceDeleteResult>;
+
+  // Mind map additions
+  createCommonplaceSubMindMap(
+    input: CreateCommonplaceMindMapInput,
+  ): Promise<CommonplaceMindMapResult>;
+  listCommonplaceSubMindMaps(
+    ownerId: string,
+  ): Promise<CommonplaceMindMapListResult>;
+  getCommonplaceMindMapGraph(
+    ownerId: string,
+    mindMapId: string,
+  ): Promise<CommonplaceMindMapGraphResult>;
+  saveCommonplaceMindMapGraph(
+    input: SaveCommonplaceMindMapInput,
+  ): Promise<CommonplaceDeleteResult>;
+  deleteCommonplaceMindMap(
+    ownerId: string,
+    mindMapId: string,
   ): Promise<CommonplaceDeleteResult>;
 };
 
@@ -161,6 +194,16 @@ function createSupabaseStorage(
       updateCommonplaceNote(input, supabaseClient),
     deleteCommonplaceNote: (ownerId, noteId) =>
       deleteCommonplaceNote(ownerId, noteId, supabaseClient),
+    createCommonplaceSubMindMap: (input) =>
+      createCommonplaceSubMindMap(input, supabaseClient),
+    listCommonplaceSubMindMaps: (ownerId) =>
+      listCommonplaceSubMindMaps(ownerId, supabaseClient),
+    getCommonplaceMindMapGraph: (ownerId, mindMapId) =>
+      getCommonplaceMindMapGraph(ownerId, mindMapId, supabaseClient),
+    saveCommonplaceMindMapGraph: (input) =>
+      saveCommonplaceMindMapGraph(input, supabaseClient),
+    deleteCommonplaceMindMap: (ownerId, mindMapId) =>
+      deleteCommonplaceMindMap(ownerId, mindMapId, supabaseClient),
   };
 }
 
@@ -439,6 +482,8 @@ export function CommonplaceView({
                       shortcode,
                     );
                   }}
+                  ownerId={effectiveOwnerId}
+                  storage={storage}
                 />
               )}
             </>

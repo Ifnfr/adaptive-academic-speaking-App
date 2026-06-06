@@ -23,19 +23,56 @@ const renderedSecretLikePattern =
 const forbiddenCommonplaceContextFieldPattern =
   /\b(ownerId|clientId|auth_metadata)\b/i;
 
+type TestMindMapSummary = {
+  id: string;
+  ownerId: string;
+  title: string;
+  type: "main" | "sub";
+  parentMindMapId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TestMindMapNodeRow = {
+  id: string;
+  mindMapId: string;
+  ownerId: string;
+  noteId: string;
+  positionX: number;
+  positionY: number;
+};
+
+type TestMindMapEdgeRow = {
+  id: string;
+  mindMapId: string;
+  ownerId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  label: string | null;
+};
+
 function installCommonplaceTestAdapter() {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
     __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
+    __COMMONPLACE_TEST_MINDMAPS__?: TestMindMapSummary[];
+    __COMMONPLACE_TEST_MINDMAP_NODES__?: TestMindMapNodeRow[];
+    __COMMONPLACE_TEST_MINDMAP_EDGES__?: TestMindMapEdgeRow[];
+    __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
+    __COMMONPLACE_TEST_FAIL_LOAD__?: boolean;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
   };
 
-  testWindow.__COMMONPLACE_TEST_NOTES__ = [];
-  testWindow.__COMMONPLACE_TEST_COUNTERS__ = {};
+  testWindow.__COMMONPLACE_TEST_NOTES__ = testWindow.__COMMONPLACE_TEST_NOTES__ || [];
+  testWindow.__COMMONPLACE_TEST_COUNTERS__ = testWindow.__COMMONPLACE_TEST_COUNTERS__ || {};
+  testWindow.__COMMONPLACE_TEST_MINDMAPS__ = testWindow.__COMMONPLACE_TEST_MINDMAPS__ || [];
+  testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ = testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ || [];
+  testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ = testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ || [];
+
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
     async listCommonplaceNotes(ownerId: string) {
       return {
-        ok: true,
+        ok: true as const,
         notes: (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).filter(
           (note) => note.ownerId === ownerId,
         ),
@@ -53,7 +90,7 @@ function installCommonplaceTestAdapter() {
       relevance?: string | null;
     }) {
       if (!input.ownerId || !input.insight?.trim()) {
-        return { ok: false, error: "commonplace_validation_failed" };
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
       }
 
       const sourceBook = input.sourceBook?.trim() || "Untitled Source";
@@ -95,7 +132,7 @@ function installCommonplaceTestAdapter() {
         note,
         ...(testWindow.__COMMONPLACE_TEST_NOTES__ ?? []),
       ];
-      return { ok: true, note };
+      return { ok: true as const, note };
     },
     async getCommonplaceNoteById(ownerId: string, noteId: string) {
       const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
@@ -103,8 +140,8 @@ function installCommonplaceTestAdapter() {
           candidate.ownerId === ownerId && candidate.id === noteId,
       );
       return note
-        ? { ok: true, note }
-        : { ok: false, error: "commonplace_not_found" };
+        ? { ok: true as const, note }
+        : { ok: false as const, error: "commonplace_not_found" as const };
     },
     async updateCommonplaceNote(input: {
       ownerId: string;
@@ -123,7 +160,7 @@ function installCommonplaceTestAdapter() {
         (note) => note.ownerId === input.ownerId && note.id === input.noteId,
       );
       if (noteIndex < 0 || !input.insight?.trim()) {
-        return { ok: false, error: "commonplace_validation_failed" };
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
       }
 
       const previous = notes[noteIndex];
@@ -145,13 +182,13 @@ function installCommonplaceTestAdapter() {
       };
       notes[noteIndex] = updated;
       testWindow.__COMMONPLACE_TEST_NOTES__ = notes;
-      return { ok: true, note: updated };
+      return { ok: true as const, note: updated };
     },
     async deleteCommonplaceNote(ownerId: string, noteId: string) {
       testWindow.__COMMONPLACE_TEST_NOTES__ = (
         testWindow.__COMMONPLACE_TEST_NOTES__ ?? []
       ).filter((note) => note.ownerId !== ownerId || note.id !== noteId);
-      return { ok: true };
+      return { ok: true as const };
     },
     async getCommonplaceNoteByShortcode(ownerId: string, shortcode: string) {
       const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
@@ -159,8 +196,183 @@ function installCommonplaceTestAdapter() {
           candidate.ownerId === ownerId && candidate.shortcode === shortcode,
       );
       return note
-        ? { ok: true, note }
-        : { ok: false, error: "commonplace_not_found" };
+        ? { ok: true as const, note }
+        : { ok: false as const, error: "commonplace_not_found" as const };
+    },
+    async createCommonplaceSubMindMap(input: { ownerId: string; title: string; parentMindMapId?: string | null }) {
+      const now = new Date("2026-06-06T05:00:00.000Z").toISOString();
+      const mindMap = {
+        id: `map-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        ownerId: input.ownerId,
+        title: input.title,
+        type: "sub" as const,
+        parentMindMapId: input.parentMindMapId || null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      testWindow.__COMMONPLACE_TEST_MINDMAPS__ = [
+        mindMap,
+        ...(testWindow.__COMMONPLACE_TEST_MINDMAPS__ ?? []),
+      ];
+      return { ok: true as const, mindMap };
+    },
+    async listCommonplaceSubMindMaps(ownerId: string) {
+      return {
+        ok: true as const,
+        mindMaps: (testWindow.__COMMONPLACE_TEST_MINDMAPS__ ?? []).filter(
+          (m) => m.ownerId === ownerId && m.type === "sub",
+        ),
+      };
+    },
+    async getCommonplaceMindMapGraph(ownerId: string, mindMapId: string) {
+      if (testWindow.__COMMONPLACE_TEST_FAIL_LOAD__) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+      const summary = (testWindow.__COMMONPLACE_TEST_MINDMAPS__ ?? []).find(
+        (m) => m.ownerId === ownerId && m.id === mindMapId,
+      );
+      if (!summary) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+
+      const nodeRows = (testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ ?? []).filter(
+        (n) => n.ownerId === ownerId && n.mindMapId === mindMapId,
+      );
+
+      const nodes = nodeRows.map((row) => {
+        const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
+          (candidate) => candidate.ownerId === ownerId && candidate.id === row.noteId,
+        );
+
+        return {
+          id: row.id,
+          noteId: row.noteId,
+          positionX: row.positionX,
+          positionY: row.positionY,
+          noteShortcode: note?.shortcode || "",
+          noteTitle: note
+            ? note.title?.trim() || note.sourceBook || "Untitled Source"
+            : "Untitled Source",
+          noteInsight: note?.insight || "",
+          noteTags: note?.tags || [],
+        };
+      });
+
+      const edgeRows = (testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ ?? []).filter(
+        (e) => e.ownerId === ownerId && e.mindMapId === mindMapId,
+      );
+
+      const edges = edgeRows.map((row) => ({
+        id: row.id,
+        sourceNodeId: row.sourceNodeId,
+        targetNodeId: row.targetNodeId,
+        label: row.label,
+      }));
+
+      return {
+        ok: true as const,
+        graph: {
+          summary,
+          nodes,
+          edges,
+        },
+      };
+    },
+    async saveCommonplaceMindMapGraph(input: {
+      ownerId: string;
+      mindMapId: string;
+      title?: string | null;
+      nodes: Array<{ localId: string; noteId: string; positionX: number; positionY: number }>;
+      edges: Array<{ sourceLocalId: string; targetLocalId: string; label?: string | null }>;
+    }) {
+      if (testWindow.__COMMONPLACE_TEST_FAIL_SAVE__) {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
+      }
+      const { ownerId, mindMapId } = input;
+      const maps = testWindow.__COMMONPLACE_TEST_MINDMAPS__ ?? [];
+      const mapIndex = maps.findIndex((m) => m.ownerId === ownerId && m.id === mindMapId);
+      if (mapIndex < 0) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+
+      // Check for a special mock error to test Save Failure
+      if (input.title === "TRIGGER_SAVE_FAILURE") {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
+      }
+
+      const notes = testWindow.__COMMONPLACE_TEST_NOTES__ ?? [];
+      for (const n of input.nodes) {
+        const noteExists = notes.some((candidate) => candidate.ownerId === ownerId && candidate.id === n.noteId);
+        if (!noteExists) {
+          return { ok: false as const, error: "commonplace_validation_failed" as const };
+        }
+      }
+
+      testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ = (testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ ?? []).filter(
+        (e) => e.ownerId !== ownerId || e.mindMapId !== mindMapId,
+      );
+      testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ = (testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ ?? []).filter(
+        (n) => n.ownerId !== ownerId || n.mindMapId !== mindMapId,
+      );
+
+      const localIdToDbIdMap = new Map<string, string>();
+      const insertedNodes = [];
+
+      for (const n of input.nodes) {
+        const nodeId = `node-row-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        localIdToDbIdMap.set(n.localId, nodeId);
+        insertedNodes.push({
+          id: nodeId,
+          mindMapId,
+          ownerId,
+          noteId: n.noteId,
+          positionX: n.positionX,
+          positionY: n.positionY,
+        });
+      }
+      testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__.push(...insertedNodes);
+
+      const insertedEdges = [];
+      for (const e of input.edges) {
+        const sourceDbId = localIdToDbIdMap.get(e.sourceLocalId);
+        const targetDbId = localIdToDbIdMap.get(e.targetLocalId);
+        if (!sourceDbId || !targetDbId) {
+          return { ok: false as const, error: "commonplace_validation_failed" as const };
+        }
+
+        insertedEdges.push({
+          id: `edge-row-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          mindMapId,
+          ownerId,
+          sourceNodeId: sourceDbId,
+          targetNodeId: targetDbId,
+          label: e.label || null,
+        });
+      }
+      testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__.push(...insertedEdges);
+
+      const now = new Date("2026-06-06T06:00:00.000Z").toISOString();
+      const existing = maps[mapIndex];
+      maps[mapIndex] = {
+        ...existing,
+        title: input.title || existing.title,
+        updatedAt: now,
+      };
+      testWindow.__COMMONPLACE_TEST_MINDMAPS__ = maps;
+
+      return { ok: true as const };
+    },
+    async deleteCommonplaceMindMap(ownerId: string, mindMapId: string) {
+      testWindow.__COMMONPLACE_TEST_MINDMAPS__ = (testWindow.__COMMONPLACE_TEST_MINDMAPS__ ?? []).filter(
+        (m) => m.ownerId !== ownerId || m.id !== mindMapId,
+      );
+      testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ = (testWindow.__COMMONPLACE_TEST_MINDMAP_NODES__ ?? []).filter(
+        (n) => n.ownerId !== ownerId || n.mindMapId !== mindMapId,
+      );
+      testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ = (testWindow.__COMMONPLACE_TEST_MINDMAP_EDGES__ ?? []).filter(
+        (e) => e.ownerId !== ownerId || e.mindMapId !== mindMapId,
+      );
+      return { ok: true as const };
     },
   };
 }
@@ -375,7 +587,6 @@ test.describe("Commonplace Library UI shell", () => {
       "#politics",
     );
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
-    await expect(page.getByText("Laci")).toHaveCount(0);
     await expect(page.getByText("Main Mind Map")).toHaveCount(0);
 
     const bodyText = await page.locator("body").innerText();
@@ -492,7 +703,6 @@ test.describe("Commonplace Library UI shell", () => {
 
     // No AI Suggest, Laci, or Main Mind Map
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
-    await expect(page.getByText("Laci")).toHaveCount(0);
     await expect(page.getByText("Main Mind Map")).toHaveCount(0);
 
     // No provider calls, no secrets
@@ -628,6 +838,198 @@ test.describe("Commonplace Library UI shell", () => {
     await expect(page.getByText("Main Mind Map")).toHaveCount(0);
 
     // Verify no secrets or provider calls
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(renderedSecretLikePattern);
+    expect(providerCalls).toEqual([]);
+  });
+
+  test("saves, lists in Laci, loads, clears state with mind map baru, and handles save/load errors", async ({
+    page,
+  }) => {
+    const providerCalls: string[] = [];
+    for (const path of [
+      "**/api/podchat/turn",
+      "**/api/podchat/evaluate",
+      "**/api/podchat/stt",
+      "**/api/podchat/tts",
+      "**/api/article-practice",
+    ]) {
+      await page.route(path, async (route) => {
+        providerCalls.push(route.request().url());
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Unexpected call" }),
+        });
+      });
+    }
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    // Create first note (#wn1)
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Why Nations Fail");
+    await page
+      .getByLabel("Insight")
+      .fill("Inclusive institutions create stronger incentives for growth.");
+    await page.getByLabel("Tags").fill("Politics, Economics");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#wn1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    // Create second note (#tf1)
+    await page.getByRole("button", { name: /Tambah note/i }).click();
+    await page.getByLabel("Source book").fill("Thinking Fast and Slow");
+    await page
+      .getByLabel("Insight")
+      .fill("System 1 operates automatically with little effort.");
+    await page.getByLabel("Tags").fill("Psychology, Cognition");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByText("#tf1")).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+
+    // Open first note detail and enter mind map
+    await page.getByRole("button", { name: /#wn1/i }).click();
+    await page.getByRole("button", { name: "Buka mind map" }).click();
+
+    await expect(page.getByTestId("commonplace-mindmap-view")).toBeVisible();
+
+    // Add second note to canvas
+    const shortcodeInput = page.getByTestId("commonplace-mindmap-shortcode-input");
+    await shortcodeInput.fill("#tf1");
+    await shortcodeInput.press("Enter");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Added #tf1 to canvas.");
+
+    // Activate connect mode and connect nodes
+    const connectButton = page.getByTestId("commonplace-mindmap-connect-toggle");
+    await connectButton.click();
+
+    const wn1Node = page.locator(".react-flow__node").filter({ hasText: "#wn1" });
+    await wn1Node.click({ force: true });
+
+    const tf1Node = page.locator(".react-flow__node").filter({ hasText: "#tf1" });
+    await tf1Node.click({ force: true });
+
+    // Fill label and confirm connection
+    const edgeLabelInput = page.getByTestId("commonplace-mindmap-label-input");
+    await edgeLabelInput.fill("sebab-akibat");
+    await page.getByTestId("commonplace-mindmap-confirm-connection").click();
+
+    // Edge label should be visible
+    await expect(page.getByTestId("commonplace-mindmap-edge-label")).toContainText("sebab-akibat");
+
+    // Laci drawer is present but closed by default
+    const laciDrawer = page.getByTestId("commonplace-mindmap-laci-drawer");
+    await expect(laciDrawer).toBeVisible();
+    await expect(page.getByTestId("commonplace-mindmap-laci-body")).toHaveCount(0);
+
+    // Save sub mind map
+    const saveButton = page.getByTestId("commonplace-mindmap-save-btn");
+    await expect(saveButton).toBeVisible();
+    await saveButton.click();
+
+    // Verify feedback shows saved successfully
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Mind map saved successfully.");
+
+    // Open Laci drawer
+    const laciHeader = page.getByTestId("commonplace-mindmap-laci-header");
+    await laciHeader.click();
+
+    // The saved mind map should appear in Laci
+    await expect(page.getByTestId("commonplace-mindmap-laci-body")).toBeVisible();
+    await expect(laciDrawer.getByText("Why Nations Fail")).toBeVisible();
+    await expect(laciDrawer.getByText("1 saved")).toBeVisible();
+
+    // Test Load Failure behavior:
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_LOAD__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_LOAD__ = true;
+    });
+
+    // Click the saved item while Laci is already open
+    const savedItem = page.getByTestId(/commonplace-mindmap-laci-item-map-/);
+    await expect(savedItem).toBeVisible();
+    await savedItem.click();
+
+    // Verify feedback shows load failure error
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Could not load mind map.");
+
+    // Laci drawer should still be open
+    await expect(page.getByTestId("commonplace-mindmap-laci-body")).toBeVisible();
+
+    // Clear the load failure flag
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_LOAD__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_LOAD__ = false;
+    });
+
+    // Click saved item again (loading succeeds)
+    await savedItem.click();
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Loaded mind map");
+
+    // Drawer is now automatically closed after load!
+    await expect(page.getByTestId("commonplace-mindmap-laci-body")).toHaveCount(0);
+
+    // Test Save Failure behavior:
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_SAVE__ = true;
+    });
+    // Click save
+    await saveButton.click();
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Could not save mind map.");
+
+    // Clear save failure flag
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_FAIL_SAVE__?: boolean;
+      };
+      testWindow.__COMMONPLACE_TEST_FAIL_SAVE__ = false;
+    });
+
+    // Click "Mind map baru" to clear canvas and start fresh
+    const newBtn = page.getByTestId("commonplace-mindmap-new-btn");
+    await expect(newBtn).toBeVisible();
+    await newBtn.click();
+
+    // Canvas should only show the initial note (#wn1) and no edges
+    const noteNodes = page.getByTestId("commonplace-mindmap-note-node");
+    await expect(noteNodes).toHaveCount(1);
+    await expect(noteNodes.first()).toContainText("#wn1");
+    await expect(page.getByTestId("commonplace-mindmap-edge-label")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Started a new mind map.");
+
+    // Open Laci drawer to load again
+    await laciHeader.click();
+    await expect(savedItem).toBeVisible();
+    await savedItem.click();
+
+    // Restored nodes and edges
+    await expect(noteNodes).toHaveCount(2);
+    await expect(page.getByTestId("commonplace-mindmap-edge-label")).toContainText("sebab-akibat");
+    await expect(page.getByTestId("commonplace-mindmap-feedback")).toContainText("Loaded mind map");
+
+    // Open Laci drawer again to test deletion
+    await laciHeader.click();
+    const deleteBtn = page.getByTestId(/commonplace-mindmap-laci-delete-map-/);
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    // Laci should now show no saved mind maps
+    await expect(laciDrawer.getByText("0 saved")).toBeVisible();
+    await expect(laciDrawer.getByText("Belum ada mind map yang disimpan.")).toBeVisible();
+
+    // Verify no AI Suggest, Main Mind Map, or provider calls
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText("Main Mind Map")).toHaveCount(0);
+
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toMatch(renderedSecretLikePattern);
     expect(providerCalls).toEqual([]);

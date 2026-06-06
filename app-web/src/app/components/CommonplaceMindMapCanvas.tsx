@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -21,6 +21,8 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import type { CommonplaceNote } from "../lib/storage/supabase-commonplace-adapter";
+import type { CommonplaceStorage } from "./CommonplaceView";
+import type { CommonplaceMindMapSummary } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 
 type CommonplaceMindMapCanvasProps = {
   note: CommonplaceNote;
@@ -29,6 +31,8 @@ type CommonplaceMindMapCanvasProps = {
     | { ok: true; note: CommonplaceNote }
     | { ok: false; error: string }
   >;
+  ownerId?: string | null;
+  storage?: CommonplaceStorage | null;
 };
 
 type CommonplaceMindMapNodeData = {
@@ -61,6 +65,19 @@ function noteToNodeData(note: CommonplaceNote): CommonplaceMindMapNodeData {
     insight: insightPreview(note.insight),
     tags: note.tags,
   };
+}
+
+function formatDate(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    return d.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return isoString;
+  }
 }
 
 function CommonplaceNoteNode({
@@ -174,6 +191,8 @@ export function CommonplaceMindMapCanvas({
   note,
   onBackToDetail,
   onLookupByShortcode,
+  ownerId,
+  storage,
 }: CommonplaceMindMapCanvasProps) {
   const [shortcodeInput, setShortcodeInput] = useState("");
   const [isLooking, setIsLooking] = useState(false);
@@ -185,6 +204,11 @@ export function CommonplaceMindMapCanvas({
   const [connectTarget, setConnectTarget] = useState<string | null>(null);
   const [showLabelForm, setShowLabelForm] = useState(false);
   const [labelText, setLabelText] = useState("");
+
+  const [isLaciOpen, setIsLaciOpen] = useState(false);
+  const [savedMaps, setSavedMaps] = useState<CommonplaceMindMapSummary[]>([]);
+  const [currentMindMapId, setCurrentMindMapId] = useState<string | null>(null);
+  const [isSavingGraph, setIsSavingGraph] = useState(false);
 
   const initialNodes = useMemo<Node<CommonplaceMindMapNodeData>[]>(
     () => [
@@ -334,6 +358,170 @@ export function CommonplaceMindMapCanvas({
     return found?.data.shortcode || "";
   }, [connectTarget, nodes]);
 
+  const loadSavedMaps = useCallback(async () => {
+    if (!storage || !ownerId) return;
+    const result = await storage.listCommonplaceSubMindMaps(ownerId);
+    if (result.ok) {
+      setSavedMaps(result.mindMaps);
+    }
+  }, [storage, ownerId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadSavedMaps();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadSavedMaps]);
+
+  const handleSaveGraph = useCallback(async () => {
+    if (!storage || !ownerId) {
+      showFeedback("Storage unavailable.", "error");
+      return;
+    }
+
+    setIsSavingGraph(true);
+    showFeedback("Saving mind map...", "info");
+
+    try {
+      let mapId = currentMindMapId;
+
+      if (!mapId) {
+        // Create new sub map
+        const title = note.title?.trim() || note.sourceBook || "Untitled Mind Map";
+        const createResult = await storage.createCommonplaceSubMindMap({
+          ownerId,
+          title,
+        });
+
+        if (!createResult.ok) {
+          showFeedback("Could not save mind map. Please try again.", "error");
+          setIsSavingGraph(false);
+          return;
+        }
+
+        mapId = createResult.mindMap.id;
+        setCurrentMindMapId(mapId);
+      }
+
+      // Map nodes and edges
+      const nodesInput = nodes.map((n) => ({
+        localId: n.id,
+        noteId: n.id.replace("commonplace-note-", ""),
+        positionX: n.position.x,
+        positionY: n.position.y,
+      }));
+
+      const edgesInput = edges.map((e) => ({
+        sourceLocalId: e.source,
+        targetLocalId: e.target,
+        label: e.label ? String(e.label) : null,
+      }));
+
+      const saveResult = await storage.saveCommonplaceMindMapGraph({
+        ownerId,
+        mindMapId: mapId,
+        nodes: nodesInput,
+        edges: edgesInput,
+      });
+
+      if (!saveResult.ok) {
+        showFeedback("Could not save mind map. Please try again.", "error");
+      } else {
+        showFeedback("Mind map saved successfully.", "info");
+        void loadSavedMaps(); // Refresh list in Laci
+      }
+    } catch {
+      showFeedback("Could not save mind map. Please try again.", "error");
+    } finally {
+      setIsSavingGraph(false);
+    }
+  }, [storage, ownerId, currentMindMapId, note, nodes, edges, loadSavedMaps, showFeedback]);
+
+  const handleLoadGraph = useCallback(async (mapId: string) => {
+    if (!storage || !ownerId) return;
+
+    showFeedback("Loading mind map...", "info");
+    const result = await storage.getCommonplaceMindMapGraph(ownerId, mapId);
+
+    if (!result.ok) {
+      showFeedback("Could not load mind map. Please try again.", "error");
+      return;
+    }
+
+    const { graph } = result;
+    setCurrentMindMapId(graph.summary.id);
+
+    // Map nodes
+    const mappedNodes = graph.nodes.map((n) => ({
+      id: `commonplace-note-${n.noteId}`,
+      type: "commonplaceNote",
+      position: { x: n.positionX, y: n.positionY },
+      data: {
+        shortcode: n.noteShortcode,
+        title: n.noteTitle || "Untitled Source",
+        insight: n.noteInsight,
+        tags: n.noteTags,
+      },
+    }));
+
+    // Map edges
+    const dbNodeIdToNoteIdMap = new Map<string, string>();
+    for (const n of graph.nodes) {
+      dbNodeIdToNoteIdMap.set(n.id, n.noteId);
+    }
+
+    const mappedEdges = graph.edges.map((e) => {
+      const sourceNoteId = dbNodeIdToNoteIdMap.get(e.sourceNodeId);
+      const targetNoteId = dbNodeIdToNoteIdMap.get(e.targetNodeId);
+
+      return {
+        id: e.id,
+        source: `commonplace-note-${sourceNoteId}`,
+        target: `commonplace-note-${targetNoteId}`,
+        type: "commonplaceEdge",
+        label: e.label || "",
+      };
+    });
+
+    setNodes(mappedNodes);
+    setEdges(mappedEdges);
+    setIsLaciOpen(false); // Close drawer after load
+    showFeedback(`Loaded mind map: "${graph.summary.title}"`, "info");
+  }, [storage, ownerId, setNodes, setEdges, showFeedback]);
+
+  const handleDeleteGraph = useCallback(async (e: React.MouseEvent, mapId: string) => {
+    e.stopPropagation(); // Avoid loading the graph when delete is clicked
+    if (!storage || !ownerId) return;
+
+    const result = await storage.deleteCommonplaceMindMap(ownerId, mapId);
+    if (!result.ok) {
+      showFeedback("Could not delete mind map. Please try again.", "error");
+      return;
+    }
+
+    showFeedback("Mind map deleted.", "info");
+    if (currentMindMapId === mapId) {
+      setCurrentMindMapId(null);
+    }
+    void loadSavedMaps();
+  }, [storage, ownerId, currentMindMapId, loadSavedMaps, showFeedback]);
+
+  const handleNewGraph = useCallback(() => {
+    setCurrentMindMapId(null);
+    setNodes([
+      {
+        id: `commonplace-note-${note.id}`,
+        type: "commonplaceNote",
+        position: { x: 120, y: 120 },
+        data: noteToNodeData(note),
+      },
+    ]);
+    setEdges([]);
+    setIsLaciOpen(false);
+    showFeedback("Started a new mind map.", "info");
+  }, [note, setNodes, setEdges, showFeedback]);
+
   const handleShortcodeSubmit = useCallback(async () => {
     const normalized = normalizeShortcodeInput(shortcodeInput);
     if (normalized.length === 0) return;
@@ -439,6 +627,15 @@ export function CommonplaceMindMapCanvas({
           </div>
           <button
             type="button"
+            onClick={handleSaveGraph}
+            disabled={isSavingGraph}
+            className="rounded-lg bg-[#534AB7] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#413797] disabled:opacity-75"
+            data-testid="commonplace-mindmap-save-btn"
+          >
+            {isSavingGraph ? "Saving..." : "Save"}
+          </button>
+          <button
+            type="button"
             onClick={onBackToDetail}
             className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
           >
@@ -504,7 +701,7 @@ export function CommonplaceMindMapCanvas({
         </div>
       )}
 
-      <div className="h-[540px] bg-[#FBFAFF]" data-testid="commonplace-mindmap-canvas">
+      <div className="relative h-[540px] bg-[#FBFAFF]" data-testid="commonplace-mindmap-canvas">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -525,6 +722,105 @@ export function CommonplaceMindMapCanvas({
           <Background color="#D9D4F7" gap={24} size={1} />
           <Controls showInteractive={false} />
         </ReactFlow>
+
+        {/* Laci Drawer */}
+        <div
+          data-testid="commonplace-mindmap-laci-drawer"
+          className={`absolute bottom-0 left-0 right-0 bg-white border-t border-[#534AB7]/25 shadow-lg transition-all duration-300 z-50 flex flex-col ${
+            isLaciOpen ? "h-72" : "h-12"
+          }`}
+        >
+          {/* Drawer Header */}
+          <div
+            onClick={() => setIsLaciOpen(!isLaciOpen)}
+            data-testid="commonplace-mindmap-laci-header"
+            className="flex items-center justify-between px-5 py-2.5 bg-[#F8F7FF] cursor-pointer hover:bg-[#EEEDFE] transition-colors border-b border-[#534AB7]/10"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-[#332C85]">Laci Drawer</span>
+              <span className="rounded-full bg-[#EEEDFE] px-2 py-0.5 text-xs font-semibold text-[#534AB7]">
+                {savedMaps.length} saved
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNewGraph();
+                }}
+                data-testid="commonplace-mindmap-new-btn"
+                className="rounded bg-[#534AB7] px-3 py-1 text-xs font-semibold text-white hover:bg-[#413797]"
+              >
+                Mind map baru
+              </button>
+              <span className="text-sm text-[#534AB7] font-semibold">
+                {isLaciOpen ? "▼ Tutup" : "▲ Buka"}
+              </span>
+            </div>
+          </div>
+
+          {/* Drawer Body */}
+          {isLaciOpen && (
+            <div
+              data-testid="commonplace-mindmap-laci-body"
+              className="p-5 overflow-y-auto flex-1 bg-white"
+            >
+              {savedMaps.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-sm text-[var(--brand-ink-soft)]">
+                  <p>Belum ada mind map yang disimpan.</p>
+                  <p className="text-xs mt-1">Buat koneksi dan klik Save untuk menyimpan.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                  {savedMaps.map((map) => (
+                    <div
+                      key={map.id}
+                      onClick={() => void handleLoadGraph(map.id)}
+                      data-testid={`commonplace-mindmap-laci-item-${map.id}`}
+                      className={`flex flex-col justify-between rounded-lg border p-4 hover:bg-[#F8F7FF] cursor-pointer transition-colors shadow-sm relative group ${
+                        currentMindMapId === map.id
+                          ? "border-2 border-[#534AB7] bg-[#F8F7FF]"
+                          : "border-[#534AB7]/20 bg-white"
+                      }`}
+                    >
+                      <div>
+                        <h4 className="text-sm font-bold text-[var(--brand-ink)] truncate pr-6">
+                          {map.title}
+                        </h4>
+                        <p className="text-[11px] text-[var(--brand-ink-soft)] mt-1.5">
+                          Updated: {formatDate(map.updatedAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => void handleDeleteGraph(e, map.id)}
+                        data-testid={`commonplace-mindmap-laci-delete-${map.id}`}
+                        className="absolute right-3 top-3 rounded p-1 text-[var(--brand-ink-soft)] hover:bg-[#FFF4F3] hover:text-[#8A1F15] transition-colors"
+                        title="Delete Mind Map"
+                      >
+                        <svg
+                          aria-hidden="true"
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
