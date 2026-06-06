@@ -33,6 +33,7 @@ type CommonplaceMindMapCanvasProps = {
   >;
   ownerId?: string | null;
   storage?: CommonplaceStorage | null;
+  initialMindMapId?: string | null;
 };
 
 type CommonplaceMindMapNodeData = {
@@ -193,6 +194,7 @@ export function CommonplaceMindMapCanvas({
   onLookupByShortcode,
   ownerId,
   storage,
+  initialMindMapId,
 }: CommonplaceMindMapCanvasProps) {
   const [shortcodeInput, setShortcodeInput] = useState("");
   const [isLooking, setIsLooking] = useState(false);
@@ -489,6 +491,16 @@ export function CommonplaceMindMapCanvas({
     setIsLaciOpen(false); // Close drawer after load
     showFeedback(`Loaded mind map: "${graph.summary.title}"`, "info");
   }, [storage, ownerId, setNodes, setEdges, showFeedback]);
+
+  useEffect(() => {
+    if (!initialMindMapId) return;
+
+    const timer = window.setTimeout(() => {
+      void handleLoadGraph(initialMindMapId);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [handleLoadGraph, initialMindMapId]);
 
   const handleDeleteGraph = useCallback(async (e: React.MouseEvent, mapId: string) => {
     e.stopPropagation(); // Avoid loading the graph when delete is clicked

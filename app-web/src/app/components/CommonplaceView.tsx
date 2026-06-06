@@ -254,6 +254,7 @@ export function CommonplaceView({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [selectedMindMapId, setSelectedMindMapId] = useState<string | null>(null);
 
   const testStorage = getTestStorage();
   const effectiveOwnerId = ownerId ?? (testStorage ? DEFAULT_TEST_OWNER_ID : null);
@@ -315,6 +316,7 @@ export function CommonplaceView({
   const openLibrary = () => {
     setMode("library");
     setSelectedNote(null);
+    setSelectedMindMapId(null);
     setDeleteConfirmVisible(false);
     setError(null);
   };
@@ -331,6 +333,7 @@ export function CommonplaceView({
     }
 
     setSelectedNote(result.note);
+    setSelectedMindMapId(null);
     setMode("detail");
   };
 
@@ -344,10 +347,39 @@ export function CommonplaceView({
 
   const openMindMap = () => {
     if (!selectedNote) return;
+    setSelectedMindMapId(null);
     setDeleteConfirmVisible(false);
     setError(null);
     setMode("mindmap");
   };
+
+  const openSavedSubMindMap = useCallback(async (subMindMapId: string) => {
+    if (!storage || !effectiveOwnerId) return false;
+
+    setError(null);
+    const graphResult = await storage.getCommonplaceMindMapGraph(
+      effectiveOwnerId,
+      subMindMapId,
+    );
+
+    if (!graphResult.ok) return false;
+
+    const firstNode = graphResult.graph.nodes[0];
+    if (!firstNode) return false;
+
+    const noteResult = await storage.getCommonplaceNoteById(
+      effectiveOwnerId,
+      firstNode.noteId,
+    );
+
+    if (!noteResult.ok) return false;
+
+    setSelectedNote(noteResult.note);
+    setSelectedMindMapId(graphResult.graph.summary.id);
+    setDeleteConfirmVisible(false);
+    setMode("mindmap");
+    return true;
+  }, [effectiveOwnerId, storage]);
 
   const handleSubmit = async () => {
     if (!storage || !effectiveOwnerId) return;
@@ -516,7 +548,10 @@ export function CommonplaceView({
               {mode === "mindmap" && selectedNote && (
                 <CommonplaceMindMapCanvas
                   note={selectedNote}
-                  onBackToDetail={() => setMode("detail")}
+                  onBackToDetail={() => {
+                    setSelectedMindMapId(null);
+                    setMode("detail");
+                  }}
                   onLookupByShortcode={async (shortcode) => {
                     if (!storage || !effectiveOwnerId) {
                       return { ok: false as const, error: "Storage unavailable" };
@@ -528,12 +563,14 @@ export function CommonplaceView({
                   }}
                   ownerId={effectiveOwnerId}
                   storage={storage}
+                  initialMindMapId={selectedMindMapId}
                 />
               )}
 
               {mode === "main_mindmap" && (
                 <CommonplaceMainMindMapCanvas
                   onBackToLibrary={openLibrary}
+                  onOpenSubMindMap={openSavedSubMindMap}
                   ownerId={effectiveOwnerId}
                   storage={storage}
                 />

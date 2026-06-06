@@ -25,6 +25,7 @@ import type { CommonplaceMindMapSummary } from "../lib/storage/supabase-commonpl
 
 type CommonplaceMainMindMapCanvasProps = {
   onBackToLibrary: () => void;
+  onOpenSubMindMap?: (subMindMapId: string) => Promise<boolean>;
   ownerId?: string | null;
   storage?: CommonplaceStorage | null;
 };
@@ -54,7 +55,7 @@ function CommonplaceClusterNode({
 }: NodeProps<CommonplaceClusterNodeData>) {
   return (
     <article
-      className={`w-[260px] rounded-lg border bg-white p-4 text-left shadow-sm transition-all ${
+      className={`w-[260px] cursor-pointer rounded-lg border bg-white p-4 text-left shadow-sm transition-all ${
         data.isHighlighted
           ? "border-2 border-[#534AB7] ring-4 ring-[#534AB7]/20"
           : "border-[#534AB7]/25 hover:border-[#534AB7]/50"
@@ -75,6 +76,9 @@ function CommonplaceClusterNode({
           Updated: {formatDate(data.updatedAt)}
         </p>
       )}
+      <p className="mt-3 text-xs font-semibold text-[#534AB7]">
+        Click to open
+      </p>
     </article>
   );
 }
@@ -141,6 +145,7 @@ const edgeTypes: EdgeTypes = {
 
 export function CommonplaceMainMindMapCanvas({
   onBackToLibrary,
+  onOpenSubMindMap,
   ownerId,
   storage,
 }: CommonplaceMainMindMapCanvasProps) {
@@ -256,6 +261,15 @@ export function CommonplaceMainMindMapCanvas({
     setNodes((nds) => [...nds, newNode]);
     showFeedback(`Added cluster for "${map.title}"`, "info");
   }, [nodes, setNodes, showFeedback]);
+
+  const handleClusterClick = useCallback(async (_event: React.MouseEvent, node: Node<CommonplaceClusterNodeData>) => {
+    if (!onOpenSubMindMap) return;
+
+    const didOpen = await onOpenSubMindMap(node.data.subMindMapId);
+    if (!didOpen) {
+      showFeedback("Could not open sub mind map.", "error");
+    }
+  }, [onOpenSubMindMap, showFeedback]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -412,6 +426,7 @@ export function CommonplaceMainMindMapCanvas({
             edgeTypes={edgeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onNodeClick={handleClusterClick}
             fitView
             nodesConnectable={false}
             nodesDraggable={true}
