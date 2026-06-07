@@ -1,0 +1,260 @@
+import { expect, test } from "@playwright/test";
+import { readFileSync } from "fs";
+
+import { POST, testHooks } from "../src/app/api/commonplace/notes/route";
+import type { CommonplaceNoteRow } from "../src/app/lib/storage/supabase-commonplace-adapter";
+
+const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const originalServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const baseRow: CommonplaceNoteRow = {
+  id: "note-db-1",
+  owner_id: "server-user-123",
+  client_id: null,
+  shortcode: "#wn1",
+  source_book: "Why Nations Fail",
+  source_page: null,
+  title: null,
+  quote: null,
+  insight: "Institutions shape incentives.",
+  tags: [],
+  connections: [],
+  relevance: null,
+  created_at: "2026-06-06T01:00:00.000Z",
+  updated_at: "2026-06-06T01:00:00.000Z",
+};
+
+type MockOptions = {
+  counterRow?: { owner_id: string; prefix: string; last_value: number } | null;
+  counterReadError?: Error | null;
+  counterWriteError?: Error | null;
+  noteInsertError?: Error | null;
+};
+
+function buildRequest(body: Record<string, unknown>): Request {
+  return new Request("http://localhost/api/commonplace/notes", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function createMockSupabaseClient(options: MockOptions = {}) {
+  const calls: string[] = [];
+  const inserted: Record<string, unknown[]> = {};
+  const updated: Record<string, unknown[]> = {};
+  let counterReadUsed = false;
+
+  function buildQuery(table: string) {
+    let operation = "";
+    let payload: unknown = null;
+
+    const query = {
+      insert(row: unknown) {
+        operation = "insert";
+        payload = row;
+        calls.push(`insert:${table}`);
+        inserted[table] = Array.isArray(row) ? row : [row];
+        return query;
+      },
+      update(row: unknown) {
+        operation = "update";
+        payload = row;
+        calls.push(`update:${table}`);
+        updated[table] = [row];
+        return query;
+      },
+      select(columns: string) {
+        calls.push(`select:${table}:${columns}`);
+        return query;
+      },
+      eq(column: string, value: string) {
+        calls.push(`eq:${table}:${column}:${value}`);
+        return query;
+      },
+      maybeSingle() {
+        calls.push(`maybeSingle:${table}`);
+        if (table === "commonplace_shortcode_counters") {
+          counterReadUsed = true;
+          return Promise.resolve({
+            data: options.counterRow ?? null,
+            error: options.counterReadError ?? null,
+          });
+        }
+
+        return Promise.resolve({ data: null, error: null });
+      },
+      single() {
+        calls.push(`single:${table}`);
+        if (table === "commonplace_notes" && operation === "insert") {
+          return Promise.resolve({
+            data:
+              options.noteInsertError || !payload
+                ? null
+                : { ...baseRow, ...(payload as Record<string, unknown>) },
+            error: options.noteInsertError ?? null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      },
+      then(
+        onfulfilled: (value: { data: unknown; error: Error | null }) => unknown,
+      ) {
+        if (
+          table === "commonplace_shortcode_counters" &&
+          (operation === "insert" || operation === "update")
+        ) {
+          return Promise.resolve({
+            data: null,
+            error: options.counterWriteError ?? null,
+          }).then(onfulfilled);
+        }
+        return Promise.resolve({ data: null, error: null }).then(onfulfilled);
+      },
+    };
+
+    return query;
+  }
+
+  const client = {
+    from(table: string) {
+      calls.push(`from:${table}`);
+      return buildQuery(table);
+    },
+  };
+
+  return { client, calls, inserted, updated, get counterReadUsed() { return counterReadUsed; } };
+}
+
+test.describe("Commonplace notes route", () => {
+  test.afterEach(() => {
+    if (originalSupabaseUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = originalSupabaseUrl;
+    }
+
+    if (originalServiceRoleKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = originalServiceRoleKey;
+    }
+
+    testHooks.resolveCurrentUserId = null;
+    testHooks.getSupabaseClient = null;
+  });
+
+  test("unauthenticated note save returns safe auth_required", async () => {
+    testHooks.resolveCurrentUserId = async () => null;
+    let clientCreated = false;
+    testHooks.getSupabaseClient = () => {
+      clientCreated = true;
+      return {};
+    };
+
+    const response = await POST(buildRequest({ insight: "Idea." }));
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(401);
+    expect(data).toEqual({ error: "auth_required" });
+    expect(clientCreated).toBe(false);
+  });
+
+  test("missing required fields returns safe invalid_note_fields", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(buildRequest({ sourceBook: "Why Nations Fail" }));
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "invalid_note_fields" });
+    expect(mock.calls).toEqual([]);
+  });
+
+  test("valid note save derives ownerId from Clerk auth and ignores request owner_id", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest({
+        owner_id: "attacker-user",
+        ownerId: "attacker-user",
+        sourceBook: "Why Nations Fail",
+        insight: "Institutions shape incentives.",
+      }),
+    );
+    const data = (await response.json()) as { note: { ownerId: string; shortcode: string } };
+
+    expect(response.status).toBe(201);
+    expect(data.note.ownerId).toBe("server-user-123");
+    expect(data.note.shortcode).toBe("#wn1");
+    expect(mock.inserted.commonplace_notes[0]).toMatchObject({
+      owner_id: "server-user-123",
+      shortcode: "#wn1",
+    });
+    expect(JSON.stringify(mock.inserted.commonplace_notes[0])).not.toContain(
+      "attacker-user",
+    );
+  });
+
+  test("shortcode reservation increments existing counter", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      counterRow: { owner_id: "server-user-123", prefix: "wn", last_value: 2 },
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest({
+        sourceBook: "Why Nations Fail",
+        insight: "New idea.",
+      }),
+    );
+    const data = (await response.json()) as { note: { shortcode: string } };
+
+    expect(response.status).toBe(201);
+    expect(mock.counterReadUsed).toBe(true);
+    expect(mock.updated.commonplace_shortcode_counters[0]).toEqual({
+      last_value: 3,
+    });
+    expect(data.note.shortcode).toBe("#wn3");
+  });
+
+  test("Supabase failure returns safe note_save_failed without raw details", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      noteInsertError: new Error("raw Supabase relation failure"),
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest({
+        sourceBook: "Why Nations Fail",
+        insight: "New idea.",
+      }),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(500);
+    expect(data).toEqual({ error: "note_save_failed" });
+    expect(JSON.stringify(data)).not.toContain("raw Supabase relation failure");
+  });
+
+  test("route source does not expose service role key to client paths", () => {
+    const routeSource = readFileSync(
+      "src/app/api/commonplace/notes/route.ts",
+      "utf8",
+    );
+    const componentSource = readFileSync(
+      "src/app/components/CommonplaceView.tsx",
+      "utf8",
+    );
+
+    expect(routeSource).toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(componentSource).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(componentSource).toContain("/api/commonplace/notes");
+  });
+});

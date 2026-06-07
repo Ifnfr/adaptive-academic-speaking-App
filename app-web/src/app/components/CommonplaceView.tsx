@@ -239,6 +239,36 @@ function createSupabaseStorage(
   };
 }
 
+async function createCommonplaceNoteViaServer(
+  input: Omit<CreateCommonplaceNoteInput, "ownerId">,
+): Promise<CommonplaceNoteResult> {
+  try {
+    const response = await fetch("/api/commonplace/notes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { note?: CommonplaceNote; error?: string }
+      | null;
+
+    if (response.ok && data?.note) {
+      return { ok: true, note: data.note };
+    }
+
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_note_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
 export function CommonplaceView({
   ownerId,
   isSignedIn = false,
@@ -391,22 +421,31 @@ export function CommonplaceView({
     setIsSaving(true);
     setError(null);
 
+    const formInput = inputFromForm(form);
     const result =
       mode === "edit" && selectedNote
         ? await storage.updateCommonplaceNote({
             ownerId: effectiveOwnerId,
             noteId: selectedNote.id,
-            ...inputFromForm(form),
+            ...formInput,
           })
-        : await storage.createCommonplaceNote({
-            ownerId: effectiveOwnerId,
-            ...inputFromForm(form),
-          });
+        : testStorage
+          ? await storage.createCommonplaceNote({
+              ownerId: effectiveOwnerId,
+              ...formInput,
+            })
+          : await createCommonplaceNoteViaServer(formInput);
 
     setIsSaving(false);
 
     if (!result.ok) {
-      setError("Could not save this note. Please check the fields and try again.");
+      if (result.error === "commonplace_auth_required") {
+        setError("Please sign in to save notes.");
+      } else if (result.error === "commonplace_validation_failed") {
+        setError("Please complete the required fields.");
+      } else {
+        setError("Could not save this note. Please try again.");
+      }
       return;
     }
 
