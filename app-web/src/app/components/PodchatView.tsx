@@ -193,9 +193,20 @@ export type PodchatArticleContext = {
   sourceDomain?: string;
 };
 
+export type PodchatCommonplaceContext = {
+  source: "commonplace";
+  shortcode: string;
+  title?: string;
+  sourceBook?: string;
+  insight: string;
+  tags: string[];
+};
+
 export interface PodchatViewProps {
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
+  commonplaceContext?: PodchatCommonplaceContext | null;
+  onClearCommonplaceContext?: () => void;
   ttsProvider?: "polly" | "elevenlabs";
   elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
 }
@@ -203,6 +214,8 @@ export interface PodchatViewProps {
 export function PodchatView({
   articleContext,
   onClearArticleContext,
+  commonplaceContext,
+  onClearCommonplaceContext,
   ttsProvider = "polly",
   elevenLabsModelId = "",
 }: PodchatViewProps) {
@@ -260,6 +273,15 @@ export function PodchatView({
     "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+
+  const commonplaceLabel =
+    commonplaceContext?.title?.trim() ||
+    commonplaceContext?.sourceBook?.trim() ||
+    "your Commonplace note";
+
+  const commonplaceOpener = commonplaceContext
+    ? `Today, we'll discuss your Commonplace note ${commonplaceContext.shortcode} from ${commonplaceLabel}. Explain the idea in your own words.`
+    : null;
 
   // --- Timer management ---
   function startTimer() {
@@ -428,7 +450,7 @@ export function PodchatView({
     const opener: PodchatTurn = {
       id: "podchat-turn-1",
       speaker: "host",
-      text: HOST_OPENERS[topic],
+      text: commonplaceOpener ?? HOST_OPENERS[topic],
     };
     setTurns([opener]);
     setSubmittedUserTurns(0);
@@ -459,6 +481,9 @@ export function PodchatView({
     setLockedTranscript(null);
     if (onClearArticleContext) {
       onClearArticleContext();
+    }
+    if (onClearCommonplaceContext) {
+      onClearCommonplaceContext();
     }
   }
 
@@ -617,6 +642,7 @@ export function PodchatView({
       remainingSeconds: remaining,
       turns: currentTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
       ...(articleContext ? { articleContext } : {}),
+      ...(commonplaceContext ? { commonplaceContext } : {}),
     };
   }
 
@@ -718,6 +744,119 @@ export function PodchatView({
   }
 
   if (phase === "setup") {
+    if (commonplaceContext) {
+      return (
+        <section className={card} data-testid="podchat-setup">
+          <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+              Podchat Phase 1
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
+              Start a Podchat
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)] font-medium">
+              This Podchat will discuss your Commonplace note.
+            </p>
+          </div>
+          <div className="p-6 flex flex-col gap-6">
+            <div
+              className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex flex-col gap-4"
+              data-testid="podchat-commonplace-context-card"
+            >
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                  Commonplace context
+                </span>
+                <span className="text-sm font-semibold text-[var(--brand-teal)] block mt-1">
+                  {commonplaceContext.shortcode}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                  Source
+                </span>
+                <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">
+                  {commonplaceLabel}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                  Insight
+                </span>
+                <p className="text-sm text-[var(--brand-ink-soft)] mt-1 whitespace-pre-wrap">
+                  {commonplaceContext.insight}
+                </p>
+              </div>
+              {commonplaceContext.tags.length > 0 && (
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                    Tags
+                  </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {commonplaceContext.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-2.5 py-1 text-xs font-medium text-[var(--brand-teal-ink)]"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <p className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--brand-ink-soft)]">
+              {commonplaceOpener}
+            </p>
+
+            <fieldset>
+              <legend className={labelClass}>Difficulty / Duration</legend>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                role="radiogroup"
+                aria-label="Podchat difficulty"
+              >
+                {DIFFICULTIES.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={difficulty === option}
+                    onClick={() => setDifficulty(option)}
+                    className={
+                      "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                      (difficulty === option
+                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                    }
+                  >
+                    <span className="text-sm font-semibold">{option}</span>
+                    <span
+                      className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                      data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
+                    >
+                      {DIFFICULTY_LABEL[option]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="flex justify-center mt-2">
+              <button
+                type="button"
+                onClick={startPodchat}
+                className={buttonPrimary}
+              >
+                Start a Podchat
+              </button>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     if (articleContext) {
       return (
         <section className={card} data-testid="podchat-setup">

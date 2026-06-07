@@ -54,8 +54,12 @@ import { Sidebar, type SidebarView } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
 import { PodchatView } from "./components/PodchatView";
-import type { PodchatArticleContext } from "./components/PodchatView";
+import type {
+  PodchatArticleContext,
+  PodchatCommonplaceContext,
+} from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
+import { CommonplaceView } from "./components/CommonplaceView";
 import {
   ArticlePracticeView,
   type ArticlePracticeResult,
@@ -553,6 +557,8 @@ export default function Home() {
   >(null);
   const [pendingArticleContext, setPendingArticleContext] =
     useState<PodchatArticleContext | null>(null);
+  const [pendingCommonplaceContext, setPendingCommonplaceContext] =
+    useState<PodchatCommonplaceContext | null>(null);
 
   // --- Gamification state (local, deterministic, no AI) ---
   const [xpProfile, setXpProfile] = useState<XpProfile>(() =>
@@ -1504,8 +1510,21 @@ export default function Home() {
       sourceDomain: result.sourceDomain,
     };
     setPendingArticleContext(context);
+    setPendingCommonplaceContext(null);
     setTarget(buildArticleSpeakingTarget(result));
     setMode("Reading-to-Speaking");
+    setView("active");
+  };
+
+  const handleDiscussCommonplaceInPodchat = (
+    context: PodchatCommonplaceContext,
+  ) => {
+    setPendingCommonplaceContext(context);
+    setPendingArticleContext(null);
+    setTarget(
+      `Commonplace note ${context.shortcode}: ${context.insight.slice(0, 180)}`,
+    );
+    setMode("Fluency Sprint");
     setView("active");
   };
 
@@ -1860,9 +1879,11 @@ export default function Home() {
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
             <PodchatView
-              key={`${mode}:${target}:${pendingArticleContext ? "article" : "generic"}`}
+              key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : "generic"}`}
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
+              commonplaceContext={pendingCommonplaceContext}
+              onClearCommonplaceContext={() => setPendingCommonplaceContext(null)}
               ttsProvider={ttsProvider}
               elevenLabsModelId={elevenLabsModel}
             />
@@ -1916,6 +1937,17 @@ export default function Home() {
               onSubmitPracticeSentence={handleSubmitVocabularyPracticeSentence}
               onSkipPracticeCard={handleSkipVocabularyPracticeCard}
               onNextPracticeCard={handleNextVocabularyPracticeCard}
+            />
+          )}
+
+          {/* ===================== Commonplace Library view ===================== */}
+          {view === "commonplace" && (
+            <CommonplaceView
+              ownerId={cloudAuthState.userId}
+              isSignedIn={cloudAuthState.isSignedIn}
+              getToken={cloudAuthState.getToken}
+              supabaseConfigured={isSupabaseConfigured()}
+              onDiscussInPodchat={handleDiscussCommonplaceInPodchat}
             />
           )}
 
@@ -2379,6 +2411,8 @@ function viewTitle(view: string, translate: Translate): string {
       return translate("topbar.titleActive");
     case "vocabulary":
       return translate("topbar.titleVocabulary");
+    case "commonplace":
+      return translate("topbar.titleCommonplace");
     case "article-practice":
       return translate("topbar.titleArticlePractice");
     case "session-log":
@@ -2410,6 +2444,8 @@ function viewSubtitle(view: string, translate: Translate): string {
       return translate("sidebar.viewActive");
     case "vocabulary":
       return translate("topbar.titleVocabulary");
+    case "commonplace":
+      return translate("sidebar.viewCommonplace");
     case "article-practice":
       return translate("topbar.titleArticlePractice");
     case "session-log":
@@ -2439,6 +2475,8 @@ function viewDescription(view: string, translate: Translate): string {
   switch (view) {
     case "vocabulary":
       return translate("topbar.descVocabulary");
+    case "commonplace":
+      return translate("topbar.descCommonplace");
     case "article-practice":
       return translate("topbar.descArticlePractice");
     case "session-log":

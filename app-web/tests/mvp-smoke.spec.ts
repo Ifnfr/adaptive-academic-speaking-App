@@ -1,4 +1,40 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+const appOwnedStorageKeys = new Set([
+  "activeView",
+  "defaultAiProvider",
+  "selectedView",
+  "view",
+]);
+
+const appOwnedStoragePrefixes = ["adaptive-speaking-app:"];
+
+const secretLikePattern =
+  /DEEPSEEK_API_KEY|DEEPGRAM_API_KEY|ELEVENLABS_API_KEY|CLAUDE_API_KEY|GEMINI_API_KEY|SUPABASE_SERVICE_ROLE_KEY|sk-[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9._-]{20,}|raw provider payload|audio_blob|recording_url|stt_payload|tts_payload/i;
+
+async function appOwnedLocalStorageSnapshot(page: Page) {
+  return page.evaluate(
+    ({ exactKeys, prefixes }) => {
+      const snapshot: Record<string, string> = {};
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key) continue;
+
+        if (
+          exactKeys.includes(key) ||
+          prefixes.some((prefix) => key.startsWith(prefix))
+        ) {
+          snapshot[key] = localStorage.getItem(key) ?? "";
+        }
+      }
+      return snapshot;
+    },
+    {
+      exactKeys: [...appOwnedStorageKeys],
+      prefixes: appOwnedStoragePrefixes,
+    },
+  );
+}
 
 function articleEssayQuestions() {
   return [
@@ -198,7 +234,9 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.locator("img[alt=\"fonetik logo\"]")).toBeVisible();
     await expect(page.locator("aside")).toContainText("Active Session");
     await expect(page.locator("aside")).toContainText("Vocabulary Notebook");
+    await expect(page.locator("aside")).toContainText("Commonplace");
     await expect(page.locator("aside")).toContainText("Article Practice");
+    await expect(page.locator("aside")).not.toContainText("Learning Path");
     await expect(page.locator("header")).toContainText("Local only");
     await expect(
       page.getByRole("button", { name: /restore cloud data|import cloud data/i }),
@@ -1080,10 +1118,15 @@ test.describe("MVP Smoke Flows", () => {
     await page.locator("#default-ai-provider-select").selectOption("Gemini");
     await expect(page.locator("#default-ai-provider-select")).toHaveValue("Gemini");
 
-    // 5. LocalStorage persists it and does not contain API keys
-    const storageVal = await page.evaluate(() => JSON.stringify(localStorage));
-    expect(storageVal).toContain('"defaultAiProvider":"Gemini"');
-    expect(storageVal).not.toMatch(/api_key|apikey|secret|token/i);
+    // 5. App-owned storage persists it and does not contain API keys.
+    // Clerk keeps its own development runtime metadata in browser storage,
+    // so privacy checks inspect app-owned keys instead of all third-party keys.
+    const appStorage = await appOwnedLocalStorageSnapshot(page);
+    const appStorageVal = JSON.stringify(appStorage);
+    const renderedText = await page.locator("body").innerText();
+    expect(appStorage.defaultAiProvider).toBe("Gemini");
+    expect(appStorageVal).not.toMatch(secretLikePattern);
+    expect(renderedText).not.toMatch(secretLikePattern);
 
     // 6. Refresh page and confirm selection persists
     await page.reload();
