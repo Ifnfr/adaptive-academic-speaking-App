@@ -4,6 +4,7 @@ import { getArticlePracticeCacheKey } from "../src/app/lib/cache/ai-cache";
 import { getArticlePracticeRequestHash } from "../src/app/lib/cache/ai-idempotency";
 
 const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
+const originalArticleAiProvider = process.env.ARTICLE_AI_PROVIDER;
 const originalFetch = globalThis.fetch;
 
 function validEssayQuestions() {
@@ -232,7 +233,68 @@ function mockFetchForArticlePractice(capture: {
 test.describe("Article Practice Feedback Language and Cache/Idempotency", () => {
   test.afterEach(() => {
     process.env.DEEPSEEK_API_KEY = originalDeepSeekKey;
+    process.env.ARTICLE_AI_PROVIDER = originalArticleAiProvider;
     globalThis.fetch = originalFetch;
+  });
+
+  test("mock mode returns deterministic article practice without fetch or API keys", async () => {
+    process.env.ARTICLE_AI_PROVIDER = "mock";
+    process.env.DEEPSEEK_API_KEY = "";
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called in article mock mode");
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(fetchCalled).toBe(false);
+    expect(Object.keys(data).sort()).toEqual([
+      "articleBrief",
+      "comprehensionChecks",
+      "essayQuestions",
+      "followUpQuestions",
+      "keyPoints",
+      "mainIdea",
+      "sourceDomain",
+      "sourceTitle",
+      "sourceUrl",
+      "speakingTask",
+      "usefulVocabulary",
+      "warnings",
+    ].sort());
+    expect(data.sourceTitle).toBe("Mock Article: AI-Assisted Learning Habits");
+    expect(data.essayQuestions).toHaveLength(5);
+    expect((data.essayQuestions as Array<{ targetSkill: string }>).map((q) => q.targetSkill).sort()).toEqual([
+      "critical_response",
+      "inference",
+      "main_idea",
+      "supporting_detail",
+      "vocabulary_in_context",
+    ]);
+    expect(data.speakingTask).toMatchObject({
+      title: "AI Study Balance",
+      timeLimitSeconds: 120,
+    });
+    expect(JSON.stringify(data)).not.toMatch(/api[_-]?key|rawProvider|fullArticleText|rawMarkdown/i);
+  });
+
+  test("mock mode still validates bad article practice requests", async () => {
+    process.env.ARTICLE_AI_PROVIDER = "mock";
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called for invalid mock requests");
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({ url: "notaurl" }));
+    const data = (await response.json()) as { error?: string };
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Invalid URL.");
+    expect(fetchCalled).toBe(false);
   });
 
   test("old requests without language fields still work & default to English", async () => {

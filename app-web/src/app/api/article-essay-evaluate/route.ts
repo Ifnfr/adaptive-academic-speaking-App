@@ -508,6 +508,65 @@ function getApiKey(provider: Provider): string | undefined {
   return process.env.GEMINI_API_KEY;
 }
 
+function isArticleMockProvider(): boolean {
+  return process.env.ARTICLE_AI_PROVIDER?.trim().toLowerCase() === "mock";
+}
+
+function buildMockArticleEssayEvaluation(
+  req: ArticleEssayEvaluateRequest,
+): ArticleEssayEvaluationResponse {
+  return {
+    overallFeedback:
+      "Your answers show a clear understanding of the article's main message. The next improvement is to support each answer with one precise article detail and connect ideas with smoother academic transitions.",
+    perQuestionFeedback: req.questions.map((question) => ({
+      questionId: question.id,
+      comprehension:
+        "You answer the question directly and show basic understanding of the article context.",
+      topicRelevance:
+        "The response stays relevant, but it can use more specific evidence from the article brief or key points.",
+      grammarNotes: [
+        "Use consistent verb tense when explaining article ideas.",
+        "Check subject-verb agreement in longer sentences.",
+      ],
+      wordFormOrPartOfSpeechNotes: [
+        "Use nouns such as improvement or dependence after academic verbs.",
+      ],
+      sentenceStructureNotes: [
+        "Begin with a clear topic sentence before adding explanation.",
+        "Combine short ideas with because, however, or therefore.",
+      ],
+      coherenceNotes: [
+        "Link the claim, article detail, and explanation in one paragraph.",
+      ],
+      vocabularyNotes: [
+        "Use precise phrases such as intentional practice and learning strategy.",
+      ],
+      improvedAnswerExample:
+        "The article suggests that AI tools are helpful when learners use them intentionally, because feedback is more useful when it supports a clear learning goal.",
+    })),
+    recurringErrors: [
+      {
+        label: "General support",
+        explanation:
+          "Several answers make a reasonable point but need one article-based detail to make the explanation stronger.",
+        exampleFromUser: req.answers[0]?.answer.slice(0, 160) || "The article is useful.",
+        correction:
+          "The article is useful because it explains how feedback loops help learners revise with a clearer goal.",
+      },
+      {
+        label: "Sentence connection",
+        explanation:
+          "Some ideas would read more academically if the relationship between claim and reason were explicit.",
+        exampleFromUser: req.answers[1]?.answer.slice(0, 160) || "Technology helps students.",
+        correction:
+          "Technology helps students when it gives targeted feedback, but it can distract them without clear study routines.",
+      },
+    ],
+    nextWritingFocus:
+      "For the next article task, write each answer as one claim, one article detail, and one explanation of why the detail matters.",
+  };
+}
+
 function stripCodeFence(raw: string): string {
   const trimmed = raw.trim();
   const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -779,45 +838,52 @@ export async function POST(request: Request) {
   }
 
   const validated = validation.request;
-  const apiKey = getApiKey(validated.provider);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "Provider is not configured. Please try again later." },
-      { status: 503 },
-    );
-  }
+  let evaluationResponse: ArticleEssayEvaluationResponse;
 
-  const systemPrompt = buildSystemPrompt(validated);
-  const userPrompt = buildUserPrompt(validated);
-
-  let raw = "";
-  try {
-    if (validated.provider === "Claude") {
-      raw = await callClaude(apiKey, systemPrompt, userPrompt);
-    } else if (validated.provider === "DeepSeek") {
-      raw = await callDeepSeek(apiKey, systemPrompt, userPrompt);
-    } else {
-      raw = await callGemini(apiKey, systemPrompt, userPrompt);
+  if (isArticleMockProvider()) {
+    evaluationResponse = buildMockArticleEssayEvaluation(validated);
+  } else {
+    const apiKey = getApiKey(validated.provider);
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Provider is not configured. Please try again later." },
+        { status: 503 },
+      );
     }
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`Article essay evaluation provider error: ${message}`);
-    return NextResponse.json(
-      { error: "Provider request failed. Please try again later." },
-      { status: 502 },
-    );
-  }
 
-  const questionIds = new Set(validated.questions.map((question) => question.id));
-  const outputValidation = validateProviderOutput(raw, questionIds);
-  if (!outputValidation.valid) {
-    console.error(
-      `Article essay evaluation output validation failed: ${outputValidation.error}`,
-    );
-    return NextResponse.json(
-      { error: "Invalid provider response format. Please try again." },
-      { status: 502 },
-    );
+    const systemPrompt = buildSystemPrompt(validated);
+    const userPrompt = buildUserPrompt(validated);
+
+    let raw = "";
+    try {
+      if (validated.provider === "Claude") {
+        raw = await callClaude(apiKey, systemPrompt, userPrompt);
+      } else if (validated.provider === "DeepSeek") {
+        raw = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+      } else {
+        raw = await callGemini(apiKey, systemPrompt, userPrompt);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Article essay evaluation provider error: ${message}`);
+      return NextResponse.json(
+        { error: "Provider request failed. Please try again later." },
+        { status: 502 },
+      );
+    }
+
+    const questionIds = new Set(validated.questions.map((question) => question.id));
+    const outputValidation = validateProviderOutput(raw, questionIds);
+    if (!outputValidation.valid) {
+      console.error(
+        `Article essay evaluation output validation failed: ${outputValidation.error}`,
+      );
+      return NextResponse.json(
+        { error: "Invalid provider response format. Please try again." },
+        { status: 502 },
+      );
+    }
+    evaluationResponse = outputValidation.response;
   }
 
   let memorySaved = false;
@@ -835,7 +901,7 @@ export async function POST(request: Request) {
             articleContext: validated.articleContext,
             questions: validated.questions,
             answers: validated.answers,
-            evaluation: outputValidation.response,
+            evaluation: evaluationResponse,
           },
           supabaseClient,
         );
@@ -852,7 +918,7 @@ export async function POST(request: Request) {
   }
 
   const finalResponse = {
-    ...outputValidation.response,
+    ...evaluationResponse,
     memory: { saved: memorySaved },
   };
 

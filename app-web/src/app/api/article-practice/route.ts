@@ -1102,6 +1102,99 @@ function friendlyProviderError(
   return `${provider} request failed (status ${status}). Please try again or switch provider.`;
 }
 
+function isArticleMockProvider(): boolean {
+  return process.env.ARTICLE_AI_PROVIDER?.trim().toLowerCase() === "mock";
+}
+
+function buildMockArticlePracticeResponse(): ArticlePracticeResponse {
+  return {
+    sourceTitle: "Mock Article: AI-Assisted Learning Habits",
+    sourceUrl: "mock-article-practice",
+    sourceDomain: "Fonetik Mock",
+    articleBrief:
+      "The article explains how AI study tools can help learners practice independently, while warning that progress depends on clear goals, privacy awareness, and active thinking.",
+    mainIdea:
+      "AI-assisted learning is most useful when students use it as a structured practice partner rather than a replacement for effort.",
+    keyPoints: [
+      "AI tools can give quick feedback and more chances to revise.",
+      "Learners still need goals, reflection, and teacher guidance.",
+      "Privacy and overdependence are important risks to manage.",
+    ],
+    usefulVocabulary: [
+      {
+        word: "intentional",
+        meaning: "done with a clear purpose",
+        whyUseful: "Useful for explaining effective study habits.",
+      },
+      {
+        word: "feedback loop",
+        meaning: "a cycle of response and improvement",
+        whyUseful: "Helps describe repeated learning practice.",
+      },
+      {
+        word: "overdependence",
+        meaning: "relying on something too much",
+        whyUseful: "Useful for discussing technology risks.",
+      },
+    ],
+    comprehensionChecks: [
+      "What benefit does AI give learners?",
+      "Why are clear goals important?",
+      "What risk does the article mention?",
+    ],
+    essayQuestions: [
+      {
+        id: "q1",
+        question: "What is the main idea of the article?",
+        expectedFocus: "Explain the central claim about AI-assisted learning.",
+        targetSkill: "main_idea",
+        suggestedWordCount: { min: 50, max: 120 },
+      },
+      {
+        id: "q2",
+        question: "Which supporting detail shows how AI can help students?",
+        expectedFocus: "Use one detail about feedback, revision, or practice.",
+        targetSkill: "supporting_detail",
+        suggestedWordCount: { min: 50, max: 120 },
+      },
+      {
+        id: "q3",
+        question: "What can readers infer about independent study habits?",
+        expectedFocus: "Infer why tools alone are not enough for progress.",
+        targetSkill: "inference",
+        suggestedWordCount: { min: 50, max: 120 },
+      },
+      {
+        id: "q4",
+        question: "What does intentional mean in this learning context?",
+        expectedFocus: "Explain the vocabulary meaning using the article context.",
+        targetSkill: "vocabulary_in_context",
+        suggestedWordCount: { min: 50, max: 120 },
+      },
+      {
+        id: "q5",
+        question: "What implication follows for students using AI tools?",
+        expectedFocus: "Give a balanced critical response about benefits and risks.",
+        targetSkill: "critical_response",
+        suggestedWordCount: { min: 60, max: 140 },
+      },
+    ],
+    speakingTask: {
+      title: "AI Study Balance",
+      instruction:
+        "Explain one benefit and one risk of using AI for study, then give one habit that keeps learning active.",
+      timeLimitSeconds: 120,
+      targetStructure: ["Claim", "Benefit", "Risk", "Study habit"],
+    },
+    followUpQuestions: [
+      "Which AI study habit seems most useful?",
+      "How can learners avoid overdependence?",
+      "What should teachers guide students to do?",
+    ],
+    warnings: ["Mock article practice is deterministic and not based on a live article."],
+  };
+}
+
 async function callClaude(
   apiKey: string,
   system: string,
@@ -1231,6 +1324,10 @@ export async function POST(request: Request) {
   const validated = validateRequest(parsed);
   if (typeof validated === "string") {
     return NextResponse.json({ error: validated }, { status: 400 });
+  }
+
+  if (isArticleMockProvider()) {
+    return NextResponse.json(buildMockArticlePracticeResponse());
   }
 
   const resolvedModel = resolveProviderModel(validated.provider);

@@ -5,6 +5,7 @@ import { POST, testHooks } from "../src/app/api/article-essay-evaluate/route";
 const originalClaudeKey = process.env.CLAUDE_API_KEY;
 const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;
 const originalGeminiKey = process.env.GEMINI_API_KEY;
+const originalArticleAiProvider = process.env.ARTICLE_AI_PROVIDER;
 const originalFetch = globalThis.fetch;
 
 function validQuestions() {
@@ -153,9 +154,66 @@ test.describe("Article Essay Evaluate Route", () => {
     process.env.CLAUDE_API_KEY = originalClaudeKey;
     process.env.DEEPSEEK_API_KEY = originalDeepSeekKey;
     process.env.GEMINI_API_KEY = originalGeminiKey;
+    process.env.ARTICLE_AI_PROVIDER = originalArticleAiProvider;
     globalThis.fetch = originalFetch;
     testHooks.resolveCurrentUserId = null;
     testHooks.getSupabaseClient = null;
+  });
+
+  test("mock mode returns deterministic evaluation without fetch or API keys", async () => {
+    process.env.ARTICLE_AI_PROVIDER = "mock";
+    process.env.CLAUDE_API_KEY = "";
+    process.env.DEEPSEEK_API_KEY = "";
+    process.env.GEMINI_API_KEY = "";
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called in article essay mock mode");
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as ReturnType<typeof validEvaluation> & {
+      memory?: { saved: boolean };
+    };
+
+    expect(response.status).toBe(200);
+    expect(fetchCalled).toBe(false);
+    expect(data.overallFeedback).toContain("main message");
+    expect(data.perQuestionFeedback).toHaveLength(5);
+    expect(data.perQuestionFeedback[0]).toMatchObject({
+      questionId: "q1",
+    });
+    expect(data.perQuestionFeedback[0].grammarNotes).toContain(
+      "Use consistent verb tense when explaining article ideas.",
+    );
+    expect(data.perQuestionFeedback[0].wordFormOrPartOfSpeechNotes[0]).toContain(
+      "nouns",
+    );
+    expect(data.perQuestionFeedback[0].sentenceStructureNotes[0]).toContain(
+      "topic sentence",
+    );
+    expect(data.perQuestionFeedback[0].coherenceNotes[0]).toContain("Link");
+    expect(data.perQuestionFeedback[0].topicRelevance).toContain("relevant");
+    expect(data.recurringErrors[0].label).toBe("General support");
+    expect(data.nextWritingFocus).toContain("one claim");
+    expect(data.memory?.saved).toBe(false);
+    expect(JSON.stringify(data)).not.toMatch(/api[_-]?key|rawProvider|score|pronunciation|phoneme/i);
+  });
+
+  test("mock mode keeps five-answer validation and forbidden-field rejection", async () => {
+    process.env.ARTICLE_AI_PROVIDER = "mock";
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      throw new Error("fetch should not be called for invalid mock requests");
+    }) as typeof fetch;
+
+    const shortAnswers = await POST(buildRequest({ answers: validAnswers().slice(0, 4) }));
+    const forbiddenField = await POST(buildRequest({ sourceUrl: "https://example.com" }));
+
+    expect(shortAnswers.status).toBe(400);
+    expect(forbiddenField.status).toBe(400);
+    expect(fetchCalled).toBe(false);
   });
 
   test("valid request returns structured evaluation", async () => {
