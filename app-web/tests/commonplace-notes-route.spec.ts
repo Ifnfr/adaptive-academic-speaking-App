@@ -256,5 +256,6 @@ test.describe("Commonplace notes route", () => {
     expect(routeSource).toContain("SUPABASE_SERVICE_ROLE_KEY");
     expect(componentSource).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
     expect(componentSource).toContain("/api/commonplace/notes");
+    expect(componentSource).toContain('credentials: "same-origin"');
   });
 });

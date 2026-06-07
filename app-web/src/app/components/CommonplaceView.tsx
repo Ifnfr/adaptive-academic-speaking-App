@@ -245,6 +245,7 @@ async function createCommonplaceNoteViaServer(
   try {
     const response = await fetch("/api/commonplace/notes", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(input),
     });
