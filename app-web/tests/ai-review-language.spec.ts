@@ -600,6 +600,7 @@ test.describe("AI review language policy routes", () => {
     const proxySource = readFileSync("src/proxy.ts", "utf8");
 
     expect(proxySource).toContain("clerkMiddleware");
+    expect(proxySource).toContain("export const proxy = clerkMiddleware()");
     expect(proxySource).toContain("export default clerkMiddleware()");
     expect(proxySource).toContain("\"/(api|trpc)(.*)\"");
     expect(proxySource).not.toContain("CLERK_SECRET_KEY");

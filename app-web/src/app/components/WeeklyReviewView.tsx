@@ -136,58 +136,74 @@ export function WeeklyReviewView({
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
               {t("review.resultTitle")}
             </h3>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-              <SummaryCell
-                label={t("review.summary")}
-                value={weeklyReviewResult.summary}
-                multiline
-              />
-              <SummaryCell
-                label={t("review.recurringWeakness")}
-                value={weeklyReviewResult.recurringWeakness}
-                multiline
-              />
-              <SummaryCell
-                label={t("review.bestImprovement")}
-                value={weeklyReviewResult.bestImprovement}
-                multiline
-              />
-              <SummaryCell
-                label={t("review.scoreTrend")}
-                value={weeklyReviewResult.scoreTrend}
-                multiline
-              />
-              <div className="sm:col-span-2">
-                <SummaryCell
-                  label={t("review.nextWeekFocus")}
-                  value={weeklyReviewResult.nextWeekFocus}
-                  multiline
-                />
-              </div>
-            </dl>
 
-            <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-              <p className={labelClass}>{t("review.plan")}</p>
-              <ol className="list-none space-y-1 text-sm text-[var(--brand-ink)]">
-                {weeklyReviewResult.recommendedPlan.map((item, i) => (
-                  <li key={i} className="break-words">
-                    {item}
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            {weeklyReviewResult.warnings.length > 0 && (
-              <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
-                <p className={labelClass}>{t("common.warnings")}</p>
-                <ul className="space-y-1 text-sm text-[var(--brand-ink)]">
-                  {weeklyReviewResult.warnings.map((warning) => (
-                    <li key={warning} className="break-words">
+            {weeklyReviewResult.warnings.length > 0 ? (
+              <div className="flex flex-col gap-4">
+                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)] p-6 text-center">
+                  {weeklyReviewResult.warnings.map((warning, idx) => (
+                    <p key={idx} className="text-sm font-medium text-[var(--brand-ink)]">
                       {warning}
-                    </li>
+                    </p>
                   ))}
-                </ul>
+                  <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                    {weeklyReviewResult.summary}
+                  </p>
+                </div>
+
+                <div className="border-t border-[var(--brand-border)] pt-4">
+                  <p className={labelClass}>{t("review.plan")}</p>
+                  <ol className="list-none space-y-1 text-sm text-[var(--brand-ink)]">
+                    {weeklyReviewResult.recommendedPlan.map((item, i) => (
+                      <li key={i} className="break-words">
+                        {item}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               </div>
+            ) : (
+              <>
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                  <SummaryCell
+                    label={t("review.summary")}
+                    value={weeklyReviewResult.summary}
+                    multiline
+                  />
+                  <SummaryCell
+                    label={t("review.recurringWeakness")}
+                    value={weeklyReviewResult.recurringWeakness}
+                    multiline
+                  />
+                  <SummaryCell
+                    label={t("review.bestImprovement")}
+                    value={weeklyReviewResult.bestImprovement}
+                    multiline
+                  />
+                  <SummaryCell
+                    label={t("review.scoreTrend")}
+                    value={weeklyReviewResult.scoreTrend}
+                    multiline
+                  />
+                  <div className="sm:col-span-2">
+                    <SummaryCell
+                      label={t("review.nextWeekFocus")}
+                      value={weeklyReviewResult.nextWeekFocus}
+                      multiline
+                    />
+                  </div>
+                </dl>
+
+                <div className="mt-5 border-t border-[var(--brand-border)] pt-4">
+                  <p className={labelClass}>{t("review.plan")}</p>
+                  <ol className="list-none space-y-1 text-sm text-[var(--brand-ink)]">
+                    {weeklyReviewResult.recommendedPlan.map((item, i) => (
+                      <li key={i} className="break-words">
+                        {item}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </>
             )}
           </div>
         )}
