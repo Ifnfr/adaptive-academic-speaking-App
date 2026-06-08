@@ -607,26 +607,38 @@ export function CommonplaceView({
     () => notes.filter((note) => noteMatchesSearch(note, searchQuery)),
     [notes, searchQuery],
   );
+  const libraryMode = mode === "library";
 
   return (
     <section
-      className="min-h-[calc(100dvh-11rem)] rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:flex-1"
+      className={`min-h-[calc(100dvh-11rem)] rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:flex-1 ${
+        libraryMode ? "lg:h-[calc(100vh_-_11rem)] lg:max-h-[calc(100vh_-_11rem)] lg:min-h-0 lg:overflow-hidden" : ""
+      }`}
       data-testid="commonplace-view"
       aria-labelledby="commonplace-title"
     >
-      <div className="flex min-h-full flex-col lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
+      <div
+        className={`flex min-h-full flex-col lg:grid lg:grid-cols-[260px_minmax(0,1fr)] ${
+            libraryMode ? "lg:h-full lg:max-h-full lg:min-h-0 lg:items-stretch lg:overflow-hidden" : "lg:items-start"
+        }`}
+      >
         <CommonplaceSidebar
           notes={filteredNotes}
           selectedNoteId={selectedNote?.id ?? null}
           searchQuery={searchQuery}
           isLoading={isLoading}
+          viewportBounded={libraryMode}
           onSearchChange={setSearchQuery}
           onBackToFonetik={onBackToFonetik}
           onCreate={openCreate}
           onOpen={openDetail}
         />
 
-        <div className="min-w-0 bg-[var(--brand-surface)] p-4 pb-10 sm:p-6 sm:pb-12 lg:p-8 lg:pb-14">
+        <div
+          className={`min-w-0 bg-[var(--brand-surface)] p-4 pb-10 sm:p-6 sm:pb-12 lg:p-8 lg:pb-14 ${
+            libraryMode ? "lg:flex lg:h-full lg:max-h-full lg:min-h-0 lg:flex-col lg:overflow-hidden" : ""
+          }`}
+        >
           {unavailableMessage ? (
             <div className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)]">
               {unavailableMessage}
@@ -643,8 +655,8 @@ export function CommonplaceView({
               )}
 
               {mode === "library" && (
-                <div className="flex flex-col gap-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex min-h-0 flex-1 flex-col gap-6 lg:h-full lg:max-h-full lg:overflow-hidden">
+                  <div className="flex flex-shrink-0 flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
                         LIBRARY
@@ -725,6 +737,7 @@ function CommonplaceSidebar({
   selectedNoteId,
   searchQuery,
   isLoading,
+  viewportBounded,
   onSearchChange,
   onBackToFonetik,
   onCreate,
@@ -734,6 +747,7 @@ function CommonplaceSidebar({
   selectedNoteId: string | null;
   searchQuery: string;
   isLoading: boolean;
+  viewportBounded: boolean;
   onSearchChange: (value: string) => void;
   onBackToFonetik?: () => void;
   onCreate: () => void;
@@ -742,7 +756,11 @@ function CommonplaceSidebar({
   return (
     <aside
       data-testid="commonplace-sidebar"
-      className="flex min-h-[18rem] flex-col rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 lg:sticky lg:top-8 lg:max-h-[calc(100dvh-4rem)] lg:rounded-l-2xl lg:rounded-tr-none lg:border-b-0 lg:border-r"
+      className={`flex min-h-[18rem] flex-col rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 lg:rounded-l-2xl lg:rounded-tr-none lg:border-b-0 lg:border-r ${
+        viewportBounded
+          ? "lg:h-full lg:max-h-full lg:min-h-0"
+          : "lg:sticky lg:top-8 lg:max-h-[calc(100dvh-4rem)]"
+      }`}
       aria-label="Commonplace library"
     >
       <button
@@ -781,7 +799,11 @@ function CommonplaceSidebar({
         />
       </label>
 
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]">
+      <div
+        className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]"
+        data-testid="commonplace-sidebar-scroll"
+        style={viewportBounded ? { maxHeight: "24rem" } : undefined}
+      >
         {isLoading ? (
           <p className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
             Loading notes...
@@ -872,7 +894,7 @@ function LibraryView({
 }) {
   if (isLoading) {
     return (
-      <p className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)]">
+      <p className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)] lg:min-h-0 lg:flex-1">
         Loading Commonplace notes...
       </p>
     );
@@ -880,86 +902,88 @@ function LibraryView({
 
   return (
     <div
-      className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 xl:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]"
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
       data-testid="commonplace-library-grid"
+      style={{ maxHeight: "24rem" }}
     >
-      {notes.map((note) => (
-        <button
-          key={note.id}
-          type="button"
-          onClick={() => onOpen(note.id)}
-          className="group flex aspect-[3/4] min-h-[220px] flex-col overflow-hidden rounded-lg border border-[var(--brand-border)] bg-white text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[var(--brand-teal)]/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
-        >
-          <span className="flex flex-1 flex-col p-4">
-            <span className="text-base font-semibold leading-5 text-[var(--brand-ink)]">
-              {displayTitle(note)}
-            </span>
-            <span className="mt-2 text-xs font-medium text-[var(--brand-ink-soft)]">
-              {note.sourceBook}
-              {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
-            </span>
-            <span className="mt-3 line-clamp-4 overflow-hidden text-sm leading-6 text-[var(--brand-ink-soft)]">
-              {note.insight}
-            </span>
-            {note.tags.length > 0 && (
-              <span className="mt-auto flex flex-wrap gap-1.5 pt-4">
-                {note.tags.slice(0, 3).map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-[var(--brand-teal)]/20 bg-[var(--brand-teal-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--brand-teal-ink)]"
-                  >
-                    #{tag}
-                  </span>
-                ))}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 xl:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]">
+        {notes.map((note) => (
+          <button
+            key={note.id}
+            type="button"
+            onClick={() => onOpen(note.id)}
+            className="group flex aspect-[3/4] min-h-[220px] flex-col overflow-hidden rounded-lg border border-[var(--brand-border)] bg-white text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[var(--brand-teal)]/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+          >
+            <span className="flex flex-1 flex-col p-4">
+              <span className="text-base font-semibold leading-5 text-[var(--brand-ink)]">
+                {displayTitle(note)}
               </span>
-            )}
+              <span className="mt-2 text-xs font-medium text-[var(--brand-ink-soft)]">
+                {note.sourceBook}
+                {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
+              </span>
+              <span className="mt-3 line-clamp-4 overflow-hidden text-sm leading-6 text-[var(--brand-ink-soft)]">
+                {note.insight}
+              </span>
+              {note.tags.length > 0 && (
+                <span className="mt-auto flex flex-wrap gap-1.5 pt-4">
+                  {note.tags.slice(0, 3).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-[var(--brand-teal)]/20 bg-[var(--brand-teal-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--brand-teal-ink)]"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
+            <span className="flex items-center justify-end border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-2">
+              <span className="font-mono text-xs font-semibold text-[var(--brand-teal-ink)]">
+                {note.shortcode}
+              </span>
+            </span>
+          </button>
+        ))}
+
+        <button
+          type="button"
+          onClick={onCreate}
+          className="flex aspect-[3/4] min-h-[220px] flex-col items-start justify-between rounded-lg border border-dashed border-[var(--brand-teal)]/45 bg-white p-5 text-left transition-colors hover:bg-[var(--brand-teal-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+          aria-describedby="commonplace-empty-helper"
+        >
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-teal)] text-white">
+            <svg
+              aria-hidden="true"
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 5v14m7-7H5"
+              />
+            </svg>
           </span>
-          <span className="flex items-center justify-end border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-2">
-            <span className="font-mono text-xs font-semibold text-[var(--brand-teal-ink)]">
-              {note.shortcode}
+          <span>
+            <span className="block text-base font-semibold text-[var(--brand-ink)]">
+              Tambah note
+            </span>
+            <span
+              id="commonplace-empty-helper"
+              className="mt-2 block text-sm leading-6 text-[var(--brand-ink-soft)]"
+            >
+              Start by saving one idea from a book.
             </span>
           </span>
         </button>
-      ))}
-
-      <button
-        type="button"
-        onClick={onCreate}
-        className="flex aspect-[3/4] min-h-[220px] flex-col items-start justify-between rounded-lg border border-dashed border-[var(--brand-teal)]/45 bg-white p-5 text-left transition-colors hover:bg-[var(--brand-teal-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
-        aria-describedby="commonplace-empty-helper"
-      >
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-teal)] text-white">
-          <svg
-            aria-hidden="true"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 5v14m7-7H5"
-            />
-          </svg>
-        </span>
-        <span>
-          <span className="block text-base font-semibold text-[var(--brand-ink)]">
-            Tambah note
-          </span>
-          <span
-            id="commonplace-empty-helper"
-            className="mt-2 block text-sm leading-6 text-[var(--brand-ink-soft)]"
-          >
-            Start by saving one idea from a book.
-          </span>
-        </span>
-      </button>
+      </div>
     </div>
   );
 }
-
 function NoteForm({
   mode,
   form,

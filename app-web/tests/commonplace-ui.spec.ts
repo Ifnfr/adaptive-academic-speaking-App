@@ -45,6 +45,25 @@ function baseNote(overrides: Partial<TestNote>): TestNote {
   };
 }
 
+function manyLibraryNotes(count: number): TestNote[] {
+  return Array.from({ length: count }, (_, index) =>
+    baseNote({
+      id: `many-note-${index + 1}`,
+      shortcode: `#qa${index + 1}`,
+      sourceBook: `Library Source ${index + 1}`,
+      title: `Viewport Scroll Note ${index + 1}`,
+      insight: `Seeded note ${index + 1} for checking internal Library scrolling.`,
+      tags: ["qa", "scroll"],
+      createdAt: new Date(
+        Date.UTC(2026, 5, 6, 5, index, 0),
+      ).toISOString(),
+      updatedAt: new Date(
+        Date.UTC(2026, 5, 6, 5, index, 0),
+      ).toISOString(),
+    }),
+  );
+}
+
 function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
@@ -288,6 +307,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     ).toBeVisible();
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
     await expect(page.getByRole("button", { name: /Tambah note/i })).toBeVisible();
+    const workspaceBox = await page.getByTestId("commonplace-view").boundingBox();
+    const viewport = page.viewportSize();
+    expect(workspaceBox?.height).toBeLessThanOrEqual((viewport?.height ?? 768) + 1);
 
     await page.getByTestId("commonplace-main-maps-btn").click();
     await expect(page.getByTestId("commonplace-main-maps-placeholder")).toBeVisible();
@@ -299,6 +321,53 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     await page.getByRole("button", { name: "Back to Library" }).click();
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
+  });
+
+  test("Library keeps a viewport-bounded frame while grid and sidebar scroll internally", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.addInitScript(installCommonplaceTestAdapter, manyLibraryNotes(24));
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    const workspaceMetrics = await page
+      .getByTestId("commonplace-view")
+      .evaluate((element) => ({
+        height: element.getBoundingClientRect().height,
+        viewportHeight: window.innerHeight,
+      }));
+    expect(workspaceMetrics.height).toBeLessThanOrEqual(
+      workspaceMetrics.viewportHeight,
+    );
+
+    const gridMetrics = await page
+      .getByTestId("commonplace-library-grid")
+      .evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        overflowY: window.getComputedStyle(element).overflowY,
+      }));
+    expect(gridMetrics.overflowY).toBe("auto");
+    expect(gridMetrics.scrollHeight).toBeGreaterThan(gridMetrics.clientHeight);
+
+    const sidebarMetrics = await page
+      .getByTestId("commonplace-sidebar-scroll")
+      .evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        overflowY: window.getComputedStyle(element).overflowY,
+      }));
+    expect(sidebarMetrics.overflowY).toBe("auto");
+    expect(sidebarMetrics.scrollHeight).toBeGreaterThan(
+      sidebarMetrics.clientHeight,
+    );
+
+    await page.getByTestId("commonplace-library-grid").evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(page.getByRole("button", { name: "+ Baru" })).toBeVisible();
+    await expect(page.getByLabel("Search notes")).toBeVisible();
   });
 
   test("+ Baru and Add Note tile open the in-place form with required field validation", async ({
