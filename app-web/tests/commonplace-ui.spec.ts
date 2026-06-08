@@ -27,6 +27,15 @@ type TestMap = {
   updatedAt: string;
 };
 
+type TestMapNode = {
+  id: string;
+  ownerId: string;
+  mapId: string;
+  noteId: string;
+  positionX: number;
+  positionY: number;
+};
+
 const TEST_OWNER_ID = "commonplace-test-owner";
 
 const renderedSecretLikePattern =
@@ -78,6 +87,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
     __COMMONPLACE_TEST_MAPS__?: TestMap[];
+    __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
     __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
     __COMMONPLACE_FORCE_DETAIL_READ_FAILURE__?: boolean;
@@ -105,6 +115,18 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       updatedAt: "2026-06-06T05:00:00.000Z",
     },
   ];
+  testWindow.__COMMONPLACE_TEST_MAP_NODES__ = seedNotes[0]
+    ? [
+        {
+          id: "sub-node-1",
+          ownerId: testOwnerId,
+          mapId: "sub-map-1",
+          noteId: seedNotes[0].id,
+          positionX: 120,
+          positionY: 140,
+        },
+      ]
+    : [];
   testWindow.__COMMONPLACE_TEST_COUNTERS__ = {};
 
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
@@ -333,6 +355,88 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       ).filter((map) => map.ownerId !== ownerId || map.id !== mindMapId);
       return { ok: true as const };
     },
+    async listCommonplaceMapNodes(
+      ownerId: string,
+      mindMapId: string,
+      type: "main" | "sub",
+    ) {
+      const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === mindMapId &&
+          candidate.type === type,
+      );
+      if (!map) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+      if (type === "main") {
+        return { ok: true as const, nodes: [] };
+      }
+
+      const nodes = (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter(
+          (node) =>
+            node.ownerId === ownerId &&
+            node.mapId === mindMapId,
+        )
+        .map((node) => {
+          const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
+            (candidate) =>
+              candidate.ownerId === ownerId && candidate.id === node.noteId,
+          );
+
+          return {
+            id: node.id,
+            noteId: node.noteId,
+            positionX: node.positionX,
+            positionY: node.positionY,
+            noteShortcode: note?.shortcode ?? "",
+            noteTitle: note?.title ?? null,
+            noteSourceBook: note?.sourceBook ?? "Untitled Source",
+            noteTags: note?.tags ?? [],
+          };
+        });
+
+      return { ok: true as const, nodes };
+    },
+    async batchUpdateCommonplaceMapNodePositions(
+      ownerId: string,
+      mindMapId: string,
+      type: "main" | "sub",
+      updates: Array<{ nodeId: string; position: { x: number; y: number } }>,
+    ) {
+      const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === mindMapId &&
+          candidate.type === type,
+      );
+      if (!map) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+      if (type === "main") {
+        return updates.length === 0
+          ? { ok: true as const }
+          : { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+
+      const nodes = testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [];
+      for (const update of updates) {
+        const node = nodes.find(
+          (candidate) =>
+            candidate.ownerId === ownerId &&
+            candidate.mapId === mindMapId &&
+            candidate.id === update.nodeId,
+        );
+        if (!node) {
+          return { ok: false as const, error: "commonplace_not_found" as const };
+        }
+        node.positionX = update.position.x;
+        node.positionY = update.position.y;
+      }
+      testWindow.__COMMONPLACE_TEST_MAP_NODES__ = nodes;
+      return { ok: true as const };
+    },
   };
 }
 
@@ -420,6 +524,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       page.getByTestId("commonplace-view").getByText(/FONETIK\s*·\s*COMMONPLACE/i),
     ).toHaveCount(0);
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
+    await expect(page.locator(".react-flow")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Tambah note/i })).toBeVisible();
     const firstCard = page
       .getByTestId("commonplace-library-grid")
@@ -491,10 +596,22 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .filter({ hasText: "Institutions Map" })
       .getByRole("button", { name: "Open" })
       .click();
-    await expect(page.getByTestId("commonplace-map-detail-placeholder")).toBeVisible();
-    await expect(page.getByText("Canvas will be built in the next phase.")).toBeVisible();
-    await expect(page.locator("canvas")).toHaveCount(0);
-    await expect(page.locator(".react-flow")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+    await expect(page.locator(".react-flow")).toHaveCount(1);
+    await expect(page.locator(".react-flow__minimap")).toBeVisible();
+    await expect(page.locator(".react-flow__controls")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
+      "Canvas is ready. Drag notes from the sidebar will be added in the next phase.",
+    );
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Saved",
+    );
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeVisible();
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Saved",
+    );
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/cluster/i)).toHaveCount(0);
     await expect(page.getByText(/saved map/i)).toHaveCount(0);
@@ -708,18 +825,61 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByRole("heading", { name: "Choose Sub Mind Map" })).toBeVisible();
     await expect(page.getByText("Institutional Incentives")).toBeVisible();
 
+    await page.getByRole("button", { name: /Institutional Incentives/i }).click();
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+    await expect(page.locator(".react-flow")).toHaveCount(1);
+    await expect(page.locator(".react-flow__minimap")).toBeVisible();
+    await expect(page.locator(".react-flow__controls")).toBeVisible();
+    await expect(page.getByText(/Opened from #tf1/i)).toBeVisible();
+    const noteNode = page.getByTestId("commonplace-map-note-node");
+    await expect(noteNode).toBeVisible();
+    await expect(noteNode).toContainText("Institutions and Growth");
+    await expect(noteNode).toContainText("Why Nations Fail");
+    await expect(noteNode).toContainText("#wn1");
+    await expect(noteNode).toContainText("#politics");
+    await expect(page.getByTestId("commonplace-map-empty-state")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Saved",
+    );
+
+    const nodeBox = await noteNode.boundingBox();
+    expect(nodeBox).not.toBeNull();
+    if (nodeBox) {
+      await page.mouse.move(
+        nodeBox.x + nodeBox.width / 2,
+        nodeBox.y + nodeBox.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        nodeBox.x + nodeBox.width / 2 + 80,
+        nodeBox.y + nodeBox.height / 2 + 50,
+        { steps: 5 },
+      );
+      await page.mouse.up();
+    }
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Saved",
+    );
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Sub Mind Maps" }).click();
+
     await page.getByLabel("New Sub Mind Map title").fill("Attention Systems");
     await page.getByRole("button", { name: "+ New Sub Mind Map" }).click();
     await expect(page.getByText("Attention Systems")).toBeVisible();
 
     await page.getByRole("button", { name: /Attention Systems/i }).click();
-    await expect(page.getByTestId("commonplace-map-detail-placeholder")).toBeVisible();
-    await expect(
-      page.getByText("Sub Mind Map canvas will be built in the next phase."),
-    ).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
+      "Canvas is ready. Drag notes from the sidebar will be added in the next phase.",
+    );
     await expect(page.getByText(/Opened from #tf1/i)).toBeVisible();
-    await expect(page.locator("canvas")).toHaveCount(0);
-    await expect(page.locator(".react-flow")).toHaveCount(0);
+    await expect(page.locator(".react-flow")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
   });

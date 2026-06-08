@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import type { FonetikSupabaseClient } from "../lib/supabase";
+import { CommonplaceMapCanvasFoundation } from "./CommonplaceMapCanvasFoundation";
 import {
   createCommonplaceNote,
   deleteCommonplaceNote,
@@ -19,11 +20,13 @@ import type {
   UpdateCommonplaceNoteInput,
 } from "../lib/storage/supabase-commonplace-adapter";
 import {
+  batchUpdateCommonplaceMapNodePositions,
   createCommonplaceMindMap,
   createCommonplaceSubMindMap,
   deleteCommonplaceMindMapFromRegistry,
   deleteCommonplaceMindMap,
   getCommonplaceMindMapGraph,
+  listCommonplaceMapNodes,
   listCommonplaceMindMaps,
   listCommonplaceSubMindMaps,
   renameCommonplaceMindMap,
@@ -46,6 +49,10 @@ import type {
   CommonplaceMindMapSummary,
   CommonplaceMindMapType,
   CreateCommonplaceMindMapRegistryInput,
+  CommonplaceMapCanvasNode,
+  CommonplaceMapNodeListResult,
+  CommonplaceMapNodePositionSaveResult,
+  CommonplaceMapNodePositionUpdate,
   RenameCommonplaceMindMapInput,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 type CommonplaceMode =
@@ -138,6 +145,17 @@ export type CommonplaceStorage = {
     ownerId: string,
     mainMapNodeId: string,
   ): Promise<CommonplaceMindMapDeleteResult>;
+  listCommonplaceMapNodes?(
+    ownerId: string,
+    mindMapId: string,
+    type: CommonplaceMindMapType,
+  ): Promise<CommonplaceMapNodeListResult>;
+  batchUpdateCommonplaceMapNodePositions?(
+    ownerId: string,
+    mindMapId: string,
+    type: CommonplaceMindMapType,
+    updates: CommonplaceMapNodePositionUpdate[],
+  ): Promise<CommonplaceMapNodePositionSaveResult>;
 };
 
 declare global {
@@ -287,6 +305,16 @@ function createSupabaseStorage(
       saveCommonplaceMainMindMapGraph(input, supabaseClient),
     deleteCommonplaceMainMapCluster: (ownerId, mainMapNodeId) =>
       deleteCommonplaceMainMapCluster(ownerId, mainMapNodeId, supabaseClient),
+    listCommonplaceMapNodes: (ownerId, mindMapId, type) =>
+      listCommonplaceMapNodes(ownerId, mindMapId, type, supabaseClient),
+    batchUpdateCommonplaceMapNodePositions: (ownerId, mindMapId, type, updates) =>
+      batchUpdateCommonplaceMapNodePositions(
+        ownerId,
+        mindMapId,
+        type,
+        updates,
+        supabaseClient,
+      ),
   };
 }
 
@@ -504,6 +532,74 @@ async function deleteCommonplaceMapViaServer(
     }
     if (data?.error === "map_has_related_graph_data") {
       return { ok: false, error: "commonplace_conflict" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function listCommonplaceMapNodesViaServer(
+  mapId: string,
+  type: CommonplaceMindMapType,
+): Promise<CommonplaceMapNodeListResult> {
+  try {
+    const params = new URLSearchParams({ mapId, type });
+    const response = await fetch(`/api/commonplace/maps/nodes?${params}`, {
+      method: "GET",
+      credentials: "same-origin",
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { nodes?: CommonplaceMapCanvasNode[]; error?: string }
+      | null;
+
+    if (response.ok && Array.isArray(data?.nodes)) {
+      return { ok: true, nodes: data.nodes };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_node_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function batchUpdateCommonplaceMapNodePositionsViaServer(
+  mapId: string,
+  type: CommonplaceMindMapType,
+  updates: CommonplaceMapNodePositionUpdate[],
+): Promise<CommonplaceMapNodePositionSaveResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps/nodes", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mapId, type, updates }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { ok?: boolean; error?: string }
+      | null;
+
+    if (response.ok && data?.ok) {
+      return { ok: true };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_node_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
     }
 
     return { ok: false, error: "commonplace_save_failed" };
@@ -799,6 +895,44 @@ export function CommonplaceView({
     setRenameMapId(null);
     setMode("map_detail_placeholder");
   };
+
+  const loadMapCanvasNodes = useCallback(
+    async (map: CommonplaceMindMapSummary): Promise<CommonplaceMapNodeListResult> => {
+      if (testStorage && storage?.listCommonplaceMapNodes && effectiveOwnerId) {
+        return storage.listCommonplaceMapNodes(effectiveOwnerId, map.id, map.type);
+      }
+
+      return listCommonplaceMapNodesViaServer(map.id, map.type);
+    },
+    [effectiveOwnerId, storage, testStorage],
+  );
+
+  const saveMapCanvasNodePositions = useCallback(
+    async (
+      map: CommonplaceMindMapSummary,
+      updates: CommonplaceMapNodePositionUpdate[],
+    ): Promise<CommonplaceMapNodePositionSaveResult> => {
+      if (
+        testStorage &&
+        storage?.batchUpdateCommonplaceMapNodePositions &&
+        effectiveOwnerId
+      ) {
+        return storage.batchUpdateCommonplaceMapNodePositions(
+          effectiveOwnerId,
+          map.id,
+          map.type,
+          updates,
+        );
+      }
+
+      return batchUpdateCommonplaceMapNodePositionsViaServer(
+        map.id,
+        map.type,
+        updates,
+      );
+    },
+    [effectiveOwnerId, storage, testStorage],
+  );
 
   const openDetail = async (noteId: string) => {
     if (!storage || !effectiveOwnerId) return;
@@ -1138,10 +1272,14 @@ export function CommonplaceView({
               )}
 
               {mode === "map_detail_placeholder" && selectedMap && (
-                <MapDetailPlaceholder
+                <CommonplaceMapCanvasFoundation
                   map={selectedMap}
                   noteContext={mapNoteContext}
                   onBack={() => setMode(mapDetailReturnMode)}
+                  loadNodes={() => loadMapCanvasNodes(selectedMap)}
+                  saveNodePositions={(updates) =>
+                    saveMapCanvasNodePositions(selectedMap, updates)
+                  }
                 />
               )}
             </>
@@ -2154,49 +2292,6 @@ function SubMindMapChooser({
           ))
         )}
       </div>
-    </section>
-  );
-}
-
-function MapDetailPlaceholder({
-  map,
-  noteContext,
-  onBack,
-}: {
-  map: CommonplaceMindMapSummary;
-  noteContext: MapNoteContext | null;
-  onBack: () => void;
-}) {
-  const isSubMap = map.type === "sub";
-
-  return (
-    <section
-      className="rounded-xl border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-6"
-      data-testid="commonplace-map-detail-placeholder"
-    >
-      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
-        {isSubMap ? "Sub Mind Map" : "Main Map"}
-      </p>
-      <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">
-        {map.title}
-      </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
-        {isSubMap
-          ? "Sub Mind Map canvas will be built in the next phase."
-          : "Canvas will be built in the next phase."}
-      </p>
-      {isSubMap && noteContext && (
-        <p className="mt-3 rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
-          Opened from {noteContext.shortcode}: {noteContext.title}
-        </p>
-      )}
-      <button
-        type="button"
-        onClick={onBack}
-        className="mt-5 rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)]"
-      >
-        {isSubMap ? "Back to Sub Mind Maps" : "Back to Main Maps"}
-      </button>
     </section>
   );
 }
