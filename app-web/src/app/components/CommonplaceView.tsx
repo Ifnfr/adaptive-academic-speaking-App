@@ -19,10 +19,14 @@ import type {
   UpdateCommonplaceNoteInput,
 } from "../lib/storage/supabase-commonplace-adapter";
 import {
+  createCommonplaceMindMap,
   createCommonplaceSubMindMap,
+  deleteCommonplaceMindMapFromRegistry,
   deleteCommonplaceMindMap,
   getCommonplaceMindMapGraph,
+  listCommonplaceMindMaps,
   listCommonplaceSubMindMaps,
+  renameCommonplaceMindMap,
   saveCommonplaceMindMapGraph,
   createOrGetCommonplaceMainMindMap,
   getCommonplaceMainMindMapGraph,
@@ -39,8 +43,19 @@ import type {
   SaveCommonplaceMainMapGraphInput,
   CommonplaceMainMapSaveResult,
   CommonplaceMindMapDeleteResult,
+  CommonplaceMindMapSummary,
+  CommonplaceMindMapType,
+  CreateCommonplaceMindMapRegistryInput,
+  RenameCommonplaceMindMapInput,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
-type CommonplaceMode = "library" | "create" | "detail" | "edit" | "main_maps_placeholder";
+type CommonplaceMode =
+  | "library"
+  | "create"
+  | "detail"
+  | "edit"
+  | "main_maps_registry"
+  | "sub_maps_chooser"
+  | "map_detail_placeholder";
 
 type CommonplaceFormState = {
   sourceBook: string;
@@ -51,6 +66,12 @@ type CommonplaceFormState = {
   tags: string;
   connections: string;
   relevance: string;
+};
+
+type MapNoteContext = {
+  shortcode: string;
+  title: string;
+  sourceBook: string;
 };
 
 export type CommonplaceStorage = {
@@ -90,6 +111,20 @@ export type CommonplaceStorage = {
     ownerId: string,
     mindMapId: string,
   ): Promise<CommonplaceDeleteResult>;
+  listCommonplaceMindMaps?(
+    ownerId: string,
+    type?: CommonplaceMindMapType | null,
+  ): Promise<CommonplaceMindMapListResult>;
+  createCommonplaceMindMap?(
+    input: CreateCommonplaceMindMapRegistryInput,
+  ): Promise<CommonplaceMindMapResult>;
+  renameCommonplaceMindMap?(
+    input: RenameCommonplaceMindMapInput,
+  ): Promise<CommonplaceMindMapResult>;
+  deleteCommonplaceMindMapFromRegistry?(
+    ownerId: string,
+    mindMapId: string,
+  ): Promise<CommonplaceMindMapDeleteResult>;
   createOrGetCommonplaceMainMindMap?(
     ownerId: string,
   ): Promise<CommonplaceMindMapResult>;
@@ -206,7 +241,6 @@ function noteMatchesSearch(note: CommonplaceNote, query: string): boolean {
 }
 
 function getTestStorage(): CommonplaceStorage | null {
-  if (process.env.NODE_ENV === "production") return null;
   if (typeof window === "undefined") return null;
   return window.__COMMONPLACE_TEST_ADAPTER__ ?? null;
 }
@@ -237,6 +271,14 @@ function createSupabaseStorage(
       saveCommonplaceMindMapGraph(input, supabaseClient),
     deleteCommonplaceMindMap: (ownerId, mindMapId) =>
       deleteCommonplaceMindMap(ownerId, mindMapId, supabaseClient),
+    listCommonplaceMindMaps: (ownerId, type) =>
+      listCommonplaceMindMaps(ownerId, supabaseClient, type),
+    createCommonplaceMindMap: (input) =>
+      createCommonplaceMindMap(input, supabaseClient),
+    renameCommonplaceMindMap: (input) =>
+      renameCommonplaceMindMap(input, supabaseClient),
+    deleteCommonplaceMindMapFromRegistry: (ownerId, mindMapId) =>
+      deleteCommonplaceMindMapFromRegistry(ownerId, mindMapId, supabaseClient),
     createOrGetCommonplaceMainMindMap: (ownerId) =>
       createOrGetCommonplaceMainMindMap(ownerId, supabaseClient),
     getCommonplaceMainMindMapGraph: (ownerId) =>
@@ -341,6 +383,135 @@ async function deleteCommonplaceNoteViaServer(
   }
 }
 
+async function listCommonplaceMapsViaServer(
+  type: CommonplaceMindMapType,
+): Promise<CommonplaceMindMapListResult> {
+  try {
+    const response = await fetch(`/api/commonplace/maps?type=${type}`, {
+      method: "GET",
+      credentials: "same-origin",
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { maps?: CommonplaceMindMapSummary[]; error?: string }
+      | null;
+
+    if (response.ok && Array.isArray(data?.maps)) {
+      return { ok: true, mindMaps: data.maps };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function createCommonplaceMapViaServer(
+  title: string,
+  type: CommonplaceMindMapType,
+): Promise<CommonplaceMindMapResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, type }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { map?: CommonplaceMindMapSummary; error?: string }
+      | null;
+
+    if (response.ok && data?.map) {
+      return { ok: true, mindMap: data.map };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function renameCommonplaceMapViaServer(
+  mapId: string,
+  title: string,
+): Promise<CommonplaceMindMapResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mapId, title }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { map?: CommonplaceMindMapSummary; error?: string }
+      | null;
+
+    if (response.ok && data?.map) {
+      return { ok: true, mindMap: data.map };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function deleteCommonplaceMapViaServer(
+  mapId: string,
+): Promise<CommonplaceMindMapDeleteResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mapId }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { ok?: boolean; error?: string }
+      | null;
+
+    if (response.ok && data?.ok) {
+      return { ok: true };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+    if (data?.error === "map_has_related_graph_data") {
+      return { ok: false, error: "commonplace_conflict" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
 export function CommonplaceView({
   ownerId,
   isSignedIn = false,
@@ -361,6 +532,22 @@ export function CommonplaceView({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [mainMaps, setMainMaps] = useState<CommonplaceMindMapSummary[]>([]);
+  const [subMaps, setSubMaps] = useState<CommonplaceMindMapSummary[]>([]);
+  const [selectedMap, setSelectedMap] =
+    useState<CommonplaceMindMapSummary | null>(null);
+  const [mapDetailReturnMode, setMapDetailReturnMode] =
+    useState<CommonplaceMode>("main_maps_registry");
+  const [mapNoteContext, setMapNoteContext] = useState<MapNoteContext | null>(
+    null,
+  );
+  const [newMainMapTitle, setNewMainMapTitle] = useState("");
+  const [newSubMapTitle, setNewSubMapTitle] = useState("");
+  const [renameMapId, setRenameMapId] = useState<string | null>(null);
+  const [renameMapTitle, setRenameMapTitle] = useState("");
+  const [deleteMapId, setDeleteMapId] = useState<string | null>(null);
+  const [isMapLoading, setIsMapLoading] = useState(false);
+  const [isMapSaving, setIsMapSaving] = useState(false);
 
   const testStorage = getTestStorage();
   const effectiveOwnerId = ownerId ?? (testStorage ? DEFAULT_TEST_OWNER_ID : null);
@@ -424,8 +611,193 @@ export function CommonplaceView({
     setMode("library");
     setSelectedNote(null);
     setDeleteConfirmVisible(false);
+    setSelectedMap(null);
+    setMapNoteContext(null);
+    setDeleteMapId(null);
+    setRenameMapId(null);
     setError(null);
     setFieldErrors({});
+  };
+
+  const loadMaps = useCallback(
+    async (type: CommonplaceMindMapType) => {
+      if (!effectiveOwnerId) return;
+
+      setIsMapLoading(true);
+      setError(null);
+      const result =
+        testStorage && storage?.listCommonplaceMindMaps
+          ? await storage.listCommonplaceMindMaps(effectiveOwnerId, type)
+          : await listCommonplaceMapsViaServer(type);
+      setIsMapLoading(false);
+
+      if (!result.ok) {
+        setError("Could not load Commonplace maps. Please try again.");
+        return;
+      }
+
+      if (type === "main") {
+        setMainMaps(result.mindMaps);
+      } else {
+        setSubMaps(result.mindMaps);
+      }
+    },
+    [effectiveOwnerId, storage, testStorage],
+  );
+
+  const openMainMapsRegistry = () => {
+    setSelectedNote(null);
+    setSelectedMap(null);
+    setMapNoteContext(null);
+    setDeleteMapId(null);
+    setRenameMapId(null);
+    setNewMainMapTitle("");
+    setMode("main_maps_registry");
+    void loadMaps("main");
+  };
+
+  const openSubMapChooser = (note?: CommonplaceNote | null) => {
+    setSelectedMap(null);
+    setDeleteMapId(null);
+    setRenameMapId(null);
+    setNewSubMapTitle("");
+    setMapNoteContext(
+      note
+        ? {
+            shortcode: note.shortcode,
+            title: displayTitle(note),
+            sourceBook: note.sourceBook,
+          }
+        : null,
+    );
+    setMode("sub_maps_chooser");
+    void loadMaps("sub");
+  };
+
+  const createMap = async (type: CommonplaceMindMapType) => {
+    if (!effectiveOwnerId) return;
+    const title = type === "main" ? newMainMapTitle : newSubMapTitle;
+
+    setIsMapSaving(true);
+    setError(null);
+    const result =
+      testStorage && storage?.createCommonplaceMindMap
+        ? await storage.createCommonplaceMindMap({
+            ownerId: effectiveOwnerId,
+            title,
+            type,
+          })
+        : await createCommonplaceMapViaServer(title, type);
+    setIsMapSaving(false);
+
+    if (!result.ok) {
+      setError(
+        result.error === "commonplace_validation_failed"
+          ? "Map title is required."
+          : "Could not save this map. Please try again.",
+      );
+      return;
+    }
+
+    if (type === "main") {
+      setMainMaps((current) => [result.mindMap, ...current]);
+      setNewMainMapTitle("");
+    } else {
+      setSubMaps((current) => [result.mindMap, ...current]);
+      setNewSubMapTitle("");
+    }
+  };
+
+  const startRenameMap = (map: CommonplaceMindMapSummary) => {
+    setRenameMapId(map.id);
+    setRenameMapTitle(map.title);
+    setDeleteMapId(null);
+  };
+
+  const saveRenameMap = async (map: CommonplaceMindMapSummary) => {
+    if (!effectiveOwnerId) return;
+
+    setIsMapSaving(true);
+    setError(null);
+    const result =
+      testStorage && storage?.renameCommonplaceMindMap
+        ? await storage.renameCommonplaceMindMap({
+            ownerId: effectiveOwnerId,
+            mindMapId: map.id,
+            title: renameMapTitle,
+          })
+        : await renameCommonplaceMapViaServer(map.id, renameMapTitle);
+    setIsMapSaving(false);
+
+    if (!result.ok) {
+      setError(
+        result.error === "commonplace_validation_failed"
+          ? "Map title is required."
+          : "Could not rename this map. Please try again.",
+      );
+      return;
+    }
+
+    const updateList = (current: CommonplaceMindMapSummary[]) =>
+      current.map((item) =>
+        item.id === result.mindMap.id ? result.mindMap : item,
+      );
+    if (result.mindMap.type === "main") {
+      setMainMaps(updateList);
+    } else {
+      setSubMaps(updateList);
+    }
+    setSelectedMap((current) =>
+      current?.id === result.mindMap.id ? result.mindMap : current,
+    );
+    setRenameMapId(null);
+    setRenameMapTitle("");
+  };
+
+  const deleteMap = async (map: CommonplaceMindMapSummary) => {
+    if (!effectiveOwnerId) return;
+
+    setIsMapSaving(true);
+    setError(null);
+    const result =
+      testStorage && storage?.deleteCommonplaceMindMapFromRegistry
+        ? await storage.deleteCommonplaceMindMapFromRegistry(
+            effectiveOwnerId,
+            map.id,
+          )
+        : await deleteCommonplaceMapViaServer(map.id);
+    setIsMapSaving(false);
+
+    if (!result.ok) {
+      setError(
+        result.error === "commonplace_conflict"
+          ? "This map already has graph data, so Phase 3 will not delete it."
+          : "Could not delete this map. Please try again.",
+      );
+      return;
+    }
+
+    if (map.type === "main") {
+      setMainMaps((current) => current.filter((item) => item.id !== map.id));
+    } else {
+      setSubMaps((current) => current.filter((item) => item.id !== map.id));
+    }
+    setDeleteMapId(null);
+    if (selectedMap?.id === map.id) {
+      setSelectedMap(null);
+      setMode(map.type === "main" ? "main_maps_registry" : "sub_maps_chooser");
+    }
+  };
+
+  const openMapPlaceholder = (
+    map: CommonplaceMindMapSummary,
+    returnMode: CommonplaceMode,
+  ) => {
+    setSelectedMap(map);
+    setMapDetailReturnMode(returnMode);
+    setDeleteMapId(null);
+    setRenameMapId(null);
+    setMode("map_detail_placeholder");
   };
 
   const openDetail = async (noteId: string) => {
@@ -659,10 +1031,7 @@ export function CommonplaceView({
                   <div className="flex flex-shrink-0 justify-end">
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedNote(null);
-                        setMode("main_maps_placeholder");
-                      }}
+                      onClick={openMainMapsRegistry}
                       className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
                       data-testid="commonplace-main-maps-btn"
                     >
@@ -699,6 +1068,7 @@ export function CommonplaceView({
                   onBack={openLibrary}
                   onEdit={openEdit}
                   onOpenConnection={openDetailByShortcode}
+                  onOpenMindMap={() => openSubMapChooser(selectedNote)}
                   onDiscussInPodchat={onDiscussInPodchat ? handleDiscussInPodchat : undefined}
                   onAskDelete={() => setDeleteConfirmVisible(true)}
                   onCancelDelete={() => setDeleteConfirmVisible(false)}
@@ -706,8 +1076,49 @@ export function CommonplaceView({
                 />
               )}
 
-              {mode === "main_maps_placeholder" && (
-                <MainMapsPlaceholder onBack={openLibrary} />
+              {mode === "main_maps_registry" && (
+                <MainMapsRegistry
+                  maps={mainMaps}
+                  isLoading={isMapLoading}
+                  isSaving={isMapSaving}
+                  newTitle={newMainMapTitle}
+                  renameMapId={renameMapId}
+                  renameTitle={renameMapTitle}
+                  deleteMapId={deleteMapId}
+                  onBack={openLibrary}
+                  onNewTitleChange={setNewMainMapTitle}
+                  onCreate={() => void createMap("main")}
+                  onOpen={(map) => openMapPlaceholder(map, "main_maps_registry")}
+                  onStartRename={startRenameMap}
+                  onRenameTitleChange={setRenameMapTitle}
+                  onSaveRename={(map) => void saveRenameMap(map)}
+                  onCancelRename={() => setRenameMapId(null)}
+                  onAskDelete={(mapId) => setDeleteMapId(mapId)}
+                  onCancelDelete={() => setDeleteMapId(null)}
+                  onConfirmDelete={(map) => void deleteMap(map)}
+                />
+              )}
+
+              {mode === "sub_maps_chooser" && (
+                <SubMindMapChooser
+                  maps={subMaps}
+                  noteContext={mapNoteContext}
+                  isLoading={isMapLoading}
+                  isSaving={isMapSaving}
+                  newTitle={newSubMapTitle}
+                  onBack={selectedNote ? () => setMode("detail") : openLibrary}
+                  onNewTitleChange={setNewSubMapTitle}
+                  onCreate={() => void createMap("sub")}
+                  onOpen={(map) => openMapPlaceholder(map, "sub_maps_chooser")}
+                />
+              )}
+
+              {mode === "map_detail_placeholder" && selectedMap && (
+                <MapDetailPlaceholder
+                  map={selectedMap}
+                  noteContext={mapNoteContext}
+                  onBack={() => setMode(mapDetailReturnMode)}
+                />
               )}
             </>
           )}
@@ -1103,6 +1514,7 @@ function NoteDetail({
   onBack,
   onEdit,
   onOpenConnection,
+  onOpenMindMap,
   onDiscussInPodchat,
   onAskDelete,
   onCancelDelete,
@@ -1114,12 +1526,12 @@ function NoteDetail({
   onBack: () => void;
   onEdit: () => void;
   onOpenConnection: (shortcode: string) => void;
+  onOpenMindMap: () => void;
   onDiscussInPodchat?: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
-  const [mindMapNoticeVisible, setMindMapNoticeVisible] = useState(false);
   const hasTags = note.tags.length > 0;
   const hasConnections = note.connections.length > 0;
 
@@ -1181,9 +1593,9 @@ function NoteDetail({
       <div className="flex flex-wrap gap-2 border-t border-[var(--brand-border)] pt-4">
         <button
           type="button"
-          onClick={() => setMindMapNoticeVisible(true)}
+          onClick={onOpenMindMap}
           className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#EEEDFE]"
-          data-testid="commonplace-note-mind-map-placeholder-btn"
+          data-testid="commonplace-note-mind-map-btn"
         >
           Buka Mind Map
         </button>
@@ -1204,15 +1616,6 @@ function NoteDetail({
             Delete
           </button>
       </div>
-
-      {mindMapNoticeVisible && (
-        <div
-          className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--brand-ink-soft)]"
-          data-testid="commonplace-note-mind-map-placeholder"
-        >
-          Mind Map for this note is reserved for a later phase.
-        </div>
-      )}
 
       <div className="grid gap-4 text-sm text-[var(--brand-ink-soft)] md:grid-cols-2">
         <p>Created {formatDate(note.createdAt)}</p>
@@ -1397,28 +1800,378 @@ function DetailList({
   );
 }
 
-function MainMapsPlaceholder({ onBack }: { onBack: () => void }) {
+function MainMapsRegistry({
+  maps,
+  isLoading,
+  isSaving,
+  newTitle,
+  renameMapId,
+  renameTitle,
+  deleteMapId,
+  onBack,
+  onNewTitleChange,
+  onCreate,
+  onOpen,
+  onStartRename,
+  onRenameTitleChange,
+  onSaveRename,
+  onCancelRename,
+  onAskDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  maps: CommonplaceMindMapSummary[];
+  isLoading: boolean;
+  isSaving: boolean;
+  newTitle: string;
+  renameMapId: string | null;
+  renameTitle: string;
+  deleteMapId: string | null;
+  onBack: () => void;
+  onNewTitleChange: (value: string) => void;
+  onCreate: () => void;
+  onOpen: (map: CommonplaceMindMapSummary) => void;
+  onStartRename: (map: CommonplaceMindMapSummary) => void;
+  onRenameTitleChange: (value: string) => void;
+  onSaveRename: (map: CommonplaceMindMapSummary) => void;
+  onCancelRename: () => void;
+  onAskDelete: (mapId: string) => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: (map: CommonplaceMindMapSummary) => void;
+}) {
+  return (
+    <section
+      className="flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--brand-border)] bg-white p-5"
+      data-testid="commonplace-main-maps-registry"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--brand-border)] pb-4">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-3 rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+          >
+            ← Library
+          </button>
+          <h2 className="text-2xl font-semibold text-[var(--brand-ink)]">
+            Main Maps
+          </h2>
+          <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
+            Organize big-picture maps across themes.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={newTitle}
+            onChange={(event) => onNewTitleChange(event.target.value)}
+            placeholder="New Main Map title"
+            className="rounded-lg border border-[var(--brand-border)] px-3 py-2 text-sm"
+            aria-label="New Main Map title"
+          />
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={isSaving}
+            className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+          >
+            + New Main Map
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+        {isLoading ? (
+          <p className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+            Loading Main Maps...
+          </p>
+        ) : maps.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+            No Main Maps yet.
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {maps.map((map) => (
+              <MapRegistryCard
+                key={map.id}
+                map={map}
+                renameMapId={renameMapId}
+                renameTitle={renameTitle}
+                deleteMapId={deleteMapId}
+                isSaving={isSaving}
+                onOpen={onOpen}
+                onStartRename={onStartRename}
+                onRenameTitleChange={onRenameTitleChange}
+                onSaveRename={onSaveRename}
+                onCancelRename={onCancelRename}
+                onAskDelete={onAskDelete}
+                onCancelDelete={onCancelDelete}
+                onConfirmDelete={onConfirmDelete}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MapRegistryCard({
+  map,
+  renameMapId,
+  renameTitle,
+  deleteMapId,
+  isSaving,
+  onOpen,
+  onStartRename,
+  onRenameTitleChange,
+  onSaveRename,
+  onCancelRename,
+  onAskDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  map: CommonplaceMindMapSummary;
+  renameMapId: string | null;
+  renameTitle: string;
+  deleteMapId: string | null;
+  isSaving: boolean;
+  onOpen: (map: CommonplaceMindMapSummary) => void;
+  onStartRename: (map: CommonplaceMindMapSummary) => void;
+  onRenameTitleChange: (value: string) => void;
+  onSaveRename: (map: CommonplaceMindMapSummary) => void;
+  onCancelRename: () => void;
+  onAskDelete: (mapId: string) => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: (map: CommonplaceMindMapSummary) => void;
+}) {
+  const isRenaming = renameMapId === map.id;
+  const isConfirmingDelete = deleteMapId === map.id;
+
+  return (
+    <article className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 shadow-sm">
+      <span className="rounded-full bg-[var(--brand-teal-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+        {map.type === "main" ? "Main Map" : "Sub Mind Map"}
+      </span>
+      {isRenaming ? (
+        <div className="mt-3 flex flex-col gap-2">
+          <input
+            value={renameTitle}
+            onChange={(event) => onRenameTitleChange(event.target.value)}
+            className="rounded-lg border border-[var(--brand-border)] px-3 py-2 text-sm"
+            aria-label={`Rename ${map.title}`}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onSaveRename(map)}
+              disabled={isSaving}
+              className="rounded-lg bg-[var(--brand-teal)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-70"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={onCancelRename}
+              className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <h3 className="mt-3 text-lg font-semibold text-[var(--brand-ink)]">
+            {map.title}
+          </h3>
+          <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+            Updated {formatDate(map.updatedAt)}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onOpen(map)}
+              className="rounded-lg bg-[var(--brand-teal)] px-3 py-1.5 text-xs font-semibold text-white"
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              onClick={() => onStartRename(map)}
+              className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-xs font-semibold"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              onClick={() => onAskDelete(map.id)}
+              className="rounded-lg border border-[#B42318]/25 bg-white px-3 py-1.5 text-xs font-semibold text-[#8A1F15]"
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      )}
+      {isConfirmingDelete && (
+        <div className="mt-3 rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] p-3">
+          <p className="text-xs font-semibold text-[#8A1F15]">
+            Delete this map?
+          </p>
+          <p className="mt-1 text-xs text-[#8A1F15]">
+            Phase 3 uses hard delete and blocks maps that already have graph data.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => onConfirmDelete(map)}
+              disabled={isSaving}
+              className="rounded-lg bg-[#8A1F15] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-70"
+            >
+              Confirm delete
+            </button>
+            <button
+              type="button"
+              onClick={onCancelDelete}
+              className="rounded-lg border border-[#B42318]/25 bg-white px-3 py-1.5 text-xs font-semibold text-[#8A1F15]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function SubMindMapChooser({
+  maps,
+  noteContext,
+  isLoading,
+  isSaving,
+  newTitle,
+  onBack,
+  onNewTitleChange,
+  onCreate,
+  onOpen,
+}: {
+  maps: CommonplaceMindMapSummary[];
+  noteContext: MapNoteContext | null;
+  isLoading: boolean;
+  isSaving: boolean;
+  newTitle: string;
+  onBack: () => void;
+  onNewTitleChange: (value: string) => void;
+  onCreate: () => void;
+  onOpen: (map: CommonplaceMindMapSummary) => void;
+}) {
+  return (
+    <section
+      className="rounded-xl border border-[var(--brand-border)] bg-white p-5"
+      data-testid="commonplace-sub-map-chooser"
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+      >
+        ← Detail Note
+      </button>
+      <h2 className="mt-4 text-2xl font-semibold text-[var(--brand-ink)]">
+        Choose Sub Mind Map
+      </h2>
+      {noteContext && (
+        <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
+          For {noteContext.shortcode} · {noteContext.title}
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <input
+          value={newTitle}
+          onChange={(event) => onNewTitleChange(event.target.value)}
+          placeholder="New Sub Mind Map title"
+          className="rounded-lg border border-[var(--brand-border)] px-3 py-2 text-sm"
+          aria-label="New Sub Mind Map title"
+        />
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={isSaving}
+          className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+        >
+          + New Sub Mind Map
+        </button>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {isLoading ? (
+          <p className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+            Loading Sub Mind Maps...
+          </p>
+        ) : maps.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+            No Sub Mind Maps yet.
+          </p>
+        ) : (
+          maps.map((map) => (
+            <button
+              key={map.id}
+              type="button"
+              onClick={() => onOpen(map)}
+              className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-left shadow-sm hover:border-[var(--brand-teal)]"
+            >
+              <span className="rounded-full bg-[var(--brand-teal-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+                Sub Mind Map
+              </span>
+              <span className="mt-3 block text-base font-semibold text-[var(--brand-ink)]">
+                {map.title}
+              </span>
+              <span className="mt-1 block text-xs text-[var(--brand-ink-soft)]">
+                Updated {formatDate(map.updatedAt)}
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MapDetailPlaceholder({
+  map,
+  noteContext,
+  onBack,
+}: {
+  map: CommonplaceMindMapSummary;
+  noteContext: MapNoteContext | null;
+  onBack: () => void;
+}) {
+  const isSubMap = map.type === "sub";
+
   return (
     <section
       className="rounded-xl border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-6"
-      data-testid="commonplace-main-maps-placeholder"
+      data-testid="commonplace-map-detail-placeholder"
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
-        Main Maps
+        {isSubMap ? "Sub Mind Map" : "Main Map"}
       </p>
       <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">
-        Main Maps is coming soon
+        {map.title}
       </h2>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
-        This entry point is reserved for a future collection view. Phase 1A
-        keeps the library focused on notes.
+        {isSubMap
+          ? "Sub Mind Map canvas will be built in the next phase."
+          : "Canvas will be built in the next phase."}
       </p>
+      {isSubMap && noteContext && (
+        <p className="mt-3 rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
+          Opened from {noteContext.shortcode}: {noteContext.title}
+        </p>
+      )}
       <button
         type="button"
         onClick={onBack}
         className="mt-5 rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)]"
       >
-        Back to Library
+        {isSubMap ? "Back to Sub Mind Maps" : "Back to Main Maps"}
       </button>
     </section>
   );

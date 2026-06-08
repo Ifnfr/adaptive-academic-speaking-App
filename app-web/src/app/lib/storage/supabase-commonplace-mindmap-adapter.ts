@@ -59,6 +59,20 @@ export type CreateCommonplaceMindMapInput = {
   parentMindMapId?: string | null;
 };
 
+export type CommonplaceMindMapType = "main" | "sub";
+
+export type CreateCommonplaceMindMapRegistryInput = {
+  ownerId: string;
+  title: string;
+  type: CommonplaceMindMapType;
+};
+
+export type RenameCommonplaceMindMapInput = {
+  ownerId: string;
+  mindMapId: string;
+  title: string;
+};
+
 export type SaveCommonplaceMindMapInput = {
   ownerId: string;
   mindMapId: string;
@@ -191,6 +205,182 @@ function mapMindMapRow(row: MindMapRow): CommonplaceMindMapSummary {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function cleanMindMapType(value: unknown): CommonplaceMindMapType | null {
+  return value === "main" || value === "sub" ? value : null;
+}
+
+export async function listCommonplaceMindMaps(
+  ownerId: string,
+  supabaseClient: FonetikSupabaseClient,
+  type?: CommonplaceMindMapType | null,
+): Promise<CommonplaceMindMapListResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  if (!cleanOwnerId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    let query = supabaseClient
+      .from(MINDMAPS_TABLE)
+      .select("*")
+      .eq("owner_id", cleanOwnerId);
+
+    if (type) {
+      query = query.eq("type", type);
+    }
+
+    const { data, error } = await query.order("updated_at", { ascending: false });
+
+    if (error) {
+      return { ok: false, error: "commonplace_save_failed" };
+    }
+
+    return {
+      ok: true,
+      mindMaps: ((data as MindMapRow[] | null) ?? []).map(mapMindMapRow),
+    };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function createCommonplaceMindMap(
+  input: CreateCommonplaceMindMapRegistryInput,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMindMapResult> {
+  const ownerId = cleanRequiredText(input.ownerId);
+  const title = cleanRequiredText(input.title);
+  const type = cleanMindMapType(input.type);
+
+  if (!ownerId || !title || !type || title.length > 120) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from(MINDMAPS_TABLE)
+      .insert({
+        owner_id: ownerId,
+        title,
+        type,
+        parent_mindmap_id: null,
+      })
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      return { ok: false, error: "commonplace_save_failed" };
+    }
+
+    return { ok: true, mindMap: mapMindMapRow(data as MindMapRow) };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function renameCommonplaceMindMap(
+  input: RenameCommonplaceMindMapInput,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMindMapResult> {
+  const ownerId = cleanRequiredText(input.ownerId);
+  const mindMapId = cleanRequiredText(input.mindMapId);
+  const title = cleanRequiredText(input.title);
+
+  if (!ownerId || !mindMapId || !title || title.length > 120) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from(MINDMAPS_TABLE)
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq("owner_id", ownerId)
+      .eq("id", mindMapId)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: "commonplace_save_failed" };
+    if (!data) return { ok: false, error: "commonplace_not_found" };
+
+    return { ok: true, mindMap: mapMindMapRow(data as MindMapRow) };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function deleteCommonplaceMindMapFromRegistry(
+  ownerId: string,
+  mindMapId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMindMapDeleteResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(mindMapId);
+
+  if (!cleanOwnerId || !cleanMindMapId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const { data: existingMap, error: readError } = await supabaseClient
+      .from(MINDMAPS_TABLE)
+      .select("id")
+      .eq("owner_id", cleanOwnerId)
+      .eq("id", cleanMindMapId)
+      .maybeSingle();
+
+    if (readError) return { ok: false, error: "commonplace_save_failed" };
+    if (!existingMap) return { ok: false, error: "commonplace_not_found" };
+
+    const { data: subNodes, error: subNodeError } = await supabaseClient
+      .from(NODES_TABLE)
+      .select("id")
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .limit(1);
+
+    if (subNodeError) return { ok: false, error: "commonplace_save_failed" };
+    if (((subNodes as Array<unknown> | null) ?? []).length > 0) {
+      return { ok: false, error: "commonplace_conflict" };
+    }
+
+    const { data: mainNodes, error: mainNodeError } = await supabaseClient
+      .from(MAINMAP_NODES_TABLE)
+      .select("id")
+      .eq("owner_id", cleanOwnerId)
+      .eq("main_mindmap_id", cleanMindMapId)
+      .limit(1);
+
+    if (mainNodeError) return { ok: false, error: "commonplace_save_failed" };
+    if (((mainNodes as Array<unknown> | null) ?? []).length > 0) {
+      return { ok: false, error: "commonplace_conflict" };
+    }
+
+    const { data: clusterRefs, error: clusterRefsError } = await supabaseClient
+      .from(MAINMAP_NODES_TABLE)
+      .select("id")
+      .eq("owner_id", cleanOwnerId)
+      .eq("sub_mindmap_id", cleanMindMapId)
+      .limit(1);
+
+    if (clusterRefsError) return { ok: false, error: "commonplace_save_failed" };
+    if (((clusterRefs as Array<unknown> | null) ?? []).length > 0) {
+      return { ok: false, error: "commonplace_conflict" };
+    }
+
+    const { error } = await supabaseClient
+      .from(MINDMAPS_TABLE)
+      .delete()
+      .eq("owner_id", cleanOwnerId)
+      .eq("id", cleanMindMapId);
+
+    if (error) return { ok: false, error: "commonplace_save_failed" };
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
 }
 
 export async function createCommonplaceSubMindMap(

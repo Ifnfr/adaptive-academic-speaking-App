@@ -17,6 +17,7 @@ const STOP_WORDS = new Set(["a", "an", "and", "for", "of", "to"]);
 
 export type CommonplaceError =
   | "commonplace_auth_required"
+  | "commonplace_conflict"
   | "commonplace_save_failed"
   | "commonplace_validation_failed"
   | "commonplace_not_found";

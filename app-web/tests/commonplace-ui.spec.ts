@@ -17,6 +17,16 @@ type TestNote = {
   updatedAt: string;
 };
 
+type TestMap = {
+  id: string;
+  ownerId: string;
+  title: string;
+  type: "main" | "sub";
+  parentMindMapId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const TEST_OWNER_ID = "commonplace-test-owner";
 
 const renderedSecretLikePattern =
@@ -67,11 +77,33 @@ function manyLibraryNotes(count: number): TestNote[] {
 function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
   const testWindow = window as typeof window & {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
+    __COMMONPLACE_TEST_MAPS__?: TestMap[];
     __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
   };
 
   testWindow.__COMMONPLACE_TEST_NOTES__ = seedNotes.map((note) => ({ ...note }));
+  const testOwnerId = seedNotes[0]?.ownerId ?? "commonplace-test-owner";
+  testWindow.__COMMONPLACE_TEST_MAPS__ = [
+    {
+      id: "main-map-1",
+      ownerId: testOwnerId,
+      title: "Institutions Overview",
+      type: "main",
+      parentMindMapId: null,
+      createdAt: "2026-06-06T05:00:00.000Z",
+      updatedAt: "2026-06-06T05:00:00.000Z",
+    },
+    {
+      id: "sub-map-1",
+      ownerId: testOwnerId,
+      title: "Institutional Incentives",
+      type: "sub",
+      parentMindMapId: null,
+      createdAt: "2026-06-06T05:00:00.000Z",
+      updatedAt: "2026-06-06T05:00:00.000Z",
+    },
+  ];
   testWindow.__COMMONPLACE_TEST_COUNTERS__ = {};
 
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
@@ -229,6 +261,69 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
     async deleteCommonplaceMindMap() {
       return { ok: true as const };
     },
+    async listCommonplaceMindMaps(ownerId: string, type?: "main" | "sub" | null) {
+      return {
+        ok: true as const,
+        mindMaps: (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).filter(
+          (map) => map.ownerId === ownerId && (!type || map.type === type),
+        ),
+      };
+    },
+    async createCommonplaceMindMap(input: {
+      ownerId: string;
+      title: string;
+      type: "main" | "sub";
+    }) {
+      if (
+        !input.ownerId ||
+        !input.title.trim() ||
+        (input.type !== "main" && input.type !== "sub")
+      ) {
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+      const now = new Date("2026-06-06T07:00:00.000Z").toISOString();
+      const map: TestMap = {
+        id: `${input.type}-map-${Date.now()}`,
+        ownerId: input.ownerId,
+        title: input.title.trim(),
+        type: input.type,
+        parentMindMapId: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      testWindow.__COMMONPLACE_TEST_MAPS__ = [
+        map,
+        ...(testWindow.__COMMONPLACE_TEST_MAPS__ ?? []),
+      ];
+      return { ok: true as const, mindMap: map };
+    },
+    async renameCommonplaceMindMap(input: {
+      ownerId: string;
+      mindMapId: string;
+      title: string;
+    }) {
+      const maps = testWindow.__COMMONPLACE_TEST_MAPS__ ?? [];
+      const mapIndex = maps.findIndex(
+        (map) => map.ownerId === input.ownerId && map.id === input.mindMapId,
+      );
+      if (mapIndex < 0 || !input.title.trim()) {
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+      const updated = {
+        ...maps[mapIndex],
+        title: input.title.trim(),
+        updatedAt: new Date("2026-06-06T08:00:00.000Z").toISOString(),
+      };
+      maps[mapIndex] = updated;
+      testWindow.__COMMONPLACE_TEST_MAPS__ = maps;
+      return { ok: true as const, mindMap: updated };
+    },
+    async deleteCommonplaceMindMapFromRegistry(ownerId: string, mindMapId: string) {
+      testWindow.__COMMONPLACE_TEST_MAPS__ = (
+        testWindow.__COMMONPLACE_TEST_MAPS__ ?? []
+      ).filter((map) => map.ownerId !== ownerId || map.id !== mindMapId);
+      return { ok: true as const };
+    },
   };
 }
 
@@ -297,7 +392,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator("header")).toContainText("Vocabulary Notebook");
   });
 
-  test("Library is default and exposes grid, Add Note tile, and placeholder-only Main Maps", async ({
+  test("Library is default and exposes grid, Add Note tile, and Main Maps registry", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
@@ -366,14 +461,46 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(workspaceBox?.y).toBeLessThanOrEqual(20);
 
     await page.getByTestId("commonplace-main-maps-btn").click();
-    await expect(page.getByTestId("commonplace-main-maps-placeholder")).toBeVisible();
+    await expect(page.getByTestId("commonplace-main-maps-registry")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Main Maps" })).toBeVisible();
+    await expect(page.getByText("Institutions Overview")).toBeVisible();
+
+    await page.getByLabel("New Main Map title").fill("Comparative Institutions");
+    await page.getByRole("button", { name: "+ New Main Map" }).click();
+    await expect(page.getByText("Comparative Institutions")).toBeVisible();
+
+    const newMapCard = page.locator("article").filter({
+      hasText: "Comparative Institutions",
+    });
+    await newMapCard.getByRole("button", { name: "Rename" }).click();
+    await page.getByLabel("Rename Comparative Institutions").fill("Institutions Map");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Institutions Map")).toBeVisible();
+
+    await page
+      .locator("article")
+      .filter({ hasText: "Institutions Map" })
+      .getByRole("button", { name: "Open" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-detail-placeholder")).toBeVisible();
+    await expect(page.getByText("Canvas will be built in the next phase.")).toBeVisible();
     await expect(page.locator("canvas")).toHaveCount(0);
     await expect(page.locator(".react-flow")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/cluster/i)).toHaveCount(0);
     await expect(page.getByText(/saved map/i)).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Back to Library" }).click();
+    await page.getByRole("button", { name: "Back to Main Maps" }).click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Institutions Map" })
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await expect(page.getByText("Delete this map?")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm delete" }).click();
+    await expect(page.getByText("Institutions Map")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "← Library" }).click();
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
   });
 
@@ -499,7 +626,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByRole("article")).toContainText("Thinking Fast and Slow");
   });
 
-  test("Detail Note hides empty optional sections and keeps placeholder actions non-canvas", async ({
+  test("Detail Note hides empty optional sections and opens Sub Mind Map chooser", async ({
     page,
   }) => {
     await gotoApp(page);
@@ -519,8 +646,21 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByRole("article")).not.toContainText("Relevance");
     await expect(page.getByRole("article")).not.toContainText("Connections");
 
-    await page.getByTestId("commonplace-note-mind-map-placeholder-btn").click();
-    await expect(page.getByTestId("commonplace-note-mind-map-placeholder")).toBeVisible();
+    await page.getByTestId("commonplace-note-mind-map-btn").click();
+    await expect(page.getByTestId("commonplace-sub-map-chooser")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Choose Sub Mind Map" })).toBeVisible();
+    await expect(page.getByText("Institutional Incentives")).toBeVisible();
+
+    await page.getByLabel("New Sub Mind Map title").fill("Attention Systems");
+    await page.getByRole("button", { name: "+ New Sub Mind Map" }).click();
+    await expect(page.getByText("Attention Systems")).toBeVisible();
+
+    await page.getByRole("button", { name: /Attention Systems/i }).click();
+    await expect(page.getByTestId("commonplace-map-detail-placeholder")).toBeVisible();
+    await expect(
+      page.getByText("Sub Mind Map canvas will be built in the next phase."),
+    ).toBeVisible();
+    await expect(page.getByText(/Opened from #tf1/i)).toBeVisible();
     await expect(page.locator("canvas")).toHaveCount(0);
     await expect(page.locator(".react-flow")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
