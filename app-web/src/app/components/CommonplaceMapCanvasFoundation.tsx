@@ -435,7 +435,9 @@ export function CommonplaceMapCanvasFoundation({
   }, [saveNodePositions, updates]);
 
   const hasDraggedCommonplaceNote = (event: DragEvent) =>
-    Array.from(event.dataTransfer.types).includes(COMMONPLACE_NOTE_DRAG_TYPE);
+    Array.from(event.dataTransfer.types).some(
+      (type) => type.toLowerCase() === COMMONPLACE_NOTE_DRAG_TYPE,
+    );
 
   const parseDraggedNote = (event: DragEvent): DraggedCommonplaceNote | null => {
     let parsed: unknown;

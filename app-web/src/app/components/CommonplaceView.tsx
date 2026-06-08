@@ -1766,10 +1766,18 @@ function SidebarNoteButton({
 }) {
   const visibleTags = note.tags.slice(0, 2);
   const hiddenCount = Math.max(0, note.tags.length - visibleTags.length);
+  const dragPayload = {
+    noteId: note.id,
+    title: displayTitle(note),
+    sourceBook: note.sourceBook,
+    shortcode: note.shortcode,
+    tags: note.tags.slice(0, 6),
+  };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       draggable={draggable}
       data-testid="commonplace-sidebar-note"
       onDragStart={(event) => {
@@ -1779,23 +1787,25 @@ function SidebarNoteButton({
         }
 
         event.dataTransfer.effectAllowed = "copy";
+        const serializedPayload = JSON.stringify(dragPayload);
         event.dataTransfer.setData(
           "application/commonplace-note",
-          JSON.stringify({
-            noteId: note.id,
-            title: displayTitle(note),
-            sourceBook: note.sourceBook,
-            shortcode: note.shortcode,
-            tags: note.tags.slice(0, 6),
-          }),
+          serializedPayload,
         );
+        event.dataTransfer.setData("text/plain", note.shortcode || dragPayload.title);
       }}
       onClick={onClick}
-      className={`rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onClick();
+      }}
+      aria-label={`${displayTitle(note)} from ${note.sourceBook}`}
+      className={`select-none rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
         selected
           ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]"
           : "border-[var(--brand-border)] bg-white hover:bg-[var(--brand-surface)]"
-      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
     >
       <span className="text-[11px] font-semibold text-[var(--brand-teal-ink)]">
         {note.shortcode}
@@ -1823,7 +1833,7 @@ function SidebarNoteButton({
           )}
         </span>
       )}
-    </button>
+    </div>
   );
 }
 

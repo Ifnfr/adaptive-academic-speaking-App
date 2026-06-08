@@ -691,6 +691,54 @@ async function dragSidebarNoteToCanvas(
   await expect(page.getByTestId("commonplace-map-drop-zone")).toHaveCount(0);
 }
 
+async function readSidebarNoteDragData(note: Locator) {
+  return note.evaluate((element) => {
+    const dataTransfer = new DataTransfer();
+    const event = new DragEvent("dragstart", {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+    });
+    element.dispatchEvent(event);
+
+    return {
+      defaultPrevented: event.defaultPrevented,
+      effectAllowed: dataTransfer.effectAllowed,
+      types: Array.from(dataTransfer.types),
+      payload: dataTransfer.getData("application/commonplace-note"),
+      plainText: dataTransfer.getData("text/plain"),
+    };
+  });
+}
+
+async function dropRawCommonplaceNotePayloadOnCanvas(
+  page: Page,
+  noteId: string,
+  offsetX: number,
+  offsetY: number,
+) {
+  const canvas = page.locator(".react-flow").first();
+  const canvasBox = await canvas.boundingBox();
+  expect(canvasBox).not.toBeNull();
+  if (!canvasBox) return;
+
+  const dataTransfer = await page.evaluateHandle((payload) => {
+    const transfer = new DataTransfer();
+    transfer.setData("application/commonplace-note", JSON.stringify(payload));
+    return transfer;
+  }, { noteId });
+  await canvas.dispatchEvent("dragover", {
+    dataTransfer,
+    clientX: canvasBox.x + offsetX,
+    clientY: canvasBox.y + offsetY,
+  });
+  await canvas.dispatchEvent("drop", {
+    dataTransfer,
+    clientX: canvasBox.x + offsetX,
+    clientY: canvasBox.y + offsetY,
+  });
+}
+
 async function openFlowNodeContextMenu(node: Locator) {
   const box = await node.boundingBox();
   expect(box).not.toBeNull();
@@ -789,6 +837,14 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         .getByTestId("commonplace-sidebar-note")
         .first(),
     ).toHaveAttribute("draggable", "false");
+    const librarySidebarDragData = await readSidebarNoteDragData(
+      page
+        .getByTestId("commonplace-sidebar-note-list")
+        .getByTestId("commonplace-sidebar-note")
+        .first(),
+    );
+    expect(librarySidebarDragData.defaultPrevented).toBe(true);
+    expect(librarySidebarDragData.types).not.toContain("application/commonplace-note");
     await expect(page.locator(".react-flow")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Tambah note/i })).toBeVisible();
     const firstCard = page
@@ -882,6 +938,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
+    await dropRawCommonplaceNotePayloadOnCanvas(page, "note-1", 160, 200);
+    await expect(
+      page.getByText("Main Map note drops will be enabled in a later phase."),
+    ).toBeVisible();
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
@@ -1158,6 +1218,24 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .filter({ hasText: "Institutions and Growth" })
       .first();
     await expect(draggableNote).toHaveAttribute("draggable", "true");
+    const subMapSidebarDragData = await readSidebarNoteDragData(draggableNote);
+    expect(subMapSidebarDragData.defaultPrevented).toBe(false);
+    expect(subMapSidebarDragData.types).toContain("application/commonplace-note");
+    expect(subMapSidebarDragData.plainText).toBe("#wn1");
+    const subMapPayload = JSON.parse(subMapSidebarDragData.payload) as {
+      noteId: string;
+      title: string;
+      sourceBook: string;
+      shortcode: string;
+      tags: string[];
+    };
+    expect(subMapPayload).toEqual({
+      noteId: "note-1",
+      title: "Institutions and Growth",
+      sourceBook: "Why Nations Fail",
+      shortcode: "#wn1",
+      tags: ["politics", "economics", "institutions"],
+    });
 
     await dragSidebarNoteToCanvas(page, "Institutions and Growth", 160, 200);
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
