@@ -635,7 +635,7 @@ export function CommonplaceView({
         />
 
         <div
-          className={`min-w-0 bg-[var(--brand-surface)] p-4 pb-10 sm:p-6 sm:pb-12 lg:p-8 lg:pb-14 ${
+          className={`min-w-0 bg-[var(--brand-surface)] p-4 pb-10 sm:p-6 sm:pb-12 lg:p-5 lg:pb-5 ${
             libraryMode ? "lg:flex lg:h-full lg:max-h-full lg:min-h-0 lg:flex-col lg:overflow-hidden" : ""
           }`}
         >
@@ -887,11 +887,11 @@ function LibraryView({
 
   return (
     <div
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1 pb-3"
       data-testid="commonplace-library-grid"
-      style={{ maxHeight: "32rem" }}
+      style={{ maxHeight: "31rem" }}
     >
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(126px,1fr))] gap-3 xl:grid-cols-[repeat(auto-fill,minmax(138px,1fr))]">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(124px,1fr))] gap-4 xl:grid-cols-[repeat(auto-fill,minmax(136px,1fr))]">
         {notes.map((note) => (
           <button
             key={note.id}

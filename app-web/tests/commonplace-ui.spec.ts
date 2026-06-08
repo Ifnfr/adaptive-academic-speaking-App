@@ -308,11 +308,20 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(
       page.getByTestId("commonplace-view").getByText(/Capture book ideas/i),
     ).toHaveCount(0);
+    await expect(
+      page.getByTestId("commonplace-view").getByText(/FONETIK\s*·\s*COMMONPLACE/i),
+    ).toHaveCount(0);
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
     await expect(page.getByRole("button", { name: /Tambah note/i })).toBeVisible();
     const firstCard = page
       .getByTestId("commonplace-library-grid")
       .getByRole("button", { name: /Institutions and Growth/i });
+    const secondCard = page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /System One Attention/i });
+    const addNoteTile = page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Tambah note/i });
     await expect(firstCard).toContainText("Why Nations Fail");
     await expect(firstCard).toContainText(
       "Inclusive institutions create stronger incentives for growth.",
@@ -322,6 +331,21 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     const cardBox = await firstCard.boundingBox();
     expect(cardBox?.height).toBeLessThan(190);
     expect(cardBox?.width).toBeLessThan(220);
+    const cardSpacing = await page
+      .getByTestId("commonplace-library-grid")
+      .evaluate((grid) => {
+        const cardGrid = grid.querySelector(".grid");
+        if (!cardGrid) return { columnGap: 0, rowGap: 0 };
+        const styles = window.getComputedStyle(cardGrid);
+        return {
+          columnGap: Number.parseFloat(styles.columnGap),
+          rowGap: Number.parseFloat(styles.rowGap),
+        };
+      });
+    expect(cardSpacing.columnGap).toBeGreaterThanOrEqual(16);
+    expect(cardSpacing.rowGap).toBeGreaterThanOrEqual(16);
+    await expect(secondCard).toBeVisible();
+    await expect(addNoteTile).toBeVisible();
     const workspaceBox = await page.getByTestId("commonplace-view").boundingBox();
     const viewport = page.viewportSize();
     expect(workspaceBox?.height).toBeLessThanOrEqual((viewport?.height ?? 768) + 1);
@@ -366,6 +390,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         overflowY: window.getComputedStyle(element).overflowY,
       }));
     expect(gridMetrics.overflowY).toBe("auto");
+    expect(gridMetrics.clientHeight).toBeGreaterThan(430);
     expect(gridMetrics.scrollHeight).toBeGreaterThan(gridMetrics.clientHeight);
     expect(gridMetrics.bottom).toBeLessThanOrEqual(workspaceMetrics.bottom);
 
