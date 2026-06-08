@@ -304,9 +304,24 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByText("LIBRARY").first()).toBeVisible();
     await expect(
       page.getByTestId("commonplace-view").getByRole("heading", { name: "Commonplace" }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    await expect(
+      page.getByTestId("commonplace-view").getByText(/Capture book ideas/i),
+    ).toHaveCount(0);
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
     await expect(page.getByRole("button", { name: /Tambah note/i })).toBeVisible();
+    const firstCard = page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i });
+    await expect(firstCard).toContainText("Why Nations Fail");
+    await expect(firstCard).toContainText(
+      "Inclusive institutions create stronger incentives for growth.",
+    );
+    await expect(firstCard).toContainText("#wn1");
+    await expect(firstCard).toContainText("#politics");
+    const cardBox = await firstCard.boundingBox();
+    expect(cardBox?.height).toBeLessThan(190);
+    expect(cardBox?.width).toBeLessThan(220);
     const workspaceBox = await page.getByTestId("commonplace-view").boundingBox();
     const viewport = page.viewportSize();
     expect(workspaceBox?.height).toBeLessThanOrEqual((viewport?.height ?? 768) + 1);
@@ -334,6 +349,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     const workspaceMetrics = await page
       .getByTestId("commonplace-view")
       .evaluate((element) => ({
+        bottom: element.getBoundingClientRect().bottom,
         height: element.getBoundingClientRect().height,
         viewportHeight: window.innerHeight,
       }));
@@ -344,12 +360,14 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     const gridMetrics = await page
       .getByTestId("commonplace-library-grid")
       .evaluate((element) => ({
+        bottom: element.getBoundingClientRect().bottom,
         clientHeight: element.clientHeight,
         scrollHeight: element.scrollHeight,
         overflowY: window.getComputedStyle(element).overflowY,
       }));
     expect(gridMetrics.overflowY).toBe("auto");
     expect(gridMetrics.scrollHeight).toBeGreaterThan(gridMetrics.clientHeight);
+    expect(gridMetrics.bottom).toBeLessThanOrEqual(workspaceMetrics.bottom);
 
     const sidebarMetrics = await page
       .getByTestId("commonplace-sidebar-scroll")
