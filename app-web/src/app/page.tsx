@@ -364,6 +364,30 @@ const card =
 const cardHeader =
   "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
 const cardBody = "p-6";
+const LAST_FONETIK_VIEW_SESSION_KEY = "fonetik:last-view-before-commonplace";
+const FONETIK_FALLBACK_VIEW: SidebarView = "active";
+const FONETIK_RETURN_VIEWS = new Set<SidebarView>([
+  "active",
+  "vocabulary",
+  "article-practice",
+  "session-log",
+  "progress",
+  "weekly-review",
+  "diagnostic",
+  "mental-model",
+  "settings",
+  "leaderboard",
+  "learning-path",
+  "profile",
+]);
+
+function normalizeFonetikReturnView(value: string | null): SidebarView {
+  if (!value) return FONETIK_FALLBACK_VIEW;
+  if (value === "commonplace") return FONETIK_FALLBACK_VIEW;
+  return FONETIK_RETURN_VIEWS.has(value as SidebarView)
+    ? (value as SidebarView)
+    : FONETIK_FALLBACK_VIEW;
+}
 
 export default function Home() {
   const sessionCloudAuthRef = useRef<SessionCloudAuthState>(
@@ -952,6 +976,19 @@ export default function Home() {
   // sub-pages that reuse existing data.
   type View = SidebarView;
   const [view, setView] = useState<View>("active");
+  const handleSelectView = (nextView: SidebarView) => {
+    if (nextView === "commonplace" && view !== "commonplace") {
+      window.sessionStorage.setItem(LAST_FONETIK_VIEW_SESSION_KEY, view);
+    }
+    setView(nextView);
+  };
+
+  const handleBackFromCommonplace = () => {
+    const previousView = normalizeFonetikReturnView(
+      window.sessionStorage.getItem(LAST_FONETIK_VIEW_SESSION_KEY),
+    );
+    setView(previousView);
+  };
 
   // Fallback for invalid or old selected view states (e.g. diagnostic, level-up-check)
   useEffect(() => {
@@ -1832,20 +1869,22 @@ export default function Home() {
         <div className="min-h-screen w-full lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col">
           <div className="flex w-full flex-col gap-6 px-4 py-6 lg:h-screen lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:py-0 lg:min-h-0">
         {/* Sidebar */}
-        <Sidebar
-          view={view}
-          level={level}
-          sessionsCount={sessions.length}
-          dayStreak={dayStreak}
-          levelPhase={LEVEL_PHASE[level]}
-          nextLevel={nextLevelHint(level)}
-          speakerLevel={speakerProgress.currentLevel.level}
-          speakerLevelName={speakerProgress.currentLevel.name}
-          totalXp={xpProfile.totalXp}
-          gamificationReady={gamificationReady}
-          appLanguage={appLanguage}
-          onSelectView={setView}
-        />
+        {view !== "commonplace" && (
+          <Sidebar
+            view={view}
+            level={level}
+            sessionsCount={sessions.length}
+            dayStreak={dayStreak}
+            levelPhase={LEVEL_PHASE[level]}
+            nextLevel={nextLevelHint(level)}
+            speakerLevel={speakerProgress.currentLevel.level}
+            speakerLevelName={speakerProgress.currentLevel.name}
+            totalXp={xpProfile.totalXp}
+            gamificationReady={gamificationReady}
+            appLanguage={appLanguage}
+            onSelectView={handleSelectView}
+          />
+        )}
         {/* Main */}
         <main className="flex min-w-0 flex-1 flex-col gap-6 lg:h-full lg:min-h-0 lg:px-8 lg:py-8">
           {/* Topbar */}
@@ -1947,6 +1986,7 @@ export default function Home() {
               isSignedIn={cloudAuthState.isSignedIn}
               getToken={cloudAuthState.getToken}
               supabaseConfigured={isSupabaseConfigured()}
+              onBackToFonetik={handleBackFromCommonplace}
               onDiscussInPodchat={handleDiscussCommonplaceInPodchat}
             />
           )}
@@ -1990,7 +2030,7 @@ export default function Home() {
                   appLanguage={appLanguage}
                   onApplyNextLevel={handleApplyLevelUp}
                   onClaimXp={handleClaimXp}
-                  onSelectView={setView}
+                  onSelectView={handleSelectView}
                   xpEvents={xpEvents}
                 />
               </div>

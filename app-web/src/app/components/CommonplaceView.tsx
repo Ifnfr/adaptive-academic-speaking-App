@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import type { FonetikSupabaseClient } from "../lib/supabase";
-import { CommonplaceMindMapCanvas } from "./CommonplaceMindMapCanvas";
-import { CommonplaceMainMindMapCanvas } from "./CommonplaceMainMindMapCanvas";
 import {
   createCommonplaceNote,
   deleteCommonplaceNote,
@@ -43,7 +41,7 @@ import type {
   CommonplaceMindMapDeleteResult,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 
-type CommonplaceMode = "library" | "create" | "detail" | "edit" | "mindmap" | "main_mindmap";
+type CommonplaceMode = "library" | "create" | "detail" | "edit" | "main_maps_placeholder";
 
 type CommonplaceFormState = {
   sourceBook: string;
@@ -76,8 +74,6 @@ export type CommonplaceStorage = {
     ownerId: string,
     noteId: string,
   ): Promise<CommonplaceDeleteResult>;
-
-  // Mind map additions
   createCommonplaceSubMindMap(
     input: CreateCommonplaceMindMapInput,
   ): Promise<CommonplaceMindMapResult>;
@@ -95,8 +91,6 @@ export type CommonplaceStorage = {
     ownerId: string,
     mindMapId: string,
   ): Promise<CommonplaceDeleteResult>;
-
-  // Main mind map additions
   createOrGetCommonplaceMainMindMap?(
     ownerId: string,
   ): Promise<CommonplaceMindMapResult>;
@@ -123,6 +117,7 @@ type CommonplaceViewProps = {
   isSignedIn?: boolean;
   getToken?: (() => Promise<string | null>) | null;
   supabaseConfigured?: boolean;
+  onBackToFonetik?: () => void;
   onDiscussInPodchat?: (context: {
     source: "commonplace";
     shortcode: string;
@@ -194,6 +189,21 @@ function formatDate(value: string): string {
 
 function displayTitle(note: CommonplaceNote): string {
   return note.title?.trim() || note.sourceBook || "Untitled Source";
+}
+
+function noteMatchesSearch(note: CommonplaceNote, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  return [
+    note.shortcode,
+    note.title ?? "",
+    note.sourceBook,
+    ...note.tags,
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalizedQuery);
 }
 
 function getTestStorage(): CommonplaceStorage | null {
@@ -275,17 +285,21 @@ export function CommonplaceView({
   isSignedIn = false,
   getToken,
   supabaseConfigured = isSupabaseConfigured(),
+  onBackToFonetik,
   onDiscussInPodchat,
 }: CommonplaceViewProps) {
   const [mode, setMode] = useState<CommonplaceMode>("library");
   const [notes, setNotes] = useState<CommonplaceNote[]>([]);
   const [selectedNote, setSelectedNote] = useState<CommonplaceNote | null>(null);
   const [form, setForm] = useState<CommonplaceFormState>(emptyForm);
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<"sourceBook" | "title" | "insight", string>>
+  >({});
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [selectedMindMapId, setSelectedMindMapId] = useState<string | null>(null);
 
   const testStorage = getTestStorage();
   const effectiveOwnerId = ownerId ?? (testStorage ? DEFAULT_TEST_OWNER_ID : null);
@@ -338,6 +352,7 @@ export function CommonplaceView({
 
   const openCreate = () => {
     setForm(emptyForm);
+    setFieldErrors({});
     setSelectedNote(null);
     setDeleteConfirmVisible(false);
     setError(null);
@@ -347,9 +362,9 @@ export function CommonplaceView({
   const openLibrary = () => {
     setMode("library");
     setSelectedNote(null);
-    setSelectedMindMapId(null);
     setDeleteConfirmVisible(false);
     setError(null);
+    setFieldErrors({});
   };
 
   const openDetail = async (noteId: string) => {
@@ -364,58 +379,37 @@ export function CommonplaceView({
     }
 
     setSelectedNote(result.note);
-    setSelectedMindMapId(null);
     setMode("detail");
   };
 
   const openEdit = () => {
     if (!selectedNote) return;
     setForm(formFromNote(selectedNote));
+    setFieldErrors({});
     setDeleteConfirmVisible(false);
     setError(null);
     setMode("edit");
   };
 
-  const openMindMap = () => {
-    if (!selectedNote) return;
-    setSelectedMindMapId(null);
-    setDeleteConfirmVisible(false);
-    setError(null);
-    setMode("mindmap");
-  };
-
-  const openSavedSubMindMap = useCallback(async (subMindMapId: string) => {
-    if (!storage || !effectiveOwnerId) return false;
-
-    setError(null);
-    const graphResult = await storage.getCommonplaceMindMapGraph(
-      effectiveOwnerId,
-      subMindMapId,
-    );
-
-    if (!graphResult.ok) return false;
-
-    const firstNode = graphResult.graph.nodes[0];
-    if (!firstNode) return false;
-
-    const noteResult = await storage.getCommonplaceNoteById(
-      effectiveOwnerId,
-      firstNode.noteId,
-    );
-
-    if (!noteResult.ok) return false;
-
-    setSelectedNote(noteResult.note);
-    setSelectedMindMapId(graphResult.graph.summary.id);
-    setDeleteConfirmVisible(false);
-    setMode("mindmap");
-    return true;
-  }, [effectiveOwnerId, storage]);
-
   const handleSubmit = async () => {
     if (!storage || !effectiveOwnerId) return;
+
+    const nextFieldErrors: Partial<
+      Record<"sourceBook" | "title" | "insight", string>
+    > = {};
+    if (form.sourceBook.trim().length === 0) {
+      nextFieldErrors.sourceBook = "Source book is required.";
+    }
+    if (form.title.trim().length === 0) {
+      nextFieldErrors.title = "Title is required.";
+    }
     if (form.insight.trim().length === 0) {
-      setError("Insight is required.");
+      nextFieldErrors.insight = "Insight is required.";
+    }
+    setFieldErrors(nextFieldErrors);
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setError("Please complete the required fields.");
       return;
     }
 
@@ -496,32 +490,43 @@ export function CommonplaceView({
 
   const updateField = (field: keyof CommonplaceFormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+    if (
+      field === "sourceBook" ||
+      field === "title" ||
+      field === "insight"
+    ) {
+      setFieldErrors((current) => {
+        const next = { ...current };
+        delete next[field];
+        return next;
+      });
+    }
   };
+
+  const filteredNotes = useMemo(
+    () => notes.filter((note) => noteMatchesSearch(note, searchQuery)),
+    [notes, searchQuery],
+  );
 
   return (
     <section
-      className="flex flex-col gap-6"
+      className="min-h-[calc(100dvh-11rem)] overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:min-h-0 lg:flex-1"
       data-testid="commonplace-view"
       aria-labelledby="commonplace-title"
     >
-      <div className="overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid">
-        <div className="border-b border-[var(--brand-border)] bg-[#EEEDFE] px-6 py-5">
-          <p className="text-xs font-semibold uppercase text-[#534AB7]">
-            Library
-          </p>
-          <h2
-            id="commonplace-title"
-            className="mt-1 text-2xl font-semibold text-[var(--brand-ink)]"
-          >
-            Commonplace
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm text-[var(--brand-ink-soft)]">
-            Capture book ideas, connect insights, and prepare them for speaking
-            practice.
-          </p>
-        </div>
+      <div className="flex min-h-full flex-col lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+        <CommonplaceSidebar
+          notes={filteredNotes}
+          selectedNoteId={selectedNote?.id ?? null}
+          searchQuery={searchQuery}
+          isLoading={isLoading}
+          onSearchChange={setSearchQuery}
+          onBackToFonetik={onBackToFonetik}
+          onCreate={openCreate}
+          onOpen={openDetail}
+        />
 
-        <div className="p-6">
+        <div className="min-w-0 bg-[var(--brand-surface)] p-4 sm:p-6 lg:h-full lg:overflow-y-auto lg:p-8">
           {unavailableMessage ? (
             <div className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)]">
               {unavailableMessage}
@@ -539,18 +544,36 @@ export function CommonplaceView({
 
               {mode === "library" && (
                 <div className="flex flex-col gap-6">
-                  <div className="flex justify-end">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
+                        LIBRARY
+                      </p>
+                      <h2
+                        id="commonplace-title"
+                        className="mt-1 text-3xl font-semibold tracking-tight text-[var(--brand-ink)]"
+                      >
+                        Commonplace
+                      </h2>
+                      <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
+                        Capture book ideas, connect insights, and prepare them
+                        for speaking practice.
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setMode("main_mindmap")}
-                      className="rounded-lg border border-[#534AB7]/30 bg-[#EEEDFE] px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#E3E0FF]"
-                      data-testid="commonplace-main-mindmap-btn"
+                      onClick={() => {
+                        setSelectedNote(null);
+                        setMode("main_maps_placeholder");
+                      }}
+                      className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-4 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
+                      data-testid="commonplace-main-maps-btn"
                     >
-                      Mind Map Utama
+                      Main Maps
                     </button>
                   </div>
                   <LibraryView
-                    notes={notes}
+                    notes={filteredNotes}
                     isLoading={isLoading}
                     onCreate={openCreate}
                     onOpen={openDetail}
@@ -562,6 +585,7 @@ export function CommonplaceView({
                 <NoteForm
                   mode={mode}
                   form={form}
+                  fieldErrors={fieldErrors}
                   shortcode={mode === "edit" ? selectedNote?.shortcode : null}
                   isSaving={isSaving}
                   onBack={mode === "edit" && selectedNote ? () => setMode("detail") : openLibrary}
@@ -577,7 +601,6 @@ export function CommonplaceView({
                   deleteConfirmVisible={deleteConfirmVisible}
                   onBack={openLibrary}
                   onEdit={openEdit}
-                  onOpenMindMap={openMindMap}
                   onDiscussInPodchat={onDiscussInPodchat ? handleDiscussInPodchat : undefined}
                   onAskDelete={() => setDeleteConfirmVisible(true)}
                   onCancelDelete={() => setDeleteConfirmVisible(false)}
@@ -585,41 +608,153 @@ export function CommonplaceView({
                 />
               )}
 
-              {mode === "mindmap" && selectedNote && (
-                <CommonplaceMindMapCanvas
-                  note={selectedNote}
-                  onBackToDetail={() => {
-                    setSelectedMindMapId(null);
-                    setMode("detail");
-                  }}
-                  onLookupByShortcode={async (shortcode) => {
-                    if (!storage || !effectiveOwnerId) {
-                      return { ok: false as const, error: "Storage unavailable" };
-                    }
-                    return storage.getCommonplaceNoteByShortcode(
-                      effectiveOwnerId,
-                      shortcode,
-                    );
-                  }}
-                  ownerId={effectiveOwnerId}
-                  storage={storage}
-                  initialMindMapId={selectedMindMapId}
-                />
-              )}
-
-              {mode === "main_mindmap" && (
-                <CommonplaceMainMindMapCanvas
-                  onBackToLibrary={openLibrary}
-                  onOpenSubMindMap={openSavedSubMindMap}
-                  ownerId={effectiveOwnerId}
-                  storage={storage}
-                />
+              {mode === "main_maps_placeholder" && (
+                <MainMapsPlaceholder onBack={openLibrary} />
               )}
             </>
           )}
         </div>
       </div>
     </section>
+  );
+}
+
+function CommonplaceSidebar({
+  notes,
+  selectedNoteId,
+  searchQuery,
+  isLoading,
+  onSearchChange,
+  onBackToFonetik,
+  onCreate,
+  onOpen,
+}: {
+  notes: CommonplaceNote[];
+  selectedNoteId: string | null;
+  searchQuery: string;
+  isLoading: boolean;
+  onSearchChange: (value: string) => void;
+  onBackToFonetik?: () => void;
+  onCreate: () => void;
+  onOpen: (noteId: string) => void;
+}) {
+  return (
+    <aside
+      data-testid="commonplace-sidebar"
+      className="flex min-h-[18rem] flex-col border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 lg:h-full lg:border-b-0 lg:border-r"
+      aria-label="Commonplace library"
+    >
+      <button
+        type="button"
+        onClick={onBackToFonetik}
+        className="w-full rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-left text-sm font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+      >
+        ← Kembali ke Fonetik
+      </button>
+
+      <div className="mt-5 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+          LIBRARY
+        </p>
+        <button
+          type="button"
+          onClick={onCreate}
+          className="rounded-lg bg-[var(--brand-teal)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2"
+        >
+          + Baru
+        </button>
+      </div>
+
+      <label
+        htmlFor="commonplace-search"
+        className="mt-4 flex flex-col gap-2 text-xs font-semibold text-[var(--brand-ink)]"
+      >
+        Search notes
+        <input
+          id="commonplace-search"
+          type="search"
+          value={searchQuery}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Title, book, shortcode, tag"
+          className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] outline-none placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-teal)] focus:ring-2 focus:ring-[var(--brand-teal)]/20"
+        />
+      </label>
+
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]">
+        {isLoading ? (
+          <p className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
+            Loading notes...
+          </p>
+        ) : notes.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-white/70 px-3 py-4 text-sm leading-6 text-[var(--brand-ink-soft)]">
+            No matching notes yet.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2" data-testid="commonplace-sidebar-note-list">
+            {notes.map((note) => (
+              <SidebarNoteButton
+                key={note.id}
+                note={note}
+                selected={note.id === selectedNoteId}
+                onClick={() => onOpen(note.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function SidebarNoteButton({
+  note,
+  selected,
+  onClick,
+}: {
+  note: CommonplaceNote;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const visibleTags = note.tags.slice(0, 2);
+  const hiddenCount = Math.max(0, note.tags.length - visibleTags.length);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
+        selected
+          ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]"
+          : "border-[var(--brand-border)] bg-white hover:bg-[var(--brand-surface)]"
+      }`}
+    >
+      <span className="text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+        {note.shortcode}
+      </span>
+      <span className="mt-1 block truncate text-sm font-semibold text-[var(--brand-ink)]">
+        {displayTitle(note)}
+      </span>
+      <span className="mt-1 block truncate text-xs text-[var(--brand-ink-soft)]">
+        {note.sourceBook}
+      </span>
+      {note.tags.length > 0 && (
+        <span className="mt-2 flex flex-wrap gap-1.5">
+          {visibleTags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-[var(--brand-teal)]/20 bg-white px-2 py-0.5 text-[10px] font-medium text-[var(--brand-teal-ink)]"
+            >
+              #{tag}
+            </span>
+          ))}
+          {hiddenCount > 0 && (
+            <span className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--brand-muted)]">
+              +{hiddenCount}
+            </span>
+          )}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -643,14 +778,56 @@ function LibraryView({
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4">
+    <div
+      className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 xl:grid-cols-[repeat(auto-fit,minmax(170px,1fr))]"
+      data-testid="commonplace-library-grid"
+    >
+      {notes.map((note) => (
+        <button
+          key={note.id}
+          type="button"
+          onClick={() => onOpen(note.id)}
+          className="group flex aspect-[3/4] min-h-[220px] flex-col overflow-hidden rounded-lg border border-[var(--brand-border)] bg-white text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[var(--brand-teal)]/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+        >
+          <span className="flex flex-1 flex-col p-4">
+            <span className="text-base font-semibold leading-5 text-[var(--brand-ink)]">
+              {displayTitle(note)}
+            </span>
+            <span className="mt-2 text-xs font-medium text-[var(--brand-ink-soft)]">
+              {note.sourceBook}
+              {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
+            </span>
+            <span className="mt-3 line-clamp-4 overflow-hidden text-sm leading-6 text-[var(--brand-ink-soft)]">
+              {note.insight}
+            </span>
+            {note.tags.length > 0 && (
+              <span className="mt-auto flex flex-wrap gap-1.5 pt-4">
+                {note.tags.slice(0, 3).map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-[var(--brand-teal)]/20 bg-[var(--brand-teal-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--brand-teal-ink)]"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </span>
+            )}
+          </span>
+          <span className="flex items-center justify-end border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-2">
+            <span className="font-mono text-xs font-semibold text-[var(--brand-teal-ink)]">
+              {note.shortcode}
+            </span>
+          </span>
+        </button>
+      ))}
+
       <button
         type="button"
         onClick={onCreate}
-        className="flex min-h-[190px] flex-col items-start justify-between rounded-lg border border-dashed border-[#534AB7]/45 bg-white p-5 text-left transition-colors hover:bg-[#EEEDFE] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+        className="flex aspect-[3/4] min-h-[220px] flex-col items-start justify-between rounded-lg border border-dashed border-[var(--brand-teal)]/45 bg-white p-5 text-left transition-colors hover:bg-[var(--brand-teal-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
         aria-describedby="commonplace-empty-helper"
       >
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#534AB7] text-white">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-teal)] text-white">
           <svg
             aria-hidden="true"
             className="h-5 w-5"
@@ -678,41 +855,6 @@ function LibraryView({
           </span>
         </span>
       </button>
-
-      {notes.map((note) => (
-        <button
-          key={note.id}
-          type="button"
-          onClick={() => onOpen(note.id)}
-          className="flex min-h-[190px] flex-col rounded-lg border border-[var(--brand-border)] bg-white p-5 text-left shadow-sm transition-colors hover:bg-[#F8F7FF] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
-        >
-          <span className="text-xs font-semibold text-[#534AB7]">
-            {note.shortcode}
-          </span>
-          <span className="mt-2 text-base font-semibold text-[var(--brand-ink)]">
-            {displayTitle(note)}
-          </span>
-          <span className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-            {note.sourceBook}
-            {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
-          </span>
-          <span className="mt-3 max-h-[4.75rem] overflow-hidden text-sm leading-6 text-[var(--brand-ink-soft)]">
-            {note.insight}
-          </span>
-          {note.tags.length > 0 && (
-            <span className="mt-4 flex flex-wrap gap-2">
-              {note.tags.slice(0, 4).map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-[#534AB7]/20 bg-[#EEEDFE] px-2.5 py-1 text-xs text-[#332C85]"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </span>
-          )}
-        </button>
-      ))}
     </div>
   );
 }
@@ -720,6 +862,7 @@ function LibraryView({
 function NoteForm({
   mode,
   form,
+  fieldErrors,
   shortcode,
   isSaving,
   onBack,
@@ -728,6 +871,7 @@ function NoteForm({
 }: {
   mode: "create" | "edit";
   form: CommonplaceFormState;
+  fieldErrors: Partial<Record<"sourceBook" | "title" | "insight", string>>;
   shortcode: string | null | undefined;
   isSaving: boolean;
   onBack: () => void;
@@ -762,6 +906,8 @@ function NoteForm({
           label="Source book"
           value={form.sourceBook}
           placeholder="Untitled Source"
+          required
+          error={fieldErrors.sourceBook}
           onChange={(value) => onChange("sourceBook", value)}
         />
         <TextInput
@@ -774,6 +920,8 @@ function NoteForm({
           id="commonplace-note-title"
           label="Title"
           value={form.title}
+          required
+          error={fieldErrors.title}
           onChange={(value) => onChange("title", value)}
         />
         <TextInput
@@ -798,6 +946,7 @@ function NoteForm({
         value={form.insight}
         rows={5}
         required
+        error={fieldErrors.insight}
         onChange={(value) => onChange("insight", value)}
       />
       <TextArea
@@ -843,7 +992,6 @@ function NoteDetail({
   deleteConfirmVisible,
   onBack,
   onEdit,
-  onOpenMindMap,
   onDiscussInPodchat,
   onAskDelete,
   onCancelDelete,
@@ -854,7 +1002,6 @@ function NoteDetail({
   deleteConfirmVisible: boolean;
   onBack: () => void;
   onEdit: () => void;
-  onOpenMindMap: () => void;
   onDiscussInPodchat?: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
@@ -899,13 +1046,6 @@ function NoteDetail({
               Diskusi di Podchat
             </button>
           )}
-          <button
-            type="button"
-            onClick={onOpenMindMap}
-            className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#F8F7FF]"
-          >
-            Buka mind map
-          </button>
           <button
             type="button"
             onClick={onAskDelete}
@@ -968,24 +1108,45 @@ function TextInput({
   label,
   value,
   placeholder,
+  required = false,
+  error,
   onChange,
 }: {
   id: string;
   label: string;
   value: string;
   placeholder?: string;
+  required?: boolean;
+  error?: string;
   onChange: (value: string) => void;
 }) {
+  const errorId = error ? `${id}-error` : undefined;
+
   return (
     <label htmlFor={id} className="flex flex-col gap-2 text-sm font-semibold text-[var(--brand-ink)]">
-      {label}
+      <span>
+        {label}
+        {required && <span className="text-[#8A1F15]"> *</span>}
+      </span>
       <input
         id={id}
         value={value}
         placeholder={placeholder}
+        required={required}
+        aria-invalid={error ? "true" : undefined}
+        aria-describedby={errorId}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] outline-none focus:border-[#534AB7] focus:ring-2 focus:ring-[#534AB7]/20"
+        className={`rounded-lg border bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] outline-none focus:ring-2 ${
+          error
+            ? "border-[#B42318] focus:border-[#B42318] focus:ring-[#B42318]/20"
+            : "border-[var(--brand-border)] focus:border-[var(--brand-teal)] focus:ring-[var(--brand-teal)]/20"
+        }`}
       />
+      {error && (
+        <span id={errorId} className="text-xs font-medium text-[#8A1F15]">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
@@ -997,6 +1158,7 @@ function TextArea({
   rows,
   required = false,
   placeholder,
+  error,
   onChange,
 }: {
   id: string;
@@ -1005,20 +1167,37 @@ function TextArea({
   rows: number;
   required?: boolean;
   placeholder?: string;
+  error?: string;
   onChange: (value: string) => void;
 }) {
+  const errorId = error ? `${id}-error` : undefined;
+
   return (
     <label htmlFor={id} className="flex flex-col gap-2 text-sm font-semibold text-[var(--brand-ink)]">
-      {label}
+      <span>
+        {label}
+        {required && <span className="text-[#8A1F15]"> *</span>}
+      </span>
       <textarea
         id={id}
         value={value}
         rows={rows}
         required={required}
         placeholder={placeholder}
+        aria-invalid={error ? "true" : undefined}
+        aria-describedby={errorId}
         onChange={(event) => onChange(event.target.value)}
-        className="resize-y rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-normal leading-6 text-[var(--brand-ink)] outline-none focus:border-[#534AB7] focus:ring-2 focus:ring-[#534AB7]/20"
+        className={`resize-y rounded-lg border bg-white px-3 py-2 text-sm font-normal leading-6 text-[var(--brand-ink)] outline-none focus:ring-2 ${
+          error
+            ? "border-[#B42318] focus:border-[#B42318] focus:ring-[#B42318]/20"
+            : "border-[var(--brand-border)] focus:border-[var(--brand-teal)] focus:ring-[var(--brand-teal)]/20"
+        }`}
       />
+      {error && (
+        <span id={errorId} className="text-xs font-medium text-[#8A1F15]">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
@@ -1052,6 +1231,33 @@ function DetailList({ label, values }: { label: string; values: string[] }) {
       ) : (
         <p className="mt-2 text-sm text-[var(--brand-ink-soft)]">None</p>
       )}
+    </section>
+  );
+}
+
+function MainMapsPlaceholder({ onBack }: { onBack: () => void }) {
+  return (
+    <section
+      className="rounded-xl border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-6"
+      data-testid="commonplace-main-maps-placeholder"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
+        Main Maps
+      </p>
+      <h2 className="mt-2 text-2xl font-semibold text-[var(--brand-ink)]">
+        Main Maps is coming soon
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
+        This entry point is reserved for a future collection view. Phase 1A
+        keeps the library focused on notes.
+      </p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-5 rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)]"
+      >
+        Back to Library
+      </button>
     </section>
   );
 }
