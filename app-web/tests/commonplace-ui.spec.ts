@@ -101,10 +101,33 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
     __COMMONPLACE_TEST_MAP_EDGES__?: TestMapEdge[];
     __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
+    __COMMONPLACE_FORCE_CREATE_FAILURE__?: boolean;
     __COMMONPLACE_FORCE_DETAIL_READ_FAILURE__?: boolean;
+    __COMMONPLACE_FORCE_LIST_FAILURE__?: boolean;
+  };
+  const notesStorageKey = "__COMMONPLACE_TEST_NOTES__";
+  const readPersistedNotes = (): TestNote[] | null => {
+    try {
+      const stored = window.sessionStorage.getItem(notesStorageKey);
+      const parsed = stored ? (JSON.parse(stored) as unknown) : null;
+      return Array.isArray(parsed) ? (parsed as TestNote[]) : null;
+    } catch {
+      return null;
+    }
+  };
+  const persistNotes = () => {
+    try {
+      window.sessionStorage.setItem(
+        notesStorageKey,
+        JSON.stringify(testWindow.__COMMONPLACE_TEST_NOTES__ ?? []),
+      );
+    } catch {
+      // Persistence is only needed for reload-focused UI tests.
+    }
   };
 
-  testWindow.__COMMONPLACE_TEST_NOTES__ = seedNotes.map((note) => ({ ...note }));
+  testWindow.__COMMONPLACE_TEST_NOTES__ =
+    readPersistedNotes() ?? seedNotes.map((note) => ({ ...note }));
   const testOwnerId = seedNotes[0]?.ownerId ?? "commonplace-test-owner";
   testWindow.__COMMONPLACE_TEST_MAPS__ = [
     {
@@ -143,6 +166,10 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
 
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
     async listCommonplaceNotes(ownerId: string) {
+      if (testWindow.__COMMONPLACE_FORCE_LIST_FAILURE__) {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
+      }
+
       return {
         ok: true as const,
         notes: (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).filter(
@@ -168,6 +195,9 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         !input.insight?.trim()
       ) {
         return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+      if (testWindow.__COMMONPLACE_FORCE_CREATE_FAILURE__) {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
       }
 
       const sourceBook = input.sourceBook.trim();
@@ -210,6 +240,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         note,
         ...(testWindow.__COMMONPLACE_TEST_NOTES__ ?? []),
       ];
+      persistNotes();
       return { ok: true as const, note };
     },
     async getCommonplaceNoteById(ownerId: string, noteId: string) {
@@ -281,12 +312,14 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       };
       notes[noteIndex] = updated;
       testWindow.__COMMONPLACE_TEST_NOTES__ = notes;
+      persistNotes();
       return { ok: true as const, note: updated };
     },
     async deleteCommonplaceNote(ownerId: string, noteId: string) {
       testWindow.__COMMONPLACE_TEST_NOTES__ = (
         testWindow.__COMMONPLACE_TEST_NOTES__ ?? []
       ).filter((note) => note.ownerId !== ownerId || note.id !== noteId);
+      persistNotes();
       return { ok: true as const };
     },
     async createCommonplaceSubMindMap() {
@@ -1061,6 +1094,105 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByRole("article")).toContainText("#education");
     await expect(page.getByRole("article")).toContainText("#wn1");
     await expect(page.getByRole("article")).not.toContainText("not-a-shortcode");
+  });
+
+  test("created notes persist after leaving Commonplace and after page reload", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await page.getByRole("button", { name: "+ Baru" }).click();
+    await page.getByLabel("Source book").fill("Persistence Source");
+    await page.getByLabel("Title").fill("Persistent Library Note");
+    await page
+      .getByLabel("Insight")
+      .fill("A saved note should come back from persistent storage.");
+    await page.getByLabel("Tags").fill("persistence, qa");
+    await page.getByRole("button", { name: "Save note" }).click();
+
+    await expect(page.getByTestId("commonplace-library-grid")).toContainText(
+      "Persistent Library Note",
+    );
+    await expect(page.getByTestId("commonplace-sidebar-note-list")).toContainText(
+      "Persistent Library Note",
+    );
+
+    await page.getByRole("button", { name: /Kembali ke Fonetik/ }).click();
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await expect(page.getByTestId("commonplace-library-grid")).toContainText(
+      "Persistent Library Note",
+    );
+    await expect(page.getByTestId("commonplace-sidebar-note-list")).toContainText(
+      "Persistent Library Note",
+    );
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await expect(page.getByTestId("commonplace-library-grid")).toContainText(
+      "Persistent Library Note",
+    );
+
+    await page.getByLabel("Search notes").fill("persistence");
+    await expect(page.getByTestId("commonplace-library-grid")).toContainText(
+      "Persistent Library Note",
+    );
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Persistent Library Note/i })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Persistent Library Note" }),
+    ).toBeVisible();
+    await expect(page.getByRole("article")).toContainText("Persistence Source");
+  });
+
+  test("create failure does not leave a fake permanent note card", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_FORCE_CREATE_FAILURE__?: boolean;
+      };
+      testWindow.__COMMONPLACE_FORCE_CREATE_FAILURE__ = true;
+    });
+
+    await page.getByRole("button", { name: "+ Baru" }).click();
+    await page.getByLabel("Source book").fill("Failed Persistence Source");
+    await page.getByLabel("Title").fill("Failed Permanent Note");
+    await page.getByLabel("Insight").fill("This note should never become permanent.");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(
+      page.getByText("Could not save this note. Please try again."),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByTestId("commonplace-library-grid")).not.toContainText(
+      "Failed Permanent Note",
+    );
+    await expect(page.getByTestId("commonplace-sidebar-note-list")).not.toContainText(
+      "Failed Permanent Note",
+    );
+  });
+
+  test("list failure shows a safe error instead of silently clearing state", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_FORCE_LIST_FAILURE__?: boolean;
+      };
+      testWindow.__COMMONPLACE_FORCE_LIST_FAILURE__ = true;
+    });
+
+    await page.getByRole("button", { name: "Commonplace" }).click();
+    await expect(
+      page.getByText("Could not load Commonplace notes. Please try again."),
+    ).toBeVisible();
   });
 
   test("note cards and sidebar note items open the existing Detail Note behavior", async ({

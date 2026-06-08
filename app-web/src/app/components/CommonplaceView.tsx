@@ -409,6 +409,33 @@ async function createCommonplaceNoteViaServer(
   }
 }
 
+async function listCommonplaceNotesViaServer(): Promise<CommonplaceNoteListResult> {
+  try {
+    const response = await fetch("/api/commonplace/notes", {
+      method: "GET",
+      credentials: "same-origin",
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { notes?: CommonplaceNote[]; error?: string }
+      | null;
+
+    if (response.ok && Array.isArray(data?.notes)) {
+      return { ok: true, notes: data.notes };
+    }
+
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_note_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
 async function updateCommonplaceNoteViaServer(
   input: Omit<UpdateCommonplaceNoteInput, "ownerId">,
 ): Promise<CommonplaceNoteResult> {
@@ -905,11 +932,14 @@ export function CommonplaceView({
   }, [effectiveOwnerId, isSignedIn, storage, supabaseConfigured, testStorage]);
 
   const loadNotes = useCallback(async () => {
-    if (!storage || !effectiveOwnerId) return;
+    if (!effectiveOwnerId) return;
 
     setIsLoading(true);
     setError(null);
-    const result = await storage.listCommonplaceNotes(effectiveOwnerId);
+    const result =
+      testStorage && storage
+        ? await storage.listCommonplaceNotes(effectiveOwnerId)
+        : await listCommonplaceNotesViaServer();
     setIsLoading(false);
 
     if (!result.ok) {
@@ -918,7 +948,7 @@ export function CommonplaceView({
     }
 
     setNotes(result.notes);
-  }, [effectiveOwnerId, storage]);
+  }, [effectiveOwnerId, storage, testStorage]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

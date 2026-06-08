@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 
-import { DELETE, PATCH, POST, testHooks } from "../src/app/api/commonplace/notes/route";
+import { DELETE, GET, PATCH, POST, testHooks } from "../src/app/api/commonplace/notes/route";
 import type { CommonplaceNoteRow } from "../src/app/lib/storage/supabase-commonplace-adapter";
 
 const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,6 +29,8 @@ type MockOptions = {
   counterReadError?: Error | null;
   counterWriteError?: Error | null;
   noteInsertError?: Error | null;
+  noteListError?: Error | null;
+  noteRows?: CommonplaceNoteRow[];
 };
 
 function buildRequest(body: Record<string, unknown>): Request {
@@ -48,6 +50,7 @@ function createMockSupabaseClient(options: MockOptions = {}) {
   function buildQuery(table: string) {
     let operation = "";
     let payload: unknown = null;
+    const filters: Array<{ column: string; value: string }> = [];
 
     const query = {
       insert(row: unknown) {
@@ -75,7 +78,25 @@ function createMockSupabaseClient(options: MockOptions = {}) {
       },
       eq(column: string, value: string) {
         calls.push(`eq:${table}:${column}:${value}`);
+        filters.push({ column, value });
         return query;
+      },
+      order(column: string, orderOptions: { ascending: boolean }) {
+        calls.push(`order:${table}:${column}:${orderOptions.ascending ? "asc" : "desc"}`);
+        if (table === "commonplace_notes" && operation === "") {
+          const rows = (options.noteRows ?? [baseRow]).filter((row) =>
+            filters.every(
+              (filter) =>
+                (row as unknown as Record<string, unknown>)[filter.column] ===
+                filter.value,
+            ),
+          );
+          return Promise.resolve({
+            data: rows,
+            error: options.noteListError ?? null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
       },
       maybeSingle() {
         calls.push(`maybeSingle:${table}`);
@@ -172,6 +193,22 @@ test.describe("Commonplace notes route", () => {
     expect(clientCreated).toBe(false);
   });
 
+  test("unauthenticated note list returns safe auth_required", async () => {
+    testHooks.resolveCurrentUserId = async () => null;
+    let clientCreated = false;
+    testHooks.getSupabaseClient = () => {
+      clientCreated = true;
+      return {};
+    };
+
+    const response = await GET();
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(401);
+    expect(data).toEqual({ error: "auth_required" });
+    expect(clientCreated).toBe(false);
+  });
+
   test("missing required fields returns safe invalid_note_fields", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";
     const mock = createMockSupabaseClient();
@@ -183,6 +220,52 @@ test.describe("Commonplace notes route", () => {
     expect(response.status).toBe(400);
     expect(data).toEqual({ error: "invalid_note_fields" });
     expect(mock.calls).toEqual([]);
+  });
+
+  test("GET returns owner-scoped notes", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const otherUserRow: CommonplaceNoteRow = {
+      ...baseRow,
+      id: "note-other-user",
+      owner_id: "other-user-456",
+      shortcode: "#ou1",
+      source_book: "Other Source",
+      insight: "This should not be returned.",
+    };
+    const mock = createMockSupabaseClient({
+      noteRows: [baseRow, otherUserRow],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET();
+    const data = (await response.json()) as {
+      notes: Array<{ id: string; ownerId: string; shortcode: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(data.notes).toHaveLength(1);
+    expect(data.notes[0]).toMatchObject({
+      id: "note-db-1",
+      ownerId: "server-user-123",
+      shortcode: "#wn1",
+    });
+    expect(mock.calls).toContain("eq:commonplace_notes:owner_id:server-user-123");
+    expect(JSON.stringify(data)).not.toContain("other-user-456");
+  });
+
+  test("GET read failure returns safe note_save_failed without raw details", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      noteListError: new Error("raw Supabase read failure"),
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET();
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(500);
+    expect(data).toEqual({ error: "note_save_failed" });
+    expect(JSON.stringify(data)).not.toContain("raw Supabase read failure");
   });
 
   test("valid note save derives ownerId from Clerk auth and ignores request owner_id", async () => {

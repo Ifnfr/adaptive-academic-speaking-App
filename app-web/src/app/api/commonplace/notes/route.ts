@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   createCommonplaceNote,
   deleteCommonplaceNote,
+  listCommonplaceNotes,
   updateCommonplaceNote,
   type CreateCommonplaceNoteInput,
   type UpdateCommonplaceNoteInput,
@@ -123,6 +124,32 @@ async function parseObjectBody(
   }
 
   return isPlainObject(parsed) ? parsed : null;
+}
+
+export async function GET() {
+  const ownerId = await resolveCurrentUserId();
+  if (!ownerId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  }
+
+  const supabaseClient = getSupabaseClient();
+  if (!supabaseClient) {
+    return NextResponse.json({ error: "note_save_failed" }, { status: 500 });
+  }
+
+  const result = await listCommonplaceNotes(ownerId, supabaseClient);
+
+  if (!result.ok) {
+    const status =
+      result.error === "commonplace_validation_failed" ? 400 : 500;
+    const error =
+      result.error === "commonplace_validation_failed"
+        ? "invalid_note_fields"
+        : "note_save_failed";
+    return NextResponse.json({ error }, { status });
+  }
+
+  return NextResponse.json({ notes: result.notes }, { status: 200 });
 }
 
 export async function POST(request: Request) {
