@@ -610,11 +610,11 @@ export function CommonplaceView({
 
   return (
     <section
-      className="min-h-[calc(100dvh-11rem)] overflow-hidden rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:min-h-0 lg:flex-1"
+      className="min-h-[calc(100dvh-11rem)] rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:flex-1"
       data-testid="commonplace-view"
       aria-labelledby="commonplace-title"
     >
-      <div className="flex min-h-full flex-col lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="flex min-h-full flex-col lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
         <CommonplaceSidebar
           notes={filteredNotes}
           selectedNoteId={selectedNote?.id ?? null}
@@ -626,7 +626,7 @@ export function CommonplaceView({
           onOpen={openDetail}
         />
 
-        <div className="min-w-0 bg-[var(--brand-surface)] p-4 sm:p-6 lg:h-full lg:overflow-y-auto lg:p-8">
+        <div className="min-w-0 bg-[var(--brand-surface)] p-4 pb-10 sm:p-6 sm:pb-12 lg:p-8 lg:pb-14">
           {unavailableMessage ? (
             <div className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)]">
               {unavailableMessage}
@@ -742,7 +742,7 @@ function CommonplaceSidebar({
   return (
     <aside
       data-testid="commonplace-sidebar"
-      className="flex min-h-[18rem] flex-col border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 lg:h-full lg:border-b-0 lg:border-r"
+      className="flex min-h-[18rem] flex-col rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 lg:sticky lg:top-8 lg:max-h-[calc(100dvh-4rem)] lg:rounded-l-2xl lg:rounded-tr-none lg:border-b-0 lg:border-r"
       aria-label="Commonplace library"
     >
       <button

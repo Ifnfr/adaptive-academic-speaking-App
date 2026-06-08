@@ -1866,8 +1866,20 @@ export default function Home() {
           onLoginSuccess={() => setCoverState("app")}
         />
       ) : (
-        <div className="min-h-screen w-full lg:h-screen lg:max-h-screen lg:overflow-hidden flex flex-col">
-          <div className="flex w-full flex-col gap-6 px-4 py-6 lg:h-screen lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:overflow-hidden lg:px-0 lg:py-0 lg:min-h-0">
+        <div
+          className={`min-h-screen w-full flex flex-col ${
+            view === "commonplace"
+              ? "lg:min-h-screen"
+              : "lg:h-screen lg:max-h-screen lg:overflow-hidden"
+          }`}
+        >
+          <div
+            className={`flex w-full flex-col gap-6 px-4 py-6 lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:px-0 lg:py-0 ${
+              view === "commonplace"
+                ? "lg:min-h-screen"
+                : "lg:h-screen lg:overflow-hidden lg:min-h-0"
+            }`}
+          >
         {/* Sidebar */}
         {view !== "commonplace" && (
           <Sidebar
@@ -1908,7 +1920,14 @@ export default function Home() {
             }
           />
 
-          <div data-testid="main-scroll-container" className="flex-1 min-h-0 lg:overflow-y-auto lg:overscroll-contain flex flex-col gap-6 lg:pb-10 lg:pr-1">
+          <div
+            data-testid="main-scroll-container"
+            className={`flex-1 min-h-0 flex flex-col gap-6 lg:pb-10 lg:pr-1 ${
+              view === "commonplace"
+                ? "overflow-visible"
+                : "lg:overflow-y-auto lg:overscroll-contain"
+            }`}
+          >
             <CloudSyncStatusPanel
             result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
             onConfirmRestore={handleConfirmCloudRestore}

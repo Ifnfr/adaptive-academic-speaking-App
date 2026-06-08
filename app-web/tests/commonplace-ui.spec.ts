@@ -309,6 +309,13 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     await page.getByRole("button", { name: "+ Baru" }).click();
     await expect(page.getByRole("heading", { name: "Create note" })).toBeVisible();
+    await expect(page.getByLabel("Quote")).toBeVisible();
+    await expect(page.getByLabel("Insight")).toBeVisible();
+    await expect(page.getByLabel("Connections")).toBeVisible();
+    await expect(page.getByLabel("Relevance")).toBeVisible();
+    await page.getByRole("button", { name: "Save note" }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("button", { name: "Save note" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
     await page.getByRole("button", { name: "Save note" }).click();
     await expect(page.getByText("Source book is required.")).toBeVisible();
     await expect(page.getByText("Title is required.")).toBeVisible();
