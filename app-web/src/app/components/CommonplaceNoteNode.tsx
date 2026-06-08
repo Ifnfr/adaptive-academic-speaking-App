@@ -1,6 +1,6 @@
 "use client";
 
-import type { NodeProps } from "reactflow";
+import { Handle, Position, type NodeProps } from "reactflow";
 
 export type CommonplaceNoteNodeData = {
   noteId: string;
@@ -35,7 +35,7 @@ export function CommonplaceNoteNode({
 
   return (
     <article
-      className={`w-[220px] rounded-lg border p-3 text-left shadow-sm transition-shadow ${
+      className={`relative w-[220px] rounded-lg border p-3 text-left shadow-sm transition-shadow ${
         selected ? "ring-2 ring-[var(--brand-teal)] ring-offset-2" : ""
       }`}
       data-testid="commonplace-map-note-node"
@@ -45,6 +45,18 @@ export function CommonplaceNoteNode({
         color: palette.text,
       }}
     >
+      <Handle
+        type="target"
+        position={Position.Left}
+        isConnectable={false}
+        className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        isConnectable={false}
+        className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
+      />
       <p className="text-[11px] font-semibold uppercase">{data.shortcode}</p>
       <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5">
         {data.title}

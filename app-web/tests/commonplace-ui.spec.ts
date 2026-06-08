@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 type TestNote = {
   id: string;
@@ -34,6 +34,16 @@ type TestMapNode = {
   noteId: string;
   positionX: number;
   positionY: number;
+};
+
+type TestMapEdge = {
+  id: string;
+  ownerId: string;
+  mapId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  edgeType: "solid" | "dashed";
+  label: string | null;
 };
 
 const TEST_OWNER_ID = "commonplace-test-owner";
@@ -88,6 +98,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
     __COMMONPLACE_TEST_NOTES__?: TestNote[];
     __COMMONPLACE_TEST_MAPS__?: TestMap[];
     __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+    __COMMONPLACE_TEST_MAP_EDGES__?: TestMapEdge[];
     __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
     __COMMONPLACE_FORCE_DETAIL_READ_FAILURE__?: boolean;
@@ -127,6 +138,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         },
       ]
     : [];
+  testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = [];
   testWindow.__COMMONPLACE_TEST_COUNTERS__ = {};
 
   testWindow.__COMMONPLACE_TEST_ADAPTER__ = {
@@ -487,6 +499,141 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         },
       };
     },
+    async listSubMapEdges(ownerId: string, mindMapId: string) {
+      const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === mindMapId &&
+          candidate.type === "sub",
+      );
+      if (!map) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+
+      return {
+        ok: true as const,
+        edges: (testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? [])
+          .filter(
+            (edge) =>
+              edge.ownerId === ownerId &&
+              edge.mapId === mindMapId,
+          )
+          .map((edge) => ({
+            id: edge.id,
+            mapId: edge.mapId,
+            sourceNodeId: edge.sourceNodeId,
+            targetNodeId: edge.targetNodeId,
+            edgeType: edge.edgeType,
+            label: edge.label,
+          })),
+      };
+    },
+    async createSubMapEdge(
+      ownerId: string,
+      input: {
+        mapId: string;
+        sourceNodeId: string;
+        targetNodeId: string;
+        edgeType: "solid" | "dashed";
+        label?: string | null;
+      },
+    ) {
+      const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === input.mapId &&
+          candidate.type === "sub",
+      );
+      const nodes = testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [];
+      const sourceNode = nodes.find(
+        (node) =>
+          node.ownerId === ownerId &&
+          node.mapId === input.mapId &&
+          node.id === input.sourceNodeId,
+      );
+      const targetNode = nodes.find(
+        (node) =>
+          node.ownerId === ownerId &&
+          node.mapId === input.mapId &&
+          node.id === input.targetNodeId,
+      );
+      if (
+        !map ||
+        !sourceNode ||
+        !targetNode ||
+        sourceNode.id === targetNode.id ||
+        (input.edgeType !== "solid" && input.edgeType !== "dashed")
+      ) {
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+
+      const edge: TestMapEdge = {
+        id: `sub-edge-${(testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? []).length + 1}`,
+        ownerId,
+        mapId: input.mapId,
+        sourceNodeId: sourceNode.id,
+        targetNodeId: targetNode.id,
+        edgeType: input.edgeType,
+        label: input.label?.trim() || null,
+      };
+      testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = [
+        ...(testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? []),
+        edge,
+      ];
+      return { ok: true as const, edge };
+    },
+    async updateSubMapEdge(
+      ownerId: string,
+      input: {
+        mapId: string;
+        edgeId: string;
+        edgeType?: "solid" | "dashed" | null;
+        label?: string | null;
+      },
+    ) {
+      const edges = testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? [];
+      const edgeIndex = edges.findIndex(
+        (edge) =>
+          edge.ownerId === ownerId &&
+          edge.mapId === input.mapId &&
+          edge.id === input.edgeId,
+      );
+      if (
+        edgeIndex < 0 ||
+        (input.edgeType !== undefined &&
+          input.edgeType !== null &&
+          input.edgeType !== "solid" &&
+          input.edgeType !== "dashed")
+      ) {
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+
+      const updated: TestMapEdge = {
+        ...edges[edgeIndex],
+        edgeType: input.edgeType ?? edges[edgeIndex].edgeType,
+        label:
+          Object.prototype.hasOwnProperty.call(input, "label")
+            ? input.label?.trim() || null
+            : edges[edgeIndex].label,
+      };
+      edges[edgeIndex] = updated;
+      testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = edges;
+      return { ok: true as const, edge: updated };
+    },
+    async deleteSubMapEdge(
+      ownerId: string,
+      mindMapId: string,
+      edgeId: string,
+    ) {
+      const before = testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? [];
+      testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = before.filter(
+        (edge) =>
+          edge.ownerId !== ownerId ||
+          edge.mapId !== mindMapId ||
+          edge.id !== edgeId,
+      );
+      return { ok: true as const };
+    },
   };
 }
 
@@ -539,6 +686,36 @@ async function dragSidebarNoteToCanvas(
     dataTransfer,
     clientX: canvasBox.x + offsetX,
     clientY: canvasBox.y + offsetY,
+  });
+}
+
+async function openFlowNodeContextMenu(node: Locator) {
+  const box = await node.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+
+  await node.dispatchEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    button: 2,
+    buttons: 2,
+    clientX: box.x + box.width / 2,
+    clientY: box.y + box.height / 2,
+  });
+}
+
+async function clickFlowNode(node: Locator) {
+  const box = await node.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+
+  await node.dispatchEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    button: 0,
+    buttons: 1,
+    clientX: box.x + box.width / 2,
+    clientY: box.y + box.height / 2,
   });
 }
 
@@ -705,6 +882,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
     await expect(page.getByText(/cluster/i)).toHaveCount(0);
     await expect(page.getByText(/saved map/i)).toHaveCount(0);
 
@@ -979,7 +1157,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .first();
     await expect(draggableNote).toHaveAttribute("draggable", "true");
 
-    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 360, 260);
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 160, 200);
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
@@ -989,15 +1167,77 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       page.getByTestId("commonplace-map-note-node").first(),
     ).toContainText("Institutions and Growth");
 
-    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 520, 340);
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 420, 200);
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
 
+    const sourceNode = page.getByTestId("rf__node-sub-node-created-2");
+    const targetNode = page.getByTestId("rf__node-sub-node-created-3");
+    await openFlowNodeContextMenu(sourceNode);
+    await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveText(
+      "Connect idea",
+    );
+    await page.getByTestId("commonplace-map-connect-idea").click();
+    await expect(page.getByTestId("commonplace-map-connection-mode")).toContainText(
+      "Click a target note",
+    );
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("commonplace-map-connection-mode")).toHaveCount(0);
+
+    await openFlowNodeContextMenu(sourceNode);
+    await page.getByTestId("commonplace-map-connect-idea").click();
+    await expect(page.getByTestId("commonplace-map-connection-mode")).toBeVisible();
+    await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
+    await expect(page.getByTestId("commonplace-map-connection-mode")).toHaveCount(0);
+
+    await openFlowNodeContextMenu(sourceNode);
+    await page.getByTestId("commonplace-map-connect-idea").click();
+    await clickFlowNode(targetNode);
+    await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-label-input").fill("direct influence");
+    await page
+      .getByTestId("commonplace-map-edge-create-popover")
+      .getByRole("button", { name: "Create" })
+      .click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    await expect(page.locator(".commonplace-map-edge--solid")).toHaveCount(1);
+    await expect(page.getByText("direct influence")).toBeVisible();
+
+    await openFlowNodeContextMenu(targetNode);
+    await page.getByTestId("commonplace-map-connect-idea").click();
+    await clickFlowNode(sourceNode);
+    await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-type-select").selectOption("dashed");
+    await page.getByTestId("commonplace-map-edge-label-input").fill("weak association");
+    await page
+      .getByTestId("commonplace-map-edge-create-popover")
+      .getByRole("button", { name: "Create" })
+      .click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(2);
+    await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(1);
+    await expect(page.getByText("weak association")).toBeVisible();
+
+    await page.getByTestId("commonplace-map-edge-label-sub-edge-2").click({ force: true });
+    const editPopover = page.getByTestId("commonplace-map-edge-edit-popover");
+    await expect(editPopover).toBeVisible();
+    await editPopover.getByLabel("Label").fill("revised association");
+    await editPopover.getByLabel("Relationship type").selectOption("solid");
+    await editPopover.getByRole("button", { name: "Save" }).click();
+    await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(0);
+    await expect(page.getByText("revised association")).toBeVisible();
+
+    await page.getByTestId("commonplace-map-edge-label-sub-edge-1").click({ force: true });
+    await expect(editPopover).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-delete-button").click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+
     await page.getByRole("button", { name: "Back to Sub Mind Maps" }).click();
     await page.getByRole("button", { name: /Attention Systems/i }).click();
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
   });

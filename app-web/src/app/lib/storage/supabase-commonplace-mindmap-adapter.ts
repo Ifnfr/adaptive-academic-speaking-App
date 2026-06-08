@@ -132,6 +132,38 @@ export type CommonplaceMapNoteNodeCreateResult =
   | { ok: true; node: CommonplaceMapCanvasNode }
   | { ok: false; error: CommonplaceError };
 
+export type CommonplaceSubMapEdge = {
+  id: string;
+  mapId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  edgeType: CommonplaceMindMapEdgeType;
+  label: string | null;
+};
+
+export type CreateCommonplaceSubMapEdgeInput = {
+  mapId: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  edgeType: CommonplaceMindMapEdgeType;
+  label?: string | null;
+};
+
+export type UpdateCommonplaceSubMapEdgeInput = {
+  mapId: string;
+  edgeId: string;
+  edgeType?: CommonplaceMindMapEdgeType | null;
+  label?: string | null;
+};
+
+export type CommonplaceSubMapEdgeListResult =
+  | { ok: true; edges: CommonplaceSubMapEdge[] }
+  | { ok: false; error: CommonplaceError };
+
+export type CommonplaceSubMapEdgeResult =
+  | { ok: true; edge: CommonplaceSubMapEdge }
+  | { ok: false; error: CommonplaceError };
+
 const MAINMAP_NODES_TABLE = "commonplace_main_map_nodes";
 const MAINMAP_EDGES_TABLE = "commonplace_main_map_edges";
 
@@ -219,10 +251,16 @@ type NodeJoinedRow = {
 
 type EdgeRow = {
   id: string;
+  mindmap_id?: string;
   source_node_id: string;
   target_node_id: string;
   edge_type?: string | null;
   label: string | null;
+};
+
+type EdgeNodeRow = {
+  id: string;
+  mindmap_id: string;
 };
 
 function cleanRequiredText(value: unknown): string | null {
@@ -249,6 +287,28 @@ function cleanMindMapType(value: unknown): CommonplaceMindMapType | null {
 
 function cleanEdgeType(value: unknown): CommonplaceMindMapEdgeType | null {
   return value === "solid" || value === "dashed" ? value : null;
+}
+
+function cleanOptionalEdgeLabel(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length > 80) return undefined;
+  return trimmed || null;
+}
+
+function mapSubMapEdgeRow(
+  row: EdgeRow,
+  fallbackMapId: string,
+): CommonplaceSubMapEdge {
+  return {
+    id: row.id,
+    mapId: row.mindmap_id ?? fallbackMapId,
+    sourceNodeId: row.source_node_id,
+    targetNodeId: row.target_node_id,
+    edgeType: cleanEdgeType(row.edge_type) ?? "solid",
+    label: row.label,
+  };
 }
 
 async function verifyOwnerScopedMap(
@@ -448,6 +508,258 @@ export async function createSubMapNoteNode(
         noteTags: noteRow.tags ?? [],
       },
     };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function verifySubMapEdgeNodes(
+  ownerId: string,
+  mindMapId: string,
+  sourceNodeId: string,
+  targetNodeId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMindMapDeleteResult> {
+  if (sourceNodeId === targetNodeId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  const { data, error } = await supabaseClient
+    .from(NODES_TABLE)
+    .select("id, mindmap_id")
+    .eq("owner_id", ownerId)
+    .eq("mindmap_id", mindMapId)
+    .in("id", [sourceNodeId, targetNodeId]);
+
+  if (error) return { ok: false, error: "commonplace_save_failed" };
+
+  const rows = ((data as EdgeNodeRow[] | null) ?? []).filter(
+    (row) => row.mindmap_id === mindMapId,
+  );
+  const foundIds = new Set(rows.map((row) => row.id));
+  if (
+    rows.length !== 2 ||
+    !foundIds.has(sourceNodeId) ||
+    !foundIds.has(targetNodeId)
+  ) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  return { ok: true };
+}
+
+export async function listSubMapEdges(
+  ownerId: string,
+  mindMapId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceSubMapEdgeListResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(mindMapId);
+  if (!cleanOwnerId || !cleanMindMapId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMindMapId,
+      "sub",
+      supabaseClient,
+    );
+    if (!mapResult.ok) return mapResult;
+
+    const { data, error } = await supabaseClient
+      .from(EDGES_TABLE)
+      .select("id, mindmap_id, source_node_id, target_node_id, edge_type, label")
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .order("created_at", { ascending: true });
+
+    if (error) return { ok: false, error: "commonplace_save_failed" };
+
+    return {
+      ok: true,
+      edges: ((data as EdgeRow[] | null) ?? []).map((row) =>
+        mapSubMapEdgeRow(row, cleanMindMapId),
+      ),
+    };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function createSubMapEdge(
+  ownerId: string,
+  input: CreateCommonplaceSubMapEdgeInput,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceSubMapEdgeResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(input.mapId);
+  const sourceNodeId = cleanRequiredText(input.sourceNodeId);
+  const targetNodeId = cleanRequiredText(input.targetNodeId);
+  const edgeType = cleanEdgeType(input.edgeType);
+  const label = cleanOptionalEdgeLabel(input.label);
+
+  if (
+    !cleanOwnerId ||
+    !cleanMindMapId ||
+    !sourceNodeId ||
+    !targetNodeId ||
+    !edgeType ||
+    label === undefined
+  ) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMindMapId,
+      "sub",
+      supabaseClient,
+    );
+    if (!mapResult.ok) return mapResult;
+
+    const nodeResult = await verifySubMapEdgeNodes(
+      cleanOwnerId,
+      cleanMindMapId,
+      sourceNodeId,
+      targetNodeId,
+      supabaseClient,
+    );
+    if (!nodeResult.ok) return nodeResult;
+
+    const { data, error } = await supabaseClient
+      .from(EDGES_TABLE)
+      .insert({
+        owner_id: cleanOwnerId,
+        mindmap_id: cleanMindMapId,
+        source_node_id: sourceNodeId,
+        target_node_id: targetNodeId,
+        edge_type: edgeType,
+        label,
+      })
+      .select("id, mindmap_id, source_node_id, target_node_id, edge_type, label")
+      .single();
+
+    if (error || !data) {
+      return { ok: false, error: "commonplace_save_failed" };
+    }
+
+    return {
+      ok: true,
+      edge: mapSubMapEdgeRow(data as EdgeRow, cleanMindMapId),
+    };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function updateSubMapEdge(
+  ownerId: string,
+  input: UpdateCommonplaceSubMapEdgeInput,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceSubMapEdgeResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(input.mapId);
+  const edgeId = cleanRequiredText(input.edgeId);
+  const hasEdgeType = input.edgeType !== undefined && input.edgeType !== null;
+  const hasLabel = Object.prototype.hasOwnProperty.call(input, "label");
+  const edgeType = hasEdgeType ? cleanEdgeType(input.edgeType) : null;
+  const label = hasLabel ? cleanOptionalEdgeLabel(input.label) : undefined;
+
+  if (
+    !cleanOwnerId ||
+    !cleanMindMapId ||
+    !edgeId ||
+    (!hasEdgeType && !hasLabel) ||
+    (hasEdgeType && !edgeType) ||
+    (hasLabel && label === undefined)
+  ) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMindMapId,
+      "sub",
+      supabaseClient,
+    );
+    if (!mapResult.ok) return mapResult;
+
+    const updatePayload: {
+      updated_at: string;
+      edge_type?: CommonplaceMindMapEdgeType;
+      label?: string | null;
+    } = { updated_at: new Date().toISOString() };
+    if (edgeType) updatePayload.edge_type = edgeType;
+    if (hasLabel) updatePayload.label = label ?? null;
+
+    const { data, error } = await supabaseClient
+      .from(EDGES_TABLE)
+      .update(updatePayload)
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .eq("id", edgeId)
+      .select("id, mindmap_id, source_node_id, target_node_id, edge_type, label")
+      .maybeSingle();
+
+    if (error) return { ok: false, error: "commonplace_save_failed" };
+    if (!data) return { ok: false, error: "commonplace_not_found" };
+
+    return {
+      ok: true,
+      edge: mapSubMapEdgeRow(data as EdgeRow, cleanMindMapId),
+    };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function deleteSubMapEdge(
+  ownerId: string,
+  mindMapId: string,
+  edgeId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMindMapDeleteResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(mindMapId);
+  const cleanEdgeId = cleanRequiredText(edgeId);
+  if (!cleanOwnerId || !cleanMindMapId || !cleanEdgeId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMindMapId,
+      "sub",
+      supabaseClient,
+    );
+    if (!mapResult.ok) return mapResult;
+
+    const { data: existingEdge, error: readError } = await supabaseClient
+      .from(EDGES_TABLE)
+      .select("id")
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .eq("id", cleanEdgeId)
+      .maybeSingle();
+
+    if (readError) return { ok: false, error: "commonplace_save_failed" };
+    if (!existingEdge) return { ok: false, error: "commonplace_not_found" };
+
+    const { error } = await supabaseClient
+      .from(EDGES_TABLE)
+      .delete()
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .eq("id", cleanEdgeId);
+
+    if (error) return { ok: false, error: "commonplace_save_failed" };
+
+    return { ok: true };
   } catch {
     return { ok: false, error: "commonplace_save_failed" };
   }
