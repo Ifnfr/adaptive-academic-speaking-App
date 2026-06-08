@@ -611,8 +611,8 @@ export function CommonplaceView({
 
   return (
     <section
-      className={`min-h-[calc(100dvh-11rem)] rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:flex-1 ${
-        libraryMode ? "lg:h-[calc(100vh_-_11rem)] lg:max-h-[calc(100vh_-_11rem)] lg:min-h-0 lg:overflow-hidden" : ""
+      className={`min-h-[calc(100dvh-2rem)] rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm lg:flex-1 ${
+        libraryMode ? "lg:h-[calc(100vh_-_2rem)] lg:max-h-[calc(100vh_-_2rem)] lg:min-h-0 lg:overflow-hidden" : ""
       }`}
       data-testid="commonplace-view"
       aria-label="Commonplace"
@@ -889,17 +889,17 @@ function LibraryView({
     <div
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1 pb-3"
       data-testid="commonplace-library-grid"
-      style={{ maxHeight: "31rem" }}
+      style={{ maxHeight: "40rem" }}
     >
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(124px,1fr))] gap-4 xl:grid-cols-[repeat(auto-fill,minmax(136px,1fr))]">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,160px))] justify-start gap-5 xl:grid-cols-[repeat(auto-fill,minmax(140px,172px))]">
         {notes.map((note) => (
           <button
             key={note.id}
             type="button"
             onClick={() => onOpen(note.id)}
-            className="group flex aspect-[4/3] min-h-[138px] flex-col overflow-hidden rounded-lg border border-[var(--brand-border)] bg-white text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[var(--brand-teal)]/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+            className="group flex h-[172px] flex-col overflow-hidden rounded-lg border border-[var(--brand-border)] bg-white text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[var(--brand-teal)]/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
           >
-            <span className="flex flex-1 flex-col p-3">
+            <span className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
               <span className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--brand-ink)]">
                 {displayTitle(note)}
               </span>
@@ -934,7 +934,7 @@ function LibraryView({
         <button
           type="button"
           onClick={onCreate}
-          className="flex aspect-[4/3] min-h-[138px] flex-col items-start justify-between rounded-lg border border-dashed border-[var(--brand-teal)]/45 bg-white p-3 text-left transition-colors hover:bg-[var(--brand-teal-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+          className="flex h-[172px] flex-col items-start justify-between rounded-lg border border-dashed border-[var(--brand-teal)]/45 bg-white p-3 text-left transition-colors hover:bg-[var(--brand-teal-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
           aria-describedby="commonplace-empty-helper"
         >
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-teal)] text-white">

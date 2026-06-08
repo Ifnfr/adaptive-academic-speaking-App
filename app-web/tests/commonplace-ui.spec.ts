@@ -281,6 +281,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     await page.getByRole("button", { name: "Vocabulary Notebook" }).click();
     await expect(page.locator("h1", { hasText: "Vocabulary Notebook" })).toBeVisible();
+    await expect(page.locator("header")).toContainText("Vocabulary Notebook");
 
     await page.getByRole("button", { name: "Commonplace" }).click();
 
@@ -288,19 +289,22 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-sidebar")).toBeVisible();
     await expect(page.getByTestId("commonplace-sidebar")).toContainText("LIBRARY");
     await expect(page.locator("aside").filter({ hasText: "Active Session" })).toHaveCount(0);
-    await expect(page.locator("header")).toContainText("Commonplace");
+    await expect(page.locator("header")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Kembali ke Fonetik/ })).toBeVisible();
 
     await page.getByRole("button", { name: /Kembali ke Fonetik/ }).click();
     await expect(page.locator("h1", { hasText: "Vocabulary Notebook" })).toBeVisible();
+    await expect(page.locator("header")).toContainText("Vocabulary Notebook");
   });
 
   test("Library is default and exposes grid, Add Note tile, and placeholder-only Main Maps", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1366, height: 768 });
     await gotoApp(page);
     await page.getByRole("button", { name: "Commonplace" }).click();
 
+    await expect(page.locator("header")).toHaveCount(0);
     await expect(page.getByText("LIBRARY").first()).toBeVisible();
     await expect(
       page.getByTestId("commonplace-view").getByRole("heading", { name: "Commonplace" }),
@@ -331,6 +335,13 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     const cardBox = await firstCard.boundingBox();
     expect(cardBox?.height).toBeLessThan(190);
     expect(cardBox?.width).toBeLessThan(220);
+    const firstShortcodeBox = await firstCard.getByText("#wn1").boundingBox();
+    expect((firstShortcodeBox?.x ?? 0) + (firstShortcodeBox?.width ?? 0)).toBeLessThanOrEqual(
+      (cardBox?.x ?? 0) + (cardBox?.width ?? 0) + 1,
+    );
+    expect((firstShortcodeBox?.y ?? 0) + (firstShortcodeBox?.height ?? 0)).toBeLessThanOrEqual(
+      (cardBox?.y ?? 0) + (cardBox?.height ?? 0) + 1,
+    );
     const cardSpacing = await page
       .getByTestId("commonplace-library-grid")
       .evaluate((grid) => {
@@ -342,13 +353,17 @@ test.describe("Commonplace Phase 1B form and detail", () => {
           rowGap: Number.parseFloat(styles.rowGap),
         };
       });
-    expect(cardSpacing.columnGap).toBeGreaterThanOrEqual(16);
-    expect(cardSpacing.rowGap).toBeGreaterThanOrEqual(16);
+    expect(cardSpacing.columnGap).toBeGreaterThanOrEqual(20);
+    expect(cardSpacing.rowGap).toBeGreaterThanOrEqual(20);
     await expect(secondCard).toBeVisible();
     await expect(addNoteTile).toBeVisible();
+    const secondCardBox = await secondCard.boundingBox();
+    const addNoteBox = await addNoteTile.boundingBox();
+    expect((addNoteBox?.x ?? 0) - ((secondCardBox?.x ?? 0) + (secondCardBox?.width ?? 0))).toBeGreaterThanOrEqual(12);
     const workspaceBox = await page.getByTestId("commonplace-view").boundingBox();
     const viewport = page.viewportSize();
     expect(workspaceBox?.height).toBeLessThanOrEqual((viewport?.height ?? 768) + 1);
+    expect(workspaceBox?.y).toBeLessThanOrEqual(20);
 
     await page.getByTestId("commonplace-main-maps-btn").click();
     await expect(page.getByTestId("commonplace-main-maps-placeholder")).toBeVisible();

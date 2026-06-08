@@ -1874,10 +1874,10 @@ export default function Home() {
           }`}
         >
           <div
-            className={`flex w-full flex-col gap-6 px-4 py-6 lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:px-0 lg:py-0 ${
+            className={`flex w-full flex-col lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:px-0 lg:py-0 ${
               view === "commonplace"
-                ? "lg:min-h-screen"
-                : "lg:h-screen lg:overflow-hidden lg:min-h-0"
+                ? "gap-0 px-3 py-3 lg:min-h-screen"
+                : "gap-6 px-4 py-6 lg:h-screen lg:overflow-hidden lg:min-h-0"
             }`}
           >
         {/* Sidebar */}
@@ -1898,34 +1898,42 @@ export default function Home() {
           />
         )}
         {/* Main */}
-        <main className="flex min-w-0 flex-1 flex-col gap-6 lg:h-full lg:min-h-0 lg:px-8 lg:py-8">
+        <main
+          className={`flex min-w-0 flex-1 flex-col ${
+            view === "commonplace"
+              ? "gap-0 lg:h-screen lg:min-h-0 lg:px-4 lg:py-4"
+              : "gap-6 lg:h-full lg:min-h-0 lg:px-8 lg:py-8"
+          }`}
+        >
           {/* Topbar */}
-          <Topbar
-            subtitle={viewSubtitle(view, homeT)}
-            title={viewTitle(view, homeT)}
-            description={viewDescription(view, homeT)}
-            hasActiveSession={view === "active"}
-            mode={mode}
-            level={level}
-            appLanguage={appLanguage}
-            authSlot={
-              <>
-                <CloudSnapshotStatusBadge
-                  result={
-                    cloudAuthState.isSignedIn ? cloudSnapshotResult : null
-                  }
-                />
-                <AuthStatus />
-              </>
-            }
-          />
+          {view !== "commonplace" && (
+            <Topbar
+              subtitle={viewSubtitle(view, homeT)}
+              title={viewTitle(view, homeT)}
+              description={viewDescription(view, homeT)}
+              hasActiveSession={view === "active"}
+              mode={mode}
+              level={level}
+              appLanguage={appLanguage}
+              authSlot={
+                <>
+                  <CloudSnapshotStatusBadge
+                    result={
+                      cloudAuthState.isSignedIn ? cloudSnapshotResult : null
+                    }
+                  />
+                  <AuthStatus />
+                </>
+              }
+            />
+          )}
 
           <div
             data-testid="main-scroll-container"
-            className={`flex-1 min-h-0 flex flex-col gap-6 lg:pb-10 lg:pr-1 ${
+            className={`flex-1 min-h-0 flex flex-col ${
               view === "commonplace"
-                ? "overflow-visible"
-                : "lg:overflow-y-auto lg:overscroll-contain"
+                ? "gap-0 overflow-visible lg:pb-0 lg:pr-0"
+                : "gap-6 lg:pb-10 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
             }`}
           >
             <CloudSyncStatusPanel
