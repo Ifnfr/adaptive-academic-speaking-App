@@ -40,7 +40,6 @@ import type {
   CommonplaceMainMapSaveResult,
   CommonplaceMindMapDeleteResult,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
-
 type CommonplaceMode = "library" | "create" | "detail" | "edit" | "main_maps_placeholder";
 
 type CommonplaceFormState = {
@@ -280,6 +279,68 @@ async function createCommonplaceNoteViaServer(
   }
 }
 
+async function updateCommonplaceNoteViaServer(
+  input: Omit<UpdateCommonplaceNoteInput, "ownerId">,
+): Promise<CommonplaceNoteResult> {
+  try {
+    const response = await fetch("/api/commonplace/notes", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { note?: CommonplaceNote; error?: string }
+      | null;
+
+    if (response.ok && data?.note) {
+      return { ok: true, note: data.note };
+    }
+
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_note_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function deleteCommonplaceNoteViaServer(
+  noteId: string,
+): Promise<CommonplaceDeleteResult> {
+  try {
+    const response = await fetch("/api/commonplace/notes", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ noteId }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { ok?: boolean; error?: string }
+      | null;
+
+    if (response.ok && data?.ok) {
+      return { ok: true };
+    }
+
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_note_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
 export function CommonplaceView({
   ownerId,
   isSignedIn = false,
@@ -382,6 +443,24 @@ export function CommonplaceView({
     setMode("detail");
   };
 
+  const openDetailByShortcode = async (shortcode: string) => {
+    if (!storage || !effectiveOwnerId) return;
+
+    setError(null);
+    setDeleteConfirmVisible(false);
+    const result = await storage.getCommonplaceNoteByShortcode(
+      effectiveOwnerId,
+      shortcode,
+    );
+    if (!result.ok) {
+      setError("Could not open that connected note. Please try again.");
+      return;
+    }
+
+    setSelectedNote(result.note);
+    setMode("detail");
+  };
+
   const openEdit = () => {
     if (!selectedNote) return;
     setForm(formFromNote(selectedNote));
@@ -417,13 +496,19 @@ export function CommonplaceView({
     setError(null);
 
     const formInput = inputFromForm(form);
+    const isEditing = mode === "edit" && Boolean(selectedNote);
     const result =
-      mode === "edit" && selectedNote
-        ? await storage.updateCommonplaceNote({
-            ownerId: effectiveOwnerId,
-            noteId: selectedNote.id,
-            ...formInput,
-          })
+      isEditing && selectedNote
+        ? testStorage
+          ? await storage.updateCommonplaceNote({
+              ownerId: effectiveOwnerId,
+              noteId: selectedNote.id,
+              ...formInput,
+            })
+          : await updateCommonplaceNoteViaServer({
+              noteId: selectedNote.id,
+              ...formInput,
+            })
         : testStorage
           ? await storage.createCommonplaceNote({
               ownerId: effectiveOwnerId,
@@ -444,13 +529,18 @@ export function CommonplaceView({
       return;
     }
 
-    setSelectedNote(result.note);
     setNotes((current) => {
       const withoutSaved = current.filter((note) => note.id !== result.note.id);
       return [result.note, ...withoutSaved];
     });
     setForm(emptyForm);
-    setMode("detail");
+    if (isEditing) {
+      setSelectedNote(result.note);
+      setMode("detail");
+    } else {
+      setSelectedNote(null);
+      setMode("library");
+    }
   };
 
   const handleDelete = async () => {
@@ -458,10 +548,9 @@ export function CommonplaceView({
 
     setIsSaving(true);
     setError(null);
-    const result = await storage.deleteCommonplaceNote(
-      effectiveOwnerId,
-      selectedNote.id,
-    );
+    const result = testStorage
+      ? await storage.deleteCommonplaceNote(effectiveOwnerId, selectedNote.id)
+      : await deleteCommonplaceNoteViaServer(selectedNote.id);
     setIsSaving(false);
 
     if (!result.ok) {
@@ -478,14 +567,25 @@ export function CommonplaceView({
   const handleDiscussInPodchat = () => {
     if (!selectedNote || !onDiscussInPodchat) return;
 
-    onDiscussInPodchat({
+    const context = {
       source: "commonplace",
       shortcode: selectedNote.shortcode,
       title: selectedNote.title ?? undefined,
       sourceBook: selectedNote.sourceBook || undefined,
       insight: selectedNote.insight,
       tags: selectedNote.tags,
-    });
+    } as const;
+
+    try {
+      window.sessionStorage.setItem(
+        "fonetik:commonplace-podchat-context",
+        JSON.stringify(context),
+      );
+    } catch {
+      // Session storage is a convenience for resume; the direct handoff remains primary.
+    }
+
+    onDiscussInPodchat(context);
   };
 
   const updateField = (field: keyof CommonplaceFormState, value: string) => {
@@ -601,6 +701,7 @@ export function CommonplaceView({
                   deleteConfirmVisible={deleteConfirmVisible}
                   onBack={openLibrary}
                   onEdit={openEdit}
+                  onOpenConnection={openDetailByShortcode}
                   onDiscussInPodchat={onDiscussInPodchat ? handleDiscussInPodchat : undefined}
                   onAskDelete={() => setDeleteConfirmVisible(true)}
                   onCancelDelete={() => setDeleteConfirmVisible(false)}
@@ -879,7 +980,7 @@ function NoteForm({
   onChange: (field: keyof CommonplaceFormState, value: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-[var(--brand-ink)]">
@@ -896,7 +997,7 @@ function NoteForm({
           onClick={onBack}
           className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
         >
-          Back
+          ← Library
         </button>
       </div>
 
@@ -992,6 +1093,7 @@ function NoteDetail({
   deleteConfirmVisible,
   onBack,
   onEdit,
+  onOpenConnection,
   onDiscussInPodchat,
   onAskDelete,
   onCancelDelete,
@@ -1002,33 +1104,26 @@ function NoteDetail({
   deleteConfirmVisible: boolean;
   onBack: () => void;
   onEdit: () => void;
+  onOpenConnection: (shortcode: string) => void;
   onDiscussInPodchat?: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
+  const [mindMapNoticeVisible, setMindMapNoticeVisible] = useState(false);
+  const hasTags = note.tags.length > 0;
+  const hasConnections = note.connections.length > 0;
+
   return (
-    <article className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-[#534AB7]">
-            {note.shortcode}
-          </p>
-          <h3 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
-            {displayTitle(note)}
-          </h3>
-          <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
-            {note.sourceBook}
-            {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <article className="mx-auto flex w-full max-w-[980px] flex-col gap-5">
+      <div className="flex flex-col gap-4 border-b border-[var(--brand-border)] pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={onBack}
             className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
           >
-            Back
+            ← Library
           </button>
           <button
             type="button"
@@ -1037,6 +1132,52 @@ function NoteDetail({
           >
             Edit
           </button>
+        </div>
+
+        <div>
+          <p className="text-sm font-semibold text-[#534AB7]">
+            {note.shortcode}
+          </p>
+          <h3 className="mt-1 text-2xl font-semibold text-[var(--brand-ink)]">
+            {displayTitle(note)}
+          </h3>
+          <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
+            {note.sourceBook}
+            {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
+          </p>
+        </div>
+      </div>
+
+      <DetailBlock label="Insight" value={note.insight} />
+      {note.quote && <DetailBlock label="Quote" value={note.quote} />}
+      {note.relevance && (
+        <DetailBlock label="Relevance" value={note.relevance} />
+      )}
+
+      {(hasTags || hasConnections) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {hasTags && (
+            <DetailList label="Tags" values={note.tags.map((tag) => `#${tag}`)} />
+          )}
+          {hasConnections && (
+            <DetailList
+              label="Connections"
+              values={note.connections}
+              onSelectValue={onOpenConnection}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 border-t border-[var(--brand-border)] pt-4">
+        <button
+          type="button"
+          onClick={() => setMindMapNoticeVisible(true)}
+          className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#EEEDFE]"
+          data-testid="commonplace-note-mind-map-placeholder-btn"
+        >
+          Buka Mind Map
+        </button>
           {onDiscussInPodchat && (
             <button
               type="button"
@@ -1053,19 +1194,16 @@ function NoteDetail({
           >
             Delete
           </button>
+      </div>
+
+      {mindMapNoticeVisible && (
+        <div
+          className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] px-4 py-3 text-sm leading-6 text-[var(--brand-ink-soft)]"
+          data-testid="commonplace-note-mind-map-placeholder"
+        >
+          Mind Map for this note is reserved for a later phase.
         </div>
-      </div>
-
-      <DetailBlock label="Insight" value={note.insight} />
-      {note.quote && <DetailBlock label="Quote" value={note.quote} />}
-      {note.relevance && (
-        <DetailBlock label="Relevance" value={note.relevance} />
       )}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <DetailList label="Tags" values={note.tags.map((tag) => `#${tag}`)} />
-        <DetailList label="Connections" values={note.connections} />
-      </div>
 
       <div className="grid gap-4 text-sm text-[var(--brand-ink-soft)] md:grid-cols-2">
         <p>Created {formatDate(note.createdAt)}</p>
@@ -1213,24 +1351,39 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DetailList({ label, values }: { label: string; values: string[] }) {
+function DetailList({
+  label,
+  values,
+  onSelectValue,
+}: {
+  label: string;
+  values: string[];
+  onSelectValue?: (value: string) => void;
+}) {
   return (
     <section className="rounded-lg border border-[var(--brand-border)] bg-white p-4">
       <h4 className="text-sm font-semibold text-[var(--brand-ink)]">{label}</h4>
-      {values.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {values.map((value) => (
+      <div className="mt-3 flex flex-wrap gap-2">
+        {values.map((value) =>
+          onSelectValue ? (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onSelectValue(value)}
+              className="rounded-full border border-[#534AB7]/20 bg-[#EEEDFE] px-2.5 py-1 text-xs text-[#332C85] hover:bg-[#E3E0FF]"
+            >
+              {value}
+            </button>
+          ) : (
             <span
               key={value}
               className="rounded-full border border-[#534AB7]/20 bg-[#EEEDFE] px-2.5 py-1 text-xs text-[#332C85]"
             >
               {value}
             </span>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-[var(--brand-ink-soft)]">None</p>
-      )}
+          ),
+        )}
+      </div>
     </section>
   );
 }

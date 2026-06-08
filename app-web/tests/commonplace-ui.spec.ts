@@ -235,10 +235,15 @@ async function gotoApp(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 }
 
-test.describe("Commonplace Phase 1A shell", () => {
+test.describe("Commonplace Phase 1B form and detail", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(installCommonplaceTestAdapter, [
-      baseNote({ id: "note-1" }),
+      baseNote({
+        id: "note-1",
+        quote: "Institutions are the rules of the game.",
+        connections: ["#tf1"],
+        relevance: "Useful for explaining how incentives shape outcomes.",
+      }),
       baseNote({
         id: "note-2",
         shortcode: "#tf1",
@@ -265,9 +270,9 @@ test.describe("Commonplace Phase 1A shell", () => {
     await expect(page.getByTestId("commonplace-sidebar")).toContainText("LIBRARY");
     await expect(page.locator("aside").filter({ hasText: "Active Session" })).toHaveCount(0);
     await expect(page.locator("header")).toContainText("Commonplace");
-    await expect(page.getByRole("button", { name: "← Kembali ke Fonetik" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Kembali ke Fonetik/ })).toBeVisible();
 
-    await page.getByRole("button", { name: "← Kembali ke Fonetik" }).click();
+    await page.getByRole("button", { name: /Kembali ke Fonetik/ }).click();
     await expect(page.locator("h1", { hasText: "Vocabulary Notebook" })).toBeVisible();
   });
 
@@ -319,11 +324,23 @@ test.describe("Commonplace Phase 1A shell", () => {
       .getByLabel("Insight")
       .fill("Learners develop agency when dialogue becomes reciprocal.");
     await page.getByLabel("Tags").fill("education, agency");
+    await page.getByLabel("Connections").fill("#wn1, not-a-shortcode");
     await page.getByRole("button", { name: "Save note" }).click();
 
+    await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
+    await expect(page.getByTestId("commonplace-library-grid")).toContainText(
+      "Dialogue and Agency",
+    );
+
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Dialogue and Agency/i })
+      .click();
     await expect(page.getByRole("heading", { name: "Dialogue and Agency" })).toBeVisible();
     await expect(page.getByRole("article")).toContainText("#po1");
     await expect(page.getByRole("article")).toContainText("#education");
+    await expect(page.getByRole("article")).toContainText("#wn1");
+    await expect(page.getByRole("article")).not.toContainText("not-a-shortcode");
   });
 
   test("note cards and sidebar note items open the existing Detail Note behavior", async ({
@@ -338,7 +355,7 @@ test.describe("Commonplace Phase 1A shell", () => {
       .click();
     await expect(page.getByRole("heading", { name: "Institutions and Growth" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
-    await page.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: /Library/ }).click();
 
     await page
       .getByTestId("commonplace-sidebar-note-list")
@@ -346,6 +363,56 @@ test.describe("Commonplace Phase 1A shell", () => {
       .click();
     await expect(page.getByRole("heading", { name: "System One Attention" })).toBeVisible();
     await expect(page.getByRole("article")).toContainText("Thinking Fast and Slow");
+  });
+
+  test("Detail Note hides empty optional sections and keeps placeholder actions non-canvas", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i })
+      .click();
+    await expect(page.getByRole("article")).toContainText("Quote");
+    await expect(page.getByRole("article")).toContainText("Relevance");
+    await expect(page.getByRole("article")).toContainText("#tf1");
+
+    await page.getByRole("article").getByRole("button", { name: "#tf1" }).click();
+    await expect(page.getByRole("heading", { name: "System One Attention" })).toBeVisible();
+    await expect(page.getByRole("article")).not.toContainText("Quote");
+    await expect(page.getByRole("article")).not.toContainText("Relevance");
+    await expect(page.getByRole("article")).not.toContainText("Connections");
+
+    await page.getByTestId("commonplace-note-mind-map-placeholder-btn").click();
+    await expect(page.getByTestId("commonplace-note-mind-map-placeholder")).toBeVisible();
+    await expect(page.locator("canvas")).toHaveCount(0);
+    await expect(page.locator(".react-flow")).toHaveCount(0);
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
+  });
+
+  test("Diskusi di Podchat passes only compact Commonplace context", async ({ page }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i })
+      .click();
+    await page.getByRole("button", { name: "Diskusi di Podchat" }).click();
+
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toBeVisible();
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText("#wn1");
+
+    const storedContext = await page.evaluate(() =>
+      window.sessionStorage.getItem("fonetik:commonplace-podchat-context"),
+    );
+    expect(storedContext).toContain('"source":"commonplace"');
+    expect(storedContext).toContain('"shortcode":"#wn1"');
+    expect(storedContext).not.toMatch(forbiddenCommonplaceContextFieldPattern);
+    expect(storedContext).not.toContain("quote");
   });
 
   test("search filters sidebar and Library notes by title, source, shortcode, and tags", async ({
@@ -388,6 +455,7 @@ test.describe("Commonplace Phase 1A shell", () => {
       .getByTestId("commonplace-library-grid")
       .getByRole("button", { name: /Institutions and Growth/i })
       .click();
+    await expect(page.getByRole("article")).toContainText("#wn1");
 
     await page.getByRole("button", { name: "Edit" }).click();
     await page.getByLabel("Title").fill("Institutions Updated");
@@ -399,6 +467,7 @@ test.describe("Commonplace Phase 1A shell", () => {
 
     await expect(page.getByRole("heading", { name: "Institutions Updated" })).toBeVisible();
     await expect(page.getByText("Why Nations Fail, p. 72")).toBeVisible();
+    await expect(page.getByRole("article")).toContainText("#wn1");
 
     await page.getByRole("button", { name: "Delete" }).click();
     await expect(page.getByText("Delete this note?")).toBeVisible();

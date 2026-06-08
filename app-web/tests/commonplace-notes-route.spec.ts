@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 
-import { POST, testHooks } from "../src/app/api/commonplace/notes/route";
+import { DELETE, PATCH, POST, testHooks } from "../src/app/api/commonplace/notes/route";
 import type { CommonplaceNoteRow } from "../src/app/lib/storage/supabase-commonplace-adapter";
 
 const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -64,6 +64,11 @@ function createMockSupabaseClient(options: MockOptions = {}) {
         updated[table] = [row];
         return query;
       },
+      delete() {
+        operation = "delete";
+        calls.push(`delete:${table}`);
+        return query;
+      },
       select(columns: string) {
         calls.push(`select:${table}:${columns}`);
         return query;
@@ -79,6 +84,13 @@ function createMockSupabaseClient(options: MockOptions = {}) {
           return Promise.resolve({
             data: options.counterRow ?? null,
             error: options.counterReadError ?? null,
+          });
+        }
+
+        if (table === "commonplace_notes" && operation === "update") {
+          return Promise.resolve({
+            data: payload ? { ...baseRow, ...(payload as Record<string, unknown>) } : null,
+            error: null,
           });
         }
 
@@ -221,6 +233,52 @@ test.describe("Commonplace notes route", () => {
       last_value: 3,
     });
     expect(data.note.shortcode).toBe("#wn3");
+  });
+
+  test("valid note update derives ownerId from Clerk auth and ignores request owner_id", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await PATCH(
+      buildRequest({
+        owner_id: "attacker-user",
+        ownerId: "attacker-user",
+        noteId: "note-db-1",
+        sourceBook: "Why Nations Fail",
+        title: "Updated Institutions",
+        insight: "Updated incentive idea.",
+      }),
+    );
+    const data = (await response.json()) as { note: { ownerId: string; title: string } };
+
+    expect(response.status).toBe(200);
+    expect(data.note.ownerId).toBe("server-user-123");
+    expect(data.note.title).toBe("Updated Institutions");
+    expect(mock.updated.commonplace_notes[0]).toMatchObject({
+      source_book: "Why Nations Fail",
+      title: "Updated Institutions",
+      insight: "Updated incentive idea.",
+    });
+    expect(mock.calls).toContain("eq:commonplace_notes:owner_id:server-user-123");
+    expect(JSON.stringify(mock.updated.commonplace_notes[0])).not.toContain(
+      "attacker-user",
+    );
+  });
+
+  test("valid note delete derives ownerId from Clerk auth", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await DELETE(buildRequest({ noteId: "note-db-1" }));
+    const data = (await response.json()) as { ok: boolean };
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ ok: true });
+    expect(mock.calls).toContain("delete:commonplace_notes");
+    expect(mock.calls).toContain("eq:commonplace_notes:owner_id:server-user-123");
+    expect(mock.calls).toContain("eq:commonplace_notes:id:note-db-1");
   });
 
   test("Supabase failure returns safe note_save_failed without raw details", async () => {

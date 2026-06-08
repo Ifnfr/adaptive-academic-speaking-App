@@ -3,7 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   createCommonplaceNote,
+  deleteCommonplaceNote,
+  updateCommonplaceNote,
   type CreateCommonplaceNoteInput,
+  type UpdateCommonplaceNoteInput,
 } from "../../../lib/storage/supabase-commonplace-adapter";
 
 export const runtime = "nodejs";
@@ -18,6 +21,14 @@ type CreateCommonplaceNoteRequest = {
   tags?: string[] | null;
   connections?: string[] | null;
   relevance?: string | null;
+};
+
+type UpdateCommonplaceNoteRequest = CreateCommonplaceNoteRequest & {
+  noteId?: string | null;
+};
+
+type DeleteCommonplaceNoteRequest = {
+  noteId?: string | null;
 };
 
 export const testHooks = {
@@ -83,20 +94,45 @@ function buildCreateInput(
   };
 }
 
+function buildUpdateInput(
+  ownerId: string,
+  body: UpdateCommonplaceNoteRequest,
+): UpdateCommonplaceNoteInput {
+  return {
+    ownerId,
+    noteId: body.noteId ?? "",
+    sourceBook: body.sourceBook,
+    sourcePage: body.sourcePage,
+    title: body.title,
+    quote: body.quote,
+    insight: body.insight,
+    tags: body.tags,
+    connections: body.connections,
+    relevance: body.relevance,
+  };
+}
+
+async function parseObjectBody(
+  request: Request,
+): Promise<Record<string, unknown> | null> {
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    return null;
+  }
+
+  return isPlainObject(parsed) ? parsed : null;
+}
+
 export async function POST(request: Request) {
   const ownerId = await resolveCurrentUserId();
   if (!ownerId) {
     return NextResponse.json({ error: "auth_required" }, { status: 401 });
   }
 
-  let parsed: unknown;
-  try {
-    parsed = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid_note_fields" }, { status: 400 });
-  }
-
-  if (!isPlainObject(parsed)) {
+  const parsed = await parseObjectBody(request);
+  if (!parsed) {
     return NextResponse.json({ error: "invalid_note_fields" }, { status: 400 });
   }
 
@@ -121,4 +157,75 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ note: result.note }, { status: 201 });
+}
+
+export async function PATCH(request: Request) {
+  const ownerId = await resolveCurrentUserId();
+  if (!ownerId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  }
+
+  const parsed = await parseObjectBody(request);
+  if (!parsed) {
+    return NextResponse.json({ error: "invalid_note_fields" }, { status: 400 });
+  }
+
+  const supabaseClient = getSupabaseClient();
+  if (!supabaseClient) {
+    return NextResponse.json({ error: "note_save_failed" }, { status: 500 });
+  }
+
+  const result = await updateCommonplaceNote(
+    buildUpdateInput(ownerId, parsed),
+    supabaseClient,
+  );
+
+  if (!result.ok) {
+    const status =
+      result.error === "commonplace_validation_failed" ? 400 : 500;
+    const error =
+      result.error === "commonplace_validation_failed"
+        ? "invalid_note_fields"
+        : "note_save_failed";
+    return NextResponse.json({ error }, { status });
+  }
+
+  return NextResponse.json({ note: result.note }, { status: 200 });
+}
+
+export async function DELETE(request: Request) {
+  const ownerId = await resolveCurrentUserId();
+  if (!ownerId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  }
+
+  const parsed = (await parseObjectBody(request)) as
+    | DeleteCommonplaceNoteRequest
+    | null;
+  if (!parsed || typeof parsed.noteId !== "string" || !parsed.noteId.trim()) {
+    return NextResponse.json({ error: "invalid_note_fields" }, { status: 400 });
+  }
+
+  const supabaseClient = getSupabaseClient();
+  if (!supabaseClient) {
+    return NextResponse.json({ error: "note_save_failed" }, { status: 500 });
+  }
+
+  const result = await deleteCommonplaceNote(
+    ownerId,
+    parsed.noteId,
+    supabaseClient,
+  );
+
+  if (!result.ok) {
+    const status =
+      result.error === "commonplace_validation_failed" ? 400 : 500;
+    const error =
+      result.error === "commonplace_validation_failed"
+        ? "invalid_note_fields"
+        : "note_save_failed";
+    return NextResponse.json({ error }, { status });
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
 }
