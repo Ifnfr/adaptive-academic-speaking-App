@@ -682,11 +682,13 @@ async function dragSidebarNoteToCanvas(
     clientX: canvasBox.x + offsetX,
     clientY: canvasBox.y + offsetY,
   });
+  await expect(page.getByTestId("commonplace-map-drop-zone")).toBeVisible();
   await canvas.dispatchEvent("drop", {
     dataTransfer,
     clientX: canvasBox.x + offsetX,
     clientY: canvasBox.y + offsetY,
   });
+  await expect(page.getByTestId("commonplace-map-drop-zone")).toHaveCount(0);
 }
 
 async function openFlowNodeContextMenu(node: Locator) {
@@ -1175,6 +1177,71 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     const sourceNode = page.getByTestId("rf__node-sub-node-created-2");
     const targetNode = page.getByTestId("rf__node-sub-node-created-3");
+    const duplicatePositionsBeforeMove = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+      };
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter((node) =>
+          ["sub-node-created-2", "sub-node-created-3"].includes(node.id),
+        )
+        .map((node) => ({
+          id: node.id,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        }));
+    });
+    const sourceDuplicateBefore = duplicatePositionsBeforeMove.find(
+      (node) => node.id === "sub-node-created-2",
+    );
+    const targetDuplicateBefore = duplicatePositionsBeforeMove.find(
+      (node) => node.id === "sub-node-created-3",
+    );
+    expect(sourceDuplicateBefore).toBeTruthy();
+    expect(targetDuplicateBefore).toBeTruthy();
+
+    await sourceNode
+      .getByTestId("commonplace-map-note-node")
+      .dragTo(page.locator(".react-flow__pane"), {
+        force: true,
+        targetPosition: { x: 260, y: 300 },
+      });
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Saved",
+    );
+
+    const duplicatePositionsAfterMove = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+      };
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter((node) =>
+          ["sub-node-created-2", "sub-node-created-3"].includes(node.id),
+        )
+        .map((node) => ({
+          id: node.id,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        }));
+    });
+    const changedDuplicateNodes = duplicatePositionsAfterMove.filter((node) => {
+      const before = duplicatePositionsBeforeMove.find(
+        (candidate) => candidate.id === node.id,
+      );
+      return (
+        before &&
+        (before.positionX !== node.positionX ||
+          before.positionY !== node.positionY)
+      );
+    });
+    expect(changedDuplicateNodes).toHaveLength(1);
+
     await openFlowNodeContextMenu(sourceNode);
     await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveText(

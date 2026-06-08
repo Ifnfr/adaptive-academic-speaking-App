@@ -289,6 +289,7 @@ export function CommonplaceMapCanvasFoundation({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("Saved");
+  const [isCanvasDragActive, setIsCanvasDragActive] = useState(false);
   const [flowInstance, setFlowInstance] =
     useState<ReactFlowInstance<CommonplaceNoteNodeData> | null>(null);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
@@ -300,9 +301,25 @@ export function CommonplaceMapCanvasFoundation({
   const [edgeEdit, setEdgeEdit] = useState<EdgeEditState | null>(null);
 
   const isSubMap = map.type === "sub";
+  const isSavingMapChange = saveStatus === "Saving...";
   const connectionSourceNode = useMemo(
     () =>
       nodes.find((node) => node.id === connectionSourceNodeId) ?? null,
+    [connectionSourceNodeId, nodes],
+  );
+  const visibleNodes = useMemo<Node<CommonplaceNoteNodeData>[]>(
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          connectionRole: connectionSourceNodeId
+            ? node.id === connectionSourceNodeId
+              ? "source"
+              : "target"
+            : null,
+        },
+      })),
     [connectionSourceNodeId, nodes],
   );
   const openEdgeEdit = useCallback<CommonplaceEdgeData["onEdit"]>(
@@ -341,6 +358,7 @@ export function CommonplaceMapCanvasFoundation({
       setSaveStatus("Saved");
       setNodes([]);
       setEdges([]);
+      setIsCanvasDragActive(false);
       setNodeContextMenu(null);
       setConnectionSourceNodeId(null);
       setEdgeDraft(null);
@@ -392,11 +410,23 @@ export function CommonplaceMapCanvasFoundation({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [cancelConnectionMode]);
 
-  const handleNodeDragStop = useCallback(() => {
-    if (isSubMap) {
+  const handleNodeDragStop = useCallback(
+    (
+      _event: ReactMouseEvent,
+      node: Node<CommonplaceNoteNodeData>,
+    ) => {
+      if (!isSubMap) return;
+      setNodes((current) =>
+        current.map((currentNode) =>
+          currentNode.id === node.id
+            ? { ...currentNode, position: node.position }
+            : currentNode,
+        ),
+      );
       setSaveStatus("Unsaved changes");
-    }
-  }, [isSubMap]);
+    },
+    [isSubMap, setNodes],
+  );
 
   const handleSave = useCallback(async () => {
     setSaveStatus("Saving...");
@@ -426,16 +456,33 @@ export function CommonplaceMapCanvasFoundation({
       : null;
   };
 
-  const handleDragOver = useCallback((event: DragEvent) => {
+  const handleDragOver = useCallback(
+    (event: DragEvent) => {
+      if (!hasDraggedCommonplaceNote(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = isSubMap ? "copy" : "none";
+      setIsCanvasDragActive(isSubMap);
+    },
+    [isSubMap],
+  );
+
+  const handleDragLeave = useCallback((event: DragEvent) => {
     if (!hasDraggedCommonplaceNote(event)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = isSubMap ? "copy" : "none";
-  }, [isSubMap]);
+    const nextTarget = event.relatedTarget;
+    if (
+      nextTarget instanceof Node &&
+      canvasPanelRef.current?.contains(nextTarget)
+    ) {
+      return;
+    }
+    setIsCanvasDragActive(false);
+  }, []);
 
   const handleDrop = useCallback(
     async (event: DragEvent) => {
       if (!hasDraggedCommonplaceNote(event)) return;
       event.preventDefault();
+      setIsCanvasDragActive(false);
       setDropError(null);
 
       if (!isSubMap) {
@@ -715,10 +762,14 @@ export function CommonplaceMapCanvasFoundation({
 
       <div
         ref={canvasPanelRef}
-        className="relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden bg-[#F8FAF8]"
+        className={`relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden bg-[#F8FAF8] transition-shadow ${
+          isCanvasDragActive
+            ? "ring-2 ring-inset ring-[var(--brand-teal)]/45"
+            : ""
+        }`}
       >
         <ReactFlow
-          nodes={nodes}
+          nodes={visibleNodes}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
@@ -732,6 +783,7 @@ export function CommonplaceMapCanvasFoundation({
           onSelectionChange={handleSelectionChange}
           onInit={setFlowInstance}
           onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
           onDrop={(event) => void handleDrop(event)}
           fitView
           nodesConnectable={false}
@@ -746,6 +798,15 @@ export function CommonplaceMapCanvasFoundation({
           <MiniMap pannable zoomable nodeStrokeWidth={3} />
           <Controls showInteractive={false} />
         </ReactFlow>
+
+        {isSubMap && isCanvasDragActive && (
+          <div
+            className="pointer-events-none absolute inset-4 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--brand-teal)] bg-white/60 text-sm font-semibold text-[var(--brand-teal-ink)] shadow-inner"
+            data-testid="commonplace-map-drop-zone"
+          >
+            Drop note here
+          </div>
+        )}
 
         {!isLoading && !loadError && nodes.length === 0 && (
           <div
@@ -855,7 +916,8 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={() => void handleCreateEdge()}
-                className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)]"
+                disabled={isSavingMapChange}
+                className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Create
               </button>
@@ -920,7 +982,8 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={() => void handleDeleteEdge()}
-                className="rounded-lg border border-[#B42318]/30 bg-white px-3 py-2 text-xs font-semibold text-[#8A1F15] hover:bg-[#FFF4F3]"
+                disabled={isSavingMapChange}
+                className="rounded-lg border border-[#B42318]/30 bg-white px-3 py-2 text-xs font-semibold text-[#8A1F15] hover:bg-[#FFF4F3] disabled:cursor-not-allowed disabled:opacity-70"
                 data-testid="commonplace-map-edge-delete-button"
               >
                 Delete
@@ -928,7 +991,8 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={() => void handleUpdateEdge()}
-                className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)]"
+                disabled={isSavingMapChange}
+                className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Save
               </button>

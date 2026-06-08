@@ -466,6 +466,48 @@ test.describe("Commonplace map nodes route", () => {
     expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
   });
 
+  test("Sub PATCH updates one duplicate node instance without touching its duplicate", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      nodeRows: [
+        {
+          id: "node-duplicate-1",
+          note_id: "note-db-1",
+          position_x: 20,
+          position_y: 40,
+        },
+      ],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await PATCH(
+      buildPatchRequest({
+        mapId: "map-db-1",
+        type: "sub",
+        updates: [
+          { nodeId: "node-duplicate-1", position: { x: 360, y: 420 } },
+        ],
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mock.updated.commonplace_mindmap_nodes).toHaveLength(1);
+    expect(mock.updated.commonplace_mindmap_nodes[0]).toMatchObject({
+      position_x: 360,
+      position_y: 420,
+    });
+    expect(mock.calls).toContain(
+      "in:commonplace_mindmap_nodes:id:node-duplicate-1",
+    );
+    expect(mock.calls).toContain(
+      "eq:commonplace_mindmap_nodes:id:node-duplicate-1",
+    );
+    expect(mock.calls).not.toContain(
+      "eq:commonplace_mindmap_nodes:id:node-duplicate-2",
+    );
+    expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
+  });
+
   test("Supabase failures return safe map node errors without raw details", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";
     const mock = createMockSupabaseClient({

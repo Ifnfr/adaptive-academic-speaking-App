@@ -8,6 +8,7 @@ export type CommonplaceNoteNodeData = {
   title: string;
   sourceBook: string;
   tags: string[];
+  connectionRole?: "source" | "target" | null;
 };
 
 const tagPalette = [
@@ -32,12 +33,18 @@ export function CommonplaceNoteNode({
   selected,
 }: NodeProps<CommonplaceNoteNodeData>) {
   const palette = paletteForTag(data.tags[0]);
+  const connectionClass =
+    data.connectionRole === "source"
+      ? "ring-2 ring-[var(--brand-teal)] ring-offset-2"
+      : data.connectionRole === "target"
+        ? "ring-2 ring-[#7B6BB0] ring-offset-2"
+        : "";
 
   return (
     <article
-      className={`relative w-[220px] rounded-lg border p-3 text-left shadow-sm transition-shadow ${
+      className={`relative w-[220px] overflow-hidden rounded-lg border p-3 text-left shadow-sm transition-shadow ${
         selected ? "ring-2 ring-[var(--brand-teal)] ring-offset-2" : ""
-      }`}
+      } ${connectionClass}`}
       data-testid="commonplace-map-note-node"
       style={{
         backgroundColor: palette.background,
@@ -58,10 +65,10 @@ export function CommonplaceNoteNode({
         className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
       />
       <p className="text-[11px] font-semibold uppercase">{data.shortcode}</p>
-      <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5">
+      <h3 className="mt-1 line-clamp-2 break-words text-sm font-semibold leading-5">
         {data.title}
       </h3>
-      <p className="mt-1 line-clamp-1 text-xs font-medium opacity-80">
+      <p className="mt-1 line-clamp-1 break-words text-xs font-medium opacity-80">
         {data.sourceBook}
       </p>
       {data.tags.length > 0 && (
@@ -69,7 +76,7 @@ export function CommonplaceNoteNode({
           {data.tags.slice(0, 2).map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold"
+              className="max-w-[9rem] truncate rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold"
             >
               #{tag}
             </span>

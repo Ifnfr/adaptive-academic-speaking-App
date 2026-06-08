@@ -355,6 +355,39 @@ test.describe("Commonplace map edges route", () => {
     });
   });
 
+  test("POST creates an edge between duplicate note node instances", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      nodeRows: [
+        { id: "node-duplicate-1", mindmap_id: "map-db-1", note_id: "note-db-1" },
+        { id: "node-duplicate-2", mindmap_id: "map-db-1", note_id: "note-db-1" },
+      ],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest("POST", {
+        mapId: "map-db-1",
+        type: "sub",
+        sourceNodeId: "node-duplicate-1",
+        targetNodeId: "node-duplicate-2",
+        edgeType: "solid",
+        label: "same note contrast",
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mock.inserted.commonplace_mindmap_edges[0]).toMatchObject({
+      source_node_id: "node-duplicate-1",
+      target_node_id: "node-duplicate-2",
+      edge_type: "solid",
+      label: "same note contrast",
+    });
+    expect(mock.calls).toContain(
+      "in:commonplace_mindmap_nodes:id:node-duplicate-1,node-duplicate-2",
+    );
+  });
+
   test("POST rejects self-edges before Supabase", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";
     const mock = createMockSupabaseClient();
