@@ -80,6 +80,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
     __COMMONPLACE_TEST_MAPS__?: TestMap[];
     __COMMONPLACE_TEST_COUNTERS__?: Record<string, number>;
     __COMMONPLACE_TEST_ADAPTER__?: unknown;
+    __COMMONPLACE_FORCE_DETAIL_READ_FAILURE__?: boolean;
   };
 
   testWindow.__COMMONPLACE_TEST_NOTES__ = seedNotes.map((note) => ({ ...note }));
@@ -178,6 +179,10 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       return { ok: true as const, note };
     },
     async getCommonplaceNoteById(ownerId: string, noteId: string) {
+      if (testWindow.__COMMONPLACE_FORCE_DETAIL_READ_FAILURE__) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+
       const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
         (candidate) =>
           candidate.ownerId === ownerId && candidate.id === noteId,
@@ -187,6 +192,10 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         : { ok: false as const, error: "commonplace_not_found" as const };
     },
     async getCommonplaceNoteByShortcode(ownerId: string, shortcode: string) {
+      if (testWindow.__COMMONPLACE_FORCE_DETAIL_READ_FAILURE__) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+
       const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
         (candidate) =>
           candidate.ownerId === ownerId && candidate.shortcode === shortcode,
@@ -616,6 +625,14 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .click();
     await expect(page.getByRole("heading", { name: "Institutions and Growth" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect(page.getByRole("article")).toContainText("#wn1");
+    await expect(page.getByRole("article")).toContainText("Why Nations Fail");
+    await expect(page.getByRole("article")).toContainText(
+      "Inclusive institutions create stronger incentives for growth.",
+    );
+    await expect(
+      page.getByText("Could not open that note. Please try again."),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: /Library/ }).click();
 
     await page
@@ -624,6 +641,46 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .click();
     await expect(page.getByRole("heading", { name: "System One Attention" })).toBeVisible();
     await expect(page.getByRole("article")).toContainText("Thinking Fast and Slow");
+    await expect(
+      page.getByText("Could not open that note. Please try again."),
+    ).toHaveCount(0);
+  });
+
+  test("visible note cards and sidebar items open from loaded note state when detail reads fail", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      (
+        window as typeof window & {
+          __COMMONPLACE_FORCE_DETAIL_READ_FAILURE__?: boolean;
+        }
+      ).__COMMONPLACE_FORCE_DETAIL_READ_FAILURE__ = true;
+    });
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i })
+      .click();
+    await expect(page.getByRole("heading", { name: "Institutions and Growth" })).toBeVisible();
+    await expect(page.getByRole("article")).toContainText("#wn1");
+    await expect(page.getByRole("article")).toContainText("Why Nations Fail");
+    await expect(
+      page.getByText("Could not open that note. Please try again."),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: /Library/ }).click();
+
+    await page
+      .getByTestId("commonplace-sidebar-note-list")
+      .getByRole("button", { name: /System One Attention/i })
+      .click();
+    await expect(page.getByRole("heading", { name: "System One Attention" })).toBeVisible();
+    await expect(page.getByRole("article")).toContainText("#tf1");
+    await expect(page.getByRole("article")).toContainText("Thinking Fast and Slow");
+    await expect(
+      page.getByText("Could not open that note. Please try again."),
+    ).toHaveCount(0);
   });
 
   test("Detail Note hides empty optional sections and opens Sub Mind Map chooser", async ({

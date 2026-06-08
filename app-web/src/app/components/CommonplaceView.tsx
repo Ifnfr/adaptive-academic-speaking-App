@@ -805,9 +805,21 @@ export function CommonplaceView({
 
     setError(null);
     setDeleteConfirmVisible(false);
+
+    const currentNote = notes.find((note) => note.id === noteId);
+    if (currentNote) {
+      setSelectedNote(currentNote);
+      setMode("detail");
+      return;
+    }
+
     const result = await storage.getCommonplaceNoteById(effectiveOwnerId, noteId);
     if (!result.ok) {
-      setError("Could not open that note. Please try again.");
+      setError(
+        result.error === "commonplace_not_found"
+          ? "That note is no longer available."
+          : "Could not open that note. Please try again.",
+      );
       return;
     }
 
@@ -820,12 +832,24 @@ export function CommonplaceView({
 
     setError(null);
     setDeleteConfirmVisible(false);
+
+    const currentNote = notes.find((note) => note.shortcode === shortcode);
+    if (currentNote) {
+      setSelectedNote(currentNote);
+      setMode("detail");
+      return;
+    }
+
     const result = await storage.getCommonplaceNoteByShortcode(
       effectiveOwnerId,
       shortcode,
     );
     if (!result.ok) {
-      setError("Could not open that connected note. Please try again.");
+      setError(
+        result.error === "commonplace_not_found"
+          ? "That connected note is no longer available."
+          : "Could not open that connected note. Please try again.",
+      );
       return;
     }
 
