@@ -169,6 +169,10 @@ const MAINMAP_EDGES_TABLE = "commonplace_main_map_edges";
 
 export type CommonplaceMainMapSummary = CommonplaceMindMapSummary;
 
+export type CommonplaceMainMapNodeKind = "cluster" | "note";
+
+export type CommonplaceMainMapEdgeType = CommonplaceMindMapEdgeType;
+
 export type CommonplaceMainMapClusterInput = {
   localId: string;
   subMindMapId: string;
@@ -179,6 +183,7 @@ export type CommonplaceMainMapClusterInput = {
 export type CommonplaceMainMapEdgeInput = {
   sourceLocalId: string;
   targetLocalId: string;
+  edgeType?: CommonplaceMainMapEdgeType | null;
   label?: string | null;
 };
 
@@ -195,6 +200,7 @@ export type CommonplaceMainMapEdge = {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
+  edgeType: CommonplaceMainMapEdgeType;
   label: string | null;
 };
 
@@ -1466,7 +1472,9 @@ export async function getCommonplaceMainMindMapGraph(
       .from(MAINMAP_NODES_TABLE)
       .select(`
         id,
+        node_kind,
         sub_mindmap_id,
+        note_id,
         position_x,
         position_y,
         commonplace_mindmaps:sub_mindmap_id (
@@ -1475,7 +1483,8 @@ export async function getCommonplaceMainMindMapGraph(
         )
       `)
       .eq("owner_id", cleanOwnerId)
-      .eq("main_mindmap_id", summary.id);
+      .eq("main_mindmap_id", summary.id)
+      .eq("node_kind", "cluster");
 
     if (clustersError) {
       return { ok: false, error: "commonplace_save_failed" };
@@ -1483,7 +1492,9 @@ export async function getCommonplaceMainMindMapGraph(
 
     type ClusterJoinedRow = {
       id: string;
+      node_kind?: CommonplaceMainMapNodeKind | null;
       sub_mindmap_id: string;
+      note_id?: string | null;
       position_x: number;
       position_y: number;
       commonplace_mindmaps: {
@@ -1511,7 +1522,7 @@ export async function getCommonplaceMainMindMapGraph(
 
     const { data: edgesData, error: edgesError } = await supabaseClient
       .from(MAINMAP_EDGES_TABLE)
-      .select("id, source_node_id, target_node_id, label")
+      .select("id, source_node_id, target_node_id, edge_type, label")
       .eq("owner_id", cleanOwnerId)
       .eq("main_mindmap_id", summary.id);
 
@@ -1523,6 +1534,7 @@ export async function getCommonplaceMainMindMapGraph(
       id: string;
       source_node_id: string;
       target_node_id: string;
+      edge_type?: string | null;
       label: string | null;
     };
 
@@ -1530,6 +1542,7 @@ export async function getCommonplaceMainMindMapGraph(
       id: row.id,
       sourceNodeId: row.source_node_id,
       targetNodeId: row.target_node_id,
+      edgeType: cleanEdgeType(row.edge_type) ?? "solid",
       label: row.label,
     }));
 
@@ -1563,7 +1576,7 @@ export async function saveCommonplaceMainMindMapGraph(
   }
 
   const seenLocalIds = new Set<string>();
-  const seenSubMapIds = new Set<string>();
+  const subMapIdsForOwnership = new Set<string>();
 
   for (const c of clusters) {
     const localId = cleanRequiredText(c.localId);
@@ -1573,12 +1586,12 @@ export async function saveCommonplaceMainMindMapGraph(
       return { ok: false, error: "commonplace_validation_failed" };
     }
 
-    if (seenLocalIds.has(localId) || seenSubMapIds.has(subMindMapId)) {
+    if (seenLocalIds.has(localId)) {
       return { ok: false, error: "commonplace_validation_failed" };
     }
 
     seenLocalIds.add(localId);
-    seenSubMapIds.add(subMindMapId);
+    subMapIdsForOwnership.add(subMindMapId);
   }
 
   const seenUndirected = new Set<string>();
@@ -1600,6 +1613,10 @@ export async function saveCommonplaceMainMindMapGraph(
     }
     seenUndirected.add(sortedPair);
 
+    if (e.edgeType !== undefined && e.edgeType !== null && !cleanEdgeType(e.edgeType)) {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
     if (e.label !== undefined && e.label !== null) {
       const trimmedLabel = e.label.trim();
       if (trimmedLabel.length > 80) {
@@ -1615,7 +1632,7 @@ export async function saveCommonplaceMainMindMapGraph(
     }
     const summary = mainMapResult.mindMap;
 
-    const subMapIds = Array.from(seenSubMapIds);
+    const subMapIds = Array.from(subMapIdsForOwnership);
     if (subMapIds.length > 0) {
       const { data: subMapsData, error: subMapsError } = await supabaseClient
         .from(MINDMAPS_TABLE)
@@ -1658,7 +1675,9 @@ export async function saveCommonplaceMainMindMapGraph(
     const clustersToInsert = clusters.map((c) => ({
       owner_id: ownerId,
       main_mindmap_id: summary.id,
+      node_kind: "cluster" satisfies CommonplaceMainMapNodeKind,
       sub_mindmap_id: c.subMindMapId,
+      note_id: null,
       position_x: c.positionX,
       position_y: c.positionY,
     }));
@@ -1667,23 +1686,15 @@ export async function saveCommonplaceMainMindMapGraph(
       const { data: insertedClusters, error: insertNodesError } = await supabaseClient
         .from(MAINMAP_NODES_TABLE)
         .insert(clustersToInsert)
-        .select("id, sub_mindmap_id");
+        .select("id");
 
-      if (insertNodesError || !insertedClusters) {
+      if (insertNodesError || !insertedClusters || insertedClusters.length !== clusters.length) {
         return { ok: false, error: "commonplace_save_failed" };
       }
 
-      const subIdToLocalIdMap = new Map<string, string>();
-      for (const c of clusters) {
-        subIdToLocalIdMap.set(c.subMindMapId, c.localId);
-      }
-
-      for (const ic of insertedClusters) {
-        const localId = subIdToLocalIdMap.get(ic.sub_mindmap_id);
-        if (localId) {
-          localIdToDbIdMap.set(localId, ic.id);
-        }
-      }
+      insertedClusters.forEach((insertedCluster, index) => {
+        localIdToDbIdMap.set(clusters[index].localId, insertedCluster.id);
+      });
     }
 
     const edgesToInsert = edges.map((e) => {
@@ -1698,6 +1709,7 @@ export async function saveCommonplaceMainMindMapGraph(
         main_mindmap_id: summary.id,
         source_node_id: sourceDbId,
         target_node_id: targetDbId,
+        edge_type: cleanEdgeType(e.edgeType) ?? "solid",
         label: e.label ? e.label.trim() : null,
       };
     });

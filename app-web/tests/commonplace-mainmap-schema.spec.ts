@@ -2,13 +2,24 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
-const migration = readFileSync(
+const baseMigration = readFileSync(
   join(
     process.cwd(),
     "..",
     "supabase",
     "migrations",
     "20260606_002_add_commonplace_mainmap_tables.sql",
+  ),
+  "utf8",
+);
+
+const phase8bMigration = readFileSync(
+  join(
+    process.cwd(),
+    "..",
+    "supabase",
+    "migrations",
+    "20260608_003_prepare_commonplace_main_map_visual_nodes.sql",
   ),
   "utf8",
 );
@@ -29,8 +40,8 @@ const FORBIDDEN_FIELDS = [
   "auth_metadata",
 ];
 
-function tableBody(tableName: string) {
-  const match = migration.match(
+function tableBody(tableName: string, source = baseMigration) {
+  const match = source.match(
     new RegExp(`create table ${tableName} \\(([\\s\\S]*?)\\n\\);`, "i"),
   );
 
@@ -45,13 +56,13 @@ function compactSql(sql: string) {
 test.describe("Commonplace Main Mind Map Supabase schema migration", () => {
   test("defines both Main Mind Map tables", () => {
     for (const table of MAINMAP_TABLES) {
-      expect(migration).toMatch(new RegExp(`create table ${table} \\(`, "i"));
+      expect(baseMigration).toMatch(new RegExp(`create table ${table} \\(`, "i"));
     }
   });
 
   test("enables RLS on every Main Mind Map table", () => {
     for (const table of MAINMAP_TABLES) {
-      expect(migration).toMatch(
+      expect(baseMigration).toMatch(
         new RegExp(`alter table ${table} enable row level security;`, "i"),
       );
     }
@@ -60,7 +71,7 @@ test.describe("Commonplace Main Mind Map Supabase schema migration", () => {
   test("creates authenticated owner-scoped policies for all row operations", () => {
     for (const table of MAINMAP_TABLES) {
       for (const operation of ["select", "insert", "update", "delete"]) {
-        expect(migration).toMatch(
+        expect(baseMigration).toMatch(
           new RegExp(
             `create policy "${table}_${operation}_own"[\\s\\S]*?on ${table} for ${operation}[\\s\\S]*?to authenticated[\\s\\S]*?owner_id = auth\\.jwt\\(\\)->>'sub'`,
             "i",
@@ -71,9 +82,9 @@ test.describe("Commonplace Main Mind Map Supabase schema migration", () => {
   });
 
   test("does not create public or anonymous broad policies", () => {
-    expect(migration).not.toMatch(/to\s+(anon|public)\b/i);
-    expect(migration).not.toMatch(/using\s*\(\s*true\s*\)/i);
-    expect(migration).not.toMatch(/with check\s*\(\s*true\s*\)/i);
+    expect(baseMigration).not.toMatch(/to\s+(anon|public)\b/i);
+    expect(baseMigration).not.toMatch(/using\s*\(\s*true\s*\)/i);
+    expect(baseMigration).not.toMatch(/with check\s*\(\s*true\s*\)/i);
   });
 
   test("adds required foreign keys and uniqueness constraints to commonplace_main_map_nodes", () => {
@@ -94,7 +105,7 @@ test.describe("Commonplace Main Mind Map Supabase schema migration", () => {
 
   test("adds updated_at triggers to both tables", () => {
     for (const table of MAINMAP_TABLES) {
-      expect(migration).toMatch(
+      expect(baseMigration).toMatch(
         new RegExp(
           `create trigger ${table}_set_updated_at[\\s\\S]*?before update on ${table}[\\s\\S]*?execute function set_updated_at\\(\\);`,
           "i",
@@ -109,7 +120,7 @@ test.describe("Commonplace Main Mind Map Supabase schema migration", () => {
       /on commonplace_main_map_nodes \(owner_id, sub_mindmap_id\)/i,
       /on commonplace_main_map_edges \(owner_id, main_mindmap_id\)/i,
     ]) {
-      expect(migration).toMatch(indexPattern);
+      expect(baseMigration).toMatch(indexPattern);
     }
   });
 
@@ -127,7 +138,73 @@ test.describe("Commonplace Main Mind Map Supabase schema migration", () => {
   });
 
   test("does not alter or drop existing sub mind map tables", () => {
-    expect(migration).not.toMatch(/alter table (commonplace_notes|commonplace_mindmaps|commonplace_mindmap_nodes|commonplace_mindmap_edges)\b/i);
-    expect(migration).not.toMatch(/drop table\b/i);
+    expect(baseMigration).not.toMatch(/alter table (commonplace_notes|commonplace_mindmaps|commonplace_mindmap_nodes|commonplace_mindmap_edges)\b/i);
+    expect(baseMigration).not.toMatch(/drop table\b/i);
+  });
+
+  test("Phase 8B drops duplicate-blocking main cluster uniqueness and keeps lookup indexes", () => {
+    expect(phase8bMigration).toContain(
+      "drop constraint if exists commonplace_main_map_nodes_owner_main_sub_unique",
+    );
+    expect(phase8bMigration).toContain(
+      "create index if not exists commonplace_main_map_nodes_owner_main_sub_idx",
+    );
+    expect(phase8bMigration).toContain(
+      "on public.commonplace_main_map_nodes (owner_id, main_mindmap_id, sub_mindmap_id)",
+    );
+    expect(phase8bMigration).not.toContain(
+      "unique (owner_id, main_mindmap_id, sub_mindmap_id)",
+    );
+  });
+
+  test("Phase 8B adds main node kind and target consistency checks", () => {
+    expect(phase8bMigration).toContain(
+      "add column if not exists node_kind text not null default 'cluster'",
+    );
+    expect(phase8bMigration).toContain("commonplace_main_map_nodes_node_kind_valid");
+    expect(phase8bMigration).toContain("check (node_kind in ('cluster', 'note'))");
+    expect(phase8bMigration).toContain("add column if not exists note_id uuid");
+    expect(phase8bMigration).toContain("alter column sub_mindmap_id drop not null");
+    expect(phase8bMigration).toContain("commonplace_main_map_nodes_note_id_fkey");
+    expect(phase8bMigration).toContain("foreign key (note_id)");
+    expect(phase8bMigration).toContain("references public.commonplace_notes(id)");
+    expect(phase8bMigration).toContain("on delete cascade");
+    expect(phase8bMigration).toContain("commonplace_main_map_nodes_target_valid");
+    expect(phase8bMigration).toContain("node_kind = 'cluster'");
+    expect(phase8bMigration).toContain("sub_mindmap_id is not null");
+    expect(phase8bMigration).toContain("note_id is null");
+    expect(phase8bMigration).toContain("node_kind = 'note'");
+    expect(phase8bMigration).toContain("note_id is not null");
+    expect(phase8bMigration).toContain("sub_mindmap_id is null");
+  });
+
+  test("Phase 8B adds main node indexes for kind, sub map, and note lookups", () => {
+    expect(phase8bMigration).toContain(
+      "create index if not exists commonplace_main_map_nodes_owner_main_kind_idx",
+    );
+    expect(phase8bMigration).toContain(
+      "on public.commonplace_main_map_nodes (owner_id, main_mindmap_id, node_kind)",
+    );
+    expect(phase8bMigration).toContain(
+      "create index if not exists commonplace_main_map_nodes_owner_main_note_idx",
+    );
+    expect(phase8bMigration).toContain(
+      "on public.commonplace_main_map_nodes (owner_id, main_mindmap_id, note_id)",
+    );
+  });
+
+  test("Phase 8B adds solid and dashed edge types to Main Map edges only", () => {
+    expect(phase8bMigration).toContain("alter table public.commonplace_main_map_edges");
+    expect(phase8bMigration).toContain("add column if not exists edge_type text not null default 'solid'");
+    expect(phase8bMigration).toContain("commonplace_main_map_edges_edge_type_valid");
+    expect(phase8bMigration).toContain("check (edge_type in ('solid', 'dashed'))");
+    expect(phase8bMigration).not.toContain("alter table public.commonplace_mindmap_edges");
+  });
+
+  test("Phase 8B preserves RLS, policies, and data safety boundaries", () => {
+    expect(phase8bMigration).not.toMatch(/disable row level security/i);
+    expect(phase8bMigration).not.toMatch(/\b(create|drop|alter)\s+policy\b/i);
+    expect(phase8bMigration).not.toMatch(/delete from/i);
+    expect(phase8bMigration).not.toMatch(/drop table\b/i);
   });
 });
