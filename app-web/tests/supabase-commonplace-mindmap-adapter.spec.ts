@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "fs";
+
 import type { FonetikSupabaseClient } from "../src/app/lib/supabase";
 import {
   createCommonplaceSubMindMap,
@@ -378,6 +380,7 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
           id: "edge-1",
           source_node_id: "node-1",
           target_node_id: "node-2",
+          edge_type: "dashed",
           label: "causes",
         },
       ],
@@ -391,6 +394,7 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     expect(result.graph.nodes.length).toBe(1);
     expect(result.graph.nodes[0].noteShortcode).toBe("#wn1");
     expect(result.graph.edges[0].label).toBe("causes");
+    expect(result.graph.edges[0].edgeType).toBe("dashed");
 
     expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:user_123");
     expect(mock.calls).toContain("eq:commonplace_mindmaps:id:map-123");
@@ -538,8 +542,59 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     });
   });
 
+  test("get graph defaults legacy edges without edge_type to solid", async () => {
+    const mock = createMockSupabaseClient({
+      edgesRows: [
+        {
+          id: "legacy-edge-1",
+          source_node_id: "node-1",
+          target_node_id: "node-2",
+          label: "legacy label",
+        },
+      ],
+    });
+
+    const result = await getCommonplaceMindMapGraph("user_123", "map-123", mock.client);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.graph.edges[0]).toMatchObject({
+      id: "legacy-edge-1",
+      edgeType: "solid",
+      label: "legacy label",
+    });
+  });
+
+  test("save graph rejects invalid edge_type", async () => {
+    const mock = createMockSupabaseClient();
+    const input = {
+      ownerId: "user_123",
+      mindMapId: "map-123",
+      nodes: [
+        { localId: "n1", noteId: "note-1", positionX: 10, positionY: 10 },
+        { localId: "n2", noteId: "note-2", positionX: 20, positionY: 20 },
+      ],
+      edges: [
+        {
+          sourceLocalId: "n1",
+          targetLocalId: "n2",
+          edgeType: "bold",
+          label: "invalid edge type",
+        },
+      ],
+    } as unknown as SaveCommonplaceMindMapInput;
+
+    const result = await saveCommonplaceMindMapGraph(input, mock.client);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "commonplace_validation_failed",
+    });
+    expect(mock.calls).toEqual([]);
+  });
+
   // 12. Save graph inserts nodes and maps local IDs to database UUIDs
-  test("save graph inserts nodes and maps local IDs to inserted DB node IDs for edges", async () => {
+  test("save graph inserts nodes and maps local IDs to inserted DB node IDs for solid edges", async () => {
     const mock = createMockSupabaseClient();
     const input: SaveCommonplaceMindMapInput = {
       ownerId: "user_123",
@@ -549,7 +604,12 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
         { localId: "n2", noteId: "note-2", positionX: 20, positionY: 20 },
       ],
       edges: [
-        { sourceLocalId: "n1", targetLocalId: "n2", label: "my relation" },
+        {
+          sourceLocalId: "n1",
+          targetLocalId: "n2",
+          edgeType: "solid",
+          label: "my relation",
+        },
       ],
     };
 
@@ -565,7 +625,36 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
       mindmap_id: "map-123",
       source_node_id: "node-db-uuid-1",
       target_node_id: "node-db-uuid-2",
+      edge_type: "solid",
       label: "my relation",
+    });
+  });
+
+  test("save graph inserts dashed edge type independently from label", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMindMapInput = {
+      ownerId: "user_123",
+      mindMapId: "map-123",
+      nodes: [
+        { localId: "n1", noteId: "note-1", positionX: 10, positionY: 10 },
+        { localId: "n2", noteId: "note-2", positionX: 20, positionY: 20 },
+      ],
+      edges: [
+        {
+          sourceLocalId: "n1",
+          targetLocalId: "n2",
+          edgeType: "dashed",
+          label: "possible relation",
+        },
+      ],
+    };
+
+    const result = await saveCommonplaceMindMapGraph(input, mock.client);
+
+    expect(result.ok).toBe(true);
+    expect(mock.inserted.commonplace_mindmap_edges[0]).toMatchObject({
+      edge_type: "dashed",
+      label: "possible relation",
     });
   });
 
@@ -606,8 +695,24 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     expect(mock.inserted.commonplace_mindmap_edges[0]).toMatchObject({
       source_node_id: "node-db-uuid-1",
       target_node_id: "node-db-uuid-2",
+      edge_type: "solid",
     });
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_nodes");
+  });
+
+  test("edge type migration adds only Sub Mind Map edge_type schema", () => {
+    const migration = readFileSync(
+      "../supabase/migrations/20260608_002_add_commonplace_edge_type.sql",
+      "utf8",
+    );
+
+    expect(migration).toContain("alter table public.commonplace_mindmap_edges");
+    expect(migration).toContain("add column if not exists edge_type text not null default 'solid'");
+    expect(migration).toContain("commonplace_mindmap_edges_edge_type_valid");
+    expect(migration).toContain("check (edge_type in ('solid', 'dashed'))");
+    expect(migration).not.toContain("commonplace_main_map_edges");
+    expect(migration).not.toContain("disable row level security");
+    expect(migration).not.toContain("drop table");
   });
 
   // 13. Save graph deletes old edges before old nodes

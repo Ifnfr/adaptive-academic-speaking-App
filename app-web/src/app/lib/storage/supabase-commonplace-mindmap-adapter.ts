@@ -23,9 +23,12 @@ export type CommonplaceMindMapNodeInput = {
   positionY: number;
 };
 
+export type CommonplaceMindMapEdgeType = "solid" | "dashed";
+
 export type CommonplaceMindMapEdgeInput = {
   sourceLocalId: string;
   targetLocalId: string;
+  edgeType?: CommonplaceMindMapEdgeType | null;
   label?: string | null;
 };
 
@@ -44,6 +47,7 @@ export type CommonplaceMindMapEdge = {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
+  edgeType: CommonplaceMindMapEdgeType;
   label: string | null;
 };
 
@@ -217,6 +221,7 @@ type EdgeRow = {
   id: string;
   source_node_id: string;
   target_node_id: string;
+  edge_type?: string | null;
   label: string | null;
 };
 
@@ -240,6 +245,10 @@ function mapMindMapRow(row: MindMapRow): CommonplaceMindMapSummary {
 
 function cleanMindMapType(value: unknown): CommonplaceMindMapType | null {
   return value === "main" || value === "sub" ? value : null;
+}
+
+function cleanEdgeType(value: unknown): CommonplaceMindMapEdgeType | null {
+  return value === "solid" || value === "dashed" ? value : null;
 }
 
 async function verifyOwnerScopedMap(
@@ -827,7 +836,7 @@ export async function getCommonplaceMindMapGraph(
     // 3. Fetch edges
     const { data: edgesData, error: edgesError } = await supabaseClient
       .from(EDGES_TABLE)
-      .select("id, source_node_id, target_node_id, label")
+      .select("id, source_node_id, target_node_id, edge_type, label")
       .eq("owner_id", cleanOwnerId)
       .eq("mindmap_id", cleanMindMapId);
 
@@ -837,6 +846,7 @@ export async function getCommonplaceMindMapGraph(
       id: row.id,
       sourceNodeId: row.source_node_id,
       targetNodeId: row.target_node_id,
+      edgeType: cleanEdgeType(row.edge_type) ?? "solid",
       label: row.label,
     }));
 
@@ -892,6 +902,10 @@ export async function saveCommonplaceMindMapGraph(
     const targetLocalId = cleanRequiredText(edge.targetLocalId);
 
     if (!sourceLocalId || !targetLocalId || sourceLocalId === targetLocalId) {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+
+    if (edge.edgeType !== undefined && edge.edgeType !== null && !cleanEdgeType(edge.edgeType)) {
       return { ok: false, error: "commonplace_validation_failed" };
     }
 
@@ -1000,6 +1014,7 @@ export async function saveCommonplaceMindMapGraph(
           mindmap_id: mindMapId,
           source_node_id: sourceDbId,
           target_node_id: targetDbId,
+          edge_type: cleanEdgeType(e.edgeType) ?? "solid",
           label: e.label ? e.label.trim() : null,
         };
       });
