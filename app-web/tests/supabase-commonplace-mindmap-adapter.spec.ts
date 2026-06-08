@@ -569,6 +569,47 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     });
   });
 
+  test("save graph allows duplicate note nodes as separate visual instances", async () => {
+    const mock = createMockSupabaseClient();
+    const input: SaveCommonplaceMindMapInput = {
+      ownerId: "user_123",
+      mindMapId: "map-123",
+      nodes: [
+        { localId: "n1", noteId: "note-1", positionX: 10, positionY: 20 },
+        { localId: "n2", noteId: "note-1", positionX: 240, positionY: 360 },
+      ],
+      edges: [
+        { sourceLocalId: "n1", targetLocalId: "n2", label: "same idea twice" },
+      ],
+    };
+
+    const result = await saveCommonplaceMindMapGraph(input, mock.client);
+
+    expect(result.ok).toBe(true);
+    expect(mock.calls).toContain("in:commonplace_notes:id:note-1");
+    expect(mock.inserted.commonplace_mindmap_nodes).toEqual([
+      {
+        owner_id: "user_123",
+        mindmap_id: "map-123",
+        note_id: "note-1",
+        position_x: 10,
+        position_y: 20,
+      },
+      {
+        owner_id: "user_123",
+        mindmap_id: "map-123",
+        note_id: "note-1",
+        position_x: 240,
+        position_y: 360,
+      },
+    ]);
+    expect(mock.inserted.commonplace_mindmap_edges[0]).toMatchObject({
+      source_node_id: "node-db-uuid-1",
+      target_node_id: "node-db-uuid-2",
+    });
+    expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_nodes");
+  });
+
   // 13. Save graph deletes old edges before old nodes
   test("save graph deletes old edges before old nodes", async () => {
     const mock = createMockSupabaseClient();

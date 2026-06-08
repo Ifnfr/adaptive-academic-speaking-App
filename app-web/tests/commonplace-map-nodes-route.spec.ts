@@ -282,4 +282,22 @@ test.describe("Commonplace map nodes route", () => {
     expect(routeSource).not.toContain("commonplace_main_map_nodes");
     expect(routeSource).not.toContain("commonplace_main_map_edges");
   });
+
+  test("duplicate sub-node migration removes only note-level uniqueness", () => {
+    const migrationSource = readFileSync(
+      "../supabase/migrations/20260608_001_allow_duplicate_commonplace_sub_note_nodes.sql",
+      "utf8",
+    );
+
+    expect(migrationSource).toContain(
+      "drop constraint if exists commonplace_mindmap_nodes_owner_mindmap_note_unique",
+    );
+    expect(migrationSource).toContain(
+      "create index if not exists commonplace_mindmap_nodes_owner_mindmap_note_idx",
+    );
+    expect(migrationSource).not.toContain("drop table");
+    expect(migrationSource).not.toContain("disable row level security");
+    expect(migrationSource).not.toContain("commonplace_main_map_nodes");
+    expect(migrationSource).not.toContain("commonplace_mindmap_edges");
+  });
 });

@@ -769,7 +769,7 @@ export async function saveCommonplaceMindMapGraph(
 
   // Node validations
   const seenLocalIds = new Set<string>();
-  const seenNoteIds = new Set<string>();
+  const noteIdsForOwnership = new Set<string>();
 
   for (const node of nodes) {
     const localId = cleanRequiredText(node.localId);
@@ -779,12 +779,12 @@ export async function saveCommonplaceMindMapGraph(
       return { ok: false, error: "commonplace_validation_failed" };
     }
 
-    if (seenLocalIds.has(localId) || seenNoteIds.has(noteId)) {
+    if (seenLocalIds.has(localId)) {
       return { ok: false, error: "commonplace_validation_failed" };
     }
 
     seenLocalIds.add(localId);
-    seenNoteIds.add(noteId);
+    noteIdsForOwnership.add(noteId);
   }
 
   // Edge validations
@@ -831,7 +831,7 @@ export async function saveCommonplaceMindMapGraph(
     if (!existingMap) return { ok: false, error: "commonplace_not_found" };
 
     // 2. Validate note ownership
-    const noteIds = Array.from(seenNoteIds);
+    const noteIds = Array.from(noteIdsForOwnership);
     if (noteIds.length > 0) {
       const { data: notesData, error: notesError } = await supabaseClient
         .from(NOTES_TABLE)
@@ -877,25 +877,15 @@ export async function saveCommonplaceMindMapGraph(
       const { data: insertedNodes, error: insertNodesError } = await supabaseClient
         .from(NODES_TABLE)
         .insert(nodesToInsert)
-        .select("id, note_id");
+        .select("id");
 
-      if (insertNodesError || !insertedNodes) {
+      if (insertNodesError || !insertedNodes || insertedNodes.length !== nodes.length) {
         return { ok: false, error: "commonplace_save_failed" };
       }
 
-      // Map noteId to localId
-      const noteIdToLocalIdMap = new Map<string, string>();
-      for (const node of nodes) {
-        noteIdToLocalIdMap.set(node.noteId, node.localId);
-      }
-
-      // Map localId to database node UUID
-      for (const insertedNode of insertedNodes) {
-        const localId = noteIdToLocalIdMap.get(insertedNode.note_id);
-        if (localId) {
-          localIdToDbIdMap.set(localId, insertedNode.id);
-        }
-      }
+      insertedNodes.forEach((insertedNode, index) => {
+        localIdToDbIdMap.set(nodes[index].localId, insertedNode.id);
+      });
     }
 
     // 6. Insert new edges
