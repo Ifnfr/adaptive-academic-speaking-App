@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -193,6 +194,17 @@ const edgeTypes: EdgeTypes = {
 };
 
 const COMMONPLACE_NOTE_DRAG_TYPE = "application/commonplace-note";
+
+const subMapBubbleBackgroundStyle: CSSProperties = {
+  backgroundImage: [
+    "radial-gradient(circle at 24% 28%, rgba(47,111,104,0.14) 0 1px, transparent 2px)",
+    "radial-gradient(circle at 24% 28%, transparent 0 82px, rgba(47,111,104,0.12) 83px 84px, transparent 85px)",
+    "radial-gradient(circle at 68% 34%, transparent 0 118px, rgba(123,107,176,0.1) 119px 120px, transparent 121px)",
+    "radial-gradient(circle at 52% 72%, transparent 0 96px, rgba(208,196,123,0.12) 97px 98px, transparent 99px)",
+    "radial-gradient(circle at 15% 82%, rgba(47,111,104,0.08) 0 34px, transparent 35px)",
+    "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(248,250,248,0.35))",
+  ].join(", "),
+};
 
 function titleForNode(node: CommonplaceMapCanvasNode): string {
   return node.noteTitle?.trim() || node.noteSourceBook || "Untitled Source";
@@ -764,13 +776,24 @@ export function CommonplaceMapCanvasFoundation({
 
       <div
         ref={canvasPanelRef}
-        className={`relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden bg-[#F8FAF8] transition-shadow ${
+        className={`relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden transition-shadow ${
+          isSubMap ? "bg-[#F7FBFA]" : "bg-[#F8FAF8]"
+        } ${
           isCanvasDragActive
             ? "ring-2 ring-inset ring-[var(--brand-teal)]/45"
             : ""
         }`}
       >
+        {isSubMap && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0"
+            data-testid="commonplace-map-bubble-background"
+            style={subMapBubbleBackgroundStyle}
+          />
+        )}
         <ReactFlow
+          className="relative z-10 bg-transparent"
           nodes={visibleNodes}
           edges={edges}
           nodeTypes={nodeTypes}

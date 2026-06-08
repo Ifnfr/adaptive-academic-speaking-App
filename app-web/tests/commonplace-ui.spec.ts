@@ -927,6 +927,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow")).toHaveCount(1);
     await expect(page.locator(".react-flow__minimap")).toBeVisible();
     await expect(page.locator(".react-flow__controls")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
       "Canvas is ready. Drag notes from the sidebar will be added in the next phase.",
     );
@@ -1162,6 +1163,18 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow")).toHaveCount(1);
     await expect(page.locator(".react-flow__minimap")).toBeVisible();
     await expect(page.locator(".react-flow__controls")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(1);
+    const bubbleBackground = await page
+      .getByTestId("commonplace-map-bubble-background")
+      .evaluate((element) => {
+        const styles = window.getComputedStyle(element);
+        return {
+          backgroundImage: styles.backgroundImage,
+          pointerEvents: styles.pointerEvents,
+        };
+      });
+    expect(bubbleBackground.backgroundImage).toContain("radial-gradient");
+    expect(bubbleBackground.pointerEvents).toBe("none");
     await expect(page.getByText(/Opened from #tf1/i)).toBeVisible();
     const noteNode = page.getByTestId("commonplace-map-note-node");
     await expect(noteNode).toBeVisible();
