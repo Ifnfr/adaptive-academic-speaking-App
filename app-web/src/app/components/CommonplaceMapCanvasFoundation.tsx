@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   type Node,
   type NodeTypes,
+  type ReactFlowInstance,
   useNodesState,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -31,6 +32,10 @@ type MapNoteContext = {
 
 type SaveStatus = "Saved" | "Unsaved changes" | "Saving..." | "Save failed";
 
+type DraggedCommonplaceNote = {
+  noteId: string;
+};
+
 type CommonplaceMapCanvasFoundationProps = {
   map: CommonplaceMindMapSummary;
   noteContext: MapNoteContext | null;
@@ -39,11 +44,20 @@ type CommonplaceMapCanvasFoundationProps = {
   saveNodePositions: (
     updates: CommonplaceMapNodePositionUpdate[],
   ) => Promise<CommonplaceMapNodePositionSaveResult>;
+  createNoteNode: (
+    noteId: string,
+    position: { x: number; y: number },
+  ) => Promise<
+    | { ok: true; node: CommonplaceMapCanvasNode }
+    | { ok: false; error: "unsupported" | "failed" }
+  >;
 };
 
 const nodeTypes: NodeTypes = {
   noteNode: CommonplaceNoteNode,
 };
+
+const COMMONPLACE_NOTE_DRAG_TYPE = "application/commonplace-note";
 
 function titleForNode(node: CommonplaceMapCanvasNode): string {
   return node.noteTitle?.trim() || node.noteSourceBook || "Untitled Source";
@@ -72,12 +86,16 @@ export function CommonplaceMapCanvasFoundation({
   onBack,
   loadNodes,
   saveNodePositions,
+  createNoteNode,
 }: CommonplaceMapCanvasFoundationProps) {
   const [nodes, setNodes, onNodesChange] =
     useNodesState<CommonplaceNoteNodeData>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [dropError, setDropError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("Saved");
+  const [flowInstance, setFlowInstance] =
+    useState<ReactFlowInstance<CommonplaceNoteNodeData> | null>(null);
 
   const isSubMap = map.type === "sub";
   const updates = useMemo<CommonplaceMapNodePositionUpdate[]>(
@@ -97,6 +115,7 @@ export function CommonplaceMapCanvasFoundation({
     const timer = window.setTimeout(() => {
       setIsLoading(true);
       setLoadError(null);
+      setDropError(null);
       setSaveStatus("Saved");
       setNodes([]);
 
@@ -136,6 +155,75 @@ export function CommonplaceMapCanvasFoundation({
     const result = await saveNodePositions(updates);
     setSaveStatus(result.ok ? "Saved" : "Save failed");
   }, [saveNodePositions, updates]);
+
+  const hasDraggedCommonplaceNote = (event: DragEvent) =>
+    Array.from(event.dataTransfer.types).includes(COMMONPLACE_NOTE_DRAG_TYPE);
+
+  const parseDraggedNote = (event: DragEvent): DraggedCommonplaceNote | null => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(
+        event.dataTransfer.getData(COMMONPLACE_NOTE_DRAG_TYPE),
+      );
+    } catch {
+      return null;
+    }
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    const payload = parsed as { noteId?: unknown };
+    return typeof payload.noteId === "string" && payload.noteId.trim()
+      ? { noteId: payload.noteId.trim() }
+      : null;
+  };
+
+  const handleDragOver = useCallback((event: DragEvent) => {
+    if (!hasDraggedCommonplaceNote(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = isSubMap ? "copy" : "none";
+  }, [isSubMap]);
+
+  const handleDrop = useCallback(
+    async (event: DragEvent) => {
+      if (!hasDraggedCommonplaceNote(event)) return;
+      event.preventDefault();
+      setDropError(null);
+
+      if (!isSubMap) {
+        setDropError("Main Map note drops will be enabled in a later phase.");
+        return;
+      }
+
+      const draggedNote = parseDraggedNote(event);
+      if (!draggedNote || !flowInstance) {
+        setSaveStatus("Save failed");
+        setDropError("Could not add this note to the canvas.");
+        return;
+      }
+
+      const position = flowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      setSaveStatus("Saving...");
+      const result = await createNoteNode(draggedNote.noteId, position);
+      if (!result.ok) {
+        setSaveStatus("Save failed");
+        setDropError(
+          result.error === "unsupported"
+            ? "Main Map note drops will be enabled in a later phase."
+            : "Could not add this note to the canvas.",
+        );
+        return;
+      }
+
+      setNodes((current) => [...current, toReactFlowNode(result.node)]);
+      setSaveStatus("Saved");
+    },
+    [createNoteNode, flowInstance, isSubMap, setNodes],
+  );
 
   return (
     <section
@@ -194,6 +282,14 @@ export function CommonplaceMapCanvasFoundation({
           {loadError}
         </p>
       )}
+      {dropError && (
+        <p
+          role="alert"
+          className="mx-4 mt-4 rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] px-4 py-3 text-sm text-[#8A1F15] sm:mx-5"
+        >
+          {dropError}
+        </p>
+      )}
 
       <div className="relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden bg-[#F8FAF8]">
         <ReactFlow
@@ -202,6 +298,9 @@ export function CommonplaceMapCanvasFoundation({
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
           onNodeDragStop={handleNodeDragStop}
+          onInit={setFlowInstance}
+          onDragOver={handleDragOver}
+          onDrop={(event) => void handleDrop(event)}
           fitView
           nodesConnectable={false}
           nodesDraggable
@@ -222,8 +321,9 @@ export function CommonplaceMapCanvasFoundation({
             data-testid="commonplace-map-empty-state"
           >
             <p className="max-w-sm rounded-xl border border-[var(--brand-border)] bg-white/95 px-4 py-3 text-center text-sm font-medium leading-6 text-[var(--brand-ink-soft)] shadow-sm">
-              Canvas is ready. Drag notes from the sidebar will be added in the
-              next phase.
+              {isSubMap
+                ? "Canvas is ready. Drag notes from the sidebar to add them here."
+                : "Canvas is ready. Drag notes from the sidebar will be added in the next phase."}
             </p>
           </div>
         )}

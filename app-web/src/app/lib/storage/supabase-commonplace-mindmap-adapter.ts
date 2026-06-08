@@ -124,6 +124,10 @@ export type CommonplaceMapNodePositionSaveResult =
   | { ok: true }
   | { ok: false; error: CommonplaceError };
 
+export type CommonplaceMapNoteNodeCreateResult =
+  | { ok: true; node: CommonplaceMapCanvasNode }
+  | { ok: false; error: CommonplaceError };
+
 const MAINMAP_NODES_TABLE = "commonplace_main_map_nodes";
 const MAINMAP_EDGES_TABLE = "commonplace_main_map_edges";
 
@@ -275,6 +279,17 @@ function cleanPositionUpdate(
   };
 }
 
+function cleanPosition(value: unknown): { x: number; y: number } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const position = value as { x?: unknown; y?: unknown };
+  return typeof position.x === "number" &&
+    typeof position.y === "number" &&
+    Number.isFinite(position.x) &&
+    Number.isFinite(position.y)
+    ? { x: position.x, y: position.y }
+    : null;
+}
+
 export async function listCommonplaceMapNodes(
   ownerId: string,
   mindMapId: string,
@@ -342,6 +357,88 @@ export async function listCommonplaceMapNodes(
     });
 
     return { ok: true, nodes };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function createSubMapNoteNode(
+  ownerId: string,
+  mindMapId: string,
+  noteId: string,
+  position: { x: number; y: number },
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMapNoteNodeCreateResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(mindMapId);
+  const cleanNoteId = cleanRequiredText(noteId);
+  const cleanNodePosition = cleanPosition(position);
+
+  if (!cleanOwnerId || !cleanMindMapId || !cleanNoteId || !cleanNodePosition) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMindMapId,
+      "sub",
+      supabaseClient,
+    );
+    if (!mapResult.ok) return mapResult;
+
+    const { data: noteData, error: noteError } = await supabaseClient
+      .from(NOTES_TABLE)
+      .select("id, shortcode, title, source_book, tags")
+      .eq("owner_id", cleanOwnerId)
+      .eq("id", cleanNoteId)
+      .maybeSingle();
+
+    if (noteError) return { ok: false, error: "commonplace_save_failed" };
+    if (!noteData) return { ok: false, error: "commonplace_not_found" };
+
+    const { data: insertedNode, error: insertError } = await supabaseClient
+      .from(NODES_TABLE)
+      .insert({
+        owner_id: cleanOwnerId,
+        mindmap_id: cleanMindMapId,
+        note_id: cleanNoteId,
+        position_x: cleanNodePosition.x,
+        position_y: cleanNodePosition.y,
+      })
+      .select("id, note_id, position_x, position_y")
+      .single();
+
+    if (insertError || !insertedNode) {
+      return { ok: false, error: "commonplace_save_failed" };
+    }
+
+    const noteRow = noteData as {
+      shortcode?: string | null;
+      title?: string | null;
+      source_book?: string | null;
+      tags?: string[] | null;
+    };
+    const nodeRow = insertedNode as {
+      id: string;
+      note_id: string;
+      position_x: number;
+      position_y: number;
+    };
+
+    return {
+      ok: true,
+      node: {
+        id: nodeRow.id,
+        noteId: nodeRow.note_id,
+        positionX: nodeRow.position_x,
+        positionY: nodeRow.position_y,
+        noteShortcode: noteRow.shortcode || "",
+        noteTitle: noteRow.title?.trim() || null,
+        noteSourceBook: noteRow.source_book || "Untitled Source",
+        noteTags: noteRow.tags ?? [],
+      },
+    };
   } catch {
     return { ok: false, error: "commonplace_save_failed" };
   }

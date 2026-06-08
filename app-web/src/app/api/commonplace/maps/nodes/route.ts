@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   batchUpdateCommonplaceMapNodePositions,
+  createSubMapNoteNode,
   listCommonplaceMapNodes,
   type CommonplaceMapNodePositionUpdate,
   type CommonplaceMindMapType,
@@ -14,6 +15,13 @@ type PatchNodesRequest = {
   mapId?: unknown;
   type?: unknown;
   updates?: unknown;
+};
+
+type PostNodeRequest = {
+  mapId?: unknown;
+  type?: unknown;
+  noteId?: unknown;
+  position?: unknown;
 };
 
 export const testHooks = {
@@ -111,6 +119,17 @@ function cleanPositionUpdates(
   return updates;
 }
 
+function cleanPosition(value: unknown): { x: number; y: number } | null {
+  if (!isPlainObject(value)) return null;
+
+  const x = value.x;
+  const y = value.y;
+  if (typeof x !== "number" || typeof y !== "number") return null;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+  return { x, y };
+}
+
 function responseForStorageError(error: string) {
   if (error === "commonplace_validation_failed") {
     return NextResponse.json(
@@ -156,6 +175,50 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({ nodes: result.nodes }, { status: 200 });
+}
+
+export async function POST(request: Request) {
+  const ownerId = await resolveCurrentUserId();
+  if (!ownerId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  }
+
+  const parsed = (await parseObjectBody(request)) as PostNodeRequest | null;
+  const mapId = cleanRequiredText(parsed?.mapId);
+  const type = cleanMapType(parsed?.type);
+  const noteId = cleanRequiredText(parsed?.noteId);
+  const position = cleanPosition(parsed?.position);
+  if (!parsed || !mapId || !type || !noteId || !position) {
+    return NextResponse.json(
+      { error: "invalid_map_node_fields" },
+      { status: 400 },
+    );
+  }
+
+  if (type === "main") {
+    return NextResponse.json(
+      { error: "main_note_nodes_not_supported" },
+      { status: 409 },
+    );
+  }
+
+  const supabaseClient = getSupabaseClient();
+  if (!supabaseClient) {
+    return NextResponse.json({ error: "map_node_save_failed" }, { status: 500 });
+  }
+
+  const result = await createSubMapNoteNode(
+    ownerId,
+    mapId,
+    noteId,
+    position,
+    supabaseClient,
+  );
+  if (!result.ok) {
+    return responseForStorageError(result.error);
+  }
+
+  return NextResponse.json({ node: result.node }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {

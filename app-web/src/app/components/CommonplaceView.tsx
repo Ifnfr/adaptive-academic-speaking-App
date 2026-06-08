@@ -21,6 +21,7 @@ import type {
 } from "../lib/storage/supabase-commonplace-adapter";
 import {
   batchUpdateCommonplaceMapNodePositions,
+  createSubMapNoteNode,
   createCommonplaceMindMap,
   createCommonplaceSubMindMap,
   deleteCommonplaceMindMapFromRegistry,
@@ -50,6 +51,7 @@ import type {
   CommonplaceMindMapType,
   CreateCommonplaceMindMapRegistryInput,
   CommonplaceMapCanvasNode,
+  CommonplaceMapNoteNodeCreateResult,
   CommonplaceMapNodeListResult,
   CommonplaceMapNodePositionSaveResult,
   CommonplaceMapNodePositionUpdate,
@@ -156,6 +158,12 @@ export type CommonplaceStorage = {
     type: CommonplaceMindMapType,
     updates: CommonplaceMapNodePositionUpdate[],
   ): Promise<CommonplaceMapNodePositionSaveResult>;
+  createSubMapNoteNode?(
+    ownerId: string,
+    mindMapId: string,
+    noteId: string,
+    position: { x: number; y: number },
+  ): Promise<CommonplaceMapNoteNodeCreateResult>;
 };
 
 declare global {
@@ -313,6 +321,14 @@ function createSupabaseStorage(
         mindMapId,
         type,
         updates,
+        supabaseClient,
+      ),
+    createSubMapNoteNode: (ownerId, mindMapId, noteId, position) =>
+      createSubMapNoteNode(
+        ownerId,
+        mindMapId,
+        noteId,
+        position,
         supabaseClient,
       ),
   };
@@ -591,6 +607,41 @@ async function batchUpdateCommonplaceMapNodePositionsViaServer(
 
     if (response.ok && data?.ok) {
       return { ok: true };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_node_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function createSubMapNoteNodeViaServer(
+  mapId: string,
+  noteId: string,
+  position: { x: number; y: number },
+): Promise<CommonplaceMapNoteNodeCreateResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps/nodes", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mapId, type: "sub", noteId, position }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { node?: CommonplaceMapCanvasNode; error?: string }
+      | null;
+
+    if (response.ok && data?.node) {
+      return { ok: true, node: data.node };
     }
     if (data?.error === "auth_required") {
       return { ok: false, error: "commonplace_auth_required" };
@@ -934,6 +985,34 @@ export function CommonplaceView({
     [effectiveOwnerId, storage, testStorage],
   );
 
+  const createMapCanvasNoteNode = useCallback(
+    async (
+      map: CommonplaceMindMapSummary,
+      noteId: string,
+      position: { x: number; y: number },
+    ): Promise<CommonplaceMapNoteNodeCreateResult> => {
+      if (map.type !== "sub") {
+        return { ok: false, error: "commonplace_conflict" };
+      }
+
+      if (
+        testStorage &&
+        storage?.createSubMapNoteNode &&
+        effectiveOwnerId
+      ) {
+        return storage.createSubMapNoteNode(
+          effectiveOwnerId,
+          map.id,
+          noteId,
+          position,
+        );
+      }
+
+      return createSubMapNoteNodeViaServer(map.id, noteId, position);
+    },
+    [effectiveOwnerId, storage, testStorage],
+  );
+
   const openDetail = async (noteId: string) => {
     if (!storage || !effectiveOwnerId) return;
 
@@ -1138,6 +1217,8 @@ export function CommonplaceView({
     [notes, searchQuery],
   );
   const libraryMode = mode === "library";
+  const sidebarNoteDragMode =
+    mode === "map_detail_placeholder" && selectedMap?.type === "sub";
 
   return (
     <section
@@ -1158,6 +1239,7 @@ export function CommonplaceView({
           searchQuery={searchQuery}
           isLoading={isLoading}
           viewportBounded={libraryMode}
+          canDragNotesToCanvas={sidebarNoteDragMode}
           onSearchChange={setSearchQuery}
           onBackToFonetik={onBackToFonetik}
           onCreate={openCreate}
@@ -1280,6 +1362,20 @@ export function CommonplaceView({
                   saveNodePositions={(updates) =>
                     saveMapCanvasNodePositions(selectedMap, updates)
                   }
+                  createNoteNode={(noteId, position) =>
+                    createMapCanvasNoteNode(selectedMap, noteId, position).then(
+                      (result) =>
+                        result.ok
+                          ? result
+                          : {
+                              ok: false as const,
+                              error:
+                                result.error === "commonplace_conflict"
+                                  ? "unsupported"
+                                  : "failed",
+                            },
+                    )
+                  }
                 />
               )}
             </>
@@ -1296,6 +1392,7 @@ function CommonplaceSidebar({
   searchQuery,
   isLoading,
   viewportBounded,
+  canDragNotesToCanvas,
   onSearchChange,
   onBackToFonetik,
   onCreate,
@@ -1306,6 +1403,7 @@ function CommonplaceSidebar({
   searchQuery: string;
   isLoading: boolean;
   viewportBounded: boolean;
+  canDragNotesToCanvas: boolean;
   onSearchChange: (value: string) => void;
   onBackToFonetik?: () => void;
   onCreate: () => void;
@@ -1377,6 +1475,7 @@ function CommonplaceSidebar({
                 key={note.id}
                 note={note}
                 selected={note.id === selectedNoteId}
+                draggable={canDragNotesToCanvas}
                 onClick={() => onOpen(note.id)}
               />
             ))}
@@ -1390,10 +1489,12 @@ function CommonplaceSidebar({
 function SidebarNoteButton({
   note,
   selected,
+  draggable,
   onClick,
 }: {
   note: CommonplaceNote;
   selected: boolean;
+  draggable: boolean;
   onClick: () => void;
 }) {
   const visibleTags = note.tags.slice(0, 2);
@@ -1402,12 +1503,32 @@ function SidebarNoteButton({
   return (
     <button
       type="button"
+      draggable={draggable}
+      data-testid="commonplace-sidebar-note"
+      onDragStart={(event) => {
+        if (!draggable) {
+          event.preventDefault();
+          return;
+        }
+
+        event.dataTransfer.effectAllowed = "copy";
+        event.dataTransfer.setData(
+          "application/commonplace-note",
+          JSON.stringify({
+            noteId: note.id,
+            title: displayTitle(note),
+            sourceBook: note.sourceBook,
+            shortcode: note.shortcode,
+            tags: note.tags.slice(0, 6),
+          }),
+        );
+      }}
       onClick={onClick}
       className={`rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
         selected
           ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]"
           : "border-[var(--brand-border)] bg-white hover:bg-[var(--brand-surface)]"
-      }`}
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
     >
       <span className="text-[11px] font-semibold text-[var(--brand-teal-ink)]">
         {note.shortcode}

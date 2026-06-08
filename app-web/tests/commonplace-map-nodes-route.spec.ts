@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 import {
   GET,
   PATCH,
+  POST,
   testHooks,
 } from "../src/app/api/commonplace/maps/nodes/route";
 
@@ -31,11 +32,22 @@ const baseNodeRow = {
   },
 };
 
+const baseNoteRow = {
+  id: "note-db-1",
+  shortcode: "#wn1",
+  title: "Institutions and Growth",
+  source_book: "Why Nations Fail",
+  tags: ["economics", "institutions"],
+};
+
 type MockOptions = {
   mapRow?: Record<string, unknown> | null;
   mapReadError?: Error | null;
+  noteRow?: Record<string, unknown> | null;
+  noteReadError?: Error | null;
   nodeRows?: Record<string, unknown>[];
   nodeReadError?: Error | null;
+  nodeInsertError?: Error | null;
   nodeUpdateError?: Error | null;
 };
 
@@ -47,17 +59,38 @@ function buildPatchRequest(body: Record<string, unknown>): Request {
   });
 }
 
+function buildPostRequest(body: Record<string, unknown>): Request {
+  return new Request("http://localhost/api/commonplace/maps/nodes", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 function createMockSupabaseClient(options: MockOptions = {}) {
   const calls: string[] = [];
+  const inserted: Record<string, unknown[]> = {};
   const updated: Record<string, unknown[]> = {};
 
   function buildQuery(table: string) {
+    let operation = "";
+    let insertedRow: Record<string, unknown> | null = null;
+
     const query = {
       select(columns: string) {
         calls.push(`select:${table}:${columns.replace(/\s+/g, " ").trim()}`);
         return query;
       },
+      insert(row: unknown) {
+        operation = "insert";
+        calls.push(`insert:${table}`);
+        const rows = Array.isArray(row) ? row : [row];
+        inserted[table] = [...(inserted[table] ?? []), ...rows];
+        insertedRow = rows[0] as Record<string, unknown>;
+        return query;
+      },
       update(row: unknown) {
+        operation = "update";
         calls.push(`update:${table}`);
         updated[table] = [...(updated[table] ?? []), row as Record<string, unknown>];
         return query;
@@ -82,12 +115,41 @@ function createMockSupabaseClient(options: MockOptions = {}) {
       },
       maybeSingle() {
         calls.push(`maybeSingle:${table}`);
+        if (table === "commonplace_notes") {
+          return Promise.resolve({
+            data:
+              options.noteRow === undefined
+                ? baseNoteRow
+                : options.noteRow,
+            error: options.noteReadError ?? null,
+          });
+        }
+
         return Promise.resolve({
           data:
             options.mapRow === undefined
               ? baseMapRow
               : options.mapRow,
           error: options.mapReadError ?? null,
+        });
+      },
+      single() {
+        calls.push(`single:${table}`);
+        if (table === "commonplace_mindmap_nodes" && operation === "insert") {
+          return Promise.resolve({
+            data: {
+              id: `node-db-${(inserted.commonplace_mindmap_nodes ?? []).length}`,
+              note_id: insertedRow?.note_id,
+              position_x: insertedRow?.position_x,
+              position_y: insertedRow?.position_y,
+            },
+            error: options.nodeInsertError ?? null,
+          });
+        }
+
+        return Promise.resolve({
+          data: null,
+          error: null,
         });
       },
       then(
@@ -109,7 +171,7 @@ function createMockSupabaseClient(options: MockOptions = {}) {
     },
   };
 
-  return { client, calls, updated };
+  return { client, calls, inserted, updated };
 }
 
 test.describe("Commonplace map nodes route", () => {
@@ -118,7 +180,7 @@ test.describe("Commonplace map nodes route", () => {
     testHooks.getSupabaseClient = null;
   });
 
-  test("unauthenticated GET and PATCH return auth_required", async () => {
+  test("unauthenticated GET, POST, and PATCH return auth_required", async () => {
     testHooks.resolveCurrentUserId = async () => null;
     testHooks.getSupabaseClient = () => {
       throw new Error("should not create client");
@@ -134,10 +196,20 @@ test.describe("Commonplace map nodes route", () => {
         updates: [],
       }),
     );
+    const postResponse = await POST(
+      buildPostRequest({
+        mapId: "map-1",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: 10, y: 20 },
+      }),
+    );
 
     expect(getResponse.status).toBe(401);
+    expect(postResponse.status).toBe(401);
     expect(patchResponse.status).toBe(401);
     await expect(getResponse.json()).resolves.toEqual({ error: "auth_required" });
+    await expect(postResponse.json()).resolves.toEqual({ error: "auth_required" });
     await expect(patchResponse.json()).resolves.toEqual({ error: "auth_required" });
   });
 
@@ -156,8 +228,17 @@ test.describe("Commonplace map nodes route", () => {
         updates: [{ nodeId: "node-db-1", position: { x: Number.NaN, y: 20 } }],
       }),
     );
+    const postResponse = await POST(
+      buildPostRequest({
+        mapId: "map-1",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: Number.NaN, y: 20 },
+      }),
+    );
 
     expect(getResponse.status).toBe(400);
+    expect(postResponse.status).toBe(400);
     expect(patchResponse.status).toBe(400);
     expect(mock.calls).toEqual([]);
   });
@@ -203,6 +284,27 @@ test.describe("Commonplace map nodes route", () => {
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_nodes");
   });
 
+  test("Main POST rejects note creation without table writes", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildPostRequest({
+        mapId: "main-map-1",
+        type: "main",
+        noteId: "note-db-1",
+        position: { x: 120, y: 180 },
+      }),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "main_note_nodes_not_supported",
+    });
+    expect(mock.calls).toEqual([]);
+  });
+
   test("Sub GET returns owner-scoped saved note nodes", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";
     const mock = createMockSupabaseClient();
@@ -224,6 +326,116 @@ test.describe("Commonplace map nodes route", () => {
     expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:owner_id:server-user-123");
     expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:mindmap_id:map-db-1");
     expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
+  });
+
+  test("Sub POST creates owner-scoped note node and ignores request owner fields", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildPostRequest({
+        ownerId: "attacker",
+        owner_id: "attacker",
+        mapId: "map-db-1",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: 140, y: 260 },
+      }),
+    );
+    const data = (await response.json()) as {
+      node: { id: string; noteId: string; positionX: number; positionY: number };
+    };
+
+    expect(response.status).toBe(201);
+    expect(data.node).toMatchObject({
+      id: "node-db-1",
+      noteId: "note-db-1",
+      positionX: 140,
+      positionY: 260,
+    });
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:server-user-123");
+    expect(mock.calls).toContain("eq:commonplace_notes:owner_id:server-user-123");
+    expect(mock.calls).toContain("insert:commonplace_mindmap_nodes");
+    expect(mock.inserted.commonplace_mindmap_nodes[0]).toMatchObject({
+      owner_id: "server-user-123",
+      mindmap_id: "map-db-1",
+      note_id: "note-db-1",
+      position_x: 140,
+      position_y: 260,
+    });
+    expect(JSON.stringify(mock.inserted)).not.toContain("attacker");
+    expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
+  });
+
+  test("Sub POST allows duplicate note node instances", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const firstResponse = await POST(
+      buildPostRequest({
+        mapId: "map-db-1",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: 20, y: 40 },
+      }),
+    );
+    const secondResponse = await POST(
+      buildPostRequest({
+        mapId: "map-db-1",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: 240, y: 360 },
+      }),
+    );
+
+    expect(firstResponse.status).toBe(201);
+    expect(secondResponse.status).toBe(201);
+    expect(mock.inserted.commonplace_mindmap_nodes).toHaveLength(2);
+    expect(mock.inserted.commonplace_mindmap_nodes[0]).toMatchObject({
+      note_id: "note-db-1",
+      position_x: 20,
+      position_y: 40,
+    });
+    expect(mock.inserted.commonplace_mindmap_nodes[1]).toMatchObject({
+      note_id: "note-db-1",
+      position_x: 240,
+      position_y: 360,
+    });
+  });
+
+  test("Sub POST rejects maps and notes outside the current owner", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const missingMap = createMockSupabaseClient({ mapRow: null });
+    testHooks.getSupabaseClient = () => missingMap.client;
+
+    const mapResponse = await POST(
+      buildPostRequest({
+        mapId: "other-map",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: 20, y: 40 },
+      }),
+    );
+
+    const missingNote = createMockSupabaseClient({ noteRow: null });
+    testHooks.getSupabaseClient = () => missingNote.client;
+    const noteResponse = await POST(
+      buildPostRequest({
+        mapId: "map-db-1",
+        type: "sub",
+        noteId: "other-note",
+        position: { x: 20, y: 40 },
+      }),
+    );
+
+    expect(mapResponse.status).toBe(404);
+    expect(noteResponse.status).toBe(404);
+    await expect(mapResponse.json()).resolves.toEqual({ error: "map_not_found" });
+    await expect(noteResponse.json()).resolves.toEqual({ error: "map_not_found" });
+    expect(missingMap.calls).not.toContain("insert:commonplace_mindmap_nodes");
+    expect(missingNote.calls).not.toContain("insert:commonplace_mindmap_nodes");
   });
 
   test("Sub PATCH updates owner-scoped node positions and ignores request owner fields", async () => {
@@ -269,6 +481,28 @@ test.describe("Commonplace map nodes route", () => {
     expect(response.status).toBe(500);
     expect(data).toEqual({ error: "map_node_save_failed" });
     expect(JSON.stringify(data)).not.toContain("raw Supabase graph failure");
+  });
+
+  test("POST Supabase failures return safe errors without raw details", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      nodeInsertError: new Error("raw Supabase insert failure"),
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildPostRequest({
+        mapId: "map-db-1",
+        type: "sub",
+        noteId: "note-db-1",
+        position: { x: 20, y: 40 },
+      }),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(500);
+    expect(data).toEqual({ error: "map_node_save_failed" });
+    expect(JSON.stringify(data)).not.toContain("raw Supabase insert failure");
   });
 
   test("route source keeps service role server-only and does not reference edge or cluster tables", () => {
