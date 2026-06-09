@@ -1,6 +1,6 @@
 "use client";
 
-import type { NodeProps } from "reactflow";
+import { Handle, Position, type NodeProps } from "reactflow";
 
 export type CommonplaceClusterNodeData = {
   subMindMapId: string;
@@ -24,6 +24,18 @@ export function CommonplaceClusterNode({
       }`}
       data-testid="commonplace-map-cluster-node"
     >
+      <Handle
+        type="target"
+        position={Position.Left}
+        isConnectable={false}
+        className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        isConnectable={false}
+        className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
+      />
       <div className="flex items-start justify-between gap-3">
         <span className="rounded-full bg-[var(--brand-teal-soft)] px-2 py-1 text-[11px] font-semibold uppercase text-[var(--brand-teal-ink)]">
           Sub Map

@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 import {
+  createMainMapEdge,
   createSubMapEdge,
+  deleteMainMapEdge,
   deleteSubMapEdge,
+  listMainMapEdges,
   listSubMapEdges,
+  updateMainMapEdge,
   updateSubMapEdge,
   type CommonplaceMindMapEdgeType,
   type CommonplaceSubMapEdge,
@@ -136,7 +140,7 @@ function responseForStorageError(error: string) {
     );
   }
   if (error === "commonplace_not_found") {
-    return NextResponse.json({ error: "map_not_found" }, { status: 404 });
+    return NextResponse.json({ error: "map_edge_not_found" }, { status: 404 });
   }
   return NextResponse.json({ error: "map_edge_save_failed" }, { status: 500 });
 }
@@ -156,19 +160,15 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   }
-  if (type === "main") {
-    return NextResponse.json(
-      { error: "main_edges_not_supported" },
-      { status: 409 },
-    );
-  }
-
   const supabaseClient = getSupabaseClient();
   if (!supabaseClient) {
     return NextResponse.json({ error: "map_edge_save_failed" }, { status: 500 });
   }
 
-  const result = await listSubMapEdges(ownerId, mapId, supabaseClient);
+  const result =
+    type === "main"
+      ? await listMainMapEdges(ownerId, mapId, supabaseClient)
+      : await listSubMapEdges(ownerId, mapId, supabaseClient);
   if (!result.ok) {
     return responseForStorageError(result.error);
   }
@@ -194,13 +194,6 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (type === "main") {
-    return NextResponse.json(
-      { error: "main_edges_not_supported" },
-      { status: 409 },
-    );
-  }
-
   const sourceNodeId = cleanRequiredText(parsed.sourceNodeId);
   const targetNodeId = cleanRequiredText(parsed.targetNodeId);
   const edgeType = cleanEdgeType(parsed.edgeType);
@@ -223,11 +216,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "map_edge_save_failed" }, { status: 500 });
   }
 
-  const result = await createSubMapEdge(
-    ownerId,
-    { mapId, sourceNodeId, targetNodeId, edgeType, label },
-    supabaseClient,
-  );
+  const result =
+    type === "main"
+      ? await createMainMapEdge(
+          ownerId,
+          {
+            mainMapId: mapId,
+            sourceNodeId,
+            targetNodeId,
+            edgeType,
+            label,
+          },
+          supabaseClient,
+        )
+      : await createSubMapEdge(
+          ownerId,
+          { mapId, sourceNodeId, targetNodeId, edgeType, label },
+          supabaseClient,
+        );
   if (!result.ok) {
     return responseForStorageError(result.error);
   }
@@ -251,13 +257,6 @@ export async function PATCH(request: Request) {
       { status: 400 },
     );
   }
-  if (type === "main") {
-    return NextResponse.json(
-      { error: "main_edges_not_supported" },
-      { status: 409 },
-    );
-  }
-
   const hasEdgeType = parsed.edgeType !== undefined && parsed.edgeType !== null;
   const hasLabel = Object.prototype.hasOwnProperty.call(parsed, "label");
   const edgeType = hasEdgeType ? cleanEdgeType(parsed.edgeType) : null;
@@ -278,11 +277,18 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "map_edge_save_failed" }, { status: 500 });
   }
 
-  const result = await updateSubMapEdge(
-    ownerId,
-    { mapId, edgeId, edgeType, label },
-    supabaseClient,
-  );
+  const result =
+    type === "main"
+      ? await updateMainMapEdge(
+          ownerId,
+          { mainMapId: mapId, edgeId, edgeType, label },
+          supabaseClient,
+        )
+      : await updateSubMapEdge(
+          ownerId,
+          { mapId, edgeId, edgeType, label },
+          supabaseClient,
+        );
   if (!result.ok) {
     return responseForStorageError(result.error);
   }
@@ -306,19 +312,15 @@ export async function DELETE(request: Request) {
       { status: 400 },
     );
   }
-  if (type === "main") {
-    return NextResponse.json(
-      { error: "main_edges_not_supported" },
-      { status: 409 },
-    );
-  }
-
   const supabaseClient = getSupabaseClient();
   if (!supabaseClient) {
     return NextResponse.json({ error: "map_edge_save_failed" }, { status: 500 });
   }
 
-  const result = await deleteSubMapEdge(ownerId, mapId, edgeId, supabaseClient);
+  const result =
+    type === "main"
+      ? await deleteMainMapEdge(ownerId, mapId, edgeId, supabaseClient)
+      : await deleteSubMapEdge(ownerId, mapId, edgeId, supabaseClient);
   if (!result.ok) {
     return responseForStorageError(result.error);
   }

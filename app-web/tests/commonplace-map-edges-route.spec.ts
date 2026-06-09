@@ -19,9 +19,24 @@ const baseMapRow = {
   updated_at: "2026-06-06T01:00:00.000Z",
 };
 
+const baseMainMapRow = {
+  id: "main-map-1",
+  owner_id: "server-user-123",
+  title: "Institutions Overview",
+  type: "main",
+  parent_mindmap_id: null,
+  created_at: "2026-06-06T01:00:00.000Z",
+  updated_at: "2026-06-06T01:00:00.000Z",
+};
+
 const baseNodes = [
   { id: "node-source", mindmap_id: "map-db-1" },
   { id: "node-target", mindmap_id: "map-db-1" },
+];
+
+const baseMainNodes = [
+  { id: "main-cluster-source", main_mindmap_id: "main-map-1" },
+  { id: "main-cluster-target", main_mindmap_id: "main-map-1" },
 ];
 
 const baseEdgeRow = {
@@ -33,11 +48,23 @@ const baseEdgeRow = {
   label: null,
 };
 
+const baseMainEdgeRow = {
+  id: "main-edge-db-1",
+  main_mindmap_id: "main-map-1",
+  source_node_id: "main-cluster-source",
+  target_node_id: "main-cluster-target",
+  edge_type: "solid",
+  label: null,
+};
+
 type MockOptions = {
   mapRow?: Record<string, unknown> | null;
+  mainMapRow?: Record<string, unknown> | null;
   mapReadError?: Error | null;
   nodeRows?: Record<string, unknown>[];
   nodeReadError?: Error | null;
+  mainNodeRows?: Record<string, unknown>[];
+  mainNodeReadError?: Error | null;
   edgeRows?: Record<string, unknown>[];
   edgeReadError?: Error | null;
   edgeInsertError?: Error | null;
@@ -45,6 +72,13 @@ type MockOptions = {
   edgeUpdateRow?: Record<string, unknown> | null;
   edgeDeleteError?: Error | null;
   existingEdgeRow?: Record<string, unknown> | null;
+  mainEdgeRows?: Record<string, unknown>[];
+  mainEdgeReadError?: Error | null;
+  mainEdgeInsertError?: Error | null;
+  mainEdgeUpdateError?: Error | null;
+  mainEdgeUpdateRow?: Record<string, unknown> | null;
+  mainEdgeDeleteError?: Error | null;
+  existingMainEdgeRow?: Record<string, unknown> | null;
 };
 
 function buildRequest(method: string, body?: Record<string, unknown>): Request {
@@ -64,6 +98,7 @@ function createMockSupabaseClient(options: MockOptions = {}) {
   let payload: Record<string, unknown> | null = null;
 
   function buildQuery(table: string) {
+    const filters: string[] = [];
     const query = {
       select(columns: string) {
         calls.push(`select:${table}:${columns.replace(/\s+/g, " ").trim()}`);
@@ -90,11 +125,18 @@ function createMockSupabaseClient(options: MockOptions = {}) {
         return query;
       },
       eq(column: string, value: string) {
+        filters.push(`${column}:${value}`);
         calls.push(`eq:${table}:${column}:${value}`);
         return query;
       },
       in(column: string, values: string[]) {
         calls.push(`in:${table}:${column}:${values.join(",")}`);
+        if (table === "commonplace_main_map_nodes") {
+          return Promise.resolve({
+            data: options.mainNodeRows ?? baseMainNodes,
+            error: options.mainNodeReadError ?? null,
+          });
+        }
         return Promise.resolve({
           data: options.nodeRows ?? baseNodes,
           error: options.nodeReadError ?? null,
@@ -102,6 +144,12 @@ function createMockSupabaseClient(options: MockOptions = {}) {
       },
       order(column: string, orderOptions: { ascending: boolean }) {
         calls.push(`order:${table}:${column}:${orderOptions.ascending}`);
+        if (table === "commonplace_main_map_edges") {
+          return Promise.resolve({
+            data: options.mainEdgeRows ?? [baseMainEdgeRow],
+            error: options.mainEdgeReadError ?? null,
+          });
+        }
         return Promise.resolve({
           data: options.edgeRows ?? [baseEdgeRow],
           error: options.edgeReadError ?? null,
@@ -110,12 +158,37 @@ function createMockSupabaseClient(options: MockOptions = {}) {
       maybeSingle() {
         calls.push(`maybeSingle:${table}`);
         if (table === "commonplace_mindmaps") {
+          const isMainMapLookup = filters.includes("type:main");
           return Promise.resolve({
             data:
-              options.mapRow === undefined
-                ? baseMapRow
-                : options.mapRow,
+              isMainMapLookup
+                ? options.mainMapRow === undefined
+                  ? baseMainMapRow
+                  : options.mainMapRow
+                : options.mapRow === undefined
+                  ? baseMapRow
+                  : options.mapRow,
             error: options.mapReadError ?? null,
+          });
+        }
+
+        if (table === "commonplace_main_map_edges" && operation === "update") {
+          return Promise.resolve({
+            data:
+              options.mainEdgeUpdateRow === undefined
+                ? { ...baseMainEdgeRow, ...payload }
+                : options.mainEdgeUpdateRow,
+            error: options.mainEdgeUpdateError ?? null,
+          });
+        }
+
+        if (table === "commonplace_main_map_edges") {
+          return Promise.resolve({
+            data:
+              options.existingMainEdgeRow === undefined
+                ? { id: baseMainEdgeRow.id }
+                : options.existingMainEdgeRow,
+            error: options.mainEdgeReadError ?? null,
           });
         }
 
@@ -139,6 +212,22 @@ function createMockSupabaseClient(options: MockOptions = {}) {
       },
       single() {
         calls.push(`single:${table}`);
+        if (table === "commonplace_main_map_edges") {
+          return Promise.resolve({
+            data:
+              options.mainEdgeInsertError || !payload
+                ? null
+                : {
+                    id: `main-edge-created-${(inserted.commonplace_main_map_edges ?? []).length}`,
+                    main_mindmap_id: payload.main_mindmap_id,
+                    source_node_id: payload.source_node_id,
+                    target_node_id: payload.target_node_id,
+                    edge_type: payload.edge_type,
+                    label: payload.label,
+                  },
+            error: options.mainEdgeInsertError ?? null,
+          });
+        }
         return Promise.resolve({
           data:
             options.edgeInsertError || !payload
@@ -160,9 +249,11 @@ function createMockSupabaseClient(options: MockOptions = {}) {
         return Promise.resolve({
           data: null,
           error:
-            table === "commonplace_mindmap_edges" && operation === "delete"
-              ? options.edgeDeleteError ?? null
-              : null,
+            table === "commonplace_main_map_edges" && operation === "delete"
+              ? options.mainEdgeDeleteError ?? null
+              : table === "commonplace_mindmap_edges" && operation === "delete"
+                ? options.edgeDeleteError ?? null
+                : null,
         }).then(onfulfilled);
       },
     };
@@ -453,33 +544,234 @@ test.describe("Commonplace map edges route", () => {
     expect(mock.calls).not.toContain("insert:commonplace_mindmap_edges");
   });
 
-  test("type=main returns main_edges_not_supported without table writes", async () => {
+  test("GET returns owner-scoped Main Map cluster edges", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      mainEdgeRows: [
+        { ...baseMainEdgeRow, edge_type: "dashed", label: "theme bridge" },
+      ],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(
+      new Request("http://localhost/api/commonplace/maps/edges?mapId=main-map-1&type=main"),
+    );
+    const data = (await response.json()) as {
+      edges: Array<{ id: string; source: string; target: string; edgeType: string; label: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(data.edges[0]).toMatchObject({
+      id: "main-edge-db-1",
+      source: "main-cluster-source",
+      target: "main-cluster-target",
+      edgeType: "dashed",
+      label: "theme bridge",
+    });
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:type:main");
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:owner_id:server-user-123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:main_mindmap_id:main-map-1");
+    expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
+  });
+
+  test("POST creates a Main Map solid cluster edge and ignores owner fields", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";
     const mock = createMockSupabaseClient();
     testHooks.getSupabaseClient = () => mock.client;
 
-    const getResponse = await GET(
-      new Request("http://localhost/api/commonplace/maps/edges?mapId=main-map-1&type=main"),
+    const response = await POST(
+      buildRequest("POST", {
+        ownerId: "attacker",
+        owner_id: "attacker",
+        mapId: "main-map-1",
+        type: "main",
+        sourceNodeId: "main-cluster-source",
+        targetNodeId: "main-cluster-target",
+        edgeType: "solid",
+      }),
     );
-    const postResponse = await POST(
+    const data = (await response.json()) as {
+      edge: { source: string; target: string; edgeType: string; label: string | null };
+    };
+
+    expect(response.status).toBe(201);
+    expect(data.edge).toMatchObject({
+      source: "main-cluster-source",
+      target: "main-cluster-target",
+      edgeType: "solid",
+      label: null,
+    });
+    expect(mock.inserted.commonplace_main_map_edges[0]).toMatchObject({
+      owner_id: "server-user-123",
+      main_mindmap_id: "main-map-1",
+      source_node_id: "main-cluster-source",
+      target_node_id: "main-cluster-target",
+      edge_type: "solid",
+      label: null,
+    });
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:owner_id:server-user-123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:main_mindmap_id:main-map-1");
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    expect(JSON.stringify(mock.inserted)).not.toContain("attacker");
+    expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
+  });
+
+  test("POST creates a Main Map dashed cluster edge with label", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
       buildRequest("POST", {
         mapId: "main-map-1",
         type: "main",
-        sourceNodeId: "node-source",
-        targetNodeId: "node-target",
+        sourceNodeId: "main-cluster-source",
+        targetNodeId: "main-cluster-target",
+        edgeType: "dashed",
+        label: "loose theme",
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mock.inserted.commonplace_main_map_edges[0]).toMatchObject({
+      edge_type: "dashed",
+      label: "loose theme",
+    });
+  });
+
+  test("POST rejects Main Map self-edges before Supabase", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest("POST", {
+        mapId: "main-map-1",
+        type: "main",
+        sourceNodeId: "main-cluster-source",
+        targetNodeId: "main-cluster-source",
         edgeType: "solid",
       }),
     );
 
-    expect(getResponse.status).toBe(409);
-    expect(postResponse.status).toBe(409);
-    await expect(getResponse.json()).resolves.toEqual({
-      error: "main_edges_not_supported",
-    });
-    await expect(postResponse.json()).resolves.toEqual({
-      error: "main_edges_not_supported",
-    });
+    expect(response.status).toBe(400);
     expect(mock.calls).toEqual([]);
+  });
+
+  test("POST rejects Main Map cluster nodes not owned by the user", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      mainNodeRows: [{ id: "main-cluster-source", main_mindmap_id: "main-map-1" }],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest("POST", {
+        mapId: "main-map-1",
+        type: "main",
+        sourceNodeId: "main-cluster-source",
+        targetNodeId: "foreign-cluster",
+        edgeType: "solid",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:owner_id:server-user-123");
+    expect(mock.calls).not.toContain("insert:commonplace_main_map_edges");
+  });
+
+  test("POST rejects Main Map cluster nodes from different main maps", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      mainNodeRows: [
+        { id: "main-cluster-source", main_mindmap_id: "main-map-1" },
+        { id: "main-cluster-target", main_mindmap_id: "other-main-map" },
+      ],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await POST(
+      buildRequest("POST", {
+        mapId: "main-map-1",
+        type: "main",
+        sourceNodeId: "main-cluster-source",
+        targetNodeId: "main-cluster-target",
+        edgeType: "solid",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mock.calls).not.toContain("insert:commonplace_main_map_edges");
+  });
+
+  test("PATCH updates owner-scoped Main Map edge label and type", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await PATCH(
+      buildRequest("PATCH", {
+        ownerId: "attacker",
+        mapId: "main-map-1",
+        type: "main",
+        edgeId: "main-edge-db-1",
+        edgeType: "dashed",
+        label: "revised theme",
+      }),
+    );
+    const data = (await response.json()) as { edge: { edgeType: string; label: string } };
+
+    expect(response.status).toBe(200);
+    expect(data.edge).toMatchObject({
+      edgeType: "dashed",
+      label: "revised theme",
+    });
+    expect(mock.updated.commonplace_main_map_edges[0]).toMatchObject({
+      edge_type: "dashed",
+      label: "revised theme",
+    });
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:owner_id:server-user-123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:main_mindmap_id:main-map-1");
+    expect(JSON.stringify(mock.updated)).not.toContain("attacker");
+  });
+
+  test("DELETE removes owner-scoped Main Map edge without deleting clusters", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient();
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await DELETE(
+      buildRequest("DELETE", {
+        mapId: "main-map-1",
+        type: "main",
+        edgeId: "main-edge-db-1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(mock.calls).toContain("delete:commonplace_main_map_edges");
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:owner_id:server-user-123");
+    expect(mock.deleted).toContain("commonplace_main_map_edges");
+    expect(mock.calls).not.toContain("delete:commonplace_main_map_nodes");
+  });
+
+  test("Main Map raw Supabase errors and secrets are not exposed", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      mainEdgeReadError: new Error("raw Supabase failure SUPABASE_SERVICE_ROLE_KEY"),
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(
+      new Request("http://localhost/api/commonplace/maps/edges?mapId=main-map-1&type=main"),
+    );
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(500);
+    expect(data).toEqual({ error: "map_edge_save_failed" });
+    expect(JSON.stringify(data)).not.toContain("raw Supabase failure");
+    expect(JSON.stringify(data)).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 
   test("PATCH updates owner-scoped edge label and type", async () => {
@@ -550,14 +842,17 @@ test.describe("Commonplace map edges route", () => {
     expect(JSON.stringify(data)).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 
-  test("route source keeps service role server-only and does not use Main Map edge table", () => {
+  test("route source keeps service role server-only and delegates Main Map edges through adapter helpers", () => {
     const routeSource = readFileSync(
       "src/app/api/commonplace/maps/edges/route.ts",
       "utf8",
     );
 
     expect(routeSource).toContain("SUPABASE_SERVICE_ROLE_KEY");
-    expect(routeSource).toContain("main_edges_not_supported");
+    expect(routeSource).toContain("listMainMapEdges");
+    expect(routeSource).toContain("createMainMapEdge");
+    expect(routeSource).toContain("updateMainMapEdge");
+    expect(routeSource).toContain("deleteMainMapEdge");
     expect(routeSource).not.toContain("commonplace_main_map_edges");
   });
 });

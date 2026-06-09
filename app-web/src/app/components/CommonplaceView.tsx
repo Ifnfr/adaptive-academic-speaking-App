@@ -21,6 +21,7 @@ import type {
 } from "../lib/storage/supabase-commonplace-adapter";
 import {
   batchUpdateCommonplaceMapNodePositions,
+  createMainMapEdge,
   createMainMapClusterNode,
   createSubMapEdge,
   createSubMapNoteNode,
@@ -28,7 +29,9 @@ import {
   createCommonplaceSubMindMap,
   deleteCommonplaceMindMapFromRegistry,
   deleteCommonplaceMindMap,
+  deleteMainMapEdge,
   getCommonplaceMindMapGraph,
+  listMainMapEdges,
   listSubMapEdges,
   listCommonplaceMapNodes,
   listCommonplaceMindMaps,
@@ -39,6 +42,7 @@ import {
   getCommonplaceMainMindMapGraph,
   saveCommonplaceMainMindMapGraph,
   updateSubMapEdge,
+  updateMainMapEdge,
   deleteSubMapEdge,
   deleteCommonplaceMainMapCluster,
   deleteMainMapNode,
@@ -192,10 +196,24 @@ export type CommonplaceStorage = {
     ownerId: string,
     mindMapId: string,
   ): Promise<CommonplaceSubMapEdgeListResult>;
+  listMainMapEdges?(
+    ownerId: string,
+    mainMapId: string,
+  ): Promise<CommonplaceSubMapEdgeListResult>;
   createSubMapEdge?(
     ownerId: string,
     input: {
       mapId: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+      edgeType: CommonplaceMindMapEdgeType;
+      label?: string | null;
+    },
+  ): Promise<CommonplaceSubMapEdgeResult>;
+  createMainMapEdge?(
+    ownerId: string,
+    input: {
+      mainMapId: string;
       sourceNodeId: string;
       targetNodeId: string;
       edgeType: CommonplaceMindMapEdgeType;
@@ -211,9 +229,23 @@ export type CommonplaceStorage = {
       label?: string | null;
     },
   ): Promise<CommonplaceSubMapEdgeResult>;
+  updateMainMapEdge?(
+    ownerId: string,
+    input: {
+      mainMapId: string;
+      edgeId: string;
+      edgeType?: CommonplaceMindMapEdgeType | null;
+      label?: string | null;
+    },
+  ): Promise<CommonplaceSubMapEdgeResult>;
   deleteSubMapEdge?(
     ownerId: string,
     mindMapId: string,
+    edgeId: string,
+  ): Promise<CommonplaceMindMapDeleteResult>;
+  deleteMainMapEdge?(
+    ownerId: string,
+    mainMapId: string,
     edgeId: string,
   ): Promise<CommonplaceMindMapDeleteResult>;
 };
@@ -389,12 +421,20 @@ function createSupabaseStorage(
       ),
     listSubMapEdges: (ownerId, mindMapId) =>
       listSubMapEdges(ownerId, mindMapId, supabaseClient),
+    listMainMapEdges: (ownerId, mainMapId) =>
+      listMainMapEdges(ownerId, mainMapId, supabaseClient),
     createSubMapEdge: (ownerId, input) =>
       createSubMapEdge(ownerId, input, supabaseClient),
+    createMainMapEdge: (ownerId, input) =>
+      createMainMapEdge(ownerId, input, supabaseClient),
     updateSubMapEdge: (ownerId, input) =>
       updateSubMapEdge(ownerId, input, supabaseClient),
+    updateMainMapEdge: (ownerId, input) =>
+      updateMainMapEdge(ownerId, input, supabaseClient),
     deleteSubMapEdge: (ownerId, mindMapId, edgeId) =>
       deleteSubMapEdge(ownerId, mindMapId, edgeId, supabaseClient),
+    deleteMainMapEdge: (ownerId, mainMapId, edgeId) =>
+      deleteMainMapEdge(ownerId, mainMapId, edgeId, supabaseClient),
   };
 }
 
@@ -795,11 +835,12 @@ async function createMainMapClusterNodeViaServer(
   }
 }
 
-async function listSubMapEdgesViaServer(
+async function listMapEdgesViaServer(
   mapId: string,
+  type: CommonplaceMindMapType,
 ): Promise<CommonplaceSubMapEdgeListResult> {
   try {
-    const params = new URLSearchParams({ mapId, type: "sub" });
+    const params = new URLSearchParams({ mapId, type });
     const response = await fetch(`/api/commonplace/maps/edges?${params}`, {
       method: "GET",
       credentials: "same-origin",
@@ -817,7 +858,7 @@ async function listSubMapEdgesViaServer(
     if (data?.error === "invalid_map_edge_fields") {
       return { ok: false, error: "commonplace_validation_failed" };
     }
-    if (data?.error === "map_not_found") {
+    if (data?.error === "map_not_found" || data?.error === "map_edge_not_found") {
       return { ok: false, error: "commonplace_not_found" };
     }
 
@@ -827,8 +868,9 @@ async function listSubMapEdgesViaServer(
   }
 }
 
-async function createSubMapEdgeViaServer(input: {
+async function createMapEdgeViaServer(input: {
   mapId: string;
+  type: CommonplaceMindMapType;
   sourceNodeId: string;
   targetNodeId: string;
   edgeType: CommonplaceMindMapEdgeType;
@@ -839,7 +881,7 @@ async function createSubMapEdgeViaServer(input: {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, type: "sub" }),
+      body: JSON.stringify(input),
     });
     const data = (await response.json().catch(() => null)) as
       | { edge?: CommonplaceSubMapEdge; error?: string }
@@ -854,7 +896,7 @@ async function createSubMapEdgeViaServer(input: {
     if (data?.error === "invalid_map_edge_fields") {
       return { ok: false, error: "commonplace_validation_failed" };
     }
-    if (data?.error === "map_not_found") {
+    if (data?.error === "map_not_found" || data?.error === "map_edge_not_found") {
       return { ok: false, error: "commonplace_not_found" };
     }
 
@@ -864,8 +906,9 @@ async function createSubMapEdgeViaServer(input: {
   }
 }
 
-async function updateSubMapEdgeViaServer(input: {
+async function updateMapEdgeViaServer(input: {
   mapId: string;
+  type: CommonplaceMindMapType;
   edgeId: string;
   edgeType?: CommonplaceMindMapEdgeType | null;
   label?: string | null;
@@ -875,7 +918,7 @@ async function updateSubMapEdgeViaServer(input: {
       method: "PATCH",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...input, type: "sub" }),
+      body: JSON.stringify(input),
     });
     const data = (await response.json().catch(() => null)) as
       | { edge?: CommonplaceSubMapEdge; error?: string }
@@ -890,7 +933,7 @@ async function updateSubMapEdgeViaServer(input: {
     if (data?.error === "invalid_map_edge_fields") {
       return { ok: false, error: "commonplace_validation_failed" };
     }
-    if (data?.error === "map_not_found") {
+    if (data?.error === "map_not_found" || data?.error === "map_edge_not_found") {
       return { ok: false, error: "commonplace_not_found" };
     }
 
@@ -900,8 +943,9 @@ async function updateSubMapEdgeViaServer(input: {
   }
 }
 
-async function deleteSubMapEdgeViaServer(
+async function deleteMapEdgeViaServer(
   mapId: string,
+  type: CommonplaceMindMapType,
   edgeId: string,
 ): Promise<CommonplaceMindMapDeleteResult> {
   try {
@@ -909,7 +953,7 @@ async function deleteSubMapEdgeViaServer(
       method: "DELETE",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mapId, edgeId, type: "sub" }),
+      body: JSON.stringify({ mapId, edgeId, type }),
     });
     const data = (await response.json().catch(() => null)) as
       | { ok?: boolean; error?: string }
@@ -924,7 +968,7 @@ async function deleteSubMapEdgeViaServer(
     if (data?.error === "invalid_map_edge_fields") {
       return { ok: false, error: "commonplace_validation_failed" };
     }
-    if (data?.error === "map_not_found") {
+    if (data?.error === "map_not_found" || data?.error === "map_edge_not_found") {
       return { ok: false, error: "commonplace_not_found" };
     }
 
@@ -1356,15 +1400,16 @@ export function CommonplaceView({
 
   const loadMapCanvasEdges = useCallback(
     async (map: CommonplaceMindMapSummary): Promise<CommonplaceSubMapEdgeListResult> => {
-      if (map.type !== "sub") {
-        return { ok: true, edges: [] };
+      if (testStorage && effectiveOwnerId) {
+        if (map.type === "main" && storage?.listMainMapEdges) {
+          return storage.listMainMapEdges(effectiveOwnerId, map.id);
+        }
+        if (map.type === "sub" && storage?.listSubMapEdges) {
+          return storage.listSubMapEdges(effectiveOwnerId, map.id);
+        }
       }
 
-      if (testStorage && storage?.listSubMapEdges && effectiveOwnerId) {
-        return storage.listSubMapEdges(effectiveOwnerId, map.id);
-      }
-
-      return listSubMapEdgesViaServer(map.id);
+      return listMapEdgesViaServer(map.id, map.type);
     },
     [effectiveOwnerId, storage, testStorage],
   );
@@ -1379,16 +1424,22 @@ export function CommonplaceView({
         label?: string | null;
       },
     ): Promise<CommonplaceSubMapEdgeResult> => {
-      if (map.type !== "sub") {
-        return { ok: false, error: "commonplace_conflict" };
+      if (testStorage && effectiveOwnerId) {
+        if (map.type === "main" && storage?.createMainMapEdge) {
+          return storage.createMainMapEdge(effectiveOwnerId, {
+            mainMapId: map.id,
+            ...input,
+          });
+        }
+        if (map.type === "sub" && storage?.createSubMapEdge) {
+          return storage.createSubMapEdge(effectiveOwnerId, {
+            mapId: map.id,
+            ...input,
+          });
+        }
       }
 
-      const payload = { mapId: map.id, ...input };
-      if (testStorage && storage?.createSubMapEdge && effectiveOwnerId) {
-        return storage.createSubMapEdge(effectiveOwnerId, payload);
-      }
-
-      return createSubMapEdgeViaServer(payload);
+      return createMapEdgeViaServer({ mapId: map.id, type: map.type, ...input });
     },
     [effectiveOwnerId, storage, testStorage],
   );
@@ -1402,16 +1453,22 @@ export function CommonplaceView({
         label?: string | null;
       },
     ): Promise<CommonplaceSubMapEdgeResult> => {
-      if (map.type !== "sub") {
-        return { ok: false, error: "commonplace_conflict" };
+      if (testStorage && effectiveOwnerId) {
+        if (map.type === "main" && storage?.updateMainMapEdge) {
+          return storage.updateMainMapEdge(effectiveOwnerId, {
+            mainMapId: map.id,
+            ...input,
+          });
+        }
+        if (map.type === "sub" && storage?.updateSubMapEdge) {
+          return storage.updateSubMapEdge(effectiveOwnerId, {
+            mapId: map.id,
+            ...input,
+          });
+        }
       }
 
-      const payload = { mapId: map.id, ...input };
-      if (testStorage && storage?.updateSubMapEdge && effectiveOwnerId) {
-        return storage.updateSubMapEdge(effectiveOwnerId, payload);
-      }
-
-      return updateSubMapEdgeViaServer(payload);
+      return updateMapEdgeViaServer({ mapId: map.id, type: map.type, ...input });
     },
     [effectiveOwnerId, storage, testStorage],
   );
@@ -1421,15 +1478,16 @@ export function CommonplaceView({
       map: CommonplaceMindMapSummary,
       edgeId: string,
     ): Promise<CommonplaceMindMapDeleteResult> => {
-      if (map.type !== "sub") {
-        return { ok: false, error: "commonplace_conflict" };
+      if (testStorage && effectiveOwnerId) {
+        if (map.type === "main" && storage?.deleteMainMapEdge) {
+          return storage.deleteMainMapEdge(effectiveOwnerId, map.id, edgeId);
+        }
+        if (map.type === "sub" && storage?.deleteSubMapEdge) {
+          return storage.deleteSubMapEdge(effectiveOwnerId, map.id, edgeId);
+        }
       }
 
-      if (testStorage && storage?.deleteSubMapEdge && effectiveOwnerId) {
-        return storage.deleteSubMapEdge(effectiveOwnerId, map.id, edgeId);
-      }
-
-      return deleteSubMapEdgeViaServer(map.id, edgeId);
+      return deleteMapEdgeViaServer(map.id, map.type, edgeId);
     },
     [effectiveOwnerId, storage, testStorage],
   );

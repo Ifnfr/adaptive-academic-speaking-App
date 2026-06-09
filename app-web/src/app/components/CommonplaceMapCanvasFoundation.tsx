@@ -361,16 +361,19 @@ export function CommonplaceMapCanvasFoundation({
 
   const isSubMap = map.type === "sub";
   const isMainMap = map.type === "main";
+  const supportsEdges = isSubMap || isMainMap;
   const isSavingMapChange = saveStatus === "Saving...";
   const connectionSourceNode = useMemo(
     () =>
       nodes.find((node) => node.id === connectionSourceNodeId) ?? null,
     [connectionSourceNodeId, nodes],
   );
-  const connectionSourceShortcode =
+  const connectionSourceLabel =
     connectionSourceNode?.type === "noteNode"
       ? (connectionSourceNode.data as CommonplaceNoteNodeData).shortcode
-      : "";
+      : connectionSourceNode?.type === "clusterNode"
+        ? (connectionSourceNode.data as CommonplaceClusterNodeData).title
+        : "";
   const visibleNodes = useMemo<Node<CommonplaceCanvasNodeData>[]>(
     () =>
       nodes.map((node) => ({
@@ -434,7 +437,7 @@ export function CommonplaceMapCanvasFoundation({
 
       Promise.all([
         loadNodes(),
-        isSubMap ? loadEdges() : Promise.resolve({ ok: true as const, edges: [] }),
+        loadEdges(),
       ])
         .then(([nodeResult, edgeResult]) => {
           if (!isCurrent) return;
@@ -463,7 +466,7 @@ export function CommonplaceMapCanvasFoundation({
       isCurrent = false;
       window.clearTimeout(timer);
     };
-  }, [isSubMap, loadEdges, loadNodes, map.id, map.type, onOpenSubMap, openEdgeEdit, setEdges, setNodes]);
+  }, [loadEdges, loadNodes, map.id, map.type, onOpenSubMap, openEdgeEdit, setEdges, setNodes]);
 
   const cancelConnectionMode = useCallback(() => {
     setNodeContextMenu(null);
@@ -633,6 +636,7 @@ export function CommonplaceMapCanvasFoundation({
         ...current,
         toReactFlowNode(result.node, onOpenSubMap),
       ]);
+      setIsClusterChooserOpen(false);
       setSaveStatus("Saved");
     },
     [
@@ -649,7 +653,10 @@ export function CommonplaceMapCanvasFoundation({
       event: ReactMouseEvent,
       node: Node<CommonplaceCanvasNodeData>,
     ) => {
-      if (!isSubMap) return;
+      const isConnectableNode =
+        (isSubMap && node.type === "noteNode") ||
+        (isMainMap && node.type === "clusterNode");
+      if (!isConnectableNode) return;
       event.preventDefault();
       event.stopPropagation();
       setDropError(null);
@@ -661,7 +668,7 @@ export function CommonplaceMapCanvasFoundation({
         ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
       });
     },
-    [isSubMap],
+    [isMainMap, isSubMap],
   );
 
   const handleStartConnection = useCallback(() => {
@@ -678,12 +685,20 @@ export function CommonplaceMapCanvasFoundation({
       event: ReactMouseEvent,
       node: Node<CommonplaceCanvasNodeData>,
     ) => {
-      if (!isSubMap || !connectionSourceNodeId) return;
+      if (!supportsEdges || !connectionSourceNodeId) return;
+      const isConnectableNode =
+        (isSubMap && node.type === "noteNode") ||
+        (isMainMap && node.type === "clusterNode");
+      if (!isConnectableNode) return;
       event.stopPropagation();
       setDropError(null);
 
       if (node.id === connectionSourceNodeId) {
-        setDropError("Choose a different note node to connect.");
+        setDropError(
+          isMainMap
+            ? "Choose a different cluster to connect."
+            : "Choose a different note node to connect.",
+        );
         return;
       }
 
@@ -698,7 +713,7 @@ export function CommonplaceMapCanvasFoundation({
       setNodeContextMenu(null);
       setEdgeEdit(null);
     },
-    [connectionSourceNodeId, isSubMap],
+    [connectionSourceNodeId, isMainMap, isSubMap, supportsEdges],
   );
 
   const handlePaneClick = useCallback(() => {
@@ -731,7 +746,7 @@ export function CommonplaceMapCanvasFoundation({
 
   const handleEdgeClick = useCallback(
     (event: ReactMouseEvent, edge: Edge<CommonplaceEdgeData>) => {
-      if (!isSubMap) return;
+      if (!supportsEdges) return;
       event.stopPropagation();
       setDropError(null);
       setNodeContextMenu(null);
@@ -744,13 +759,13 @@ export function CommonplaceMapCanvasFoundation({
         ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
       });
     },
-    [isSubMap],
+    [supportsEdges],
   );
 
   const handleSelectionChange = useCallback(
     ({ edges: selectedEdges }: { edges: Edge<CommonplaceEdgeData>[] }) => {
       if (
-        !isSubMap ||
+        !supportsEdges ||
         selectedEdges.length === 0 ||
         edgeDraft ||
         nodeContextMenu ||
@@ -772,7 +787,7 @@ export function CommonplaceMapCanvasFoundation({
         ),
       });
     },
-    [connectionSourceNodeId, edgeDraft, isSubMap, nodeContextMenu],
+    [connectionSourceNodeId, edgeDraft, nodeContextMenu, supportsEdges],
   );
 
   const handleUpdateEdge = useCallback(async () => {
@@ -1024,7 +1039,7 @@ export function CommonplaceMapCanvasFoundation({
           </div>
         )}
 
-        {isSubMap && nodeContextMenu && (
+        {supportsEdges && nodeContextMenu && (
           <div
             className="absolute z-50 w-48 rounded-lg border border-[var(--brand-border)] bg-white p-2 text-sm shadow-lg"
             style={{ left: nodeContextMenu.x, top: nodeContextMenu.y }}
@@ -1037,9 +1052,13 @@ export function CommonplaceMapCanvasFoundation({
               type="button"
               onClick={handleStartConnection}
               className="w-full rounded-md px-3 py-2 text-left font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
-              data-testid="commonplace-map-connect-idea"
+              data-testid={
+                isMainMap
+                  ? "commonplace-map-connect-cluster"
+                  : "commonplace-map-connect-idea"
+              }
             >
-              Connect idea
+              {isMainMap ? "Connect cluster" : "Connect idea"}
             </button>
             <button
               type="button"
@@ -1051,16 +1070,18 @@ export function CommonplaceMapCanvasFoundation({
           </div>
         )}
 
-        {isSubMap && connectionSourceNode && (
+        {supportsEdges && connectionSourceNode && (
           <div
             className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border border-[var(--brand-teal)]/25 bg-white px-3 py-2 text-sm font-medium text-[var(--brand-ink)] shadow-sm"
             data-testid="commonplace-map-connection-mode"
           >
-            Connecting from {connectionSourceShortcode}. Click a target note.
+            {isMainMap
+              ? `Connecting cluster ${connectionSourceLabel}. Click a target cluster.`
+              : `Connecting from ${connectionSourceLabel}. Click a target note.`}
           </div>
         )}
 
-        {isSubMap && edgeDraft && (
+        {supportsEdges && edgeDraft && (
           <div
             className="absolute z-50 w-72 rounded-lg border border-[var(--brand-border)] bg-white p-4 text-sm shadow-lg"
             style={{ left: edgeDraft.x, top: edgeDraft.y }}
@@ -1128,7 +1149,7 @@ export function CommonplaceMapCanvasFoundation({
           </div>
         )}
 
-        {isSubMap && edgeEdit && (
+        {supportsEdges && edgeEdit && (
           <div
             className="absolute z-50 w-72 rounded-lg border border-[var(--brand-border)] bg-white p-4 text-sm shadow-lg"
             style={{ left: edgeEdit.x, top: edgeEdit.y }}
