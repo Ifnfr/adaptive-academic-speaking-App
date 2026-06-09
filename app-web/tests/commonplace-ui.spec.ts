@@ -423,10 +423,28 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           .filter(
             (node) =>
               node.ownerId === ownerId &&
-              node.mapId === mindMapId &&
-              node.nodeKind === "cluster",
+              node.mapId === mindMapId,
           )
           .map((node) => {
+            if (node.nodeKind === "note") {
+              const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
+                (candidate) =>
+                  candidate.ownerId === ownerId && candidate.id === node.noteId,
+              );
+
+              return {
+                id: node.id,
+                nodeKind: "note" as const,
+                noteId: node.noteId ?? "",
+                positionX: node.positionX,
+                positionY: node.positionY,
+                noteShortcode: note?.shortcode ?? "",
+                noteTitle: note?.title ?? null,
+                noteSourceBook: note?.sourceBook ?? "Untitled Source",
+                noteTags: note?.tags ?? [],
+              };
+            }
+
             const subMap = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
               (candidate) =>
                 candidate.ownerId === ownerId &&
@@ -499,8 +517,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
             (candidate) =>
               candidate.ownerId === ownerId &&
               candidate.mapId === mindMapId &&
-              candidate.id === update.nodeId &&
-              candidate.nodeKind === "cluster",
+              candidate.id === update.nodeId,
           );
           if (!node) {
             return { ok: false as const, error: "commonplace_not_found" as const };
@@ -583,6 +600,67 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         },
       };
     },
+    async createMainMapNoteNode(
+      ownerId: string,
+      input: {
+        mainMapId: string;
+        noteId: string;
+        position: { x: number; y: number };
+      },
+    ) {
+      const mainMap = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === input.mainMapId &&
+          candidate.type === "main",
+      );
+      const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId && candidate.id === input.noteId,
+      );
+      if (!mainMap || !note) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+      if (
+        !Number.isFinite(input.position.x) ||
+        !Number.isFinite(input.position.y)
+      ) {
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+
+      const nextIndex =
+        (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []).filter(
+          (node) => node.nodeKind === "note" && node.mapId === input.mainMapId,
+        ).length + 1;
+      const node: TestMapNode = {
+        id: `main-note-created-${nextIndex}`,
+        ownerId,
+        mapId: input.mainMapId,
+        nodeKind: "note",
+        noteId: input.noteId,
+        subMindMapId: null,
+        positionX: input.position.x,
+        positionY: input.position.y,
+      };
+      testWindow.__COMMONPLACE_TEST_MAP_NODES__ = [
+        ...(testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []),
+        node,
+      ];
+      return {
+        ok: true as const,
+        node: {
+          id: node.id,
+          nodeKind: "note" as const,
+          noteId: note.id,
+          positionX: node.positionX,
+          positionY: node.positionY,
+          noteShortcode: note.shortcode,
+          noteTitle: note.title,
+          noteSourceBook: note.sourceBook,
+          noteTags: note.tags,
+        },
+      };
+    },
     async createMainMapClusterNode(
       ownerId: string,
       input: {
@@ -655,8 +733,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         (node) =>
           node.ownerId !== ownerId ||
           node.mapId !== mainMapId ||
-          node.id !== nodeId ||
-          node.nodeKind !== "cluster",
+          node.id !== nodeId,
       );
       return { ok: true as const };
     },
@@ -1015,34 +1092,6 @@ async function readSidebarNoteDragData(note: Locator) {
   });
 }
 
-async function dropRawCommonplaceNotePayloadOnCanvas(
-  page: Page,
-  noteId: string,
-  offsetX: number,
-  offsetY: number,
-) {
-  const canvas = page.locator(".react-flow").first();
-  const canvasBox = await canvas.boundingBox();
-  expect(canvasBox).not.toBeNull();
-  if (!canvasBox) return;
-
-  const dataTransfer = await page.evaluateHandle((payload) => {
-    const transfer = new DataTransfer();
-    transfer.setData("application/commonplace-note", JSON.stringify(payload));
-    return transfer;
-  }, { noteId });
-  await canvas.dispatchEvent("dragover", {
-    dataTransfer,
-    clientX: canvasBox.x + offsetX,
-    clientY: canvasBox.y + offsetY,
-  });
-  await canvas.dispatchEvent("drop", {
-    dataTransfer,
-    clientX: canvasBox.x + offsetX,
-    clientY: canvasBox.y + offsetY,
-  });
-}
-
 async function openFlowNodeContextMenu(node: Locator) {
   const box = await node.boundingBox();
   expect(box).not.toBeNull();
@@ -1245,13 +1294,13 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         .getByTestId("commonplace-sidebar-note-list")
         .getByTestId("commonplace-sidebar-note")
         .first(),
-    ).toHaveAttribute("draggable", "false");
+    ).toHaveAttribute("draggable", "true");
     await expect(page.locator(".react-flow")).toHaveCount(1);
     await expect(page.locator(".react-flow__minimap")).toBeVisible();
     await expect(page.locator(".react-flow__controls")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
-      "Add Sub Mind Maps as clusters to build your Main Map.",
+      "Add Sub Mind Maps as clusters or drag notes from the sidebar to build your Main Map.",
     );
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
@@ -1461,11 +1510,119 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow__edge")).toHaveCount(1);
     await expect(page.getByText("theme bridge")).toBeVisible();
 
-    await dropRawCommonplaceNotePayloadOnCanvas(page, "note-1", 160, 200);
     await expect(
-      page.getByText("Main Map note drops will be enabled in a later phase."),
-    ).toBeVisible();
-    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
+      page
+        .getByTestId("commonplace-sidebar-note-list")
+        .getByTestId("commonplace-sidebar-note")
+        .first(),
+    ).toHaveAttribute("draggable", "true");
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 170, 220);
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Institutions and Growth",
+    );
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Why Nations Fail",
+    );
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "#wn1",
+    );
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 320, 300);
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
+    const notePositionsBeforeMove = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+        __COMMONPLACE_TEST_MAPS__?: TestMap[];
+      };
+      const mainMapId = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (map) => map.type === "main" && map.title === "Institutions Map",
+      )?.id;
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter((node) => node.nodeKind === "note" && node.mapId === mainMapId)
+        .map((node) => ({
+          id: node.id,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        }));
+    });
+    const firstMainNoteNode = page.getByTestId("rf__node-main-note-created-1");
+    const firstMainNoteBox = await firstMainNoteNode.boundingBox();
+    expect(firstMainNoteBox).not.toBeNull();
+    if (firstMainNoteBox) {
+      await page.mouse.move(
+        firstMainNoteBox.x + firstMainNoteBox.width / 2,
+        firstMainNoteBox.y + firstMainNoteBox.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        firstMainNoteBox.x + firstMainNoteBox.width / 2 + 70,
+        firstMainNoteBox.y + firstMainNoteBox.height / 2 + 35,
+        { steps: 5 },
+      );
+      await page.mouse.up();
+    }
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Saved",
+    );
+    const notePositionsAfterMove = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+        __COMMONPLACE_TEST_MAPS__?: TestMap[];
+      };
+      const mainMapId = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (map) => map.type === "main" && map.title === "Institutions Map",
+      )?.id;
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter((node) => node.nodeKind === "note" && node.mapId === mainMapId)
+        .map((node) => ({
+          id: node.id,
+          noteId: node.noteId,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        }));
+    });
+    expect(notePositionsAfterMove).toHaveLength(2);
+    expect(notePositionsAfterMove).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "main-note-created-1",
+          noteId: "note-1",
+        }),
+        expect.objectContaining({
+          id: "main-note-created-2",
+          noteId: "note-1",
+        }),
+      ]),
+    );
+    const movedMainNotes = notePositionsAfterMove.filter((node) => {
+      const before = notePositionsBeforeMove.find(
+        (candidate) => candidate.id === node.id,
+      );
+      return (
+        before &&
+        (before.positionX !== node.positionX ||
+          before.positionY !== node.positionY)
+      );
+    });
+    expect(movedMainNotes).toHaveLength(1);
+    await page.getByRole("button", { name: "Back to Main Maps" }).click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Institutions Map" })
+      .getByRole("button", { name: "Open" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Institutions and Growth",
+    );
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
     await expect(page.getByText(/saved map/i)).toHaveCount(0);
@@ -1984,22 +2141,17 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".commonplace-map-edge--solid")).toHaveCount(1);
     await expect(page.getByText("direct influence")).toBeVisible();
 
-    await openFlowNodeContextMenu(targetNode);
-    await clickConnectIdea(page);
-    await clickFlowNode(sourceNode);
-    await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
-    await page.getByTestId("commonplace-map-edge-type-select").selectOption("dashed");
-    await page.getByTestId("commonplace-map-edge-label-input").fill("weak association");
-    await page
-      .getByTestId("commonplace-map-edge-create-popover")
-      .getByRole("button", { name: "Create" })
-      .click();
-    await expect(page.locator(".react-flow__edge")).toHaveCount(2);
+    await page.getByTestId("commonplace-map-edge-label-sub-edge-1").click({ force: true });
+    const editPopover = page.getByTestId("commonplace-map-edge-edit-popover");
+    await expect(editPopover).toBeVisible();
+    await editPopover.getByLabel("Label").fill("weak association");
+    await editPopover.getByLabel("Relationship type").selectOption("dashed");
+    await editPopover.getByRole("button", { name: "Save" }).click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
     await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(1);
     await expect(page.getByText("weak association")).toBeVisible();
 
-    await page.getByTestId("commonplace-map-edge-label-sub-edge-2").click({ force: true });
-    const editPopover = page.getByTestId("commonplace-map-edge-edit-popover");
+    await page.getByTestId("commonplace-map-edge-label-sub-edge-1").click({ force: true });
     await expect(editPopover).toBeVisible();
     await editPopover.getByLabel("Label").fill("revised association");
     await editPopover.getByLabel("Relationship type").selectOption("solid");
@@ -2010,12 +2162,12 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await page.getByTestId("commonplace-map-edge-label-sub-edge-1").click({ force: true });
     await expect(editPopover).toBeVisible();
     await page.getByTestId("commonplace-map-edge-delete-button").click();
-    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Back to Sub Mind Maps" }).click();
     await page.getByRole("button", { name: /Attention Systems/i }).click();
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
-    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
   });

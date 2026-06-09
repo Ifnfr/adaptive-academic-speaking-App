@@ -23,6 +23,7 @@ import {
   batchUpdateCommonplaceMapNodePositions,
   createMainMapEdge,
   createMainMapClusterNode,
+  createMainMapNoteNode,
   createSubMapEdge,
   createSubMapNoteNode,
   createCommonplaceMindMap,
@@ -191,6 +192,14 @@ export type CommonplaceStorage = {
     mindMapId: string,
     noteId: string,
     position: { x: number; y: number },
+  ): Promise<CommonplaceMapNoteNodeCreateResult>;
+  createMainMapNoteNode?(
+    ownerId: string,
+    input: {
+      mainMapId: string;
+      noteId: string;
+      position: { x: number; y: number };
+    },
   ): Promise<CommonplaceMapNoteNodeCreateResult>;
   listSubMapEdges?(
     ownerId: string,
@@ -419,6 +428,8 @@ function createSupabaseStorage(
         position,
         supabaseClient,
       ),
+    createMainMapNoteNode: (ownerId, input) =>
+      createMainMapNoteNode(ownerId, input, supabaseClient),
     listSubMapEdges: (ownerId, mindMapId) =>
       listSubMapEdges(ownerId, mindMapId, supabaseClient),
     listMainMapEdges: (ownerId, mainMapId) =>
@@ -817,6 +828,47 @@ async function createMainMapClusterNodeViaServer(
       data?.node &&
       data.node.nodeKind === "cluster"
     ) {
+      return { ok: true, node: data.node };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_node_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function createMainMapNoteNodeViaServer(
+  mainMapId: string,
+  noteId: string,
+  position: { x: number; y: number },
+): Promise<CommonplaceMapNoteNodeCreateResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps/nodes", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mapId: mainMapId,
+        type: "main",
+        nodeKind: "note",
+        noteId,
+        position,
+      }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { node?: CommonplaceMapCanvasNode; error?: string }
+      | null;
+
+    if (response.ok && data?.node?.nodeKind === "note") {
       return { ok: true, node: data.node };
     }
     if (data?.error === "auth_required") {
@@ -1322,24 +1374,35 @@ export function CommonplaceView({
       noteId: string,
       position: { x: number; y: number },
     ): Promise<CommonplaceMapNoteNodeCreateResult> => {
-      if (map.type !== "sub") {
-        return { ok: false, error: "commonplace_conflict" };
-      }
-
       if (
         testStorage &&
-        storage?.createSubMapNoteNode &&
         effectiveOwnerId
       ) {
-        return storage.createSubMapNoteNode(
-          effectiveOwnerId,
-          map.id,
-          noteId,
-          position,
-        );
+        if (map.type === "main" && storage?.createMainMapNoteNode) {
+          return storage.createMainMapNoteNode(effectiveOwnerId, {
+            mainMapId: map.id,
+            noteId,
+            position,
+          });
+        }
+        if (map.type === "sub" && storage?.createSubMapNoteNode) {
+          return storage.createSubMapNoteNode(
+            effectiveOwnerId,
+            map.id,
+            noteId,
+            position,
+          );
+        }
       }
 
-      return createSubMapNoteNodeViaServer(map.id, noteId, position);
+      if (map.type === "main") {
+        return createMainMapNoteNodeViaServer(map.id, noteId, position);
+      }
+      if (map.type === "sub") {
+        return createSubMapNoteNodeViaServer(map.id, noteId, position);
+      }
+
+      return { ok: false, error: "commonplace_conflict" };
     },
     [effectiveOwnerId, storage, testStorage],
   );
@@ -1709,7 +1772,7 @@ export function CommonplaceView({
   }, [clusterReturnMap, mapDetailReturnMode, selectedMap?.type]);
   const libraryMode = mode === "library";
   const sidebarNoteDragMode =
-    mode === "map_detail_placeholder" && selectedMap?.type === "sub";
+    mode === "map_detail_placeholder" && Boolean(selectedMap);
 
   return (
     <section

@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   batchUpdateCommonplaceMapNodePositions,
   createMainMapClusterNode,
+  createMainMapNoteNode,
   createSubMapNoteNode,
   deleteMainMapNode,
   listCommonplaceMapNodes,
@@ -212,10 +213,24 @@ export async function POST(request: Request) {
   if (type === "main") {
     const nodeKind = cleanRequiredText(parsed.nodeKind) ?? "note";
     if (nodeKind === "note") {
-      return NextResponse.json(
-        { error: "main_note_nodes_not_supported" },
-        { status: 409 },
+      const noteId = cleanRequiredText(parsed.noteId);
+      if (!noteId) {
+        return NextResponse.json(
+          { error: "invalid_map_node_fields" },
+          { status: 400 },
+        );
+      }
+
+      const result = await createMainMapNoteNode(
+        ownerId,
+        { mainMapId: mapId, noteId, position },
+        supabaseClient,
       );
+      if (!result.ok) {
+        return responseForStorageError(result.error);
+      }
+
+      return NextResponse.json({ node: result.node }, { status: 201 });
     }
     if (nodeKind !== "cluster") {
       return NextResponse.json(

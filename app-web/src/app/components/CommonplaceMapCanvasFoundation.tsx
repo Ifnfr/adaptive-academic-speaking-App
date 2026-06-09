@@ -536,10 +536,10 @@ export function CommonplaceMapCanvasFoundation({
     (event: DragEvent) => {
       if (!hasDraggedCommonplaceNote(event)) return;
       event.preventDefault();
-      event.dataTransfer.dropEffect = isSubMap ? "copy" : "none";
-      setIsCanvasDragActive(isSubMap);
+      event.dataTransfer.dropEffect = "copy";
+      setIsCanvasDragActive(true);
     },
-    [isSubMap],
+    [],
   );
 
   const handleDragLeave = useCallback((event: DragEvent) => {
@@ -561,11 +561,6 @@ export function CommonplaceMapCanvasFoundation({
       setIsCanvasDragActive(false);
       setDropError(null);
 
-      if (!isSubMap) {
-        setDropError("Main Map note drops will be enabled in a later phase.");
-        return;
-      }
-
       const draggedNote = parseDraggedNote(event);
       if (!draggedNote || !flowInstance) {
         setSaveStatus("Save failed");
@@ -584,7 +579,7 @@ export function CommonplaceMapCanvasFoundation({
         setSaveStatus("Save failed");
         setDropError(
           result.error === "unsupported"
-            ? "Main Map note drops will be enabled in a later phase."
+            ? "Note drops are not available for this map."
             : "Could not add this note to the canvas.",
         );
         return;
@@ -597,7 +592,7 @@ export function CommonplaceMapCanvasFoundation({
       setIsClusterChooserOpen(false);
       setSaveStatus("Saved");
     },
-    [createNoteNode, flowInstance, isSubMap, onOpenSubMap, setNodes],
+    [createNoteNode, flowInstance, onOpenSubMap, setNodes],
   );
 
   const defaultClusterPosition = useCallback(() => {
@@ -1017,7 +1012,7 @@ export function CommonplaceMapCanvasFoundation({
           <Controls showInteractive={false} />
         </ReactFlow>
 
-        {isSubMap && isCanvasDragActive && (
+        {isCanvasDragActive && (
           <div
             className="pointer-events-none absolute inset-4 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--brand-teal)] bg-white/60 text-sm font-semibold text-[var(--brand-teal-ink)] shadow-inner"
             data-testid="commonplace-map-drop-zone"
@@ -1034,7 +1029,7 @@ export function CommonplaceMapCanvasFoundation({
             <p className="max-w-sm rounded-xl border border-[var(--brand-border)] bg-white/95 px-4 py-3 text-center text-sm font-medium leading-6 text-[var(--brand-ink-soft)] shadow-sm">
               {isSubMap
                 ? "Canvas is ready. Drag notes from the sidebar to add them here."
-                : "Add Sub Mind Maps as clusters to build your Main Map."}
+                : "Add Sub Mind Maps as clusters or drag notes from the sidebar to build your Main Map."}
             </p>
           </div>
         )}

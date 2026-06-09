@@ -15,6 +15,7 @@ import {
   deleteCommonplaceMainMapCluster,
   batchUpdateMainMapNodePositions,
   createMainMapClusterNode,
+  createMainMapNoteNode,
   createMainMapEdge,
   deleteMainMapNode,
   deleteMainMapEdge,
@@ -34,6 +35,7 @@ type MockOptions = {
   nodesRows?: Record<string, unknown>[];
   edgesRows?: Record<string, unknown>[];
   notesRows?: Record<string, unknown>[];
+  noteRow?: Record<string, unknown> | null;
 
   // Main map options:
   mainNodesRows?: Record<string, unknown>[];
@@ -161,6 +163,18 @@ function createMockSupabaseClient(options: MockOptions = {}) {
           data = options.mainNodesRows?.[0] ?? {
             id: "main-node-db-uuid-1",
           };
+        } else if (table === "commonplace_notes") {
+          error = options.notesReadError ?? null;
+          data =
+            options.noteRow === undefined
+              ? {
+                  id: "note-1",
+                  shortcode: "#wn1",
+                  title: "Institutions and Growth",
+                  source_book: "Why Nations Fail",
+                  tags: ["economics", "institutions"],
+                }
+              : options.noteRow;
         } else if (table === "commonplace_main_map_edges") {
           if (operation === "update") {
             error = options.mainEdgeUpdateError ?? null;
@@ -219,6 +233,8 @@ function createMockSupabaseClient(options: MockOptions = {}) {
             error = options.mainNodeInsertError ?? null;
             data = {
               id: `main-node-db-uuid-${(inserted.commonplace_main_map_nodes ?? []).length}`,
+              node_kind: insertedPayload?.node_kind,
+              note_id: insertedPayload?.note_id,
               sub_mindmap_id: insertedPayload?.sub_mindmap_id,
               position_x: insertedPayload?.position_x,
               position_y: insertedPayload?.position_y,
@@ -1616,7 +1632,7 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     });
   });
 
-  test("listMainMapNodes returns cluster nodes and does not read edge tables", async () => {
+  test("listMainMapNodes returns cluster and note nodes without reading edge tables", async () => {
     const mock = createMockSupabaseClient({
       mindMapRow: {
         id: "main-map-db-123",
@@ -1637,6 +1653,20 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
           commonplace_mindmaps: {
             title: "Institutional Incentives",
             updated_at: "2026-06-06T12:00:00Z",
+          },
+        },
+        {
+          id: "note-node-1",
+          node_kind: "note",
+          note_id: "note-1",
+          sub_mindmap_id: null,
+          position_x: 260,
+          position_y: 320,
+          commonplace_notes: {
+            shortcode: "#wn1",
+            title: "Institutions and Growth",
+            source_book: "Why Nations Fail",
+            tags: ["economics", "institutions"],
           },
         },
       ],
@@ -1660,8 +1690,19 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
         positionX: 64,
         positionY: 128,
       },
+      {
+        id: "note-node-1",
+        nodeKind: "note",
+        noteId: "note-1",
+        noteShortcode: "#wn1",
+        noteTitle: "Institutions and Growth",
+        noteSourceBook: "Why Nations Fail",
+        noteTags: ["economics", "institutions"],
+        positionX: 260,
+        positionY: 320,
+      },
     ]);
-    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_edges");
   });
 
@@ -1730,7 +1771,7 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_edges");
   });
 
-  test("batchUpdateMainMapNodePositions updates owner-scoped cluster rows by node id", async () => {
+  test("createMainMapNoteNode inserts note nodes with sub_mindmap_id null and allows duplicates", async () => {
     const mock = createMockSupabaseClient({
       mindMapRow: {
         id: "main-map-db-123",
@@ -1741,19 +1782,117 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
         created_at: "2026-06-06T00:00:00Z",
         updated_at: "2026-06-06T00:00:00Z",
       },
-      mainNodesRows: [{ id: "cluster-node-1" }],
+    });
+
+    const firstResult = await createMainMapNoteNode(
+      "user_123",
+      {
+        mainMapId: "main-map-db-123",
+        noteId: "note-1",
+        position: { x: 80, y: 100 },
+      },
+      mock.client,
+    );
+    const secondResult = await createMainMapNoteNode(
+      "user_123",
+      {
+        mainMapId: "main-map-db-123",
+        noteId: "note-1",
+        position: { x: 220, y: 260 },
+      },
+      mock.client,
+    );
+
+    expect(firstResult.ok).toBe(true);
+    expect(secondResult.ok).toBe(true);
+    if (!firstResult.ok || !secondResult.ok) return;
+    expect(firstResult.node).toMatchObject({
+      id: "main-node-db-uuid-1",
+      nodeKind: "note",
+      noteId: "note-1",
+      noteShortcode: "#wn1",
+      noteTitle: "Institutions and Growth",
+      noteSourceBook: "Why Nations Fail",
+      positionX: 80,
+      positionY: 100,
+    });
+    expect(mock.inserted.commonplace_main_map_nodes).toEqual([
+      {
+        owner_id: "user_123",
+        main_mindmap_id: "main-map-db-123",
+        node_kind: "note",
+        sub_mindmap_id: null,
+        note_id: "note-1",
+        position_x: 80,
+        position_y: 100,
+      },
+      {
+        owner_id: "user_123",
+        main_mindmap_id: "main-map-db-123",
+        node_kind: "note",
+        sub_mindmap_id: null,
+        note_id: "note-1",
+        position_x: 220,
+        position_y: 260,
+      },
+    ]);
+    expect(mock.calls).toContain("eq:commonplace_notes:owner_id:user_123");
+    expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_nodes");
+    expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_edges");
+  });
+
+  test("createMainMapNoteNode rejects notes outside the owner scope", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+      noteRow: null,
+    });
+
+    const result = await createMainMapNoteNode(
+      "user_123",
+      {
+        mainMapId: "main-map-db-123",
+        noteId: "foreign-note",
+        position: { x: 80, y: 100 },
+      },
+      mock.client,
+    );
+
+    expect(result).toEqual({ ok: false, error: "commonplace_not_found" });
+    expect(mock.inserted.commonplace_main_map_nodes ?? []).toHaveLength(0);
+  });
+
+  test("batchUpdateMainMapNodePositions updates owner-scoped visual rows by node id", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+      mainNodesRows: [{ id: "note-node-1", node_kind: "note", note_id: "note-1" }],
     });
 
     const result = await batchUpdateMainMapNodePositions(
       "user_123",
       "main-map-db-123",
-      [{ nodeId: "cluster-node-1", position: { x: 240, y: 320 } }],
+      [{ nodeId: "note-node-1", position: { x: 240, y: 320 } }],
       mock.client,
     );
 
     expect(result).toEqual({ ok: true });
-    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
-    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:id:cluster-node-1");
+    expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:id:note-node-1");
     expect(mock.updated.commonplace_main_map_nodes[0]).toMatchObject({
       position_x: 240,
       position_y: 320,
@@ -1761,7 +1900,7 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_edges");
   });
 
-  test("deleteMainMapNode deletes only the cluster node in the selected Main Map", async () => {
+  test("batchUpdateMainMapNodePositions updates one duplicate note node without touching its duplicate", async () => {
     const mock = createMockSupabaseClient({
       mindMapRow: {
         id: "main-map-db-123",
@@ -1772,21 +1911,53 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
         created_at: "2026-06-06T00:00:00Z",
         updated_at: "2026-06-06T00:00:00Z",
       },
-      mainNodesRows: [{ id: "cluster-node-1" }],
+      mainNodesRows: [{ id: "note-node-1", node_kind: "note", note_id: "note-1" }],
+    });
+
+    const result = await batchUpdateMainMapNodePositions(
+      "user_123",
+      "main-map-db-123",
+      [{ nodeId: "note-node-1", position: { x: 360, y: 420 } }],
+      mock.client,
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(mock.updated.commonplace_main_map_nodes).toHaveLength(1);
+    expect(mock.updated.commonplace_main_map_nodes[0]).toMatchObject({
+      position_x: 360,
+      position_y: 420,
+    });
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:id:note-node-1");
+    expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:id:note-node-2");
+  });
+
+  test("deleteMainMapNode deletes only the visual node in the selected Main Map", async () => {
+    const mock = createMockSupabaseClient({
+      mindMapRow: {
+        id: "main-map-db-123",
+        owner_id: "user_123",
+        title: "Main Mind Map",
+        type: "main",
+        parent_mindmap_id: null,
+        created_at: "2026-06-06T00:00:00Z",
+        updated_at: "2026-06-06T00:00:00Z",
+      },
+      mainNodesRows: [{ id: "note-node-1", node_kind: "note", note_id: "note-1" }],
     });
 
     const result = await deleteMainMapNode(
       "user_123",
       "main-map-db-123",
-      "cluster-node-1",
+      "note-node-1",
       mock.client,
     );
 
     expect(result).toEqual({ ok: true });
     expect(mock.calls).toContain("eq:commonplace_main_map_nodes:main_mindmap_id:main-map-db-123");
-    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
     expect(mock.calls).toContain("delete:commonplace_main_map_nodes");
     expect(mock.calls).not.toContain("delete:commonplace_mindmaps");
+    expect(mock.calls).not.toContain("delete:commonplace_notes");
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_edges");
   });
 

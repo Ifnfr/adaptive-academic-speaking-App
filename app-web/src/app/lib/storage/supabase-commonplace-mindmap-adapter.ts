@@ -156,6 +156,15 @@ export type CreateMainMapClusterNodeInput = {
   };
 };
 
+export type CreateMainMapNoteNodeInput = {
+  mainMapId: string;
+  noteId: string;
+  position: {
+    x: number;
+    y: number;
+  };
+};
+
 export type CommonplaceMapClusterNodeCreateResult =
   | { ok: true; node: CommonplaceMapCanvasClusterNode }
   | { ok: false; error: CommonplaceError };
@@ -305,6 +314,7 @@ type NodeJoinedRow = {
 type MainClusterJoinedRow = {
   id: string;
   node_kind?: string | null;
+  note_id?: string | null;
   sub_mindmap_id: string | null;
   position_x: number;
   position_y: number;
@@ -314,6 +324,17 @@ type MainClusterJoinedRow = {
   } | Array<{
     title: string | null;
     updated_at: string | null;
+  }> | null;
+  commonplace_notes?: {
+    shortcode: string;
+    title: string | null;
+    source_book: string;
+    tags: string[] | null;
+  } | Array<{
+    shortcode: string;
+    title: string | null;
+    source_book: string;
+    tags: string[] | null;
   }> | null;
 };
 
@@ -413,6 +434,25 @@ function mapMainClusterNodeRow(
     subMindMapUpdatedAt: mindmapObj?.updated_at || new Date().toISOString(),
     positionX: row.position_x,
     positionY: row.position_y,
+  };
+}
+
+function mapMainNoteNodeRow(
+  row: MainClusterJoinedRow,
+): CommonplaceMapCanvasNoteNode {
+  const notesRel = row.commonplace_notes;
+  const noteObj = Array.isArray(notesRel) ? notesRel[0] : notesRel;
+
+  return {
+    id: row.id,
+    nodeKind: "note",
+    noteId: row.note_id ?? "",
+    positionX: row.position_x,
+    positionY: row.position_y,
+    noteShortcode: noteObj?.shortcode || "",
+    noteTitle: noteObj?.title?.trim() || null,
+    noteSourceBook: noteObj?.source_book || "Untitled Source",
+    noteTags: noteObj?.tags ?? [],
   };
 }
 
@@ -563,27 +603,38 @@ export async function listMainMapNodes(
       .select(`
         id,
         node_kind,
+        note_id,
         sub_mindmap_id,
         position_x,
         position_y,
         commonplace_mindmaps:sub_mindmap_id (
           title,
           updated_at
+        ),
+        commonplace_notes:note_id (
+          shortcode,
+          title,
+          source_book,
+          tags
         )
       `)
       .eq("owner_id", cleanOwnerId)
       .eq("main_mindmap_id", cleanMainMapId)
-      .eq("node_kind", "cluster")
       .order("updated_at", { ascending: false });
 
     if (error) return { ok: false, error: "commonplace_save_failed" };
 
-    return {
-      ok: true,
-      nodes: ((data as unknown as MainClusterJoinedRow[] | null) ?? []).map(
-        mapMainClusterNodeRow,
-      ),
-    };
+    const nodes: CommonplaceMapCanvasNode[] = (
+      (data as unknown as MainClusterJoinedRow[] | null) ?? []
+    ).flatMap((row): CommonplaceMapCanvasNode[] =>
+      row.node_kind === "note"
+        ? [mapMainNoteNodeRow(row)]
+        : row.node_kind === "cluster" || !row.node_kind
+          ? [mapMainClusterNodeRow(row)]
+          : [],
+    );
+
+    return { ok: true, nodes };
   } catch {
     return { ok: false, error: "commonplace_save_failed" };
   }
@@ -714,6 +765,89 @@ export async function createSubMapNoteNode(
       .insert({
         owner_id: cleanOwnerId,
         mindmap_id: cleanMindMapId,
+        note_id: cleanNoteId,
+        position_x: cleanNodePosition.x,
+        position_y: cleanNodePosition.y,
+      })
+      .select("id, note_id, position_x, position_y")
+      .single();
+
+    if (insertError || !insertedNode) {
+      return { ok: false, error: "commonplace_save_failed" };
+    }
+
+    const noteRow = noteData as {
+      shortcode?: string | null;
+      title?: string | null;
+      source_book?: string | null;
+      tags?: string[] | null;
+    };
+    const nodeRow = insertedNode as {
+      id: string;
+      note_id: string;
+      position_x: number;
+      position_y: number;
+    };
+
+    return {
+      ok: true,
+      node: {
+        id: nodeRow.id,
+        nodeKind: "note",
+        noteId: nodeRow.note_id,
+        positionX: nodeRow.position_x,
+        positionY: nodeRow.position_y,
+        noteShortcode: noteRow.shortcode || "",
+        noteTitle: noteRow.title?.trim() || null,
+        noteSourceBook: noteRow.source_book || "Untitled Source",
+        noteTags: noteRow.tags ?? [],
+      },
+    };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function createMainMapNoteNode(
+  ownerId: string,
+  input: CreateMainMapNoteNodeInput,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMapNoteNodeCreateResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMainMapId = cleanRequiredText(input.mainMapId);
+  const cleanNoteId = cleanRequiredText(input.noteId);
+  const cleanNodePosition = cleanPosition(input.position);
+
+  if (!cleanOwnerId || !cleanMainMapId || !cleanNoteId || !cleanNodePosition) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mainMapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMainMapId,
+      "main",
+      supabaseClient,
+    );
+    if (!mainMapResult.ok) return mainMapResult;
+
+    const { data: noteData, error: noteError } = await supabaseClient
+      .from(NOTES_TABLE)
+      .select("id, shortcode, title, source_book, tags")
+      .eq("owner_id", cleanOwnerId)
+      .eq("id", cleanNoteId)
+      .maybeSingle();
+
+    if (noteError) return { ok: false, error: "commonplace_save_failed" };
+    if (!noteData) return { ok: false, error: "commonplace_not_found" };
+
+    const { data: insertedNode, error: insertError } = await supabaseClient
+      .from(MAINMAP_NODES_TABLE)
+      .insert({
+        owner_id: cleanOwnerId,
+        main_mindmap_id: cleanMainMapId,
+        node_kind: "note",
+        sub_mindmap_id: null,
         note_id: cleanNoteId,
         position_x: cleanNodePosition.x,
         position_y: cleanNodePosition.y,
@@ -1394,7 +1528,6 @@ export async function batchUpdateMainMapNodePositions(
         .select("id")
         .eq("owner_id", cleanOwnerId)
         .eq("main_mindmap_id", cleanMainMapId)
-        .eq("node_kind", "cluster")
         .in("id", nodeIds);
 
     if (existingNodesError) {
@@ -1416,7 +1549,6 @@ export async function batchUpdateMainMapNodePositions(
         })
         .eq("owner_id", cleanOwnerId)
         .eq("main_mindmap_id", cleanMainMapId)
-        .eq("node_kind", "cluster")
         .eq("id", update.nodeId);
 
       if (error) return { ok: false, error: "commonplace_save_failed" };
@@ -2379,7 +2511,6 @@ export async function deleteMainMapNode(
       .select("id")
       .eq("owner_id", cleanOwnerId)
       .eq("main_mindmap_id", cleanMainMapId)
-      .eq("node_kind", "cluster")
       .eq("id", cleanNodeId)
       .maybeSingle();
 
@@ -2391,7 +2522,6 @@ export async function deleteMainMapNode(
       .delete()
       .eq("owner_id", cleanOwnerId)
       .eq("main_mindmap_id", cleanMainMapId)
-      .eq("node_kind", "cluster")
       .eq("id", cleanNodeId);
 
     if (error) return { ok: false, error: "commonplace_save_failed" };
