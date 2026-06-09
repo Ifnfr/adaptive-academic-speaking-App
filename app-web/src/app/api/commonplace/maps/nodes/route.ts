@@ -3,7 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   batchUpdateCommonplaceMapNodePositions,
+  createMainMapClusterNode,
   createSubMapNoteNode,
+  deleteMainMapNode,
   listCommonplaceMapNodes,
   type CommonplaceMapNodePositionUpdate,
   type CommonplaceMindMapType,
@@ -20,8 +22,16 @@ type PatchNodesRequest = {
 type PostNodeRequest = {
   mapId?: unknown;
   type?: unknown;
+  nodeKind?: unknown;
   noteId?: unknown;
+  subMindmapId?: unknown;
   position?: unknown;
+};
+
+type DeleteNodeRequest = {
+  mapId?: unknown;
+  type?: unknown;
+  nodeId?: unknown;
 };
 
 export const testHooks = {
@@ -186,25 +196,60 @@ export async function POST(request: Request) {
   const parsed = (await parseObjectBody(request)) as PostNodeRequest | null;
   const mapId = cleanRequiredText(parsed?.mapId);
   const type = cleanMapType(parsed?.type);
-  const noteId = cleanRequiredText(parsed?.noteId);
   const position = cleanPosition(parsed?.position);
-  if (!parsed || !mapId || !type || !noteId || !position) {
+  if (!parsed || !mapId || !type || !position) {
     return NextResponse.json(
       { error: "invalid_map_node_fields" },
       { status: 400 },
     );
   }
 
-  if (type === "main") {
-    return NextResponse.json(
-      { error: "main_note_nodes_not_supported" },
-      { status: 409 },
-    );
-  }
-
   const supabaseClient = getSupabaseClient();
   if (!supabaseClient) {
     return NextResponse.json({ error: "map_node_save_failed" }, { status: 500 });
+  }
+
+  if (type === "main") {
+    const nodeKind = cleanRequiredText(parsed.nodeKind) ?? "note";
+    if (nodeKind === "note") {
+      return NextResponse.json(
+        { error: "main_note_nodes_not_supported" },
+        { status: 409 },
+      );
+    }
+    if (nodeKind !== "cluster") {
+      return NextResponse.json(
+        { error: "invalid_map_node_fields" },
+        { status: 400 },
+      );
+    }
+
+    const subMindmapId = cleanRequiredText(parsed.subMindmapId);
+    if (!subMindmapId) {
+      return NextResponse.json(
+        { error: "invalid_map_node_fields" },
+        { status: 400 },
+      );
+    }
+
+    const result = await createMainMapClusterNode(
+      ownerId,
+      { mainMapId: mapId, subMindmapId, position },
+      supabaseClient,
+    );
+    if (!result.ok) {
+      return responseForStorageError(result.error);
+    }
+
+    return NextResponse.json({ node: result.node }, { status: 201 });
+  }
+
+  const noteId = cleanRequiredText(parsed.noteId);
+  if (!noteId) {
+    return NextResponse.json(
+      { error: "invalid_map_node_fields" },
+      { status: 400 },
+    );
   }
 
   const result = await createSubMapNoteNode(
@@ -250,6 +295,43 @@ export async function PATCH(request: Request) {
     updates,
     supabaseClient,
   );
+  if (!result.ok) {
+    return responseForStorageError(result.error);
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+
+export async function DELETE(request: Request) {
+  const ownerId = await resolveCurrentUserId();
+  if (!ownerId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  }
+
+  const parsed = (await parseObjectBody(request)) as DeleteNodeRequest | null;
+  const mapId = cleanRequiredText(parsed?.mapId);
+  const type = cleanMapType(parsed?.type);
+  const nodeId = cleanRequiredText(parsed?.nodeId);
+  if (!parsed || !mapId || !type || !nodeId) {
+    return NextResponse.json(
+      { error: "invalid_map_node_fields" },
+      { status: 400 },
+    );
+  }
+
+  if (type !== "main") {
+    return NextResponse.json(
+      { error: "invalid_map_node_fields" },
+      { status: 400 },
+    );
+  }
+
+  const supabaseClient = getSupabaseClient();
+  if (!supabaseClient) {
+    return NextResponse.json({ error: "map_node_save_failed" }, { status: 500 });
+  }
+
+  const result = await deleteMainMapNode(ownerId, mapId, nodeId, supabaseClient);
   if (!result.ok) {
     return responseForStorageError(result.error);
   }

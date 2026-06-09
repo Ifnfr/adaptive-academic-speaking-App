@@ -31,7 +31,9 @@ type TestMapNode = {
   id: string;
   ownerId: string;
   mapId: string;
-  noteId: string;
+  nodeKind: "note" | "cluster";
+  noteId: string | null;
+  subMindMapId: string | null;
   positionX: number;
   positionY: number;
 };
@@ -155,7 +157,9 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           id: "sub-node-1",
           ownerId: testOwnerId,
           mapId: "sub-map-1",
+          nodeKind: "note",
           noteId: seedNotes[0].id,
+          subMindMapId: null,
           positionX: 120,
           positionY: 140,
         },
@@ -415,14 +419,42 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         return { ok: false as const, error: "commonplace_not_found" as const };
       }
       if (type === "main") {
-        return { ok: true as const, nodes: [] };
+        const nodes = (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+          .filter(
+            (node) =>
+              node.ownerId === ownerId &&
+              node.mapId === mindMapId &&
+              node.nodeKind === "cluster",
+          )
+          .map((node) => {
+            const subMap = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+              (candidate) =>
+                candidate.ownerId === ownerId &&
+                candidate.id === node.subMindMapId &&
+                candidate.type === "sub",
+            );
+
+            return {
+              id: node.id,
+              nodeKind: "cluster" as const,
+              subMindMapId: node.subMindMapId ?? "",
+              subMindMapTitle: subMap?.title ?? "Untitled Sub Mind Map",
+              subMindMapUpdatedAt:
+                subMap?.updatedAt ?? "2026-06-06T05:00:00.000Z",
+              positionX: node.positionX,
+              positionY: node.positionY,
+            };
+          });
+
+        return { ok: true as const, nodes };
       }
 
       const nodes = (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
         .filter(
           (node) =>
             node.ownerId === ownerId &&
-            node.mapId === mindMapId,
+            node.mapId === mindMapId &&
+            node.nodeKind === "note",
         )
         .map((node) => {
           const note = (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).find(
@@ -432,7 +464,8 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
 
           return {
             id: node.id,
-            noteId: node.noteId,
+            nodeKind: "note" as const,
+            noteId: node.noteId ?? "",
             positionX: node.positionX,
             positionY: node.positionY,
             noteShortcode: note?.shortcode ?? "",
@@ -460,9 +493,23 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         return { ok: false as const, error: "commonplace_not_found" as const };
       }
       if (type === "main") {
-        return updates.length === 0
-          ? { ok: true as const }
-          : { ok: false as const, error: "commonplace_validation_failed" as const };
+        const nodes = testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [];
+        for (const update of updates) {
+          const node = nodes.find(
+            (candidate) =>
+              candidate.ownerId === ownerId &&
+              candidate.mapId === mindMapId &&
+              candidate.id === update.nodeId &&
+              candidate.nodeKind === "cluster",
+          );
+          if (!node) {
+            return { ok: false as const, error: "commonplace_not_found" as const };
+          }
+          node.positionX = update.position.x;
+          node.positionY = update.position.y;
+        }
+        testWindow.__COMMONPLACE_TEST_MAP_NODES__ = nodes;
+        return { ok: true as const };
       }
 
       const nodes = testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [];
@@ -471,7 +518,8 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           (candidate) =>
             candidate.ownerId === ownerId &&
             candidate.mapId === mindMapId &&
-            candidate.id === update.nodeId,
+            candidate.id === update.nodeId &&
+            candidate.nodeKind === "note",
         );
         if (!node) {
           return { ok: false as const, error: "commonplace_not_found" as const };
@@ -510,7 +558,9 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         id: `sub-node-created-${nextIndex}`,
         ownerId,
         mapId: mindMapId,
+        nodeKind: "note",
         noteId,
+        subMindMapId: null,
         positionX: position.x,
         positionY: position.y,
       };
@@ -522,7 +572,8 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
         ok: true as const,
         node: {
           id: node.id,
-          noteId: node.noteId,
+          nodeKind: "note" as const,
+          noteId,
           positionX: node.positionX,
           positionY: node.positionY,
           noteShortcode: note.shortcode,
@@ -531,6 +582,83 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           noteTags: note.tags,
         },
       };
+    },
+    async createMainMapClusterNode(
+      ownerId: string,
+      input: {
+        mainMapId: string;
+        subMindmapId: string;
+        position: { x: number; y: number };
+      },
+    ) {
+      const mainMap = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === input.mainMapId &&
+          candidate.type === "main",
+      );
+      const subMap = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
+        (candidate) =>
+          candidate.ownerId === ownerId &&
+          candidate.id === input.subMindmapId &&
+          candidate.type === "sub",
+      );
+      if (!mainMap || !subMap) {
+        return { ok: false as const, error: "commonplace_not_found" as const };
+      }
+      if (
+        !Number.isFinite(input.position.x) ||
+        !Number.isFinite(input.position.y)
+      ) {
+        return { ok: false as const, error: "commonplace_validation_failed" as const };
+      }
+
+      const nextIndex =
+        (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []).filter(
+          (node) => node.nodeKind === "cluster",
+        ).length + 1;
+      const node: TestMapNode = {
+        id: `main-cluster-created-${nextIndex}`,
+        ownerId,
+        mapId: input.mainMapId,
+        nodeKind: "cluster",
+        noteId: null,
+        subMindMapId: input.subMindmapId,
+        positionX: input.position.x,
+        positionY: input.position.y,
+      };
+      testWindow.__COMMONPLACE_TEST_MAP_NODES__ = [
+        ...(testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []),
+        node,
+      ];
+      return {
+        ok: true as const,
+        node: {
+          id: node.id,
+          nodeKind: "cluster" as const,
+          subMindMapId: subMap.id,
+          subMindMapTitle: subMap.title,
+          subMindMapUpdatedAt: subMap.updatedAt,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        },
+      };
+    },
+    async deleteMainMapNode(
+      ownerId: string,
+      mainMapId: string,
+      nodeId: string,
+    ) {
+      testWindow.__COMMONPLACE_TEST_MAP_NODES__ = (
+        testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []
+      ).filter(
+        (node) =>
+          node.ownerId !== ownerId ||
+          node.mapId !== mainMapId ||
+          node.id !== nodeId ||
+          node.nodeKind !== "cluster",
+      );
+      return { ok: true as const };
     },
     async listSubMapEdges(ownerId: string, mindMapId: string) {
       const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
@@ -802,6 +930,15 @@ async function clickFlowNode(node: Locator) {
   });
 }
 
+async function clickConnectIdea(page: Page) {
+  const connectIdea = page.getByTestId("commonplace-map-connect-idea");
+  await expect(connectIdea).toBeVisible();
+  await connectIdea.dispatchEvent("click", {
+    bubbles: true,
+    cancelable: true,
+  });
+}
+
 test.describe("Commonplace Phase 1B form and detail", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(installCommonplaceTestAdapter, [
@@ -962,16 +1099,131 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow__controls")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
-      "Canvas is ready. Drag notes from the sidebar will be added in the next phase.",
+      "Add Sub Mind Maps as clusters to build your Main Map.",
     );
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
+    );
+    await expect(page.getByTestId("commonplace-map-add-cluster-button")).toBeVisible();
+    await page.getByTestId("commonplace-map-add-cluster-button").click();
+    await expect(page.getByTestId("commonplace-map-cluster-chooser")).toBeVisible();
+    await expect(
+      page.getByTestId("commonplace-map-cluster-option").filter({
+        hasText: "Institutional Incentives",
+      }),
+    ).toBeVisible();
+    await page
+      .getByTestId("commonplace-map-cluster-option")
+      .filter({ hasText: "Institutional Incentives" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-cluster-node").first()).toContainText(
+      "Institutional Incentives",
+    );
+    await expect(page.getByTestId("commonplace-map-cluster-node").first()).toContainText(
+      "Sub Map",
+    );
+    await expect(page.getByTestId("commonplace-map-cluster-node").first()).toContainText(
+      "Cluster",
+    );
+    if ((await page.getByTestId("commonplace-map-cluster-chooser").count()) === 0) {
+      await page.getByTestId("commonplace-map-add-cluster-button").click();
+    }
+    await expect(page.getByTestId("commonplace-map-cluster-chooser")).toBeVisible();
+    await page
+      .getByTestId("commonplace-map-cluster-option")
+      .filter({ hasText: "Institutional Incentives" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
+
+    const firstClusterNode = page.getByTestId("rf__node-main-cluster-created-1");
+    const clusterPositionsBeforeMove = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+      };
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter((node) => node.nodeKind === "cluster")
+        .map((node) => ({
+          id: node.id,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        }));
+    });
+    const firstClusterBox = await firstClusterNode.boundingBox();
+    expect(firstClusterBox).not.toBeNull();
+    if (firstClusterBox) {
+      await page.mouse.move(
+        firstClusterBox.x + firstClusterBox.width / 2,
+        firstClusterBox.y + firstClusterBox.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        firstClusterBox.x + firstClusterBox.width / 2 + 90,
+        firstClusterBox.y + firstClusterBox.height / 2 + 45,
+        { steps: 5 },
+      );
+      await page.mouse.up();
+    }
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
     );
     await expect(page.getByTestId("commonplace-map-save-button")).toBeVisible();
     await page.getByTestId("commonplace-map-save-button").click();
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
+    const clusterPositionsAfterMove = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+      };
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+        .filter((node) => node.nodeKind === "cluster")
+        .map((node) => ({
+          id: node.id,
+          positionX: node.positionX,
+          positionY: node.positionY,
+        }));
+    });
+    expect(clusterPositionsAfterMove).toHaveLength(2);
+    expect(clusterPositionsAfterMove).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "main-cluster-created-1",
+        }),
+        expect.objectContaining({
+          id: "main-cluster-created-2",
+        }),
+      ]),
+    );
+    const movedClusters = clusterPositionsAfterMove.filter((node) => {
+      const before = clusterPositionsBeforeMove.find(
+        (candidate) => candidate.id === node.id,
+      );
+      return (
+        before &&
+        (before.positionX !== node.positionX ||
+          before.positionY !== node.positionY)
+      );
+    });
+    expect(movedClusters).toHaveLength(1);
+
+    await page.getByRole("button", { name: "Back to Main Maps" }).click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Institutions Map" })
+      .getByRole("button", { name: "Open" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
+    await expect(page.getByTestId("commonplace-map-empty-state")).toHaveCount(0);
+    await page.getByTestId("commonplace-map-cluster-open-submap").first().click();
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Institutional Incentives" })).toBeVisible();
+    await expect(page.getByText("Sub Mind Map")).toBeVisible();
+    await page.getByRole("button", { name: "Back to Main Map" }).click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
+
     await dropRawCommonplaceNotePayloadOnCanvas(page, "note-1", 160, 200);
     await expect(
       page.getByText("Main Map note drops will be enabled in a later phase."),
@@ -979,7 +1231,6 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
-    await expect(page.getByText(/cluster/i)).toHaveCount(0);
     await expect(page.getByText(/saved map/i)).toHaveCount(0);
 
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
@@ -1470,7 +1721,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveText(
       "Connect idea",
     );
-    await page.getByTestId("commonplace-map-connect-idea").click();
+    await clickConnectIdea(page);
     await expect(page.getByTestId("commonplace-map-connection-mode")).toContainText(
       "Click a target note",
     );
@@ -1478,13 +1729,13 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-connection-mode")).toHaveCount(0);
 
     await openFlowNodeContextMenu(sourceNode);
-    await page.getByTestId("commonplace-map-connect-idea").click();
+    await clickConnectIdea(page);
     await expect(page.getByTestId("commonplace-map-connection-mode")).toBeVisible();
     await page.locator(".react-flow__pane").click({ position: { x: 20, y: 20 } });
     await expect(page.getByTestId("commonplace-map-connection-mode")).toHaveCount(0);
 
     await openFlowNodeContextMenu(sourceNode);
-    await page.getByTestId("commonplace-map-connect-idea").click();
+    await clickConnectIdea(page);
     await clickFlowNode(targetNode);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-label-input").fill("direct influence");
@@ -1497,7 +1748,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByText("direct influence")).toBeVisible();
 
     await openFlowNodeContextMenu(targetNode);
-    await page.getByTestId("commonplace-map-connect-idea").click();
+    await clickConnectIdea(page);
     await clickFlowNode(sourceNode);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-type-select").selectOption("dashed");

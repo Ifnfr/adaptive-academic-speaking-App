@@ -21,6 +21,7 @@ import type {
 } from "../lib/storage/supabase-commonplace-adapter";
 import {
   batchUpdateCommonplaceMapNodePositions,
+  createMainMapClusterNode,
   createSubMapEdge,
   createSubMapNoteNode,
   createCommonplaceMindMap,
@@ -40,6 +41,7 @@ import {
   updateSubMapEdge,
   deleteSubMapEdge,
   deleteCommonplaceMainMapCluster,
+  deleteMainMapNode,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 import type {
   CommonplaceMindMapListResult,
@@ -55,6 +57,7 @@ import type {
   CommonplaceMindMapType,
   CreateCommonplaceMindMapRegistryInput,
   CommonplaceMapCanvasNode,
+  CommonplaceMapClusterNodeCreateResult,
   CommonplaceMapNoteNodeCreateResult,
   CommonplaceMapNodeListResult,
   CommonplaceMapNodePositionSaveResult,
@@ -154,6 +157,19 @@ export type CommonplaceStorage = {
   deleteCommonplaceMainMapCluster?(
     ownerId: string,
     mainMapNodeId: string,
+  ): Promise<CommonplaceMindMapDeleteResult>;
+  createMainMapClusterNode?(
+    ownerId: string,
+    input: {
+      mainMapId: string;
+      subMindmapId: string;
+      position: { x: number; y: number };
+    },
+  ): Promise<CommonplaceMapClusterNodeCreateResult>;
+  deleteMainMapNode?(
+    ownerId: string,
+    mainMapId: string,
+    nodeId: string,
   ): Promise<CommonplaceMindMapDeleteResult>;
   listCommonplaceMapNodes?(
     ownerId: string,
@@ -349,6 +365,10 @@ function createSupabaseStorage(
       saveCommonplaceMainMindMapGraph(input, supabaseClient),
     deleteCommonplaceMainMapCluster: (ownerId, mainMapNodeId) =>
       deleteCommonplaceMainMapCluster(ownerId, mainMapNodeId, supabaseClient),
+    createMainMapClusterNode: (ownerId, input) =>
+      createMainMapClusterNode(ownerId, input, supabaseClient),
+    deleteMainMapNode: (ownerId, mainMapId, nodeId) =>
+      deleteMainMapNode(ownerId, mainMapId, nodeId, supabaseClient),
     listCommonplaceMapNodes: (ownerId, mindMapId, type) =>
       listCommonplaceMapNodes(ownerId, mindMapId, type, supabaseClient),
     batchUpdateCommonplaceMapNodePositions: (ownerId, mindMapId, type, updates) =>
@@ -711,7 +731,52 @@ async function createSubMapNoteNodeViaServer(
       | { node?: CommonplaceMapCanvasNode; error?: string }
       | null;
 
-    if (response.ok && data?.node) {
+    if (response.ok && data?.node?.nodeKind === "note") {
+      return { ok: true, node: data.node };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_node_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+async function createMainMapClusterNodeViaServer(
+  mainMapId: string,
+  subMindmapId: string,
+  position: { x: number; y: number },
+): Promise<CommonplaceMapClusterNodeCreateResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps/nodes", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mapId: mainMapId,
+        type: "main",
+        nodeKind: "cluster",
+        subMindmapId,
+        position,
+      }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { node?: CommonplaceMapCanvasNode; error?: string }
+      | null;
+
+    if (
+      response.ok &&
+      data?.node &&
+      data.node.nodeKind === "cluster"
+    ) {
       return { ok: true, node: data.node };
     }
     if (data?.error === "auth_required") {
@@ -895,6 +960,8 @@ export function CommonplaceView({
     useState<CommonplaceMindMapSummary | null>(null);
   const [mapDetailReturnMode, setMapDetailReturnMode] =
     useState<CommonplaceMode>("main_maps_registry");
+  const [clusterReturnMap, setClusterReturnMap] =
+    useState<CommonplaceMindMapSummary | null>(null);
   const [mapNoteContext, setMapNoteContext] = useState<MapNoteContext | null>(
     null,
   );
@@ -972,6 +1039,7 @@ export function CommonplaceView({
     setSelectedNote(null);
     setDeleteConfirmVisible(false);
     setSelectedMap(null);
+    setClusterReturnMap(null);
     setMapNoteContext(null);
     setDeleteMapId(null);
     setRenameMapId(null);
@@ -1008,6 +1076,7 @@ export function CommonplaceView({
   const openMainMapsRegistry = () => {
     setSelectedNote(null);
     setSelectedMap(null);
+    setClusterReturnMap(null);
     setMapNoteContext(null);
     setDeleteMapId(null);
     setRenameMapId(null);
@@ -1018,6 +1087,7 @@ export function CommonplaceView({
 
   const openSubMapChooser = (note?: CommonplaceNote | null) => {
     setSelectedMap(null);
+    setClusterReturnMap(null);
     setDeleteMapId(null);
     setRenameMapId(null);
     setNewSubMapTitle("");
@@ -1154,10 +1224,14 @@ export function CommonplaceView({
     returnMode: CommonplaceMode,
   ) => {
     setSelectedMap(map);
+    setClusterReturnMap(null);
     setMapDetailReturnMode(returnMode);
     setDeleteMapId(null);
     setRenameMapId(null);
     setMode("map_detail_placeholder");
+    if (map.type === "main") {
+      void loadMaps("sub");
+    }
   };
 
   const loadMapCanvasNodes = useCallback(
@@ -1224,6 +1298,60 @@ export function CommonplaceView({
       return createSubMapNoteNodeViaServer(map.id, noteId, position);
     },
     [effectiveOwnerId, storage, testStorage],
+  );
+
+  const createMapCanvasClusterNode = useCallback(
+    async (
+      map: CommonplaceMindMapSummary,
+      subMindmapId: string,
+      position: { x: number; y: number },
+    ): Promise<CommonplaceMapClusterNodeCreateResult> => {
+      if (map.type !== "main") {
+        return { ok: false, error: "commonplace_conflict" };
+      }
+
+      if (
+        testStorage &&
+        storage?.createMainMapClusterNode &&
+        effectiveOwnerId
+      ) {
+        return storage.createMainMapClusterNode(effectiveOwnerId, {
+          mainMapId: map.id,
+          subMindmapId,
+          position,
+        });
+      }
+
+      return createMainMapClusterNodeViaServer(map.id, subMindmapId, position);
+    },
+    [effectiveOwnerId, storage, testStorage],
+  );
+
+  const openSubMapFromCluster = useCallback(
+    (subMapContext: { id: string; title: string; updatedAt: string }) => {
+      if (!selectedMap || selectedMap.type !== "main") return;
+
+      const existingSubMap = subMaps.find((map) => map.id === subMapContext.id);
+      const subMap: CommonplaceMindMapSummary =
+        existingSubMap ?? {
+          id: subMapContext.id,
+          ownerId: selectedMap.ownerId,
+          title: subMapContext.title,
+          type: "sub",
+          parentMindMapId: null,
+          createdAt: subMapContext.updatedAt,
+          updatedAt: subMapContext.updatedAt,
+        };
+
+      setClusterReturnMap(selectedMap);
+      setSelectedMap(subMap);
+      setMapNoteContext(null);
+      setMapDetailReturnMode("map_detail_placeholder");
+      setDeleteMapId(null);
+      setRenameMapId(null);
+      setMode("map_detail_placeholder");
+    },
+    [selectedMap, subMaps],
   );
 
   const loadMapCanvasEdges = useCallback(
@@ -1509,6 +1637,18 @@ export function CommonplaceView({
     () => notes.filter((note) => noteMatchesSearch(note, searchQuery)),
     [notes, searchQuery],
   );
+  const handleMapCanvasBack = useCallback(() => {
+    if (clusterReturnMap && selectedMap?.type === "sub") {
+      setSelectedMap(clusterReturnMap);
+      setClusterReturnMap(null);
+      setMapDetailReturnMode("main_maps_registry");
+      setMode("map_detail_placeholder");
+      return;
+    }
+
+    setClusterReturnMap(null);
+    setMode(mapDetailReturnMode);
+  }, [clusterReturnMap, mapDetailReturnMode, selectedMap?.type]);
   const libraryMode = mode === "library";
   const sidebarNoteDragMode =
     mode === "map_detail_placeholder" && selectedMap?.type === "sub";
@@ -1650,7 +1790,14 @@ export function CommonplaceView({
                 <CommonplaceMapCanvasFoundation
                   map={selectedMap}
                   noteContext={mapNoteContext}
-                  onBack={() => setMode(mapDetailReturnMode)}
+                  onBack={handleMapCanvasBack}
+                  backLabel={
+                    clusterReturnMap && selectedMap.type === "sub"
+                      ? "Back to Main Map"
+                      : undefined
+                  }
+                  subMaps={subMaps}
+                  isSubMapLoading={isMapLoading}
                   loadNodes={() => loadMapCanvasNodes(selectedMap)}
                   loadEdges={() => loadMapCanvasEdges(selectedMap)}
                   saveNodePositions={(updates) =>
@@ -1670,6 +1817,24 @@ export function CommonplaceView({
                             },
                     )
                   }
+                  createClusterNode={(subMindmapId, position) =>
+                    createMapCanvasClusterNode(
+                      selectedMap,
+                      subMindmapId,
+                      position,
+                    ).then((result) =>
+                      result.ok
+                        ? result
+                        : {
+                            ok: false as const,
+                            error:
+                              result.error === "commonplace_conflict"
+                                ? "unsupported"
+                                : "failed",
+                          },
+                    )
+                  }
+                  onOpenSubMap={openSubMapFromCluster}
                   createEdge={(input) => createMapCanvasEdge(selectedMap, input)}
                   updateEdge={(input) => updateMapCanvasEdge(selectedMap, input)}
                   deleteEdge={(edgeId) => deleteMapCanvasEdge(selectedMap, edgeId)}

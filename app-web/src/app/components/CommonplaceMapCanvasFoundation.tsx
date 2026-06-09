@@ -30,7 +30,9 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import type {
+  CommonplaceMapCanvasClusterNode,
   CommonplaceMapCanvasNode,
+  CommonplaceMapCanvasNoteNode,
   CommonplaceMindMapDeleteResult,
   CommonplaceMindMapEdgeType,
   CommonplaceMapNodeListResult,
@@ -41,6 +43,10 @@ import type {
   CommonplaceSubMapEdgeListResult,
   CommonplaceSubMapEdgeResult,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
+import {
+  CommonplaceClusterNode,
+  type CommonplaceClusterNodeData,
+} from "./CommonplaceClusterNode";
 import {
   CommonplaceNoteNode,
   type CommonplaceNoteNodeData,
@@ -70,6 +76,10 @@ type CommonplaceEdgeData = {
   ) => void;
 };
 
+type CommonplaceCanvasNodeData =
+  | CommonplaceNoteNodeData
+  | CommonplaceClusterNodeData;
+
 type PositionedPanel = {
   x: number;
   y: number;
@@ -96,6 +106,9 @@ type CommonplaceMapCanvasFoundationProps = {
   map: CommonplaceMindMapSummary;
   noteContext: MapNoteContext | null;
   onBack: () => void;
+  backLabel?: string;
+  subMaps?: CommonplaceMindMapSummary[];
+  isSubMapLoading?: boolean;
   loadNodes: () => Promise<CommonplaceMapNodeListResult>;
   loadEdges: () => Promise<CommonplaceSubMapEdgeListResult>;
   saveNodePositions: (
@@ -108,6 +121,18 @@ type CommonplaceMapCanvasFoundationProps = {
     | { ok: true; node: CommonplaceMapCanvasNode }
     | { ok: false; error: "unsupported" | "failed" }
   >;
+  createClusterNode?: (
+    subMindmapId: string,
+    position: { x: number; y: number },
+  ) => Promise<
+    | { ok: true; node: CommonplaceMapCanvasClusterNode }
+    | { ok: false; error: "unsupported" | "failed" }
+  >;
+  onOpenSubMap?: (subMap: {
+    id: string;
+    title: string;
+    updatedAt: string;
+  }) => void;
   createEdge: (input: {
     sourceNodeId: string;
     targetNodeId: string;
@@ -124,6 +149,7 @@ type CommonplaceMapCanvasFoundationProps = {
 
 const nodeTypes: NodeTypes = {
   noteNode: CommonplaceNoteNode,
+  clusterNode: CommonplaceClusterNode,
 };
 
 function CommonplaceConnectionEdge({
@@ -206,13 +232,28 @@ const subMapBubbleBackgroundStyle: CSSProperties = {
   ].join(", "),
 };
 
-function titleForNode(node: CommonplaceMapCanvasNode): string {
+function titleForNode(node: CommonplaceMapCanvasNoteNode): string {
   return node.noteTitle?.trim() || node.noteSourceBook || "Untitled Source";
 }
 
 function toReactFlowNode(
   node: CommonplaceMapCanvasNode,
-): Node<CommonplaceNoteNodeData> {
+  onOpenSubMap?: CommonplaceMapCanvasFoundationProps["onOpenSubMap"],
+): Node<CommonplaceCanvasNodeData> {
+  if (node.nodeKind === "cluster") {
+    return {
+      id: node.id,
+      type: "clusterNode",
+      position: { x: node.positionX, y: node.positionY },
+      data: {
+        subMindMapId: node.subMindMapId,
+        title: node.subMindMapTitle,
+        updatedAt: node.subMindMapUpdatedAt,
+        onOpenSubMap,
+      },
+    };
+  }
+
   return {
     id: node.id,
     type: "noteNode",
@@ -285,16 +326,21 @@ export function CommonplaceMapCanvasFoundation({
   map,
   noteContext,
   onBack,
+  backLabel,
+  subMaps = [],
+  isSubMapLoading = false,
   loadNodes,
   loadEdges,
   saveNodePositions,
   createNoteNode,
+  createClusterNode,
+  onOpenSubMap,
   createEdge,
   updateEdge,
   deleteEdge,
 }: CommonplaceMapCanvasFoundationProps) {
   const [nodes, setNodes, onNodesChange] =
-    useNodesState<CommonplaceNoteNodeData>([]);
+    useNodesState<CommonplaceCanvasNodeData>([]);
   const [edges, setEdges, onEdgesChange] =
     useEdgesState<CommonplaceEdgeData>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -302,8 +348,9 @@ export function CommonplaceMapCanvasFoundation({
   const [dropError, setDropError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("Saved");
   const [isCanvasDragActive, setIsCanvasDragActive] = useState(false);
+  const [isClusterChooserOpen, setIsClusterChooserOpen] = useState(false);
   const [flowInstance, setFlowInstance] =
-    useState<ReactFlowInstance<CommonplaceNoteNodeData> | null>(null);
+    useState<ReactFlowInstance<CommonplaceCanvasNodeData> | null>(null);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const [nodeContextMenu, setNodeContextMenu] =
     useState<NodeContextMenuState | null>(null);
@@ -313,24 +360,32 @@ export function CommonplaceMapCanvasFoundation({
   const [edgeEdit, setEdgeEdit] = useState<EdgeEditState | null>(null);
 
   const isSubMap = map.type === "sub";
+  const isMainMap = map.type === "main";
   const isSavingMapChange = saveStatus === "Saving...";
   const connectionSourceNode = useMemo(
     () =>
       nodes.find((node) => node.id === connectionSourceNodeId) ?? null,
     [connectionSourceNodeId, nodes],
   );
-  const visibleNodes = useMemo<Node<CommonplaceNoteNodeData>[]>(
+  const connectionSourceShortcode =
+    connectionSourceNode?.type === "noteNode"
+      ? (connectionSourceNode.data as CommonplaceNoteNodeData).shortcode
+      : "";
+  const visibleNodes = useMemo<Node<CommonplaceCanvasNodeData>[]>(
     () =>
       nodes.map((node) => ({
         ...node,
-        data: {
-          ...node.data,
-          connectionRole: connectionSourceNodeId
-            ? node.id === connectionSourceNodeId
-              ? "source"
-              : "target"
-            : null,
-        },
+        data:
+          node.type === "noteNode"
+            ? {
+                ...(node.data as CommonplaceNoteNodeData),
+                connectionRole: connectionSourceNodeId
+                  ? node.id === connectionSourceNodeId
+                    ? "source"
+                    : "target"
+                  : null,
+              }
+            : node.data,
       })),
     [connectionSourceNodeId, nodes],
   );
@@ -371,6 +426,7 @@ export function CommonplaceMapCanvasFoundation({
       setNodes([]);
       setEdges([]);
       setIsCanvasDragActive(false);
+      setIsClusterChooserOpen(false);
       setNodeContextMenu(null);
       setConnectionSourceNodeId(null);
       setEdgeDraft(null);
@@ -386,7 +442,11 @@ export function CommonplaceMapCanvasFoundation({
             setLoadError("Could not load this map canvas.");
             return;
           }
-          setNodes(nodeResult.nodes.map(toReactFlowNode));
+          setNodes(
+            nodeResult.nodes.map((node) =>
+              toReactFlowNode(node, onOpenSubMap),
+            ),
+          );
           setEdges(edgeResult.edges.map((edge) => toReactFlowEdge(edge, openEdgeEdit)));
         })
         .catch(() => {
@@ -403,7 +463,7 @@ export function CommonplaceMapCanvasFoundation({
       isCurrent = false;
       window.clearTimeout(timer);
     };
-  }, [isSubMap, loadEdges, loadNodes, map.id, map.type, openEdgeEdit, setEdges, setNodes]);
+  }, [isSubMap, loadEdges, loadNodes, map.id, map.type, onOpenSubMap, openEdgeEdit, setEdges, setNodes]);
 
   const cancelConnectionMode = useCallback(() => {
     setNodeContextMenu(null);
@@ -425,9 +485,8 @@ export function CommonplaceMapCanvasFoundation({
   const handleNodeDragStop = useCallback(
     (
       _event: ReactMouseEvent,
-      node: Node<CommonplaceNoteNodeData>,
+      node: Node<CommonplaceCanvasNodeData>,
     ) => {
-      if (!isSubMap) return;
       setNodes((current) =>
         current.map((currentNode) =>
           currentNode.id === node.id
@@ -437,7 +496,7 @@ export function CommonplaceMapCanvasFoundation({
       );
       setSaveStatus("Unsaved changes");
     },
-    [isSubMap, setNodes],
+    [setNodes],
   );
 
   const handleSave = useCallback(async () => {
@@ -528,16 +587,67 @@ export function CommonplaceMapCanvasFoundation({
         return;
       }
 
-      setNodes((current) => [...current, toReactFlowNode(result.node)]);
+      setNodes((current) => [
+        ...current,
+        toReactFlowNode(result.node, onOpenSubMap),
+      ]);
+      setIsClusterChooserOpen(false);
       setSaveStatus("Saved");
     },
-    [createNoteNode, flowInstance, isSubMap, setNodes],
+    [createNoteNode, flowInstance, isSubMap, onOpenSubMap, setNodes],
+  );
+
+  const defaultClusterPosition = useCallback(() => {
+    const rect = canvasPanelRef.current?.getBoundingClientRect();
+    if (flowInstance && rect) {
+      return flowInstance.screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + Math.min(rect.height / 2, 280),
+      });
+    }
+
+    return {
+      x: 140 + nodes.length * 32,
+      y: 120 + nodes.length * 24,
+    };
+  }, [flowInstance, nodes.length]);
+
+  const handleCreateClusterNode = useCallback(
+    async (subMap: CommonplaceMindMapSummary) => {
+      if (!isMainMap || !createClusterNode) return;
+
+      setSaveStatus("Saving...");
+      setDropError(null);
+      const result = await createClusterNode(subMap.id, defaultClusterPosition());
+      if (!result.ok) {
+        setSaveStatus("Save failed");
+        setDropError(
+          result.error === "unsupported"
+            ? "Main Map note nodes will be enabled in a later phase."
+            : "Could not add this Sub Mind Map cluster.",
+        );
+        return;
+      }
+
+      setNodes((current) => [
+        ...current,
+        toReactFlowNode(result.node, onOpenSubMap),
+      ]);
+      setSaveStatus("Saved");
+    },
+    [
+      createClusterNode,
+      defaultClusterPosition,
+      isMainMap,
+      onOpenSubMap,
+      setNodes,
+    ],
   );
 
   const handleNodeContextMenu = useCallback(
     (
       event: ReactMouseEvent,
-      node: Node<CommonplaceNoteNodeData>,
+      node: Node<CommonplaceCanvasNodeData>,
     ) => {
       if (!isSubMap) return;
       event.preventDefault();
@@ -566,7 +676,7 @@ export function CommonplaceMapCanvasFoundation({
   const handleNodeClick = useCallback(
     (
       event: ReactMouseEvent,
-      node: Node<CommonplaceNoteNodeData>,
+      node: Node<CommonplaceCanvasNodeData>,
     ) => {
       if (!isSubMap || !connectionSourceNodeId) return;
       event.stopPropagation();
@@ -720,7 +830,7 @@ export function CommonplaceMapCanvasFoundation({
             onClick={onBack}
             className="mb-3 rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)]"
           >
-            {isSubMap ? "Back to Sub Mind Maps" : "Back to Main Maps"}
+            {backLabel ?? (isSubMap ? "Back to Sub Mind Maps" : "Back to Main Maps")}
           </button>
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
             {isSubMap ? "Sub Mind Map" : "Main Map"}
@@ -739,6 +849,16 @@ export function CommonplaceMapCanvasFoundation({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {isMainMap && (
+            <button
+              type="button"
+              onClick={() => setIsClusterChooserOpen((current) => !current)}
+              className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
+              data-testid="commonplace-map-add-cluster-button"
+            >
+              + Add Sub Mind Map Cluster
+            </button>
+          )}
           <span
             className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-xs font-semibold text-[var(--brand-ink-soft)]"
             data-testid="commonplace-map-save-status"
@@ -792,6 +912,64 @@ export function CommonplaceMapCanvasFoundation({
             style={subMapBubbleBackgroundStyle}
           />
         )}
+        {isMainMap && isClusterChooserOpen && (
+          <div
+            className="absolute left-4 top-4 z-30 w-[min(22rem,calc(100%-2rem))] rounded-xl border border-[var(--brand-border)] bg-white p-3 text-sm shadow-lg"
+            data-testid="commonplace-map-cluster-chooser"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-[var(--brand-ink)]">
+                  Add Sub Mind Map
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[var(--brand-ink-soft)]">
+                  Choose a Sub Map to place as a cluster.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsClusterChooserOpen(false)}
+                className="rounded-md px-2 py-1 text-xs font-semibold text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface)]"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-3 max-h-64 overflow-y-auto pr-1">
+              {isSubMapLoading ? (
+                <p className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
+                  Loading Sub Mind Maps...
+                </p>
+              ) : subMaps.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
+                  No Sub Mind Maps available.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {subMaps.map((subMap) => (
+                    <button
+                      key={subMap.id}
+                      type="button"
+                      onClick={() => void handleCreateClusterNode(subMap)}
+                      disabled={isSavingMapChange}
+                      className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-left transition-colors hover:border-[var(--brand-teal)]/35 hover:bg-[var(--brand-teal-soft)] disabled:cursor-not-allowed disabled:opacity-70"
+                      data-testid="commonplace-map-cluster-option"
+                    >
+                      <span className="block text-sm font-semibold text-[var(--brand-ink)]">
+                        {subMap.title}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] font-medium text-[var(--brand-ink-soft)]">
+                        Sub Map
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <ReactFlow
           className="relative z-10 bg-transparent"
           nodes={visibleNodes}
@@ -841,7 +1019,7 @@ export function CommonplaceMapCanvasFoundation({
             <p className="max-w-sm rounded-xl border border-[var(--brand-border)] bg-white/95 px-4 py-3 text-center text-sm font-medium leading-6 text-[var(--brand-ink-soft)] shadow-sm">
               {isSubMap
                 ? "Canvas is ready. Drag notes from the sidebar to add them here."
-                : "Canvas is ready. Drag notes from the sidebar will be added in the next phase."}
+                : "Add Sub Mind Maps as clusters to build your Main Map."}
             </p>
           </div>
         )}
@@ -878,7 +1056,7 @@ export function CommonplaceMapCanvasFoundation({
             className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border border-[var(--brand-teal)]/25 bg-white px-3 py-2 text-sm font-medium text-[var(--brand-ink)] shadow-sm"
             data-testid="commonplace-map-connection-mode"
           >
-            Connecting from {connectionSourceNode.data.shortcode}. Click a target note.
+            Connecting from {connectionSourceShortcode}. Click a target note.
           </div>
         )}
 
