@@ -374,6 +374,7 @@ export function CommonplaceMapCanvasFoundation({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("Saved");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isCanvasDragActive, setIsCanvasDragActive] = useState(false);
   const [isClusterChooserOpen, setIsClusterChooserOpen] = useState(false);
   const [flowInstance, setFlowInstance] =
@@ -391,11 +392,25 @@ export function CommonplaceMapCanvasFoundation({
     useState<PositionedPanel | null>(null);
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraftState | null>(null);
   const [edgeEdit, setEdgeEdit] = useState<EdgeEditState | null>(null);
+  const savedNodePositionsRef = useRef<Map<string, { x: number; y: number }>>(
+    new Map(),
+  );
 
   const isSubMap = map.type === "sub";
   const isMainMap = map.type === "main";
   const supportsEdges = isSubMap || isMainMap;
   const isSavingMapChange = saveStatus === "Saving...";
+  const displayedSaveStatus: SaveStatus =
+    saveStatus === "Saving..." || saveStatus === "Save failed"
+      ? saveStatus
+      : hasUnsavedChanges
+        ? "Unsaved changes"
+        : "Saved";
+  const hasSaveFailure = saveStatus === "Save failed";
+  const canSaveMap =
+    !isLoading &&
+    !isSavingMapChange &&
+    (hasUnsavedChanges || hasSaveFailure);
   const connectionSourceNode = useMemo(
     () =>
       nodes.find((node) => node.id === connectionSourceNodeId) ?? null,
@@ -443,6 +458,29 @@ export function CommonplaceMapCanvasFoundation({
           y2: connectionPointer.y,
         }
       : null;
+  const rememberSavedNodePositions = useCallback(
+    (nextNodes: Node<CommonplaceCanvasNodeData>[]) => {
+      savedNodePositionsRef.current = new Map(
+        nextNodes.map((node) => [
+          node.id,
+          { x: node.position.x, y: node.position.y },
+        ]),
+      );
+    },
+    [],
+  );
+  const nodesHavePositionChanges = useCallback(
+    (nextNodes: Node<CommonplaceCanvasNodeData>[]) =>
+      nextNodes.some((node) => {
+        const savedPosition = savedNodePositionsRef.current.get(node.id);
+        return (
+          !savedPosition ||
+          savedPosition.x !== node.position.x ||
+          savedPosition.y !== node.position.y
+        );
+      }),
+    [],
+  );
   const openEdgeEdit = useCallback<CommonplaceEdgeData["onEdit"]>(
     (edgeId, edgeType, label, clientX, clientY) => {
       setDropError(null);
@@ -478,6 +516,8 @@ export function CommonplaceMapCanvasFoundation({
       setLoadError(null);
       setDropError(null);
       setSaveStatus("Saved");
+      setHasUnsavedChanges(false);
+      savedNodePositionsRef.current = new Map();
       setNodes([]);
       setEdges([]);
       setIsCanvasDragActive(false);
@@ -500,11 +540,11 @@ export function CommonplaceMapCanvasFoundation({
             setLoadError("Could not load this map canvas.");
             return;
           }
-          setNodes(
-            nodeResult.nodes.map((node) =>
-              toReactFlowNode(node, onOpenSubMap),
-            ),
+          const nextNodes = nodeResult.nodes.map((node) =>
+            toReactFlowNode(node, onOpenSubMap),
           );
+          rememberSavedNodePositions(nextNodes);
+          setNodes(nextNodes);
           setEdges(edgeResult.edges.map((edge) => toReactFlowEdge(edge, openEdgeEdit)));
         })
         .catch(() => {
@@ -521,7 +561,17 @@ export function CommonplaceMapCanvasFoundation({
       isCurrent = false;
       window.clearTimeout(timer);
     };
-  }, [loadEdges, loadNodes, map.id, map.type, onOpenSubMap, openEdgeEdit, setEdges, setNodes]);
+  }, [
+    loadEdges,
+    loadNodes,
+    map.id,
+    map.type,
+    onOpenSubMap,
+    openEdgeEdit,
+    rememberSavedNodePositions,
+    setEdges,
+    setNodes,
+  ]);
 
   const cancelConnectionMode = useCallback(() => {
     setNodeContextMenu(null);
@@ -571,23 +621,43 @@ export function CommonplaceMapCanvasFoundation({
       _event: ReactMouseEvent,
       node: Node<CommonplaceCanvasNodeData>,
     ) => {
-      setNodes((current) =>
-        current.map((currentNode) =>
-          currentNode.id === node.id
-            ? { ...currentNode, position: node.position }
-            : currentNode,
-        ),
+      const nextNodes = nodes.map((currentNode) =>
+        currentNode.id === node.id
+          ? { ...currentNode, position: node.position }
+          : currentNode,
       );
-      setSaveStatus("Unsaved changes");
+      const hasPositionChanges = nodesHavePositionChanges(nextNodes);
+      if (!hasPositionChanges && !hasUnsavedChanges) return;
+
+      setNodes(nextNodes);
+      setDropError(null);
+      setHasUnsavedChanges(hasPositionChanges);
+      setSaveStatus(hasPositionChanges ? "Unsaved changes" : "Saved");
     },
-    [setNodes],
+    [hasUnsavedChanges, nodes, nodesHavePositionChanges, setNodes],
   );
 
   const handleSave = useCallback(async () => {
+    if (isSavingMapChange) return;
     setSaveStatus("Saving...");
+    setDropError(null);
     const result = await saveNodePositions(updates);
-    setSaveStatus(result.ok ? "Saved" : "Save failed");
-  }, [saveNodePositions, updates]);
+    if (!result.ok) {
+      setSaveStatus("Save failed");
+      setDropError("Could not save map. Please try again. Your local changes are still visible.");
+      return;
+    }
+
+    setHasUnsavedChanges(false);
+    rememberSavedNodePositions(nodes);
+    setSaveStatus("Saved");
+  }, [
+    isSavingMapChange,
+    nodes,
+    rememberSavedNodePositions,
+    saveNodePositions,
+    updates,
+  ]);
 
   const hasDraggedCommonplaceNote = (event: DragEvent) =>
     Array.from(event.dataTransfer.types).some(
@@ -666,14 +736,30 @@ export function CommonplaceMapCanvasFoundation({
         return;
       }
 
-      setNodes((current) => [
-        ...current,
-        toReactFlowNode(result.node, onOpenSubMap),
-      ]);
+      const nextNode = toReactFlowNode(result.node, onOpenSubMap);
+      setNodes((current) => {
+        const nextNodes = [...current, nextNode];
+        if (!isMainMap) {
+          rememberSavedNodePositions(nextNodes);
+        }
+        return nextNodes;
+      });
       setIsClusterChooserOpen(false);
-      setSaveStatus("Saved");
+      if (isMainMap) {
+        setHasUnsavedChanges(true);
+        setSaveStatus("Unsaved changes");
+      } else {
+        setSaveStatus("Saved");
+      }
     },
-    [createNoteNode, flowInstance, onOpenSubMap, setNodes],
+    [
+      createNoteNode,
+      flowInstance,
+      isMainMap,
+      onOpenSubMap,
+      rememberSavedNodePositions,
+      setNodes,
+    ],
   );
 
   const defaultClusterPosition = useCallback(() => {
@@ -713,7 +799,8 @@ export function CommonplaceMapCanvasFoundation({
         toReactFlowNode(result.node, onOpenSubMap),
       ]);
       setIsClusterChooserOpen(false);
-      setSaveStatus("Saved");
+      setHasUnsavedChanges(true);
+      setSaveStatus("Unsaved changes");
     },
     [
       createClusterNode,
@@ -1029,7 +1116,12 @@ export function CommonplaceMapCanvasFoundation({
     }
 
     const deletedNodeId = nodeDeleteConfirm.nodeId;
-    setNodes((current) => current.filter((node) => node.id !== deletedNodeId));
+    savedNodePositionsRef.current.delete(deletedNodeId);
+    setNodes((current) => {
+      const nextNodes = current.filter((node) => node.id !== deletedNodeId);
+      setHasUnsavedChanges(nodesHavePositionChanges(nextNodes));
+      return nextNodes;
+    });
     setEdges((current) =>
       current.filter(
         (edge) => edge.source !== deletedNodeId && edge.target !== deletedNodeId,
@@ -1046,6 +1138,7 @@ export function CommonplaceMapCanvasFoundation({
     deleteNode,
     isMainMap,
     nodeDeleteConfirm,
+    nodesHavePositionChanges,
     setConnectionPointer,
     setConnectionSourceNodeId,
     setConnectionSourcePoint,
@@ -1107,19 +1200,39 @@ export function CommonplaceMapCanvasFoundation({
             </>
           )}
           <span
-            className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-xs font-semibold text-[var(--brand-ink-soft)]"
+            aria-live="polite"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+              displayedSaveStatus === "Unsaved changes"
+                ? "border-[#D99A25]/35 bg-[#FFF4D8] text-[#7A4A00]"
+                : displayedSaveStatus === "Saving..."
+                  ? "border-[#0F766E]/25 bg-[#DDEBE5] text-[#134E44]"
+                  : displayedSaveStatus === "Save failed"
+                    ? "border-[#B42318]/25 bg-[#FFF4F3] text-[#8A1F15]"
+                    : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink-soft)]"
+            }`}
             data-testid="commonplace-map-save-status"
           >
-            {saveStatus}
+            {displayedSaveStatus}
           </span>
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={saveStatus === "Saving..." || isLoading}
-            className="rounded-lg bg-[var(--brand-teal)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1C8A7A] disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={!canSaveMap}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+              displayedSaveStatus === "Unsaved changes" ||
+              displayedSaveStatus === "Save failed"
+                ? "bg-[var(--brand-teal)] text-white hover:bg-[#1C8A7A]"
+                : displayedSaveStatus === "Saving..."
+                  ? "bg-[#0F766E]/80 text-white"
+                  : "border border-[var(--brand-border)] bg-white text-[var(--brand-ink-soft)]"
+            }`}
             data-testid="commonplace-map-save-button"
           >
-            Save
+            {displayedSaveStatus === "Saving..."
+              ? "Saving..."
+              : displayedSaveStatus === "Saved"
+                ? "Saved"
+                : "Save"}
           </button>
         </div>
       </div>

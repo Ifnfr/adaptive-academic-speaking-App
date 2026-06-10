@@ -106,6 +106,7 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
     __COMMONPLACE_FORCE_CREATE_FAILURE__?: boolean;
     __COMMONPLACE_FORCE_DETAIL_READ_FAILURE__?: boolean;
     __COMMONPLACE_FORCE_LIST_FAILURE__?: boolean;
+    __COMMONPLACE_FORCE_POSITION_SAVE_FAILURE__?: boolean;
   };
   const notesStorageKey = "__COMMONPLACE_TEST_NOTES__";
   const readPersistedNotes = (): TestNote[] | null => {
@@ -501,6 +502,10 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       type: "main" | "sub",
       updates: Array<{ nodeId: string; position: { x: number; y: number } }>,
     ) {
+      if (testWindow.__COMMONPLACE_FORCE_POSITION_SAVE_FAILURE__) {
+        return { ok: false as const, error: "commonplace_save_failed" as const };
+      }
+
       const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
         (candidate) =>
           candidate.ownerId === ownerId &&
@@ -1344,6 +1349,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
+    await expect(page.getByTestId("commonplace-map-save-button")).toHaveText(
+      "Saved",
+    );
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeDisabled();
     await expect(page.getByTestId("commonplace-map-add-cluster-button")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-add-cluster-button")).toHaveText(
       "+ Add cluster",
@@ -1379,6 +1388,13 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "data-node-kind",
       "cluster",
     );
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+    await expect(page.getByTestId("commonplace-map-save-button")).toHaveText(
+      "Save",
+    );
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeEnabled();
     if ((await page.getByTestId("commonplace-map-cluster-chooser").count()) === 0) {
       await page.getByTestId("commonplace-map-add-cluster-button").click();
     }
@@ -1422,10 +1438,12 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Unsaved changes",
     );
     await expect(page.getByTestId("commonplace-map-save-button")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeEnabled();
     await page.getByTestId("commonplace-map-save-button").click();
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeDisabled();
     const clusterPositionsAfterMove = await page.evaluate(() => {
       const testWindow = window as typeof window & {
         __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
@@ -1603,8 +1621,15 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "data-node-kind",
       "note",
     );
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeEnabled();
     await dragSidebarNoteToCanvas(page, "Institutions and Growth", 320, 300);
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
     const notePositionsBeforeMove = await page.evaluate(() => {
       const testWindow = window as typeof window & {
         __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
@@ -1641,10 +1666,33 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Unsaved changes",
     );
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
+          __COMMONPLACE_FORCE_POSITION_SAVE_FAILURE__?: boolean;
+        }
+      ).__COMMONPLACE_FORCE_POSITION_SAVE_FAILURE__ = true;
+    });
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Save failed",
+    );
+    await expect(
+      page.getByText("Could not save map. Please try again. Your local changes are still visible."),
+    ).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeEnabled();
+    await page.evaluate(() => {
+      (
+        window as typeof window & {
+          __COMMONPLACE_FORCE_POSITION_SAVE_FAILURE__?: boolean;
+        }
+      ).__COMMONPLACE_FORCE_POSITION_SAVE_FAILURE__ = false;
+    });
     await page.getByTestId("commonplace-map-save-button").click();
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
+    await expect(page.getByTestId("commonplace-map-save-button")).toBeDisabled();
     const notePositionsAfterMove = await page.evaluate(() => {
       const testWindow = window as typeof window & {
         __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
@@ -2123,7 +2171,8 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Saved",
     );
 
-    const nodeBox = await noteNode.boundingBox();
+    const subMapFlowNode = page.getByTestId("rf__node-sub-node-1");
+    const nodeBox = await subMapFlowNode.boundingBox();
     expect(nodeBox).not.toBeNull();
     if (nodeBox) {
       await page.mouse.move(
