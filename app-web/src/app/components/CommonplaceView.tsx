@@ -887,6 +887,40 @@ async function createMainMapNoteNodeViaServer(
   }
 }
 
+async function deleteMainMapNodeViaServer(
+  mainMapId: string,
+  nodeId: string,
+): Promise<CommonplaceMindMapDeleteResult> {
+  try {
+    const response = await fetch("/api/commonplace/maps/nodes", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mapId: mainMapId, type: "main", nodeId }),
+    });
+    const data = (await response.json().catch(() => null)) as
+      | { ok?: boolean; error?: string }
+      | null;
+
+    if (response.ok && data?.ok) {
+      return { ok: true };
+    }
+    if (data?.error === "auth_required") {
+      return { ok: false, error: "commonplace_auth_required" };
+    }
+    if (data?.error === "invalid_map_node_fields") {
+      return { ok: false, error: "commonplace_validation_failed" };
+    }
+    if (data?.error === "map_not_found") {
+      return { ok: false, error: "commonplace_not_found" };
+    }
+
+    return { ok: false, error: "commonplace_save_failed" };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
 async function listMapEdgesViaServer(
   mapId: string,
   type: CommonplaceMindMapType,
@@ -1434,6 +1468,23 @@ export function CommonplaceView({
     [effectiveOwnerId, storage, testStorage],
   );
 
+  const deleteMapCanvasNode = useCallback(
+    async (
+      map: CommonplaceMindMapSummary,
+      nodeId: string,
+    ): Promise<CommonplaceMindMapDeleteResult> => {
+      if (map.type !== "main") {
+        return { ok: false, error: "commonplace_validation_failed" };
+      }
+      if (testStorage && storage?.deleteMainMapNode && effectiveOwnerId) {
+        return storage.deleteMainMapNode(effectiveOwnerId, map.id, nodeId);
+      }
+
+      return deleteMainMapNodeViaServer(map.id, nodeId);
+    },
+    [effectiveOwnerId, storage, testStorage],
+  );
+
   const openSubMapFromCluster = useCallback(
     (subMapContext: { id: string; title: string; updatedAt: string }) => {
       if (!selectedMap || selectedMap.type !== "main") return;
@@ -1959,6 +2010,11 @@ export function CommonplaceView({
                   createEdge={(input) => createMapCanvasEdge(selectedMap, input)}
                   updateEdge={(input) => updateMapCanvasEdge(selectedMap, input)}
                   deleteEdge={(edgeId) => deleteMapCanvasEdge(selectedMap, edgeId)}
+                  deleteNode={
+                    selectedMap.type === "main"
+                      ? (nodeId) => deleteMapCanvasNode(selectedMap, nodeId)
+                      : undefined
+                  }
                 />
               )}
             </>

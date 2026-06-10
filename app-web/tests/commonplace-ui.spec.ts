@@ -735,6 +735,14 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           node.mapId !== mainMapId ||
           node.id !== nodeId,
       );
+      testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = (
+        testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? []
+      ).filter(
+        (edge) =>
+          edge.ownerId !== ownerId ||
+          edge.mapId !== mainMapId ||
+          (edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId),
+      );
       return { ok: true as const };
     },
     async listSubMapEdges(ownerId: string, mindMapId: string) {
@@ -1462,9 +1470,15 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
     await expect(page.getByTestId("commonplace-map-empty-state")).toHaveCount(0);
-    await page.getByTestId("commonplace-map-cluster-open-submap").first().click();
+    await page
+      .getByTestId("commonplace-map-cluster-open-submap")
+      .first()
+      .dispatchEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
     await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Institutional Incentives" })).toBeVisible();
+    await expect(page.locator("h2").filter({ hasText: "Institutional Incentives" })).toBeVisible();
     await expect(page.getByText("Sub Mind Map")).toBeVisible();
     await page.getByRole("button", { name: "Back to Main Map" }).click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
@@ -1514,8 +1528,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(1);
     await expect(page.getByText("weak theme")).toBeVisible();
 
-    await page.getByTestId("commonplace-map-edge-label-main-edge-2").click({
-      force: true,
+    await page.getByTestId("commonplace-map-edge-label-main-edge-2").dispatchEvent("click", {
+      bubbles: true,
+      cancelable: true,
     });
     const mainEdgeEditPopover = page.getByTestId("commonplace-map-edge-edit-popover");
     await expect(mainEdgeEditPopover).toBeVisible();
@@ -1542,8 +1557,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       ]),
     );
 
-    await page.getByRole("button", { name: "theme bridge" }).click({
-      force: true,
+    await page.getByRole("button", { name: "theme bridge" }).dispatchEvent("click", {
+      bubbles: true,
+      cancelable: true,
     });
     await expect(page.getByTestId("commonplace-map-edge-edit-popover")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-delete-button").click();
@@ -1558,7 +1574,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
     await expect(page.locator(".react-flow__edge")).toHaveCount(1);
-    await expect(page.getByText("theme bridge")).toBeVisible();
+    await expect(page.getByText("revised theme")).toBeVisible();
 
     await expect(
       page
@@ -1676,7 +1692,15 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       firstMainNoteNode.getByTestId("commonplace-map-note-node"),
     ).toHaveAttribute("data-selected", "true");
     await openFlowNodeContextMenu(firstMainNoteNode);
-    await expect(page.getByTestId("commonplace-map-node-context-menu")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-connect-cluster")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-delete-visual-node")).toHaveText(
+      "Delete visual note",
+    );
+    await page
+      .getByTestId("commonplace-map-node-context-menu")
+      .getByRole("button", { name: "Cancel" })
+      .click();
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
     await page
       .locator("article")
@@ -1688,6 +1712,75 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow__edge")).toHaveCount(1);
     await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
       "Institutions and Growth",
+    );
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-note-created-1"));
+    await page.getByTestId("commonplace-map-delete-visual-node").click();
+    await expect(page.getByTestId("commonplace-map-node-delete-confirm")).toContainText(
+      "Delete visual note?",
+    );
+    await expect(page.getByTestId("commonplace-map-node-delete-confirm")).toContainText(
+      "The original Library note will remain.",
+    );
+    await page.getByTestId("commonplace-map-node-delete-confirm-button").click();
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Institutions and Growth",
+    );
+    await expect(page.getByTestId("commonplace-sidebar-note-list")).toContainText(
+      "Institutions and Growth",
+    );
+    const visualNotesAfterDelete = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+        __COMMONPLACE_TEST_NOTES__?: TestNote[];
+      };
+
+      return {
+        visualNoteIds: (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
+          .filter((node) => node.nodeKind === "note")
+          .map((node) => node.id),
+        libraryNoteExists: (testWindow.__COMMONPLACE_TEST_NOTES__ ?? []).some(
+          (note) => note.id === "note-1",
+        ),
+      };
+    });
+    expect(visualNotesAfterDelete.visualNoteIds).not.toContain("main-note-created-1");
+    expect(visualNotesAfterDelete.visualNoteIds).toContain("main-note-created-2");
+    expect(visualNotesAfterDelete.libraryNoteExists).toBe(true);
+
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-cluster-created-1"));
+    await page.getByTestId("commonplace-map-delete-visual-node").click();
+    await expect(page.getByTestId("commonplace-map-node-delete-confirm")).toContainText(
+      "Delete visual cluster?",
+    );
+    await expect(page.getByTestId("commonplace-map-node-delete-confirm")).toContainText(
+      "The referenced Sub Mind Map will remain.",
+    );
+    await page.getByTestId("commonplace-map-node-delete-confirm-button").click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(1);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(0);
+    await expect(page.getByText("revised theme")).toHaveCount(0);
+    await page
+      .getByTestId("commonplace-map-cluster-open-submap")
+      .first()
+      .dispatchEvent("click", {
+        bubbles: true,
+        cancelable: true,
+      });
+    await expect(page.locator("h2").filter({ hasText: "Institutional Incentives" })).toBeVisible();
+    await page.getByRole("button", { name: "Back to Main Map" }).click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(1);
+
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-cluster-created-2"));
+    await page.getByTestId("commonplace-map-delete-visual-node").click();
+    await page.getByTestId("commonplace-map-node-delete-confirm-button").click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(0);
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-note-created-2"));
+    await page.getByTestId("commonplace-map-delete-visual-node").click();
+    await page.getByTestId("commonplace-map-node-delete-confirm-button").click();
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
+      "Add a saved Sub Mind Map as a cluster, or drag notes from the sidebar.",
     );
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);

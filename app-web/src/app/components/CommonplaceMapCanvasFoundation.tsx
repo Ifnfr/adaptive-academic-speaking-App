@@ -87,6 +87,14 @@ type PositionedPanel = {
 
 type NodeContextMenuState = PositionedPanel & {
   nodeId: string;
+  nodeType: "note" | "cluster";
+  label: string;
+};
+
+type NodeDeleteConfirmState = PositionedPanel & {
+  nodeId: string;
+  nodeType: "note" | "cluster";
+  label: string;
 };
 
 type EdgeDraftState = PositionedPanel & {
@@ -145,6 +153,7 @@ type CommonplaceMapCanvasFoundationProps = {
     label?: string | null;
   }) => Promise<CommonplaceSubMapEdgeResult>;
   deleteEdge: (edgeId: string) => Promise<CommonplaceMindMapDeleteResult>;
+  deleteNode?: (nodeId: string) => Promise<CommonplaceMindMapDeleteResult>;
 };
 
 const nodeTypes: NodeTypes = {
@@ -306,6 +315,15 @@ function toReactFlowEdge(
   };
 }
 
+function labelForFlowNode(node: Node<CommonplaceCanvasNodeData>): string {
+  if (node.type === "clusterNode") {
+    return (node.data as CommonplaceClusterNodeData).title;
+  }
+
+  const noteData = node.data as CommonplaceNoteNodeData;
+  return noteData.title || noteData.shortcode;
+}
+
 function panelPosition(
   clientX: number,
   clientY: number,
@@ -346,6 +364,7 @@ export function CommonplaceMapCanvasFoundation({
   createEdge,
   updateEdge,
   deleteEdge,
+  deleteNode,
 }: CommonplaceMapCanvasFoundationProps) {
   const [nodes, setNodes, onNodesChange] =
     useNodesState<CommonplaceCanvasNodeData>([]);
@@ -362,6 +381,8 @@ export function CommonplaceMapCanvasFoundation({
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
   const [nodeContextMenu, setNodeContextMenu] =
     useState<NodeContextMenuState | null>(null);
+  const [nodeDeleteConfirm, setNodeDeleteConfirm] =
+    useState<NodeDeleteConfirmState | null>(null);
   const [connectionSourceNodeId, setConnectionSourceNodeId] =
     useState<string | null>(null);
   const [connectionSourcePoint, setConnectionSourcePoint] =
@@ -426,6 +447,7 @@ export function CommonplaceMapCanvasFoundation({
     (edgeId, edgeType, label, clientX, clientY) => {
       setDropError(null);
       setNodeContextMenu(null);
+      setNodeDeleteConfirm(null);
       setConnectionSourceNodeId(null);
       setEdgeDraft(null);
       setEdgeEdit({
@@ -461,6 +483,7 @@ export function CommonplaceMapCanvasFoundation({
       setIsCanvasDragActive(false);
       setIsClusterChooserOpen(false);
       setNodeContextMenu(null);
+      setNodeDeleteConfirm(null);
       setConnectionSourceNodeId(null);
       setConnectionSourcePoint(null);
       setConnectionPointer(null);
@@ -502,6 +525,7 @@ export function CommonplaceMapCanvasFoundation({
 
   const cancelConnectionMode = useCallback(() => {
     setNodeContextMenu(null);
+    setNodeDeleteConfirm(null);
     setConnectionSourceNodeId(null);
     setConnectionSourcePoint(null);
     setConnectionPointer(null);
@@ -708,15 +732,20 @@ export function CommonplaceMapCanvasFoundation({
       const isConnectableNode =
         (isSubMap && node.type === "noteNode") ||
         (isMainMap && node.type === "clusterNode");
-      if (!isConnectableNode) return;
+      const isMainMapVisualNode =
+        isMainMap && (node.type === "noteNode" || node.type === "clusterNode");
+      if (!isConnectableNode && !isMainMapVisualNode) return;
       event.preventDefault();
       event.stopPropagation();
       setDropError(null);
       setEdgeEdit(null);
       setEdgeDraft(null);
+      setNodeDeleteConfirm(null);
       setConnectionSourceNodeId(null);
       setNodeContextMenu({
         nodeId: node.id,
+        nodeType: node.type === "clusterNode" ? "cluster" : "note",
+        label: labelForFlowNode(node),
         ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
       });
     },
@@ -730,6 +759,7 @@ export function CommonplaceMapCanvasFoundation({
     setConnectionSourcePoint(sourcePoint);
     setConnectionPointer(sourcePoint);
     setNodeContextMenu(null);
+    setNodeDeleteConfirm(null);
     setEdgeEdit(null);
     setEdgeDraft(null);
     setDropError(null);
@@ -798,6 +828,7 @@ export function CommonplaceMapCanvasFoundation({
   const handlePaneClick = useCallback(() => {
     cancelConnectionMode();
     setEdgeEdit(null);
+    setNodeDeleteConfirm(null);
   }, [cancelConnectionMode, setEdgeEdit]);
 
   const handleCanvasMouseMove = useCallback(
@@ -861,6 +892,7 @@ export function CommonplaceMapCanvasFoundation({
       event.stopPropagation();
       setDropError(null);
       setNodeContextMenu(null);
+      setNodeDeleteConfirm(null);
       setConnectionSourceNodeId(null);
       setConnectionSourcePoint(null);
       setConnectionPointer(null);
@@ -954,6 +986,74 @@ export function CommonplaceMapCanvasFoundation({
     setEdgeEdit(null);
     setSaveStatus("Saved");
   }, [deleteEdge, edgeEdit, setEdges]);
+
+  const handleAskDeleteVisualNode = useCallback(() => {
+    if (!nodeContextMenu || !isMainMap) return;
+
+    setNodeDeleteConfirm({
+      nodeId: nodeContextMenu.nodeId,
+      nodeType: nodeContextMenu.nodeType,
+      label: nodeContextMenu.label,
+      x: nodeContextMenu.x,
+      y: nodeContextMenu.y,
+    });
+    setNodeContextMenu(null);
+    setConnectionSourceNodeId(null);
+    setConnectionSourcePoint(null);
+    setConnectionPointer(null);
+    setEdgeDraft(null);
+    setEdgeEdit(null);
+    setDropError(null);
+  }, [
+    isMainMap,
+    nodeContextMenu,
+    setConnectionPointer,
+    setConnectionSourceNodeId,
+    setConnectionSourcePoint,
+    setDropError,
+    setEdgeDraft,
+    setEdgeEdit,
+    setNodeContextMenu,
+  ]);
+
+  const handleDeleteVisualNode = useCallback(async () => {
+    if (!nodeDeleteConfirm || !isMainMap || !deleteNode) return;
+
+    setSaveStatus("Saving...");
+    setDropError(null);
+    const result = await deleteNode(nodeDeleteConfirm.nodeId);
+    if (!result.ok) {
+      setSaveStatus("Save failed");
+      setDropError("Could not delete this visual node.");
+      return;
+    }
+
+    const deletedNodeId = nodeDeleteConfirm.nodeId;
+    setNodes((current) => current.filter((node) => node.id !== deletedNodeId));
+    setEdges((current) =>
+      current.filter(
+        (edge) => edge.source !== deletedNodeId && edge.target !== deletedNodeId,
+      ),
+    );
+    setNodeDeleteConfirm(null);
+    setConnectionSourceNodeId(null);
+    setConnectionSourcePoint(null);
+    setConnectionPointer(null);
+    setEdgeDraft(null);
+    setEdgeEdit(null);
+    setSaveStatus("Saved");
+  }, [
+    deleteNode,
+    isMainMap,
+    nodeDeleteConfirm,
+    setConnectionPointer,
+    setConnectionSourceNodeId,
+    setConnectionSourcePoint,
+    setEdgeDraft,
+    setEdgeEdit,
+    setEdges,
+    setNodes,
+  ]);
 
   return (
     <section
@@ -1204,25 +1304,37 @@ export function CommonplaceMapCanvasFoundation({
 
         {supportsEdges && nodeContextMenu && (
           <div
-            className="absolute z-50 w-48 rounded-lg border border-[var(--brand-border)] bg-white p-2 text-sm shadow-lg"
+            className="absolute z-50 w-56 rounded-lg border border-[var(--brand-border)] bg-white p-2 text-sm shadow-lg"
             style={{ left: nodeContextMenu.x, top: nodeContextMenu.y }}
             data-testid="commonplace-map-node-context-menu"
             onPointerDown={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={handleStartConnection}
-              className="w-full rounded-md px-3 py-2 text-left font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
-              data-testid={
-                isMainMap
-                  ? "commonplace-map-connect-cluster"
-                  : "commonplace-map-connect-idea"
-              }
-            >
-              {isMainMap ? "Connect clusters" : "Connect idea"}
-            </button>
+            {(isSubMap || nodeContextMenu.nodeType === "cluster") && (
+              <button
+                type="button"
+                onClick={handleStartConnection}
+                className="w-full rounded-md px-3 py-2 text-left font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                data-testid={
+                  isMainMap
+                    ? "commonplace-map-connect-cluster"
+                    : "commonplace-map-connect-idea"
+                }
+              >
+                {isMainMap ? "Connect clusters" : "Connect idea"}
+              </button>
+            )}
+            {isMainMap && (
+              <button
+                type="button"
+                onClick={handleAskDeleteVisualNode}
+                className="mt-1 w-full rounded-md px-3 py-2 text-left font-semibold text-[#8A1F15] hover:bg-[#FFF4F3] focus:outline-none focus:ring-2 focus:ring-[#B42318]/30"
+                data-testid="commonplace-map-delete-visual-node"
+              >
+                Delete visual {nodeContextMenu.nodeType === "cluster" ? "cluster" : "note"}
+              </button>
+            )}
             <button
               type="button"
               onClick={cancelConnectionMode}
@@ -1230,6 +1342,52 @@ export function CommonplaceMapCanvasFoundation({
             >
               Cancel
             </button>
+          </div>
+        )}
+
+        {isMainMap && nodeDeleteConfirm && (
+          <div
+            className="absolute z-50 w-80 rounded-lg border border-[var(--brand-border)] bg-white p-4 text-sm shadow-lg"
+            style={{ left: nodeDeleteConfirm.x, top: nodeDeleteConfirm.y }}
+            data-testid="commonplace-map-node-delete-confirm"
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="font-semibold text-[var(--brand-ink)]">
+              {nodeDeleteConfirm.nodeType === "cluster"
+                ? "Delete visual cluster?"
+                : "Delete visual note?"}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-soft)]">
+              {nodeDeleteConfirm.nodeType === "cluster"
+                ? "Only this cluster node will be removed from this Main Map. The referenced Sub Mind Map will remain."
+                : "Only this visual note node will be removed from this Main Map. The original Library note will remain."}
+            </p>
+            <p className="mt-2 rounded-md bg-[var(--brand-surface)] px-3 py-2 text-xs font-semibold text-[var(--brand-ink-soft)]">
+              {nodeDeleteConfirm.label}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
+              Connected Main Map edges for this visual node will also disappear.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNodeDeleteConfirm(null)}
+                className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteVisualNode()}
+                disabled={isSavingMapChange}
+                className="rounded-lg border border-[#B42318]/30 bg-[#B42318] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8A1F15] disabled:cursor-not-allowed disabled:opacity-70"
+                data-testid="commonplace-map-node-delete-confirm-button"
+              >
+                Delete visual node
+              </button>
+            </div>
           </div>
         )}
 
