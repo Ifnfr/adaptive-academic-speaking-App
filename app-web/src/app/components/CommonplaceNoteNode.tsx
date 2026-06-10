@@ -12,11 +12,11 @@ export type CommonplaceNoteNodeData = {
 };
 
 const tagPalette = [
-  { background: "#EEF7F4", border: "#8AC6B6", text: "#194E42" },
-  { background: "#F4F1FA", border: "#B7A4D9", text: "#3F2F68" },
-  { background: "#F7F5EA", border: "#D0C47B", text: "#4D4616" },
-  { background: "#EEF4FB", border: "#91B7DC", text: "#234966" },
-  { background: "#FAF0F0", border: "#DBA2A0", text: "#6D2B29" },
+  { background: "#FFF8EA", border: "#C9D8D1", text: "#254238" },
+  { background: "#FFF8EA", border: "#B7D4C8", text: "#194E42" },
+  { background: "#FFF8EA", border: "#D6CFA8", text: "#4D4616" },
+  { background: "#FFF8EA", border: "#B5C9D6", text: "#234966" },
+  { background: "#FFF8EA", border: "#D9BBB1", text: "#6D2B29" },
 ];
 
 function paletteForTag(tag: string | undefined) {
@@ -35,15 +35,15 @@ export function CommonplaceNoteNode({
   const palette = paletteForTag(data.tags[0]);
   const connectionClass =
     data.connectionRole === "source"
-      ? "ring-2 ring-[var(--brand-teal)] ring-offset-2"
+      ? "ring-2 ring-[#0F766E] ring-offset-2 ring-offset-[#EEF3F1] shadow-md"
       : data.connectionRole === "target"
-        ? "ring-2 ring-[#7B6BB0] ring-offset-2"
+        ? "ring-2 ring-[#0F766E]/55 ring-offset-2 ring-offset-[#EEF3F1] shadow-md"
         : "";
 
   return (
     <article
-      className={`relative w-[220px] overflow-hidden rounded-lg border p-3 text-left shadow-sm transition-shadow ${
-        selected ? "ring-2 ring-[var(--brand-teal)] ring-offset-2" : ""
+      className={`group relative w-[220px] overflow-visible rounded-lg border p-3 text-left shadow-sm transition duration-150 hover:border-[#0F766E] hover:shadow-md ${
+        selected ? "ring-2 ring-[#0F766E] ring-offset-2 ring-offset-[#EEF3F1]" : ""
       } ${connectionClass}`}
       data-testid="commonplace-map-note-node"
       style={{
@@ -56,13 +56,13 @@ export function CommonplaceNoteNode({
         type="target"
         position={Position.Left}
         isConnectable={false}
-        className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
+        className="!-left-2 !h-4 !w-4 !border-2 !border-white !bg-[#0F766E] !opacity-95 !shadow-md transition-transform group-hover:!scale-110"
       />
       <Handle
         type="source"
         position={Position.Right}
         isConnectable={false}
-        className="!h-2.5 !w-2.5 !border !border-white !bg-[var(--brand-teal)]"
+        className="!-right-2 !h-4 !w-4 !border-2 !border-white !bg-[#0F766E] !opacity-95 !shadow-md transition-transform group-hover:!scale-110"
       />
       <p className="text-[11px] font-semibold uppercase">{data.shortcode}</p>
       <h3 className="mt-1 line-clamp-2 break-words text-sm font-semibold leading-5">
@@ -76,7 +76,7 @@ export function CommonplaceNoteNode({
           {data.tags.slice(0, 2).map((tag) => (
             <span
               key={tag}
-              className="max-w-[9rem] truncate rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold"
+              className="max-w-[9rem] truncate rounded-full border border-[#C9D8D1] bg-white/80 px-2 py-0.5 text-[11px] font-semibold"
             >
               #{tag}
             </span>

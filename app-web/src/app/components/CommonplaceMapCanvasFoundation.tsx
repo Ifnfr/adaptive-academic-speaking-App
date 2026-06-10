@@ -223,12 +223,20 @@ const COMMONPLACE_NOTE_DRAG_TYPE = "application/commonplace-note";
 
 const subMapBubbleBackgroundStyle: CSSProperties = {
   backgroundImage: [
-    "radial-gradient(circle at 24% 28%, rgba(47,111,104,0.14) 0 1px, transparent 2px)",
-    "radial-gradient(circle at 24% 28%, transparent 0 82px, rgba(47,111,104,0.12) 83px 84px, transparent 85px)",
-    "radial-gradient(circle at 68% 34%, transparent 0 118px, rgba(123,107,176,0.1) 119px 120px, transparent 121px)",
-    "radial-gradient(circle at 52% 72%, transparent 0 96px, rgba(208,196,123,0.12) 97px 98px, transparent 99px)",
-    "radial-gradient(circle at 15% 82%, rgba(47,111,104,0.08) 0 34px, transparent 35px)",
-    "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(248,250,248,0.35))",
+    "radial-gradient(circle at 24% 28%, rgba(15,118,110,0.16) 0 2px, transparent 3px)",
+    "radial-gradient(circle at 24% 28%, transparent 0 82px, rgba(183,212,200,0.72) 83px 85px, transparent 86px)",
+    "radial-gradient(circle at 68% 34%, transparent 0 118px, rgba(183,212,200,0.58) 119px 121px, transparent 122px)",
+    "radial-gradient(circle at 52% 72%, transparent 0 96px, rgba(183,212,200,0.52) 97px 99px, transparent 100px)",
+    "radial-gradient(circle at 15% 82%, rgba(221,235,229,0.7) 0 34px, transparent 35px)",
+    "linear-gradient(180deg, rgba(221,235,229,0.82), rgba(238,243,241,0.52))",
+  ].join(", "),
+};
+
+const mainMapBackgroundStyle: CSSProperties = {
+  backgroundImage: [
+    "radial-gradient(circle at 18% 18%, rgba(221,235,229,0.82) 0 120px, transparent 121px)",
+    "radial-gradient(circle at 82% 76%, rgba(221,235,229,0.65) 0 150px, transparent 151px)",
+    "linear-gradient(180deg, #EEF3F1, #E8F0ED)",
   ].join(", "),
 };
 
@@ -284,13 +292,13 @@ function toReactFlowEdge(
       isDashed ? "commonplace-map-edge--dashed" : "commonplace-map-edge--solid"
     }`,
     style: {
-      stroke: isDashed ? "#7B6BB0" : "#2F6F68",
-      strokeWidth: 2,
+      stroke: isDashed ? "#5F7D74" : "#2F6B61",
+      strokeWidth: 2.5,
       strokeDasharray: isDashed ? "7 5" : undefined,
     },
     markerEnd: {
       type: MarkerType.ArrowClosed,
-      color: isDashed ? "#7B6BB0" : "#2F6F68",
+      color: isDashed ? "#5F7D74" : "#2F6B61",
     },
     labelBgPadding: [8, 4],
     labelBgBorderRadius: 6,
@@ -356,6 +364,10 @@ export function CommonplaceMapCanvasFoundation({
     useState<NodeContextMenuState | null>(null);
   const [connectionSourceNodeId, setConnectionSourceNodeId] =
     useState<string | null>(null);
+  const [connectionSourcePoint, setConnectionSourcePoint] =
+    useState<PositionedPanel | null>(null);
+  const [connectionPointer, setConnectionPointer] =
+    useState<PositionedPanel | null>(null);
   const [edgeDraft, setEdgeDraft] = useState<EdgeDraftState | null>(null);
   const [edgeEdit, setEdgeEdit] = useState<EdgeEditState | null>(null);
 
@@ -386,12 +398,30 @@ export function CommonplaceMapCanvasFoundation({
                   ? node.id === connectionSourceNodeId
                     ? "source"
                     : "target"
-                  : null,
+              : null,
               }
-            : node.data,
+            : node.type === "clusterNode"
+              ? {
+                  ...(node.data as CommonplaceClusterNodeData),
+                  connectionRole: connectionSourceNodeId
+                    ? node.id === connectionSourceNodeId
+                      ? "source"
+                      : "target"
+                    : null,
+                }
+              : node.data,
       })),
     [connectionSourceNodeId, nodes],
   );
+  const connectionPreview =
+    connectionSourcePoint && connectionPointer
+      ? {
+          x1: connectionSourcePoint.x,
+          y1: connectionSourcePoint.y,
+          x2: connectionPointer.x,
+          y2: connectionPointer.y,
+        }
+      : null;
   const openEdgeEdit = useCallback<CommonplaceEdgeData["onEdit"]>(
     (edgeId, edgeType, label, clientX, clientY) => {
       setDropError(null);
@@ -432,6 +462,8 @@ export function CommonplaceMapCanvasFoundation({
       setIsClusterChooserOpen(false);
       setNodeContextMenu(null);
       setConnectionSourceNodeId(null);
+      setConnectionSourcePoint(null);
+      setConnectionPointer(null);
       setEdgeDraft(null);
       setEdgeEdit(null);
 
@@ -471,7 +503,32 @@ export function CommonplaceMapCanvasFoundation({
   const cancelConnectionMode = useCallback(() => {
     setNodeContextMenu(null);
     setConnectionSourceNodeId(null);
+    setConnectionSourcePoint(null);
+    setConnectionPointer(null);
     setEdgeDraft(null);
+  }, [
+    setConnectionPointer,
+    setConnectionSourceNodeId,
+    setConnectionSourcePoint,
+    setEdgeDraft,
+    setNodeContextMenu,
+  ]);
+
+  const getNodeCenterPoint = useCallback((nodeId: string) => {
+    const panel = canvasPanelRef.current;
+    if (!panel) return null;
+
+    const sourceElement = panel.querySelector<HTMLElement>(
+      `.react-flow__node[data-id="${CSS.escape(nodeId)}"]`,
+    );
+    const sourceRect = sourceElement?.getBoundingClientRect();
+    if (!sourceRect) return null;
+
+    const panelRect = panel.getBoundingClientRect();
+    return {
+      x: sourceRect.left - panelRect.left + sourceRect.width / 2,
+      y: sourceRect.top - panelRect.top + sourceRect.height / 2,
+    };
   }, []);
 
   useEffect(() => {
@@ -669,11 +726,24 @@ export function CommonplaceMapCanvasFoundation({
   const handleStartConnection = useCallback(() => {
     if (!nodeContextMenu) return;
     setConnectionSourceNodeId(nodeContextMenu.nodeId);
+    const sourcePoint = getNodeCenterPoint(nodeContextMenu.nodeId);
+    setConnectionSourcePoint(sourcePoint);
+    setConnectionPointer(sourcePoint);
     setNodeContextMenu(null);
     setEdgeEdit(null);
     setEdgeDraft(null);
     setDropError(null);
-  }, [nodeContextMenu]);
+  }, [
+    getNodeCenterPoint,
+    nodeContextMenu,
+    setConnectionPointer,
+    setConnectionSourceNodeId,
+    setConnectionSourcePoint,
+    setDropError,
+    setEdgeDraft,
+    setEdgeEdit,
+    setNodeContextMenu,
+  ]);
 
   const handleNodeClick = useCallback(
     (
@@ -705,16 +775,51 @@ export function CommonplaceMapCanvasFoundation({
         ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
       });
       setConnectionSourceNodeId(null);
+      setConnectionSourcePoint(null);
+      setConnectionPointer(null);
       setNodeContextMenu(null);
       setEdgeEdit(null);
     },
-    [connectionSourceNodeId, isMainMap, isSubMap, supportsEdges],
+    [
+      connectionSourceNodeId,
+      isMainMap,
+      isSubMap,
+      setConnectionPointer,
+      setConnectionSourceNodeId,
+      setConnectionSourcePoint,
+      setDropError,
+      setEdgeDraft,
+      setEdgeEdit,
+      setNodeContextMenu,
+      supportsEdges,
+    ],
   );
 
   const handlePaneClick = useCallback(() => {
     cancelConnectionMode();
     setEdgeEdit(null);
-  }, [cancelConnectionMode]);
+  }, [cancelConnectionMode, setEdgeEdit]);
+
+  const handleCanvasMouseMove = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!connectionSourceNodeId || !canvasPanelRef.current) return;
+      const rect = canvasPanelRef.current.getBoundingClientRect();
+      if (!connectionSourcePoint) {
+        setConnectionSourcePoint(getNodeCenterPoint(connectionSourceNodeId));
+      }
+      setConnectionPointer({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    },
+    [
+      connectionSourceNodeId,
+      connectionSourcePoint,
+      getNodeCenterPoint,
+      setConnectionPointer,
+      setConnectionSourcePoint,
+    ],
+  );
 
   const handleCreateEdge = useCallback(async () => {
     if (!edgeDraft) return;
@@ -736,8 +841,19 @@ export function CommonplaceMapCanvasFoundation({
 
     setEdges((current) => [...current, toReactFlowEdge(result.edge, openEdgeEdit)]);
     setEdgeDraft(null);
+    setConnectionSourcePoint(null);
+    setConnectionPointer(null);
     setSaveStatus("Saved");
-  }, [createEdge, edgeDraft, openEdgeEdit, setEdges]);
+  }, [
+    createEdge,
+    edgeDraft,
+    openEdgeEdit,
+    setConnectionPointer,
+    setConnectionSourcePoint,
+    setEdgeDraft,
+    setEdges,
+    setSaveStatus,
+  ]);
 
   const handleEdgeClick = useCallback(
     (event: ReactMouseEvent, edge: Edge<CommonplaceEdgeData>) => {
@@ -746,6 +862,8 @@ export function CommonplaceMapCanvasFoundation({
       setDropError(null);
       setNodeContextMenu(null);
       setConnectionSourceNodeId(null);
+      setConnectionSourcePoint(null);
+      setConnectionPointer(null);
       setEdgeDraft(null);
       setEdgeEdit({
         edgeId: edge.id,
@@ -754,7 +872,16 @@ export function CommonplaceMapCanvasFoundation({
         ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
       });
     },
-    [supportsEdges],
+    [
+      setConnectionPointer,
+      setConnectionSourceNodeId,
+      setConnectionSourcePoint,
+      setDropError,
+      setEdgeDraft,
+      setEdgeEdit,
+      setNodeContextMenu,
+      supportsEdges,
+    ],
   );
 
   const handleSelectionChange = useCallback(
@@ -830,10 +957,10 @@ export function CommonplaceMapCanvasFoundation({
 
   return (
     <section
-      className="flex min-h-0 flex-col rounded-xl border border-[var(--brand-border)] bg-white"
+      className="flex min-h-0 flex-col rounded-xl border border-[#C9D8D1] bg-[#FAF8F2]"
       data-testid="commonplace-map-canvas"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--brand-border)] px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#C9D8D1] px-4 py-4 sm:px-5">
         <div>
           <button
             type="button"
@@ -906,20 +1033,26 @@ export function CommonplaceMapCanvasFoundation({
 
       <div
         ref={canvasPanelRef}
+        onMouseMove={handleCanvasMouseMove}
         className={`relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden transition-shadow ${
-          isSubMap ? "bg-[#F7FBFA]" : "bg-[#F8FAF8]"
+          isSubMap ? "bg-[#EEF3F1]" : "bg-[#EEF3F1]"
         } ${
           isCanvasDragActive
             ? "ring-2 ring-inset ring-[var(--brand-teal)]/45"
             : ""
         }`}
       >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0"
+          style={isSubMap ? subMapBubbleBackgroundStyle : mainMapBackgroundStyle}
+          data-testid={isSubMap ? "commonplace-map-bubble-background" : "commonplace-map-main-background"}
+        />
         {isSubMap && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0"
-            data-testid="commonplace-map-bubble-background"
-            style={subMapBubbleBackgroundStyle}
+            className="pointer-events-none absolute inset-0 z-0 opacity-0"
+            data-testid="commonplace-map-bubble-background-legacy"
           />
         )}
         {isMainMap && isClusterChooserOpen && (
@@ -981,7 +1114,7 @@ export function CommonplaceMapCanvasFoundation({
           </div>
         )}
         <ReactFlow
-          className="relative z-10 bg-transparent"
+          className="relative z-10 bg-transparent [&_.react-flow__connection-path]:!stroke-[#0F766E] [&_.react-flow__connection-path]:!stroke-[3px] [&_.react-flow__controls]:!z-40 [&_.react-flow__controls]:!pointer-events-auto [&_.react-flow__controls-button]:!pointer-events-auto [&_.react-flow__controls-button]:!border-[#C9D8D1] [&_.react-flow__controls-button]:!bg-white [&_.react-flow__controls-button]:!text-[#0F766E] [&_.react-flow__minimap]:!z-30 [&_.react-flow__pane]:!cursor-grab"
           nodes={visibleNodes}
           edges={edges}
           nodeTypes={nodeTypes}
@@ -1007,10 +1140,35 @@ export function CommonplaceMapCanvasFoundation({
           connectOnClick={false}
           proOptions={{ hideAttribution: true }}
         >
-          <Background color="#D7E6E2" gap={24} size={1} />
-          <MiniMap pannable zoomable nodeStrokeWidth={3} />
+          <Background color="#B7D4C8" gap={24} size={1.2} />
+          <MiniMap pannable zoomable nodeStrokeWidth={3} maskColor="rgba(238,243,241,0.72)" />
           <Controls showInteractive={false} />
         </ReactFlow>
+
+        {connectionPreview && (
+          <svg
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-20"
+            data-testid="commonplace-map-connection-preview"
+          >
+            <line
+              x1={connectionPreview.x1}
+              y1={connectionPreview.y1}
+              x2={connectionPreview.x2}
+              y2={connectionPreview.y2}
+              stroke="#0F766E"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray="8 7"
+            />
+            <circle
+              cx={connectionPreview.x2}
+              cy={connectionPreview.y2}
+              r="5"
+              fill="#0F766E"
+            />
+          </svg>
+        )}
 
         {isCanvasDragActive && (
           <div
@@ -1067,7 +1225,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {supportsEdges && connectionSourceNode && (
           <div
-            className="pointer-events-none absolute left-4 top-4 z-10 rounded-lg border border-[var(--brand-teal)]/25 bg-white px-3 py-2 text-sm font-medium text-[var(--brand-ink)] shadow-sm"
+            className="pointer-events-none absolute left-4 top-4 z-30 rounded-lg border border-[#0F766E]/35 bg-white px-3 py-2 text-sm font-semibold text-[#134E44] shadow-sm"
             data-testid="commonplace-map-connection-mode"
           >
             {isMainMap

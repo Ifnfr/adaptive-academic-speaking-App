@@ -1298,7 +1298,26 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow")).toHaveCount(1);
     await expect(page.locator(".react-flow__minimap")).toBeVisible();
     await expect(page.locator(".react-flow__controls")).toBeVisible();
+    await page.getByRole("button", { name: "fit view" }).click();
+    const mainCanvasStyle = await page
+      .getByTestId("commonplace-map-canvas")
+      .evaluate((element) => {
+        const panel = element.querySelector(".react-flow")?.parentElement;
+        const controls = element.querySelector(".react-flow__controls");
+        const styles = panel ? window.getComputedStyle(panel) : null;
+        const controlStyles = controls
+          ? window.getComputedStyle(controls)
+          : null;
+        return {
+          backgroundColor: styles?.backgroundColor ?? "",
+          controlsPointerEvents: controlStyles?.pointerEvents ?? "",
+          controlsZIndex: controlStyles?.zIndex ?? "",
+        };
+      });
+    expect(mainCanvasStyle.backgroundColor).not.toBe("rgb(255, 255, 255)");
+    expect(mainCanvasStyle.controlsPointerEvents).not.toBe("none");
     await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
     await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
       "Add Sub Mind Maps as clusters or drag notes from the sidebar to build your Main Map.",
     );
@@ -1436,6 +1455,8 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-connection-mode")).toContainText(
       "Click a target cluster",
     );
+    await page.mouse.move(520, 360);
+    await expect(page.getByTestId("commonplace-map-connection-preview")).toBeVisible();
     await clickFlowNode(mainTargetCluster);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-label-input").fill("theme bridge");
@@ -2119,7 +2140,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-connection-mode")).toContainText(
       "Click a target note",
     );
+    await page.mouse.move(540, 380);
+    await expect(page.getByTestId("commonplace-map-connection-preview")).toBeVisible();
     await page.keyboard.press("Escape");
+    await expect(page.getByTestId("commonplace-map-connection-preview")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-connection-mode")).toHaveCount(0);
 
     await openFlowNodeContextMenu(sourceNode);

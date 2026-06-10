@@ -2178,40 +2178,38 @@ function LibraryView({
       data-testid="commonplace-library-grid"
       style={{ maxHeight: "40rem" }}
     >
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(128px,160px))] justify-start gap-5 xl:grid-cols-[repeat(auto-fill,minmax(140px,172px))]">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(144px,168px))] justify-start gap-5 xl:grid-cols-[repeat(auto-fill,minmax(148px,176px))]">
         {notes.map((note) => (
           <button
             key={note.id}
             type="button"
             onClick={() => onOpen(note.id)}
-            className="group flex h-[172px] flex-col overflow-hidden rounded-lg border border-[var(--brand-border)] bg-white text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[var(--brand-teal)]/35 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+            className="group flex h-[168px] min-w-0 flex-col overflow-hidden rounded-lg border border-[#C9D8D1] bg-[#FFFDF8] text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[#0F766E]/45 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2 focus:ring-offset-[#FAF8F2]"
           >
-            <span className="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
-              <span className="line-clamp-2 text-sm font-semibold leading-5 text-[var(--brand-ink)]">
+            <span className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2.5 pt-3">
+              <span className="line-clamp-2 min-h-[2.5rem] break-words text-sm font-semibold leading-5 text-[var(--brand-ink)]">
                 {displayTitle(note)}
               </span>
-              <span className="mt-1 text-[11px] font-medium leading-4 text-[var(--brand-ink-soft)]">
+              <span className="mt-1 line-clamp-1 min-h-4 break-words text-[11px] font-medium leading-4 text-[var(--brand-ink-soft)]">
                 {note.sourceBook}
                 {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
               </span>
-              <span className="mt-2 line-clamp-2 overflow-hidden text-xs leading-5 text-[var(--brand-ink-soft)]">
+              <span className="mt-2 line-clamp-2 min-h-[2.5rem] overflow-hidden break-words text-xs leading-5 text-[var(--brand-ink-soft)]">
                 {note.insight}
               </span>
-              {note.tags.length > 0 && (
-                <span className="mt-auto flex flex-wrap gap-1 pt-2">
-                  {note.tags.slice(0, 2).map((tag) => (
-                    <span
-                      key={tag}
-                      className="max-w-full truncate rounded-full border border-[var(--brand-teal)]/20 bg-[var(--brand-teal-soft)] px-1.5 py-0.5 text-[10px] font-medium leading-4 text-[var(--brand-teal-ink)]"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </span>
-              )}
+              <span className="mt-auto flex min-h-[1.375rem] flex-wrap items-end gap-1 overflow-hidden pt-2">
+                {note.tags.slice(0, 2).map((tag) => (
+                  <span
+                    key={tag}
+                    className="max-w-[6.5rem] truncate rounded-full border border-[#0F766E]/20 bg-[#E4F3EC] px-1.5 py-0.5 text-[10px] font-medium leading-4 text-[#134E44]"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </span>
             </span>
-            <span className="flex items-center justify-end border-t border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1.5">
-              <span className="font-mono text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+            <span className="flex min-h-[2rem] items-center justify-end border-t border-[#C9D8D1] bg-[#FAF8F2] px-3 py-1.5">
+              <span className="max-w-full truncate font-mono text-[11px] font-semibold leading-4 text-[#0F766E]">
                 {note.shortcode}
               </span>
             </span>
@@ -2221,7 +2219,7 @@ function LibraryView({
         <button
           type="button"
           onClick={onCreate}
-          className="flex h-[172px] flex-col items-start justify-between rounded-lg border border-dashed border-[var(--brand-teal)]/45 bg-white p-3 text-left transition-colors hover:bg-[var(--brand-teal-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+          className="flex h-[168px] flex-col items-start justify-between rounded-lg border border-dashed border-[#0F766E]/45 bg-[#FFFDF8] p-3 text-left transition-colors hover:bg-[#E4F3EC] focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2 focus:ring-offset-[#FAF8F2]"
           aria-describedby="commonplace-empty-helper"
         >
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-teal)] text-white">
