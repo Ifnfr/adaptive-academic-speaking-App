@@ -976,7 +976,9 @@ export function CommonplaceMapCanvasFoundation({
             {map.title}
           </h2>
           <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
-            Canvas foundation
+            {isMainMap
+              ? "Clusters organize saved sub maps. Notes are individual ideas."
+              : "Drag notes, move ideas, and connect relationships."}
           </p>
           {isSubMap && noteContext && (
             <p className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
@@ -987,14 +989,22 @@ export function CommonplaceMapCanvasFoundation({
 
         <div className="flex flex-wrap items-center gap-3">
           {isMainMap && (
-            <button
-              type="button"
-              onClick={() => setIsClusterChooserOpen((current) => !current)}
-              className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
-              data-testid="commonplace-map-add-cluster-button"
-            >
-              + Add Sub Mind Map Cluster
-            </button>
+            <>
+              <span
+                className="rounded-full border border-[#C9D8D1] bg-white px-3 py-1 text-xs font-semibold text-[#36564C]"
+                data-testid="commonplace-map-note-drag-guidance"
+              >
+                Drag notes from the sidebar
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsClusterChooserOpen((current) => !current)}
+                className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
+                data-testid="commonplace-map-add-cluster-button"
+              >
+                + Add cluster
+              </button>
+            </>
           )}
           <span
             className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-xs font-semibold text-[var(--brand-ink-soft)]"
@@ -1066,10 +1076,10 @@ export function CommonplaceMapCanvasFoundation({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-[var(--brand-ink)]">
-                  Add Sub Mind Map
+                  Add cluster
                 </p>
                 <p className="mt-1 text-xs leading-5 text-[var(--brand-ink-soft)]">
-                  Choose a Sub Map to place as a cluster.
+                  Choose a saved Sub Mind Map to place as a cluster.
                 </p>
               </div>
               <button
@@ -1187,7 +1197,7 @@ export function CommonplaceMapCanvasFoundation({
             <p className="max-w-sm rounded-xl border border-[var(--brand-border)] bg-white/95 px-4 py-3 text-center text-sm font-medium leading-6 text-[var(--brand-ink-soft)] shadow-sm">
               {isSubMap
                 ? "Canvas is ready. Drag notes from the sidebar to add them here."
-                : "Add Sub Mind Maps as clusters or drag notes from the sidebar to build your Main Map."}
+                : "Add a saved Sub Mind Map as a cluster, or drag notes from the sidebar."}
             </p>
           </div>
         )}
@@ -1211,7 +1221,7 @@ export function CommonplaceMapCanvasFoundation({
                   : "commonplace-map-connect-idea"
               }
             >
-              {isMainMap ? "Connect cluster" : "Connect idea"}
+              {isMainMap ? "Connect clusters" : "Connect idea"}
             </button>
             <button
               type="button"

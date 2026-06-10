@@ -42,10 +42,12 @@ export function CommonplaceNoteNode({
 
   return (
     <article
-      className={`group relative w-[220px] overflow-visible rounded-lg border p-3 text-left shadow-sm transition duration-150 hover:border-[#0F766E] hover:shadow-md ${
-        selected ? "ring-2 ring-[#0F766E] ring-offset-2 ring-offset-[#EEF3F1]" : ""
+      className={`group relative w-[220px] cursor-grab overflow-visible rounded-lg border p-3 text-left shadow-sm transition duration-150 active:cursor-grabbing hover:border-[#0F766E] hover:shadow-md ${
+        selected ? "ring-2 ring-[#0F766E] ring-offset-2 ring-offset-[#EEF3F1] shadow-md" : ""
       } ${connectionClass}`}
       data-testid="commonplace-map-note-node"
+      data-node-kind="note"
+      data-selected={selected ? "true" : "false"}
       style={{
         backgroundColor: palette.background,
         borderColor: palette.border,
@@ -64,12 +66,22 @@ export function CommonplaceNoteNode({
         isConnectable={false}
         className="!-right-2 !h-4 !w-4 !border-2 !border-white !bg-[#0F766E] !opacity-95 !shadow-md transition-transform group-hover:!scale-110"
       />
-      <p className="text-[11px] font-semibold uppercase">{data.shortcode}</p>
+      <div className="flex items-start justify-between gap-2">
+        <span className="rounded-full border border-[#D6CFA8] bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase text-[#5E5317]">
+          Library Note
+        </span>
+        <span className="max-w-[5.5rem] truncate text-[11px] font-semibold uppercase">
+          {data.shortcode}
+        </span>
+      </div>
       <h3 className="mt-1 line-clamp-2 break-words text-sm font-semibold leading-5">
         {data.title}
       </h3>
       <p className="mt-1 line-clamp-1 break-words text-xs font-medium opacity-80">
         {data.sourceBook}
+      </p>
+      <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide opacity-65">
+        Visual idea
       </p>
       {data.tags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">

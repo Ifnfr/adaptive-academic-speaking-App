@@ -27,10 +27,12 @@ export function CommonplaceClusterNode({
 
   return (
     <article
-      className={`group relative w-[260px] overflow-visible rounded-lg border border-[#C9D8D1] bg-[#E4F3EC] p-4 text-left shadow-sm transition duration-150 hover:border-[#0F766E] hover:shadow-md ${
-        selected ? "ring-2 ring-[#0F766E] ring-offset-2 ring-offset-[#EEF3F1]" : ""
+      className={`group relative w-[260px] cursor-grab overflow-visible rounded-lg border border-[#C9D8D1] bg-[#E4F3EC] p-4 text-left shadow-sm transition duration-150 active:cursor-grabbing hover:border-[#0F766E] hover:shadow-md ${
+        selected ? "ring-2 ring-[#0F766E] ring-offset-2 ring-offset-[#EEF3F1] shadow-md" : ""
       } ${connectionClass}`}
       data-testid="commonplace-map-cluster-node"
+      data-node-kind="cluster"
+      data-selected={selected ? "true" : "false"}
     >
       <Handle
         type="target"
@@ -56,7 +58,7 @@ export function CommonplaceClusterNode({
         {data.title}
       </h3>
       <p className="mt-2 text-xs font-medium text-[var(--brand-ink-soft)]">
-        Theme workspace
+        Saved Sub Mind Map cluster
       </p>
       <button
         type="button"

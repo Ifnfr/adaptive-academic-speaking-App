@@ -1122,6 +1122,14 @@ async function clickFlowNode(node: Locator) {
   });
 }
 
+async function selectFlowNode(page: Page, node: Locator) {
+  const box = await node.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+
 async function clickConnectIdea(page: Page) {
   const connectIdea = page.getByTestId("commonplace-map-connect-idea");
   await expect(connectIdea).toBeVisible();
@@ -1319,14 +1327,24 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
     await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
-      "Add Sub Mind Maps as clusters or drag notes from the sidebar to build your Main Map.",
+      "Add a saved Sub Mind Map as a cluster, or drag notes from the sidebar.",
+    );
+    await expect(page.getByText("Clusters organize saved sub maps. Notes are individual ideas.")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-note-drag-guidance")).toHaveText(
+      "Drag notes from the sidebar",
     );
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Saved",
     );
     await expect(page.getByTestId("commonplace-map-add-cluster-button")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-add-cluster-button")).toHaveText(
+      "+ Add cluster",
+    );
     await page.getByTestId("commonplace-map-add-cluster-button").click();
     await expect(page.getByTestId("commonplace-map-cluster-chooser")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-cluster-chooser")).toContainText(
+      "Choose a saved Sub Mind Map to place as a cluster.",
+    );
     await expect(
       page.getByTestId("commonplace-map-cluster-option").filter({
         hasText: "Institutional Incentives",
@@ -1345,6 +1363,13 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
     await expect(page.getByTestId("commonplace-map-cluster-node").first()).toContainText(
       "Cluster",
+    );
+    await expect(page.getByTestId("commonplace-map-cluster-node").first()).toContainText(
+      "Saved Sub Mind Map cluster",
+    );
+    await expect(page.getByTestId("commonplace-map-cluster-node").first()).toHaveAttribute(
+      "data-node-kind",
+      "cluster",
     );
     if ((await page.getByTestId("commonplace-map-cluster-chooser").count()) === 0) {
       await page.getByTestId("commonplace-map-add-cluster-button").click();
@@ -1446,10 +1471,14 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     const mainSourceCluster = page.getByTestId("rf__node-main-cluster-created-1");
     const mainTargetCluster = page.getByTestId("rf__node-main-cluster-created-2");
+    await selectFlowNode(page, mainSourceCluster);
+    await expect(
+      mainSourceCluster.getByTestId("commonplace-map-cluster-node"),
+    ).toHaveAttribute("data-selected", "true");
     await openFlowNodeContextMenu(mainSourceCluster);
     await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-connect-cluster")).toHaveText(
-      "Connect cluster",
+      "Connect clusters",
     );
     await clickConnectCluster(page);
     await expect(page.getByTestId("commonplace-map-connection-mode")).toContainText(
@@ -1548,6 +1577,16 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
       "#wn1",
     );
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Library Note",
+    );
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Visual idea",
+    );
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toHaveAttribute(
+      "data-node-kind",
+      "note",
+    );
     await dragSidebarNoteToCanvas(page, "Institutions and Growth", 320, 300);
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
     const notePositionsBeforeMove = await page.evaluate(() => {
@@ -1632,6 +1671,12 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       );
     });
     expect(movedMainNotes).toHaveLength(1);
+    await selectFlowNode(page, firstMainNoteNode);
+    await expect(
+      firstMainNoteNode.getByTestId("commonplace-map-note-node"),
+    ).toHaveAttribute("data-selected", "true");
+    await openFlowNodeContextMenu(firstMainNoteNode);
+    await expect(page.getByTestId("commonplace-map-node-context-menu")).toHaveCount(0);
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
     await page
       .locator("article")
