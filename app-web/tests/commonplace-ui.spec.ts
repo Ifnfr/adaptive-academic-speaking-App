@@ -1165,6 +1165,7 @@ async function readSidebarNoteDragData(note: Locator) {
 }
 
 async function openFlowNodeContextMenu(node: Locator) {
+  await node.scrollIntoViewIfNeeded();
   const box = await node.boundingBox();
   expect(box).not.toBeNull();
   if (!box) return;
@@ -1180,6 +1181,7 @@ async function openFlowNodeContextMenu(node: Locator) {
 }
 
 async function clickFlowNode(node: Locator) {
+  await node.scrollIntoViewIfNeeded();
   const box = await node.boundingBox();
   expect(box).not.toBeNull();
   if (!box) return;
@@ -1195,6 +1197,7 @@ async function clickFlowNode(node: Locator) {
 }
 
 async function selectFlowNode(page: Page, node: Locator) {
+  await node.scrollIntoViewIfNeeded();
   const box = await node.boundingBox();
   expect(box).not.toBeNull();
   if (!box) return;
@@ -1388,14 +1391,17 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         const controlStyles = controls
           ? window.getComputedStyle(controls)
           : null;
+        const rect = panel ? panel.getBoundingClientRect() : null;
         return {
           backgroundColor: styles?.backgroundColor ?? "",
           controlsPointerEvents: controlStyles?.pointerEvents ?? "",
           controlsZIndex: controlStyles?.zIndex ?? "",
+          height: rect ? rect.height : 0,
         };
       });
     expect(mainCanvasStyle.backgroundColor).not.toBe("rgb(255, 255, 255)");
     expect(mainCanvasStyle.controlsPointerEvents).not.toBe("none");
+    expect(mainCanvasStyle.height).toBeGreaterThan(460);
     await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
     await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
@@ -1412,8 +1418,27 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Saved",
     );
     await expect(page.getByTestId("commonplace-map-save-button")).toBeDisabled();
+
+    // Verify controls are visible and enabled (clickable)
+    await expect(page.getByRole("button", { name: "zoom in" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "zoom out" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "fit view" })).toBeEnabled();
+
     const inventory = page.getByTestId("commonplace-map-inventory");
     await expect(inventory).toBeVisible();
+
+    // Verify inventory does not overlap/block the controls panel
+    const controlsBox = await page.locator(".react-flow__controls").boundingBox();
+    const inventoryBox = await inventory.boundingBox();
+    if (controlsBox && inventoryBox) {
+      const overlap = !(
+        controlsBox.x + controlsBox.width <= inventoryBox.x ||
+        inventoryBox.x + inventoryBox.width <= controlsBox.x ||
+        controlsBox.y + controlsBox.height <= inventoryBox.y ||
+        inventoryBox.y + inventoryBox.height <= controlsBox.y
+      );
+      expect(overlap).toBe(false);
+    }
     await expect(inventory).toContainText("Inventory");
     await expect(inventory).toContainText("Saved maps");
     await expect(inventory).toContainText("Open saved maps");

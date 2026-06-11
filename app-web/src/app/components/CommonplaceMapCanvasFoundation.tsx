@@ -1591,7 +1591,7 @@ export function CommonplaceMapCanvasFoundation({
       className="flex min-h-0 flex-col rounded-xl border border-[#C9D8D1] bg-[#FAF8F2]"
       data-testid="commonplace-map-canvas"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#C9D8D1] px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#C9D8D1] px-4 py-3 sm:px-5">
         <div>
           <button
             type="button"
@@ -1704,7 +1704,7 @@ export function CommonplaceMapCanvasFoundation({
       <div
         ref={canvasPanelRef}
         onMouseMove={handleCanvasMouseMove}
-        className={`relative h-[min(68dvh,720px)] min-h-[460px] overflow-hidden transition-shadow ${
+        className={`relative h-[min(78dvh,860px)] min-h-[420px] sm:min-h-[520px] lg:min-h-[560px] overflow-hidden transition-shadow ${
           isSubMap ? "bg-[#EEF3F1]" : "bg-[#EEF3F1]"
         } ${
           isCanvasDragActive
