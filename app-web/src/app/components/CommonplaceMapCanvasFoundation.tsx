@@ -861,7 +861,7 @@ export function CommonplaceMapCanvasFoundation({
     (nextMap: CommonplaceMindMapSummary) => {
       if (!onOpenInventoryMap || nextMap.id === map.id) return;
       if (
-        displayedSaveStatus === "Unsaved changes" &&
+        (hasUnsavedChanges || displayedSaveStatus === "Unsaved changes") &&
         typeof window !== "undefined" &&
         !window.confirm("You have unsaved map changes. Open another saved map?")
       ) {
@@ -870,7 +870,7 @@ export function CommonplaceMapCanvasFoundation({
 
       onOpenInventoryMap(nextMap);
     },
-    [displayedSaveStatus, map.id, onOpenInventoryMap],
+    [displayedSaveStatus, hasUnsavedChanges, map.id, onOpenInventoryMap],
   );
 
   const hasDraggedCommonplaceNote = (event: DragEvent) =>

@@ -160,6 +160,15 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       createdAt: "2026-06-06T05:00:00.000Z",
       updatedAt: "2026-06-06T05:00:00.000Z",
     },
+    {
+      id: "sub-map-2",
+      ownerId: testOwnerId,
+      title: "Cognitive Systems",
+      type: "sub",
+      parentMindMapId: null,
+      createdAt: "2026-06-06T07:00:00.000Z",
+      updatedAt: "2026-06-06T07:00:00.000Z",
+    },
   ];
   testWindow.__COMMONPLACE_TEST_MAP_NODES__ = seedNotes[0]
     ? [
@@ -173,6 +182,20 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           positionX: 120,
           positionY: 140,
         },
+        ...(seedNotes[1]
+          ? [
+              {
+                id: "sub-node-2",
+                ownerId: testOwnerId,
+                mapId: "sub-map-2",
+                nodeKind: "note" as const,
+                noteId: seedNotes[1].id,
+                subMindMapId: null,
+                positionX: 180,
+                positionY: 160,
+              },
+            ]
+          : []),
       ]
     : [];
   testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = [];
@@ -1376,6 +1399,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(inventory).toContainText("Institutions Overview");
     await expect(inventory).toContainText("Comparative Politics Map");
     await expect(inventory).toContainText("Institutional Incentives");
+    await expect(inventory).toContainText("Cognitive Systems");
     await expect(inventory).not.toContainText("Laci");
     await expect(inventory).not.toContainText("Drawer");
     await expect(inventory).not.toContainText("Map Shelf");
@@ -1414,10 +1438,29 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     ).toBeVisible();
     await expect(page.getByText("Sub Mind Map", { exact: true })).toBeVisible();
     await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "Institutions and Growth",
+    );
     await expect(
       page
         .getByTestId("commonplace-map-inventory-item")
         .filter({ hasText: "Institutional Incentives" }),
+    ).toHaveAttribute("data-active", "true");
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Cognitive Systems" })
+      .click();
+    await expect(page.locator("h2").filter({ hasText: "Cognitive Systems" })).toBeVisible();
+    await expect(page.getByText("Sub Mind Map", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "System One Attention",
+    );
+    await expect(
+      page
+        .getByTestId("commonplace-map-inventory-item")
+        .filter({ hasText: "Cognitive Systems" }),
     ).toHaveAttribute("data-active", "true");
     await page
       .getByTestId("commonplace-map-inventory-item")
@@ -1998,6 +2041,129 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
   });
 
+  test("Inventory stays map-scoped and confirms dirty map switching", async ({
+    page,
+  }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-inventory")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "+ Baru" }).click();
+    await expect(page.getByRole("heading", { name: "Create note" })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-inventory")).toHaveCount(0);
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Institutions and Growth" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-inventory")).toHaveCount(0);
+    await page.getByRole("button", { name: /Library/ }).click();
+
+    await page.getByTestId("commonplace-main-maps-btn").click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Institutions Overview" })
+      .getByRole("button", { name: "Open" })
+      .click();
+
+    const inventory = page.getByTestId("commonplace-map-inventory");
+    await expect(inventory).toBeVisible();
+    await expect(inventory).toContainText("Inventory");
+    await expect(inventory).toContainText("Saved maps");
+    await expect(inventory).not.toContainText("Laci");
+    await expect(inventory).not.toContainText("Drawer");
+    await expect(
+      inventory
+        .getByTestId("commonplace-map-inventory-item")
+        .filter({ hasText: "Institutions Overview" }),
+    ).toHaveAttribute("data-active", "true");
+
+    await inventory
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Comparative Politics Map" })
+      .click();
+    await expect(
+      page.locator("h2").filter({ hasText: "Comparative Politics Map" }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByTestId("commonplace-map-inventory-item")
+        .filter({ hasText: "Comparative Politics Map" }),
+    ).toHaveAttribute("data-active", "true");
+
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Institutional Incentives" })
+      .click();
+    await expect(
+      page.locator("h2").filter({ hasText: "Institutional Incentives" }),
+    ).toBeVisible();
+    await expect(page.getByText("Sub Mind Map", { exact: true })).toBeVisible();
+
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Cognitive Systems" })
+      .click();
+    await expect(page.locator("h2").filter({ hasText: "Cognitive Systems" })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
+      "System One Attention",
+    );
+    await expect(
+      page
+        .getByTestId("commonplace-map-inventory-item")
+        .filter({ hasText: "Cognitive Systems" }),
+    ).toHaveAttribute("data-active", "true");
+
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Institutions Overview" })
+      .click();
+    await expect(page.locator("h2").filter({ hasText: "Institutions Overview" })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
+    await page.getByRole("button", { name: "fit view" }).click();
+
+    await page.getByTestId("commonplace-map-add-cluster-button").click();
+    await page
+      .getByTestId("commonplace-map-cluster-option")
+      .filter({ hasText: "Institutional Incentives" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toContain("unsaved map changes");
+      await dialog.dismiss();
+    });
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Comparative Politics Map" })
+      .click();
+    await expect(page.locator("h2").filter({ hasText: "Institutions Overview" })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
+
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toContain("unsaved map changes");
+      await dialog.accept();
+    });
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Comparative Politics Map" })
+      .click();
+    await expect(
+      page.locator("h2").filter({ hasText: "Comparative Politics Map" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText("Saved");
+  });
+
   test("Library keeps a viewport-bounded frame while grid and sidebar scroll internally", async ({
     page,
   }) => {
@@ -2324,18 +2490,16 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     const subMapFlowNode = page.getByTestId("rf__node-sub-node-1");
     const nodeBox = await subMapFlowNode.boundingBox();
     expect(nodeBox).not.toBeNull();
-    if (nodeBox) {
-      await page.mouse.move(
-        nodeBox.x + nodeBox.width / 2,
-        nodeBox.y + nodeBox.height / 2,
-      );
-      await page.mouse.down();
-      await page.mouse.move(
-        nodeBox.x + nodeBox.width / 2 + 80,
-        nodeBox.y + nodeBox.height / 2 + 50,
-        { steps: 5 },
-      );
-      await page.mouse.up();
+    const subMapCanvasBox = await page.locator(".react-flow").first().boundingBox();
+    expect(subMapCanvasBox).not.toBeNull();
+    if (subMapCanvasBox) {
+      await subMapFlowNode.dragTo(page.locator(".react-flow").first(), {
+        sourcePosition: { x: 36, y: 36 },
+        targetPosition: {
+          x: Math.min(subMapCanvasBox.width - 80, 420),
+          y: Math.min(subMapCanvasBox.height - 80, 320),
+        },
+      });
     }
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Unsaved changes",
@@ -2401,8 +2565,8 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
 
-    const sourceNode = page.getByTestId("rf__node-sub-node-created-2");
-    const targetNode = page.getByTestId("rf__node-sub-node-created-3");
+    const sourceNode = page.getByTestId("rf__node-sub-node-created-3");
+    const targetNode = page.getByTestId("rf__node-sub-node-created-4");
     const duplicatePositionsBeforeMove = await page.evaluate(() => {
       const testWindow = window as typeof window & {
         __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
@@ -2410,7 +2574,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
       return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
         .filter((node) =>
-          ["sub-node-created-2", "sub-node-created-3"].includes(node.id),
+          ["sub-node-created-3", "sub-node-created-4"].includes(node.id),
         )
         .map((node) => ({
           id: node.id,
@@ -2419,10 +2583,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         }));
     });
     const sourceDuplicateBefore = duplicatePositionsBeforeMove.find(
-      (node) => node.id === "sub-node-created-2",
+      (node) => node.id === "sub-node-created-3",
     );
     const targetDuplicateBefore = duplicatePositionsBeforeMove.find(
-      (node) => node.id === "sub-node-created-3",
+      (node) => node.id === "sub-node-created-4",
     );
     expect(sourceDuplicateBefore).toBeTruthy();
     expect(targetDuplicateBefore).toBeTruthy();
@@ -2448,7 +2612,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
       return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? [])
         .filter((node) =>
-          ["sub-node-created-2", "sub-node-created-3"].includes(node.id),
+          ["sub-node-created-3", "sub-node-created-4"].includes(node.id),
         )
         .map((node) => ({
           id: node.id,
