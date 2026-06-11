@@ -818,7 +818,7 @@ export function CommonplaceMapCanvasFoundation({
     ) => {
       const isConnectableNode =
         (isSubMap && node.type === "noteNode") ||
-        (isMainMap && node.type === "clusterNode");
+        (isMainMap && (node.type === "clusterNode" || node.type === "noteNode"));
       const isMainMapVisualNode =
         isMainMap && (node.type === "noteNode" || node.type === "clusterNode");
       if (!isConnectableNode && !isMainMapVisualNode) return;
@@ -870,7 +870,7 @@ export function CommonplaceMapCanvasFoundation({
       if (!supportsEdges || !connectionSourceNodeId) return;
       const isConnectableNode =
         (isSubMap && node.type === "noteNode") ||
-        (isMainMap && node.type === "clusterNode");
+        (isMainMap && (node.type === "clusterNode" || node.type === "noteNode"));
       if (!isConnectableNode) return;
       event.stopPropagation();
       setDropError(null);
@@ -878,7 +878,7 @@ export function CommonplaceMapCanvasFoundation({
       if (node.id === connectionSourceNodeId) {
         setDropError(
           isMainMap
-            ? "Choose a different cluster to connect."
+            ? "Choose a different visual node to connect."
             : "Choose a different note node to connect.",
         );
         return;
@@ -1424,18 +1424,18 @@ export function CommonplaceMapCanvasFoundation({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
           >
-            {(isSubMap || nodeContextMenu.nodeType === "cluster") && (
+            {(isSubMap || isMainMap) && (
               <button
                 type="button"
                 onClick={handleStartConnection}
                 className="w-full rounded-md px-3 py-2 text-left font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
                 data-testid={
                   isMainMap
-                    ? "commonplace-map-connect-cluster"
+                    ? "commonplace-map-connect-visual-node"
                     : "commonplace-map-connect-idea"
                 }
               >
-                {isMainMap ? "Connect clusters" : "Connect idea"}
+                {isMainMap ? "Connect visual nodes" : "Connect idea"}
               </button>
             )}
             {isMainMap && (
@@ -1510,7 +1510,7 @@ export function CommonplaceMapCanvasFoundation({
             data-testid="commonplace-map-connection-mode"
           >
             {isMainMap
-              ? `Connecting cluster ${connectionSourceLabel}. Click a target cluster.`
+              ? `Connecting visual node ${connectionSourceLabel}. Click a target visual node.`
               : `Connecting from ${connectionSourceLabel}. Click a target note.`}
           </div>
         )}

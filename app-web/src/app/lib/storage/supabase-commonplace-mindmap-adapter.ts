@@ -942,7 +942,6 @@ async function verifyMainMapEdgeNodes(
     .select("id, main_mindmap_id")
     .eq("owner_id", ownerId)
     .eq("main_mindmap_id", mainMapId)
-    .eq("node_kind", "cluster")
     .in("id", [sourceNodeId, targetNodeId]);
 
   if (error) return { ok: false, error: "commonplace_save_failed" };

@@ -886,14 +886,14 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
           node.ownerId === ownerId &&
           node.mapId === input.mainMapId &&
           node.id === input.sourceNodeId &&
-          node.nodeKind === "cluster",
+          (node.nodeKind === "cluster" || node.nodeKind === "note"),
       );
       const targetNode = nodes.find(
         (node) =>
           node.ownerId === ownerId &&
           node.mapId === input.mainMapId &&
           node.id === input.targetNodeId &&
-          node.nodeKind === "cluster",
+          (node.nodeKind === "cluster" || node.nodeKind === "note"),
       );
       if (
         !map ||
@@ -906,9 +906,13 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       }
 
       const nextIndex =
-        (testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? []).filter((edge) =>
-          edge.id.startsWith("main-edge-"),
-        ).length + 1;
+        Math.max(
+          0,
+          ...(testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? [])
+            .map((edge) => /^main-edge-(\d+)$/.exec(edge.id)?.[1])
+            .filter((value): value is string => Boolean(value))
+            .map((value) => Number(value)),
+        ) + 1;
       const edge: TestMapEdge = {
         id: `main-edge-${nextIndex}`,
         ownerId,
@@ -1152,10 +1156,10 @@ async function clickConnectIdea(page: Page) {
   });
 }
 
-async function clickConnectCluster(page: Page) {
-  const connectCluster = page.getByTestId("commonplace-map-connect-cluster");
-  await expect(connectCluster).toBeVisible();
-  await connectCluster.dispatchEvent("click", {
+async function clickConnectVisualNode(page: Page) {
+  const connectVisualNode = page.getByTestId("commonplace-map-connect-visual-node");
+  await expect(connectVisualNode).toBeVisible();
+  await connectVisualNode.dispatchEvent("click", {
     bubbles: true,
     cancelable: true,
   });
@@ -1509,12 +1513,12 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     ).toHaveAttribute("data-selected", "true");
     await openFlowNodeContextMenu(mainSourceCluster);
     await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
-    await expect(page.getByTestId("commonplace-map-connect-cluster")).toHaveText(
-      "Connect clusters",
+    await expect(page.getByTestId("commonplace-map-connect-visual-node")).toHaveText(
+      "Connect visual nodes",
     );
-    await clickConnectCluster(page);
+    await clickConnectVisualNode(page);
     await expect(page.getByTestId("commonplace-map-connection-mode")).toContainText(
-      "Click a target cluster",
+      "Click a target visual node",
     );
     await page.mouse.move(520, 360);
     await expect(page.getByTestId("commonplace-map-connection-preview")).toBeVisible();
@@ -1533,7 +1537,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
 
     await openFlowNodeContextMenu(mainTargetCluster);
-    await clickConnectCluster(page);
+    await clickConnectVisualNode(page);
     await clickFlowNode(mainSourceCluster);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-type-select").selectOption("dashed");
@@ -1741,7 +1745,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     ).toHaveAttribute("data-selected", "true");
     await openFlowNodeContextMenu(firstMainNoteNode);
     await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
-    await expect(page.getByTestId("commonplace-map-connect-cluster")).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-connect-visual-node")).toHaveText(
+      "Connect visual nodes",
+    );
     await expect(page.getByTestId("commonplace-map-delete-visual-node")).toHaveText(
       "Delete visual note",
     );
@@ -1749,6 +1755,68 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .getByTestId("commonplace-map-node-context-menu")
       .getByRole("button", { name: "Cancel" })
       .click();
+    const secondMainNoteNode = page.getByTestId("rf__node-main-note-created-2");
+
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-cluster-created-1"));
+    await clickConnectVisualNode(page);
+    await clickFlowNode(firstMainNoteNode);
+    await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-label-input").fill("cluster note link");
+    await page
+      .getByTestId("commonplace-map-edge-create-popover")
+      .getByRole("button", { name: "Create" })
+      .click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(2);
+    await expect(page.getByText("cluster note link")).toBeVisible();
+
+    await openFlowNodeContextMenu(firstMainNoteNode);
+    await clickConnectVisualNode(page);
+    await clickFlowNode(page.getByTestId("rf__node-main-cluster-created-2"));
+    await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-type-select").selectOption("dashed");
+    await page.getByTestId("commonplace-map-edge-label-input").fill("note cluster hint");
+    await page
+      .getByTestId("commonplace-map-edge-create-popover")
+      .getByRole("button", { name: "Create" })
+      .click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+    await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(1);
+    await expect(page.getByText("note cluster hint")).toBeVisible();
+
+    await openFlowNodeContextMenu(firstMainNoteNode);
+    await clickConnectVisualNode(page);
+    await clickFlowNode(secondMainNoteNode);
+    await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-label-input").fill("note pair link");
+    await page
+      .getByTestId("commonplace-map-edge-create-popover")
+      .getByRole("button", { name: "Create" })
+      .click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(4);
+    await expect(page.getByText("note pair link")).toBeVisible();
+
+    await page.getByRole("button", { name: "note pair link" }).dispatchEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    const mixedEdgeEditPopover = page.getByTestId("commonplace-map-edge-edit-popover");
+    await expect(mixedEdgeEditPopover).toBeVisible();
+    await mixedEdgeEditPopover.getByLabel("Relationship type").selectOption("dashed");
+    await mixedEdgeEditPopover.getByLabel("Label").fill("revised note pair");
+    await mixedEdgeEditPopover.getByRole("button", { name: "Save" }).click();
+    await expect(mixedEdgeEditPopover).toHaveCount(0);
+    await expect(page.getByText("revised note pair")).toBeVisible();
+    await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(2);
+
+    await page.getByRole("button", { name: "cluster note link" }).dispatchEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    await expect(page.getByTestId("commonplace-map-edge-edit-popover")).toBeVisible();
+    await page.getByTestId("commonplace-map-edge-delete-button").click();
+    await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+    await expect(page.getByText("cluster note link")).toHaveCount(0);
+
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
     await page
       .locator("article")
@@ -1757,7 +1825,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
-    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(3);
+    await expect(page.getByText("note cluster hint")).toBeVisible();
+    await expect(page.getByText("revised note pair")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
       "Institutions and Growth",
     );
@@ -1795,6 +1865,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(visualNotesAfterDelete.visualNoteIds).not.toContain("main-note-created-1");
     expect(visualNotesAfterDelete.visualNoteIds).toContain("main-note-created-2");
     expect(visualNotesAfterDelete.libraryNoteExists).toBe(true);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    await expect(page.getByText("note cluster hint")).toHaveCount(0);
+    await expect(page.getByText("revised note pair")).toHaveCount(0);
 
     await openFlowNodeContextMenu(page.getByTestId("rf__node-main-cluster-created-1"));
     await page.getByTestId("commonplace-map-delete-visual-node").click();

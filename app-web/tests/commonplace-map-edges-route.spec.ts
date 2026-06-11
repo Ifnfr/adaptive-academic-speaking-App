@@ -35,8 +35,10 @@ const baseNodes = [
 ];
 
 const baseMainNodes = [
-  { id: "main-cluster-source", main_mindmap_id: "main-map-1" },
-  { id: "main-cluster-target", main_mindmap_id: "main-map-1" },
+  { id: "main-cluster-source", main_mindmap_id: "main-map-1", node_kind: "cluster" },
+  { id: "main-cluster-target", main_mindmap_id: "main-map-1", node_kind: "cluster" },
+  { id: "main-note-source", main_mindmap_id: "main-map-1", node_kind: "note" },
+  { id: "main-note-target", main_mindmap_id: "main-map-1", node_kind: "note" },
 ];
 
 const baseEdgeRow = {
@@ -133,12 +135,16 @@ function createMockSupabaseClient(options: MockOptions = {}) {
         calls.push(`in:${table}:${column}:${values.join(",")}`);
         if (table === "commonplace_main_map_nodes") {
           return Promise.resolve({
-            data: options.mainNodeRows ?? baseMainNodes,
+            data: (options.mainNodeRows ?? baseMainNodes).filter((row) =>
+              values.includes(String(row.id)),
+            ),
             error: options.mainNodeReadError ?? null,
           });
         }
         return Promise.resolve({
-          data: options.nodeRows ?? baseNodes,
+          data: (options.nodeRows ?? baseNodes).filter((row) =>
+            values.includes(String(row.id)),
+          ),
           error: options.nodeReadError ?? null,
         });
       },
@@ -611,10 +617,77 @@ test.describe("Commonplace map edges route", () => {
     });
     expect(mock.calls).toContain("eq:commonplace_main_map_nodes:owner_id:server-user-123");
     expect(mock.calls).toContain("eq:commonplace_main_map_nodes:main_mindmap_id:main-map-1");
-    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
     expect(JSON.stringify(mock.inserted)).not.toContain("attacker");
     expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
   });
+
+  const mainMixedEdgeCases: Array<{
+    name: string;
+    sourceNodeId: string;
+    targetNodeId: string;
+    edgeType: "solid" | "dashed";
+    label: string;
+  }> = [
+    {
+      name: "cluster to note",
+      sourceNodeId: "main-cluster-source",
+      targetNodeId: "main-note-target",
+      edgeType: "solid",
+      label: "cluster explains note",
+    },
+    {
+      name: "note to cluster",
+      sourceNodeId: "main-note-source",
+      targetNodeId: "main-cluster-target",
+      edgeType: "dashed",
+      label: "note suggests cluster",
+    },
+    {
+      name: "note to note",
+      sourceNodeId: "main-note-source",
+      targetNodeId: "main-note-target",
+      edgeType: "solid",
+      label: "note contrast",
+    },
+  ];
+
+  for (const { name, sourceNodeId, targetNodeId, edgeType, label } of mainMixedEdgeCases) {
+    test(`POST creates a Main Map mixed visual-node edge: ${name}`, async () => {
+      testHooks.resolveCurrentUserId = async () => "server-user-123";
+      const mock = createMockSupabaseClient();
+      testHooks.getSupabaseClient = () => mock.client;
+
+      const response = await POST(
+        buildRequest("POST", {
+          mapId: "main-map-1",
+          type: "main",
+          sourceNodeId,
+          targetNodeId,
+          edgeType,
+          label,
+        }),
+      );
+      const data = (await response.json()) as {
+        edge: { source: string; target: string; edgeType: string; label: string | null };
+      };
+
+      expect(response.status).toBe(201);
+      expect(data.edge).toMatchObject({
+        source: sourceNodeId,
+        target: targetNodeId,
+        edgeType,
+        label,
+      });
+      expect(mock.inserted.commonplace_main_map_edges[0]).toMatchObject({
+        source_node_id: sourceNodeId,
+        target_node_id: targetNodeId,
+        edge_type: edgeType,
+        label,
+      });
+      expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    });
+  }
 
   test("POST creates a Main Map dashed cluster edge with label", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";

@@ -73,6 +73,7 @@ function createMockSupabaseClient(options: MockOptions = {}) {
   const updated: Record<string, Record<string, unknown>[]> = {};
   const deleted: Record<string, boolean> = {};
   let noteIdsFilter: string[] = [];
+  let mainNodeIdsFilter: string[] = [];
   let insertedNodesPayload: Record<string, unknown>[] = [];
   let insertedPayload: Record<string, unknown> | null = null;
 
@@ -122,6 +123,9 @@ function createMockSupabaseClient(options: MockOptions = {}) {
         calls.push(`in:${table}:${column}:${values.join(",")}`);
         if (table === "commonplace_notes" && column === "id") {
           noteIdsFilter = values;
+        }
+        if (table === "commonplace_main_map_nodes" && column === "id") {
+          mainNodeIdsFilter = values;
         }
         return query;
       },
@@ -328,7 +332,12 @@ function createMockSupabaseClient(options: MockOptions = {}) {
             error = options.mainNodeUpdateError ?? null;
           } else {
             error = options.mainNodeReadError ?? null;
-            data = options.mainNodesRows ?? [];
+            data =
+              mainNodeIdsFilter.length > 0
+                ? (options.mainNodesRows ?? []).filter((row) =>
+                    mainNodeIdsFilter.includes(String(row.id)),
+                  )
+                : options.mainNodesRows ?? [];
           }
         } else if (table === "commonplace_main_map_edges") {
           if (operation === "insert") {
@@ -1206,8 +1215,8 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
         updated_at: "2026-06-06T00:00:00Z",
       },
       mainNodesRows: [
-        { id: "main-node-source", main_mindmap_id: "main-map-db-123" },
-        { id: "main-node-target", main_mindmap_id: "main-map-db-123" },
+        { id: "main-node-source", main_mindmap_id: "main-map-db-123", node_kind: "cluster" },
+        { id: "main-node-target", main_mindmap_id: "main-map-db-123", node_kind: "cluster" },
       ],
     });
 
@@ -1241,10 +1250,90 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
       edge_type: "solid",
       label: "direct theme",
     });
-    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
     expect(mock.calls).not.toContain("insert:commonplace_main_map_nodes");
     expect(mock.calls).not.toContain("delete:commonplace_main_map_nodes");
   });
+
+  const mainMixedEdgeCases: Array<{
+    name: string;
+    sourceNodeId: string;
+    targetNodeId: string;
+    edgeType: "solid" | "dashed";
+    label: string;
+  }> = [
+    {
+      name: "cluster to note",
+      sourceNodeId: "main-cluster-source",
+      targetNodeId: "main-note-target",
+      edgeType: "solid" as const,
+      label: "cluster detail",
+    },
+    {
+      name: "note to cluster",
+      sourceNodeId: "main-note-source",
+      targetNodeId: "main-cluster-target",
+      edgeType: "dashed" as const,
+      label: "note evidence",
+    },
+    {
+      name: "note to note",
+      sourceNodeId: "main-note-source",
+      targetNodeId: "main-note-target",
+      edgeType: "solid" as const,
+      label: "note pair",
+    },
+  ];
+
+  for (const { name, sourceNodeId, targetNodeId, edgeType, label } of mainMixedEdgeCases) {
+    test(`createMainMapEdge creates mixed visual-node edge: ${name}`, async () => {
+      const mock = createMockSupabaseClient({
+        mindMapRow: {
+          id: "main-map-db-123",
+          owner_id: "user_123",
+          title: "Main Mind Map",
+          type: "main",
+          parent_mindmap_id: null,
+          created_at: "2026-06-06T00:00:00Z",
+          updated_at: "2026-06-06T00:00:00Z",
+        },
+        mainNodesRows: [
+          { id: "main-cluster-source", main_mindmap_id: "main-map-db-123", node_kind: "cluster" },
+          { id: "main-cluster-target", main_mindmap_id: "main-map-db-123", node_kind: "cluster" },
+          { id: "main-note-source", main_mindmap_id: "main-map-db-123", node_kind: "note" },
+          { id: "main-note-target", main_mindmap_id: "main-map-db-123", node_kind: "note" },
+        ],
+      });
+
+      const result = await createMainMapEdge(
+        "user_123",
+        {
+          mainMapId: "main-map-db-123",
+          sourceNodeId,
+          targetNodeId,
+          edgeType,
+          label,
+        },
+        mock.client,
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.edge).toMatchObject({
+        sourceNodeId,
+        targetNodeId,
+        edgeType,
+        label,
+      });
+      expect(mock.inserted.commonplace_main_map_edges[0]).toMatchObject({
+        source_node_id: sourceNodeId,
+        target_node_id: targetNodeId,
+        edge_type: edgeType,
+        label,
+      });
+      expect(mock.calls).not.toContain("eq:commonplace_main_map_nodes:node_kind:cluster");
+    });
+  }
 
   test("createMainMapEdge rejects clusters from different Main Maps", async () => {
     const mock = createMockSupabaseClient({
