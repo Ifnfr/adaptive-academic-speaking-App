@@ -1512,6 +1512,21 @@ export function CommonplaceView({
     [selectedMap, subMaps],
   );
 
+  const openMapFromInventory = useCallback(
+    (map: CommonplaceMindMapSummary) => {
+      setSelectedMap(map);
+      setClusterReturnMap(null);
+      setMapNoteContext(null);
+      setMapDetailReturnMode(
+        map.type === "main" ? "main_maps_registry" : "sub_maps_chooser",
+      );
+      setDeleteMapId(null);
+      setRenameMapId(null);
+      setMode("map_detail_placeholder");
+    },
+    [],
+  );
+
   const loadMapCanvasEdges = useCallback(
     async (map: CommonplaceMindMapSummary): Promise<CommonplaceSubMapEdgeListResult> => {
       if (testStorage && effectiveOwnerId) {
@@ -1968,6 +1983,9 @@ export function CommonplaceView({
                       ? "Back to Main Map"
                       : undefined
                   }
+                  inventoryMainMaps={mainMaps}
+                  inventorySubMaps={subMaps}
+                  onOpenInventoryMap={openMapFromInventory}
                   subMaps={subMaps}
                   isSubMapLoading={isMapLoading}
                   loadNodes={() => loadMapCanvasNodes(selectedMap)}

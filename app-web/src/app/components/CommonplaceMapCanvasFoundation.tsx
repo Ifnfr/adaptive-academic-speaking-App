@@ -115,6 +115,9 @@ type CommonplaceMapCanvasFoundationProps = {
   noteContext: MapNoteContext | null;
   onBack: () => void;
   backLabel?: string;
+  inventoryMainMaps?: CommonplaceMindMapSummary[];
+  inventorySubMaps?: CommonplaceMindMapSummary[];
+  onOpenInventoryMap?: (map: CommonplaceMindMapSummary) => void;
   subMaps?: CommonplaceMindMapSummary[];
   isSubMapLoading?: boolean;
   loadNodes: () => Promise<CommonplaceMapNodeListResult>;
@@ -396,11 +399,148 @@ function panelPosition(
   };
 }
 
+function formatInventoryDate(value: string): string {
+  try {
+    return new Intl.DateTimeFormat("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function MapInventory({
+  activeMapId,
+  mainMaps,
+  subMaps,
+  onOpen,
+}: {
+  activeMapId: string;
+  mainMaps: CommonplaceMindMapSummary[];
+  subMaps: CommonplaceMindMapSummary[];
+  onOpen: (map: CommonplaceMindMapSummary) => void;
+}) {
+  return (
+    <details
+      open
+      className="mx-4 mt-4 rounded-xl border border-[#C9D8D1] bg-white/80 p-3 text-sm shadow-sm sm:mx-5"
+      data-testid="commonplace-map-inventory"
+    >
+      <summary className="cursor-pointer list-none rounded-lg px-1 py-1 focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]">
+        <span className="flex items-center justify-between gap-3">
+          <span>
+            <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
+              Inventory
+            </span>
+            <span className="block text-xs font-medium text-[var(--brand-ink-soft)]">
+              Saved maps
+            </span>
+          </span>
+          <span className="text-xs font-semibold text-[var(--brand-ink-soft)]">
+            Open saved maps
+          </span>
+        </span>
+      </summary>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <MapInventoryGroup
+          title="Main Maps"
+          emptyText="No Main Maps yet."
+          activeMapId={activeMapId}
+          maps={mainMaps}
+          onOpen={onOpen}
+        />
+        <MapInventoryGroup
+          title="Sub Mind Maps"
+          emptyText="No Sub Mind Maps yet."
+          activeMapId={activeMapId}
+          maps={subMaps}
+          onOpen={onOpen}
+        />
+      </div>
+    </details>
+  );
+}
+
+function MapInventoryGroup({
+  title,
+  emptyText,
+  activeMapId,
+  maps,
+  onOpen,
+}: {
+  title: string;
+  emptyText: string;
+  activeMapId: string;
+  maps: CommonplaceMindMapSummary[];
+  onOpen: (map: CommonplaceMindMapSummary) => void;
+}) {
+  return (
+    <section
+      className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-2"
+      data-testid="commonplace-map-inventory-group"
+      aria-label={title}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2 px-1">
+        <h3 className="text-xs font-semibold text-[var(--brand-ink)]">{title}</h3>
+        <span className="text-[11px] font-medium text-[var(--brand-ink-soft)]">
+          {maps.length}
+        </span>
+      </div>
+      {maps.length === 0 ? (
+        <p className="rounded-md border border-dashed border-[var(--brand-border-strong)] bg-white px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="flex max-h-40 flex-col gap-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+          {maps.map((map) => {
+            const isActive = map.id === activeMapId;
+            return (
+              <button
+                key={map.id}
+                type="button"
+                onClick={() => onOpen(map)}
+                aria-current={isActive ? "page" : undefined}
+                className={`rounded-md border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
+                  isActive
+                    ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]"
+                    : "border-transparent bg-white text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]"
+                }`}
+                data-active={isActive ? "true" : "false"}
+                data-testid="commonplace-map-inventory-item"
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs font-semibold">{map.title}</span>
+                  {isActive && (
+                    <span className="shrink-0 rounded-full bg-[var(--brand-teal)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Active
+                    </span>
+                  )}
+                </span>
+                {map.updatedAt && (
+                  <span className="mt-0.5 block text-[11px] font-medium text-[var(--brand-ink-soft)]">
+                    Updated {formatInventoryDate(map.updatedAt)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function CommonplaceMapCanvasFoundation({
   map,
   noteContext,
   onBack,
   backLabel,
+  inventoryMainMaps = [],
+  inventorySubMaps = [],
+  onOpenInventoryMap,
   subMaps = [],
   isSubMapLoading = false,
   loadNodes,
@@ -450,6 +590,7 @@ export function CommonplaceMapCanvasFoundation({
   const isSubMap = map.type === "sub";
   const isMainMap = map.type === "main";
   const supportsEdges = isSubMap || isMainMap;
+  const hasInventory = Boolean(onOpenInventoryMap);
   const isSavingMapChange = saveStatus === "Saving...";
   const displayedSaveStatus: SaveStatus =
     saveStatus === "Saving..." || saveStatus === "Save failed"
@@ -715,6 +856,22 @@ export function CommonplaceMapCanvasFoundation({
     saveNodePositions,
     updates,
   ]);
+
+  const handleOpenInventoryMap = useCallback(
+    (nextMap: CommonplaceMindMapSummary) => {
+      if (!onOpenInventoryMap || nextMap.id === map.id) return;
+      if (
+        displayedSaveStatus === "Unsaved changes" &&
+        typeof window !== "undefined" &&
+        !window.confirm("You have unsaved map changes. Open another saved map?")
+      ) {
+        return;
+      }
+
+      onOpenInventoryMap(nextMap);
+    },
+    [displayedSaveStatus, map.id, onOpenInventoryMap],
+  );
 
   const hasDraggedCommonplaceNote = (event: DragEvent) =>
     Array.from(event.dataTransfer.types).some(
@@ -1339,6 +1496,15 @@ export function CommonplaceMapCanvasFoundation({
         >
           {dropError}
         </p>
+      )}
+
+      {hasInventory && (
+        <MapInventory
+          activeMapId={map.id}
+          mainMaps={inventoryMainMaps}
+          subMaps={inventorySubMaps}
+          onOpen={handleOpenInventoryMap}
+        />
       )}
 
       <div

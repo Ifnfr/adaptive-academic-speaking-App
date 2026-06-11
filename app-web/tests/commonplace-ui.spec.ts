@@ -143,6 +143,15 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       updatedAt: "2026-06-06T05:00:00.000Z",
     },
     {
+      id: "main-map-2",
+      ownerId: testOwnerId,
+      title: "Comparative Politics Map",
+      type: "main",
+      parentMindMapId: null,
+      createdAt: "2026-06-06T06:00:00.000Z",
+      updatedAt: "2026-06-06T06:00:00.000Z",
+    },
+    {
       id: "sub-map-1",
       ownerId: testOwnerId,
       title: "Institutional Incentives",
@@ -1357,6 +1366,65 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Saved",
     );
     await expect(page.getByTestId("commonplace-map-save-button")).toBeDisabled();
+    const inventory = page.getByTestId("commonplace-map-inventory");
+    await expect(inventory).toBeVisible();
+    await expect(inventory).toContainText("Inventory");
+    await expect(inventory).toContainText("Saved maps");
+    await expect(inventory).toContainText("Open saved maps");
+    await expect(inventory).toContainText("Main Maps");
+    await expect(inventory).toContainText("Sub Mind Maps");
+    await expect(inventory).toContainText("Institutions Overview");
+    await expect(inventory).toContainText("Comparative Politics Map");
+    await expect(inventory).toContainText("Institutional Incentives");
+    await expect(inventory).not.toContainText("Laci");
+    await expect(inventory).not.toContainText("Drawer");
+    await expect(inventory).not.toContainText("Map Shelf");
+    await expect(
+      inventory.getByTestId("commonplace-map-inventory-item").filter({
+        hasText: "Institutions Map",
+      }),
+    ).toHaveAttribute("data-active", "true");
+    await expect(
+      inventory.getByTestId("commonplace-map-inventory-item").filter({
+        hasText: "Comparative Politics Map",
+      }),
+    ).toHaveAttribute("data-active", "false");
+    await inventory
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Comparative Politics Map" })
+      .click();
+    await expect(
+      page.locator("h2").filter({ hasText: "Comparative Politics Map" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-map-empty-state")).toContainText(
+      "Add a saved Sub Mind Map as a cluster, or drag notes from the sidebar.",
+    );
+    await expect(
+      page
+        .getByTestId("commonplace-map-inventory-item")
+        .filter({ hasText: "Comparative Politics Map" }),
+    ).toHaveAttribute("data-active", "true");
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Institutional Incentives" })
+      .click();
+    await expect(
+      page.locator("h2").filter({ hasText: "Institutional Incentives" }),
+    ).toBeVisible();
+    await expect(page.getByText("Sub Mind Map", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-bubble-background")).toHaveCount(1);
+    await expect(
+      page
+        .getByTestId("commonplace-map-inventory-item")
+        .filter({ hasText: "Institutional Incentives" }),
+    ).toHaveAttribute("data-active", "true");
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Institutions Map" })
+      .click();
+    await expect(page.locator("h2").filter({ hasText: "Institutions Map" })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
     await expect(page.getByTestId("commonplace-map-add-cluster-button")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-add-cluster-button")).toHaveText(
       "+ Add cluster",
@@ -1399,6 +1467,18 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Save",
     );
     await expect(page.getByTestId("commonplace-map-save-button")).toBeEnabled();
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toContain("unsaved map changes");
+      await dialog.dismiss();
+    });
+    await page
+      .getByTestId("commonplace-map-inventory-item")
+      .filter({ hasText: "Comparative Politics Map" })
+      .click();
+    await expect(page.locator("h2").filter({ hasText: "Institutions Map" })).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
+      "Unsaved changes",
+    );
     if ((await page.getByTestId("commonplace-map-cluster-chooser").count()) === 0) {
       await page.getByTestId("commonplace-map-add-cluster-button").click();
     }
@@ -1409,7 +1489,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
 
-    const firstClusterNode = page.getByTestId("rf__node-main-cluster-created-1");
+    const firstClusterNode = page.getByTestId("rf__node-main-cluster-created-2");
     const clusterPositionsBeforeMove = await page.evaluate(() => {
       const testWindow = window as typeof window & {
         __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
@@ -1425,18 +1505,16 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     });
     const firstClusterBox = await firstClusterNode.boundingBox();
     expect(firstClusterBox).not.toBeNull();
-    if (firstClusterBox) {
-      await page.mouse.move(
-        firstClusterBox.x + firstClusterBox.width / 2,
-        firstClusterBox.y + firstClusterBox.height / 2,
-      );
-      await page.mouse.down();
-      await page.mouse.move(
-        firstClusterBox.x + firstClusterBox.width / 2 + 90,
-        firstClusterBox.y + firstClusterBox.height / 2 + 45,
-        { steps: 5 },
-      );
-      await page.mouse.up();
+    const canvasBoxForClusterDrag = await page.locator(".react-flow").first().boundingBox();
+    expect(canvasBoxForClusterDrag).not.toBeNull();
+    if (canvasBoxForClusterDrag) {
+      await firstClusterNode.dragTo(page.locator(".react-flow").first(), {
+        sourcePosition: { x: 42, y: 42 },
+        targetPosition: {
+          x: Math.min(canvasBoxForClusterDrag.width - 80, 420),
+          y: Math.min(canvasBoxForClusterDrag.height - 80, 320),
+        },
+      });
     }
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Unsaved changes",
@@ -1501,12 +1579,12 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       });
     await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
     await expect(page.locator("h2").filter({ hasText: "Institutional Incentives" })).toBeVisible();
-    await expect(page.getByText("Sub Mind Map")).toBeVisible();
+    await expect(page.getByText("Sub Mind Map", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Back to Main Map" }).click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(2);
 
-    const mainSourceCluster = page.getByTestId("rf__node-main-cluster-created-1");
-    const mainTargetCluster = page.getByTestId("rf__node-main-cluster-created-2");
+    const mainSourceCluster = page.getByTestId("rf__node-main-cluster-created-2");
+    const mainTargetCluster = page.getByTestId("rf__node-main-cluster-created-1");
     await selectFlowNode(page, mainSourceCluster);
     await expect(
       mainSourceCluster.getByTestId("commonplace-map-cluster-node"),
@@ -1652,20 +1730,19 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         }));
     });
     const firstMainNoteNode = page.getByTestId("rf__node-main-note-created-1");
-    const firstMainNoteBox = await firstMainNoteNode.boundingBox();
+    const movedMainNoteNode = page.getByTestId("rf__node-main-note-created-2");
+    const firstMainNoteBox = await movedMainNoteNode.boundingBox();
     expect(firstMainNoteBox).not.toBeNull();
-    if (firstMainNoteBox) {
-      await page.mouse.move(
-        firstMainNoteBox.x + firstMainNoteBox.width / 2,
-        firstMainNoteBox.y + firstMainNoteBox.height / 2,
-      );
-      await page.mouse.down();
-      await page.mouse.move(
-        firstMainNoteBox.x + firstMainNoteBox.width / 2 + 70,
-        firstMainNoteBox.y + firstMainNoteBox.height / 2 + 35,
-        { steps: 5 },
-      );
-      await page.mouse.up();
+    const canvasBoxForNoteDrag = await page.locator(".react-flow").first().boundingBox();
+    expect(canvasBoxForNoteDrag).not.toBeNull();
+    if (canvasBoxForNoteDrag) {
+      await movedMainNoteNode.dragTo(page.locator(".react-flow").first(), {
+        sourcePosition: { x: 36, y: 36 },
+        targetPosition: {
+          x: Math.min(canvasBoxForNoteDrag.width - 80, 520),
+          y: Math.min(canvasBoxForNoteDrag.height - 80, 380),
+        },
+      });
     }
     await expect(page.getByTestId("commonplace-map-save-status")).toHaveText(
       "Unsaved changes",
@@ -1739,11 +1816,11 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       );
     });
     expect(movedMainNotes).toHaveLength(1);
-    await selectFlowNode(page, firstMainNoteNode);
+    await selectFlowNode(page, movedMainNoteNode);
     await expect(
-      firstMainNoteNode.getByTestId("commonplace-map-note-node"),
+      movedMainNoteNode.getByTestId("commonplace-map-note-node"),
     ).toHaveAttribute("data-selected", "true");
-    await openFlowNodeContextMenu(firstMainNoteNode);
+    await openFlowNodeContextMenu(movedMainNoteNode);
     await expect(page.getByTestId("commonplace-map-node-context-menu")).toBeVisible();
     await expect(page.getByTestId("commonplace-map-connect-visual-node")).toHaveText(
       "Connect visual nodes",
@@ -1755,11 +1832,11 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .getByTestId("commonplace-map-node-context-menu")
       .getByRole("button", { name: "Cancel" })
       .click();
-    const secondMainNoteNode = page.getByTestId("rf__node-main-note-created-2");
+    const secondMainNoteNode = firstMainNoteNode;
 
     await openFlowNodeContextMenu(page.getByTestId("rf__node-main-cluster-created-1"));
     await clickConnectVisualNode(page);
-    await clickFlowNode(firstMainNoteNode);
+    await clickFlowNode(movedMainNoteNode);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-label-input").fill("cluster note link");
     await page
@@ -1769,7 +1846,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".react-flow__edge")).toHaveCount(2);
     await expect(page.getByText("cluster note link")).toBeVisible();
 
-    await openFlowNodeContextMenu(firstMainNoteNode);
+    await openFlowNodeContextMenu(movedMainNoteNode);
     await clickConnectVisualNode(page);
     await clickFlowNode(page.getByTestId("rf__node-main-cluster-created-2"));
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
@@ -1783,7 +1860,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.locator(".commonplace-map-edge--dashed")).toHaveCount(1);
     await expect(page.getByText("note cluster hint")).toBeVisible();
 
-    await openFlowNodeContextMenu(firstMainNoteNode);
+    await openFlowNodeContextMenu(movedMainNoteNode);
     await clickConnectVisualNode(page);
     await clickFlowNode(secondMainNoteNode);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
@@ -1831,7 +1908,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("commonplace-map-note-node").first()).toContainText(
       "Institutions and Growth",
     );
-    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-note-created-1"));
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-note-created-2"));
     await page.getByTestId("commonplace-map-delete-visual-node").click();
     await expect(page.getByTestId("commonplace-map-node-delete-confirm")).toContainText(
       "Delete visual note?",
@@ -1862,8 +1939,8 @@ test.describe("Commonplace Phase 1B form and detail", () => {
         ),
       };
     });
-    expect(visualNotesAfterDelete.visualNoteIds).not.toContain("main-note-created-1");
-    expect(visualNotesAfterDelete.visualNoteIds).toContain("main-note-created-2");
+    expect(visualNotesAfterDelete.visualNoteIds).toContain("main-note-created-1");
+    expect(visualNotesAfterDelete.visualNoteIds).not.toContain("main-note-created-2");
     expect(visualNotesAfterDelete.libraryNoteExists).toBe(true);
     await expect(page.locator(".react-flow__edge")).toHaveCount(1);
     await expect(page.getByText("note cluster hint")).toHaveCount(0);
@@ -1896,7 +1973,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await page.getByTestId("commonplace-map-delete-visual-node").click();
     await page.getByTestId("commonplace-map-node-delete-confirm-button").click();
     await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(0);
-    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-note-created-2"));
+    await openFlowNodeContextMenu(page.getByTestId("rf__node-main-note-created-1"));
     await page.getByTestId("commonplace-map-delete-visual-node").click();
     await page.getByTestId("commonplace-map-node-delete-confirm-button").click();
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(0);
@@ -1905,7 +1982,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
-    await expect(page.getByText(/saved map/i)).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-inventory")).toContainText("Saved maps");
 
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
     await page
