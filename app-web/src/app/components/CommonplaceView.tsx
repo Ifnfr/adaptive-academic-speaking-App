@@ -176,6 +176,11 @@ export type CommonplaceStorage = {
     mainMapId: string,
     nodeId: string,
   ): Promise<CommonplaceMindMapDeleteResult>;
+  deleteSubMapNode?(
+    ownerId: string,
+    mindMapId: string,
+    nodeId: string,
+  ): Promise<CommonplaceMindMapDeleteResult>;
   listCommonplaceMapNodes?(
     ownerId: string,
     mindMapId: string,
@@ -887,8 +892,9 @@ async function createMainMapNoteNodeViaServer(
   }
 }
 
-async function deleteMainMapNodeViaServer(
-  mainMapId: string,
+async function deleteMapNodeViaServer(
+  mapId: string,
+  type: CommonplaceMindMapType,
   nodeId: string,
 ): Promise<CommonplaceMindMapDeleteResult> {
   try {
@@ -896,7 +902,7 @@ async function deleteMainMapNodeViaServer(
       method: "DELETE",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mapId: mainMapId, type: "main", nodeId }),
+      body: JSON.stringify({ mapId, type, nodeId }),
     });
     const data = (await response.json().catch(() => null)) as
       | { ok?: boolean; error?: string }
@@ -1473,14 +1479,16 @@ export function CommonplaceView({
       map: CommonplaceMindMapSummary,
       nodeId: string,
     ): Promise<CommonplaceMindMapDeleteResult> => {
-      if (map.type !== "main") {
-        return { ok: false, error: "commonplace_validation_failed" };
-      }
-      if (testStorage && storage?.deleteMainMapNode && effectiveOwnerId) {
-        return storage.deleteMainMapNode(effectiveOwnerId, map.id, nodeId);
+      if (testStorage && effectiveOwnerId) {
+        if (map.type === "main" && storage?.deleteMainMapNode) {
+          return storage.deleteMainMapNode(effectiveOwnerId, map.id, nodeId);
+        }
+        if (map.type === "sub" && storage?.deleteSubMapNode) {
+          return storage.deleteSubMapNode(effectiveOwnerId, map.id, nodeId);
+        }
       }
 
-      return deleteMainMapNodeViaServer(map.id, nodeId);
+      return deleteMapNodeViaServer(map.id, map.type, nodeId);
     },
     [effectiveOwnerId, storage, testStorage],
   );
@@ -2028,11 +2036,7 @@ export function CommonplaceView({
                   createEdge={(input) => createMapCanvasEdge(selectedMap, input)}
                   updateEdge={(input) => updateMapCanvasEdge(selectedMap, input)}
                   deleteEdge={(edgeId) => deleteMapCanvasEdge(selectedMap, edgeId)}
-                  deleteNode={
-                    selectedMap.type === "main"
-                      ? (nodeId) => deleteMapCanvasNode(selectedMap, nodeId)
-                      : undefined
-                  }
+                  deleteNode={(nodeId) => deleteMapCanvasNode(selectedMap, nodeId)}
                 />
               )}
             </>

@@ -7,6 +7,7 @@ import {
   createMainMapNoteNode,
   createSubMapNoteNode,
   deleteMainMapNode,
+  deleteSubMapNode,
   listCommonplaceMapNodes,
   type CommonplaceMapNodePositionUpdate,
   type CommonplaceMindMapType,
@@ -334,19 +335,15 @@ export async function DELETE(request: Request) {
     );
   }
 
-  if (type !== "main") {
-    return NextResponse.json(
-      { error: "invalid_map_node_fields" },
-      { status: 400 },
-    );
-  }
-
   const supabaseClient = getSupabaseClient();
   if (!supabaseClient) {
     return NextResponse.json({ error: "map_node_save_failed" }, { status: 500 });
   }
 
-  const result = await deleteMainMapNode(ownerId, mapId, nodeId, supabaseClient);
+  const result =
+    type === "main"
+      ? await deleteMainMapNode(ownerId, mapId, nodeId, supabaseClient)
+      : await deleteSubMapNode(ownerId, mapId, nodeId, supabaseClient);
   if (!result.ok) {
     return responseForStorageError(result.error);
   }

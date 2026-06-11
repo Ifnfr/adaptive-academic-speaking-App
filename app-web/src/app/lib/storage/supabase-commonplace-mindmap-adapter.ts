@@ -2530,3 +2530,52 @@ export async function deleteMainMapNode(
     return { ok: false, error: "commonplace_save_failed" };
   }
 }
+
+export async function deleteSubMapNode(
+  ownerId: string,
+  mindMapId: string,
+  nodeId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceMindMapDeleteResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(mindMapId);
+  const cleanNodeId = cleanRequiredText(nodeId);
+
+  if (!cleanOwnerId || !cleanMindMapId || !cleanNodeId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const mapResult = await verifyOwnerScopedMap(
+      cleanOwnerId,
+      cleanMindMapId,
+      "sub",
+      supabaseClient,
+    );
+    if (!mapResult.ok) return mapResult;
+
+    const { data: existingNode, error: readError } = await supabaseClient
+      .from(NODES_TABLE)
+      .select("id")
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .eq("id", cleanNodeId)
+      .maybeSingle();
+
+    if (readError) return { ok: false, error: "commonplace_save_failed" };
+    if (!existingNode) return { ok: false, error: "commonplace_not_found" };
+
+    const { error } = await supabaseClient
+      .from(NODES_TABLE)
+      .delete()
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .eq("id", cleanNodeId);
+
+    if (error) return { ok: false, error: "commonplace_save_failed" };
+
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}

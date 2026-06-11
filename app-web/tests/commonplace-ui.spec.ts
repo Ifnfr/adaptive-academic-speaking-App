@@ -782,6 +782,29 @@ function installCommonplaceTestAdapter(seedNotes: TestNote[] = []) {
       );
       return { ok: true as const };
     },
+    async deleteSubMapNode(
+      ownerId: string,
+      mindMapId: string,
+      nodeId: string,
+    ) {
+      testWindow.__COMMONPLACE_TEST_MAP_NODES__ = (
+        testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []
+      ).filter(
+        (node) =>
+          node.ownerId !== ownerId ||
+          node.mapId !== mindMapId ||
+          node.id !== nodeId,
+      );
+      testWindow.__COMMONPLACE_TEST_MAP_EDGES__ = (
+        testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? []
+      ).filter(
+        (edge) =>
+          edge.ownerId !== ownerId ||
+          edge.mapId !== mindMapId ||
+          (edge.sourceNodeId !== nodeId && edge.targetNodeId !== nodeId),
+      );
+      return { ok: true as const };
+    },
     async listSubMapEdges(ownerId: string, mindMapId: string) {
       const map = (testWindow.__COMMONPLACE_TEST_MAPS__ ?? []).find(
         (candidate) =>
@@ -2643,6 +2666,9 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
     await page.mouse.move(540, 380);
     await expect(page.getByTestId("commonplace-map-connection-preview")).toBeVisible();
+    await expect(
+      page.getByTestId("commonplace-map-connection-preview").locator("line"),
+    ).not.toHaveAttribute("stroke-dasharray", /.+/);
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("commonplace-map-connection-preview")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-connection-mode")).toHaveCount(0);
@@ -2657,6 +2683,12 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await clickConnectIdea(page);
     await clickFlowNode(targetNode);
     await expect(page.getByTestId("commonplace-map-edge-create-popover")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-edge-type-options")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-edge-type-option-solid")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(page.getByTestId("commonplace-map-edge-type-option-dashed")).toBeVisible();
     await page.getByTestId("commonplace-map-edge-label-input").fill("direct influence");
     await page
       .getByTestId("commonplace-map-edge-create-popover")
@@ -2669,6 +2701,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await page.getByTestId("commonplace-map-edge-label-sub-edge-1").click({ force: true });
     const editPopover = page.getByTestId("commonplace-map-edge-edit-popover");
     await expect(editPopover).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-edge-type-options")).toBeVisible();
     await editPopover.getByLabel("Label").fill("weak association");
     await editPopover.getByLabel("Relationship type").selectOption("dashed");
     await editPopover.getByRole("button", { name: "Save" }).click();
@@ -2693,6 +2726,27 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await page.getByRole("button", { name: /Attention Systems/i }).click();
     await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(2);
     await expect(page.locator(".react-flow__edge")).toHaveCount(0);
+    const returnedNode = page.getByTestId("rf__node-sub-node-created-3");
+    await returnedNode.dragTo(page.getByTestId("commonplace-sidebar"), {
+      sourcePosition: { x: 40, y: 40 },
+      targetPosition: { x: 120, y: 180 },
+      force: true,
+    });
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(1);
+    await expect(page.getByTestId("commonplace-sidebar-note-list")).toContainText(
+      "Institutions and Growth",
+    );
+    const subNodesAfterReturn = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __COMMONPLACE_TEST_MAP_NODES__?: TestMapNode[];
+      };
+
+      return (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []).filter((node) =>
+        ["sub-node-created-3", "sub-node-created-4"].includes(node.id),
+      );
+    });
+    expect(subNodesAfterReturn).toHaveLength(1);
+    expect(subNodesAfterReturn[0]).toMatchObject({ id: "sub-node-created-4" });
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
     await expect(page.getByText(/connect idea/i)).toHaveCount(0);
   });

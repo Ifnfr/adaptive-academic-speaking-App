@@ -18,6 +18,7 @@ import {
   createMainMapNoteNode,
   createMainMapEdge,
   deleteMainMapNode,
+  deleteSubMapNode,
   deleteMainMapEdge,
   listMainMapEdges,
   listMainMapNodes,
@@ -166,6 +167,11 @@ function createMockSupabaseClient(options: MockOptions = {}) {
           error = options.mainNodeReadError ?? null;
           data = options.mainNodesRows?.[0] ?? {
             id: "main-node-db-uuid-1",
+          };
+        } else if (table === "commonplace_mindmap_nodes") {
+          error = options.nodeReadError ?? null;
+          data = options.nodesRows?.[0] ?? {
+            id: "node-db-uuid-1",
           };
         } else if (table === "commonplace_notes") {
           error = options.notesReadError ?? null;
@@ -2048,6 +2054,27 @@ test.describe("Supabase Commonplace Mind Map Storage Adapter", () => {
     expect(mock.calls).not.toContain("delete:commonplace_mindmaps");
     expect(mock.calls).not.toContain("delete:commonplace_notes");
     expect(mock.calls.join("\n")).not.toContain("commonplace_main_map_edges");
+  });
+
+  test("deleteSubMapNode deletes only the visual note node in the selected Sub Map", async () => {
+    const mock = createMockSupabaseClient({
+      nodesRows: [{ id: "sub-node-1", note_id: "note-1" }],
+    });
+
+    const result = await deleteSubMapNode(
+      "user_123",
+      "map-db-123",
+      "sub-node-1",
+      mock.client,
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:mindmap_id:map-db-123");
+    expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:id:sub-node-1");
+    expect(mock.calls).toContain("delete:commonplace_mindmap_nodes");
+    expect(mock.calls).not.toContain("delete:commonplace_mindmaps");
+    expect(mock.calls).not.toContain("delete:commonplace_notes");
+    expect(mock.calls.join("\n")).not.toContain("commonplace_mindmap_edges");
   });
 
   test("deleteCommonplaceMainMapCluster deletes only main map node, not sub mind map", async () => {

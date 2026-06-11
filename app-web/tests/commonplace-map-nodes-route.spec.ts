@@ -214,6 +214,15 @@ function createMockSupabaseClient(options: MockOptions = {}) {
             error: options.mainNodeReadError ?? null,
           });
         }
+        if (table === "commonplace_mindmap_nodes") {
+          return Promise.resolve({
+            data:
+              options.nodeRows === undefined
+                ? baseNodeRow
+                : options.nodeRows[0] ?? null,
+            error: options.nodeReadError ?? null,
+          });
+        }
 
         const mapRows =
           options.mapRows ??
@@ -678,6 +687,31 @@ test.describe("Commonplace map nodes route", () => {
     expect(mock.deleted.commonplace_main_map_nodes).toBe(true);
   });
 
+  test("Sub DELETE removes only the visual note node, not the Library note or map", async () => {
+    testHooks.resolveCurrentUserId = async () => "server-user-123";
+    const mock = createMockSupabaseClient({
+      nodeRows: [baseNodeRow],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await DELETE(
+      buildDeleteRequest({
+        mapId: "map-db-1",
+        type: "sub",
+        nodeId: "node-db-1",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true });
+    expect(mock.calls).toContain("delete:commonplace_mindmap_nodes");
+    expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:id:node-db-1");
+    expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:mindmap_id:map-db-1");
+    expect(mock.calls).not.toContain("delete:commonplace_mindmaps");
+    expect(mock.calls).not.toContain("delete:commonplace_notes");
+    expect(mock.deleted.commonplace_mindmap_nodes).toBe(true);
+  });
+
   test("Sub GET returns owner-scoped saved note nodes", async () => {
     testHooks.resolveCurrentUserId = async () => "server-user-123";
     const mock = createMockSupabaseClient();
@@ -953,6 +987,7 @@ test.describe("Commonplace map nodes route", () => {
     expect(routeSource).toContain("createMainMapClusterNode");
     expect(routeSource).toContain("createMainMapNoteNode");
     expect(routeSource).toContain("deleteMainMapNode");
+    expect(routeSource).toContain("deleteSubMapNode");
     expect(routeSource).not.toContain("commonplace_mindmap_edges");
     expect(routeSource).not.toContain("commonplace_main_map_edges");
   });

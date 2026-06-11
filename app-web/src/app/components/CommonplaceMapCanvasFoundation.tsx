@@ -533,6 +533,65 @@ function MapInventoryGroup({
   );
 }
 
+function EdgeTypeChoiceButtons({
+  value,
+  onChange,
+}: {
+  value: CommonplaceMindMapEdgeType;
+  onChange: (nextType: CommonplaceMindMapEdgeType) => void;
+}) {
+  const choices: Array<{
+    type: CommonplaceMindMapEdgeType;
+    label: string;
+    description: string;
+    sampleClassName: string;
+  }> = [
+    {
+      type: "solid",
+      label: "Solid",
+      description: "direct / strong",
+      sampleClassName: "border-t-2 border-[#2F6B61]",
+    },
+    {
+      type: "dashed",
+      label: "Dashed",
+      description: "speculative / weak",
+      sampleClassName: "border-t-2 border-dashed border-[#5F7D74]",
+    },
+  ];
+
+  return (
+    <div
+      className="mt-2 grid grid-cols-2 gap-2"
+      data-testid="commonplace-map-edge-type-options"
+    >
+      {choices.map((choice) => {
+        const isSelected = value === choice.type;
+        return (
+          <button
+            key={choice.type}
+            type="button"
+            onClick={() => onChange(choice.type)}
+            aria-pressed={isSelected}
+            className={`rounded-lg border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
+              isSelected
+                ? "border-[#0F766E] bg-[#DDEBE5] text-[#134E44]"
+                : "border-[var(--brand-border)] bg-white text-[var(--brand-ink)] hover:border-[#0F766E]/35"
+            }`}
+            data-testid={`commonplace-map-edge-type-option-${choice.type}`}
+          >
+            <span className={`mb-2 block w-full ${choice.sampleClassName}`} />
+            <span className="block text-xs font-semibold">{choice.label}</span>
+            <span className="mt-0.5 block text-[11px] font-medium opacity-75">
+              {choice.description}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CommonplaceMapCanvasFoundation({
   map,
   noteContext,
@@ -564,6 +623,8 @@ export function CommonplaceMapCanvasFoundation({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("Saved");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isCanvasDragActive, setIsCanvasDragActive] = useState(false);
+  const [isLibraryReturnDragActive, setIsLibraryReturnDragActive] =
+    useState(false);
   const [isClusterChooserOpen, setIsClusterChooserOpen] = useState(false);
   const [flowInstance, setFlowInstance] =
     useState<ReactFlowInstance<CommonplaceCanvasNodeData> | null>(null);
@@ -647,6 +708,32 @@ export function CommonplaceMapCanvasFoundation({
           y2: connectionPointer.y,
         }
       : null;
+
+  const isPointInLibraryReturnZone = useCallback(
+    (clientX: number, clientY: number) => {
+      if (
+        typeof document === "undefined" ||
+        !isFiniteCoordinate(clientX) ||
+        !isFiniteCoordinate(clientY)
+      ) {
+        return false;
+      }
+
+      const returnZone = document.querySelector<HTMLElement>(
+        "[data-testid='commonplace-sidebar']",
+      );
+      const rect = returnZone?.getBoundingClientRect();
+      if (!rect) return false;
+
+      return (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      );
+    },
+    [],
+  );
   const rememberSavedNodePositions = useCallback(
     (nextNodes: Node<CommonplaceCanvasNodeData>[]) => {
       savedNodePositionsRef.current = new Map(
@@ -713,6 +800,7 @@ export function CommonplaceMapCanvasFoundation({
       setNodes([]);
       setEdges([]);
       setIsCanvasDragActive(false);
+      setIsLibraryReturnDragActive(false);
       setIsClusterChooserOpen(false);
       setNodeContextMenu(null);
       setNodeDeleteConfirm(null);
@@ -800,6 +888,34 @@ export function CommonplaceMapCanvasFoundation({
       : null;
   }, []);
 
+  const getNodeConnectionPoint = useCallback(
+    (nodeId: string, targetPoint?: PositionedPanel | null) => {
+      const panel = canvasPanelRef.current;
+      if (!panel) return null;
+
+      const sourceElement = panel.querySelector<HTMLElement>(
+        `.react-flow__node[data-id="${CSS.escape(nodeId)}"]`,
+      );
+      const sourceRect = sourceElement?.getBoundingClientRect();
+      if (!sourceRect) return null;
+
+      const panelRect = panel.getBoundingClientRect();
+      const centerX = sourceRect.left - panelRect.left + sourceRect.width / 2;
+      const centerY = sourceRect.top - panelRect.top + sourceRect.height / 2;
+      const point = {
+        x:
+          sourceRect.left -
+          panelRect.left +
+          (!targetPoint || targetPoint.x >= centerX ? sourceRect.width : 0),
+        y: centerY,
+      };
+      return isFiniteCoordinate(point.x) && isFiniteCoordinate(point.y)
+        ? point
+        : null;
+    },
+    [],
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -811,11 +927,80 @@ export function CommonplaceMapCanvasFoundation({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [cancelConnectionMode]);
 
-  const handleNodeDragStop = useCallback(
+  const removeVisualNodeFromCanvas = useCallback(
+    async (nodeId: string, failureMessage: string) => {
+      if (!deleteNode) {
+        setSaveStatus("Save failed");
+        setDropError(failureMessage);
+        return;
+      }
+
+      setSaveStatus("Saving...");
+      setDropError(null);
+      const result = await deleteNode(nodeId);
+      if (!result.ok) {
+        setSaveStatus("Save failed");
+        setDropError(failureMessage);
+        return;
+      }
+
+      savedNodePositionsRef.current.delete(nodeId);
+      setNodes((current) => current.filter((node) => node.id !== nodeId));
+      setEdges((current) =>
+        current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+      );
+      setConnectionSourceNodeId((current) => (current === nodeId ? null : current));
+      setConnectionSourcePoint(null);
+      setConnectionPointer(null);
+      setEdgeDraft(null);
+      setEdgeEdit(null);
+      setNodeDeleteConfirm(null);
+      setSaveStatus("Saved");
+      setHasUnsavedChanges(false);
+    },
+    [
+      deleteNode,
+      setConnectionPointer,
+      setConnectionSourceNodeId,
+      setConnectionSourcePoint,
+      setEdgeDraft,
+      setEdgeEdit,
+      setEdges,
+      setNodes,
+    ],
+  );
+
+  const handleNodeDrag = useCallback(
     (
-      _event: ReactMouseEvent,
+      event: ReactMouseEvent,
       node: Node<CommonplaceCanvasNodeData>,
     ) => {
+      if (!deleteNode || node.type !== "noteNode") return;
+      setIsLibraryReturnDragActive(
+        isPointInLibraryReturnZone(event.clientX, event.clientY),
+      );
+    },
+    [deleteNode, isPointInLibraryReturnZone],
+  );
+
+  const handleNodeDragStop = useCallback(
+    (
+      event: ReactMouseEvent,
+      node: Node<CommonplaceCanvasNodeData>,
+    ) => {
+      setIsLibraryReturnDragActive(false);
+      if (
+        deleteNode &&
+        node.type === "noteNode" &&
+        isPointInLibraryReturnZone(event.clientX, event.clientY)
+      ) {
+        void removeVisualNodeFromCanvas(
+          node.id,
+          "Could not return this card to the Library.",
+        );
+        return;
+      }
+
       const nextNodes = nodes.map((currentNode) =>
         currentNode.id === node.id
           ? { ...currentNode, position: node.position }
@@ -829,7 +1014,15 @@ export function CommonplaceMapCanvasFoundation({
       setHasUnsavedChanges(hasPositionChanges);
       setSaveStatus(hasPositionChanges ? "Unsaved changes" : "Saved");
     },
-    [hasUnsavedChanges, nodes, nodesHavePositionChanges, setNodes],
+    [
+      deleteNode,
+      hasUnsavedChanges,
+      isPointInLibraryReturnZone,
+      nodes,
+      nodesHavePositionChanges,
+      removeVisualNodeFromCanvas,
+      setNodes,
+    ],
   );
 
   const handleSave = useCallback(async () => {
@@ -1067,7 +1260,7 @@ export function CommonplaceMapCanvasFoundation({
   const handleStartConnection = useCallback(() => {
     if (!nodeContextMenu) return;
     setConnectionSourceNodeId(nodeContextMenu.nodeId);
-    const sourcePoint = getNodeCenterPoint(nodeContextMenu.nodeId);
+    const sourcePoint = getNodeConnectionPoint(nodeContextMenu.nodeId);
     setConnectionSourcePoint(sourcePoint);
     setConnectionPointer(sourcePoint);
     setNodeContextMenu(null);
@@ -1076,7 +1269,7 @@ export function CommonplaceMapCanvasFoundation({
     setEdgeDraft(null);
     setDropError(null);
   }, [
-    getNodeCenterPoint,
+    getNodeConnectionPoint,
     nodeContextMenu,
     setConnectionPointer,
     setConnectionSourceNodeId,
@@ -1154,12 +1347,16 @@ export function CommonplaceMapCanvasFoundation({
       if (!connectionSourceNodeId || !canvasPanelRef.current) return;
       const rect = canvasPanelRef.current.getBoundingClientRect();
       if (!connectionSourcePoint) {
-        setConnectionSourcePoint(getNodeCenterPoint(connectionSourceNodeId));
+        setConnectionSourcePoint(getNodeConnectionPoint(connectionSourceNodeId));
       }
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       if (!isFiniteCoordinate(x) || !isFiniteCoordinate(y)) return;
 
+      const nextPointer = { x, y };
+      setConnectionSourcePoint(
+        getNodeConnectionPoint(connectionSourceNodeId, nextPointer),
+      );
       setConnectionPointer({
         x,
         y,
@@ -1168,7 +1365,7 @@ export function CommonplaceMapCanvasFoundation({
     [
       connectionSourceNodeId,
       connectionSourcePoint,
-      getNodeCenterPoint,
+      getNodeConnectionPoint,
       setConnectionPointer,
       setConnectionSourcePoint,
     ],
@@ -1594,6 +1791,7 @@ export function CommonplaceMapCanvasFoundation({
           edgeTypes={COMMONPLACE_EDGE_TYPES}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
           onNodeContextMenu={handleNodeContextMenu}
           onNodeClick={handleNodeClick}
@@ -1630,9 +1828,9 @@ export function CommonplaceMapCanvasFoundation({
               x2={connectionPreview.x2}
               y2={connectionPreview.y2}
               stroke="#0F766E"
-              strokeWidth="3"
+              strokeWidth="4"
               strokeLinecap="round"
-              strokeDasharray="8 7"
+              filter="drop-shadow(0 1px 2px rgba(15, 118, 110, 0.32))"
             />
             <circle
               cx={connectionPreview.x2}
@@ -1641,6 +1839,15 @@ export function CommonplaceMapCanvasFoundation({
               fill="#0F766E"
             />
           </svg>
+        )}
+
+        {isLibraryReturnDragActive && (
+          <div
+            className="pointer-events-none absolute left-4 top-4 z-40 rounded-lg border border-[#0F766E]/35 bg-white px-3 py-2 text-sm font-semibold text-[#134E44] shadow-sm"
+            data-testid="commonplace-map-return-to-library-hint"
+          >
+            Drop on Library sidebar to remove this visual card.
+          </div>
         )}
 
         {isCanvasDragActive && (
@@ -1797,6 +2004,14 @@ export function CommonplaceMapCanvasFoundation({
                 <option value="solid">Solid / direct</option>
                 <option value="dashed">Dashed / speculative</option>
               </select>
+              <EdgeTypeChoiceButtons
+                value={edgeDraft.edgeType}
+                onChange={(nextType) =>
+                  setEdgeDraft((current) =>
+                    current ? { ...current, edgeType: nextType } : current,
+                  )
+                }
+              />
             </label>
             <label className="mt-3 block text-xs font-semibold text-[var(--brand-ink)]">
               Label
@@ -1864,6 +2079,14 @@ export function CommonplaceMapCanvasFoundation({
                 <option value="solid">Solid / direct</option>
                 <option value="dashed">Dashed / speculative</option>
               </select>
+              <EdgeTypeChoiceButtons
+                value={edgeEdit.edgeType}
+                onChange={(nextType) =>
+                  setEdgeEdit((current) =>
+                    current ? { ...current, edgeType: nextType } : current,
+                  )
+                }
+              />
             </label>
             <label className="mt-3 block text-xs font-semibold text-[var(--brand-ink)]">
               Label
