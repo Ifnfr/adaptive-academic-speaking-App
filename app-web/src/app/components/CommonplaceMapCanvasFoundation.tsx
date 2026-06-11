@@ -156,7 +156,7 @@ type CommonplaceMapCanvasFoundationProps = {
   deleteNode?: (nodeId: string) => Promise<CommonplaceMindMapDeleteResult>;
 };
 
-const nodeTypes: NodeTypes = {
+const COMMONPLACE_NODE_TYPES: NodeTypes = {
   noteNode: CommonplaceNoteNode,
   clusterNode: CommonplaceClusterNode,
 };
@@ -173,6 +173,15 @@ function CommonplaceConnectionEdge({
   style,
   data,
 }: EdgeProps<CommonplaceEdgeData>) {
+  if (
+    !isFiniteCoordinate(sourceX) ||
+    !isFiniteCoordinate(sourceY) ||
+    !isFiniteCoordinate(targetX) ||
+    !isFiniteCoordinate(targetY)
+  ) {
+    return null;
+  }
+
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -181,6 +190,8 @@ function CommonplaceConnectionEdge({
     targetY,
     targetPosition,
   });
+  const hasValidLabelPosition =
+    isFiniteCoordinate(labelX) && isFiniteCoordinate(labelY);
 
   const openEdit = (event: ReactMouseEvent) => {
     event.stopPropagation();
@@ -204,29 +215,33 @@ function CommonplaceConnectionEdge({
         className="commonplace-map-edge-hitbox"
         onClick={openEdit}
       />
-      <EdgeLabelRenderer>
-        <button
-          type="button"
-          onClick={openEdit}
-          className="nodrag nopan rounded-full border border-[var(--brand-border)] bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-[var(--brand-ink)] shadow-sm transition-colors hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
-          style={{
-            position: "absolute",
-            transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-            pointerEvents: "all",
-            zIndex: 20,
-          }}
-          data-testid={`commonplace-map-edge-label-${id}`}
-        >
-          {data?.label || "Connection"}
-        </button>
-      </EdgeLabelRenderer>
+      {hasValidLabelPosition && (
+        <EdgeLabelRenderer>
+          <button
+            type="button"
+            onClick={openEdit}
+            className="nodrag nopan rounded-full border border-[var(--brand-border)] bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-[var(--brand-ink)] shadow-sm transition-colors hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: "all",
+              zIndex: 20,
+            }}
+            data-testid={`commonplace-map-edge-label-${id}`}
+          >
+            {data?.label || "Connection"}
+          </button>
+        </EdgeLabelRenderer>
+      )}
     </>
   );
 }
 
-const edgeTypes: EdgeTypes = {
+const COMMONPLACE_EDGE_TYPES: EdgeTypes = {
   commonplaceEdge: CommonplaceConnectionEdge,
 };
+
+const COMMONPLACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true };
 
 const COMMONPLACE_NOTE_DRAG_TYPE = "application/commonplace-note";
 
@@ -253,15 +268,32 @@ function titleForNode(node: CommonplaceMapCanvasNoteNode): string {
   return node.noteTitle?.trim() || node.noteSourceBook || "Untitled Source";
 }
 
+function isFiniteCoordinate(value: number): boolean {
+  return Number.isFinite(value);
+}
+
+function safeFlowPosition(
+  x: number,
+  y: number,
+  fallback: { x: number; y: number } = { x: 0, y: 0 },
+): { x: number; y: number } {
+  return {
+    x: isFiniteCoordinate(x) ? x : fallback.x,
+    y: isFiniteCoordinate(y) ? y : fallback.y,
+  };
+}
+
 function toReactFlowNode(
   node: CommonplaceMapCanvasNode,
   onOpenSubMap?: CommonplaceMapCanvasFoundationProps["onOpenSubMap"],
 ): Node<CommonplaceCanvasNodeData> {
+  const position = safeFlowPosition(node.positionX, node.positionY);
+
   if (node.nodeKind === "cluster") {
     return {
       id: node.id,
       type: "clusterNode",
-      position: { x: node.positionX, y: node.positionY },
+      position,
       data: {
         subMindMapId: node.subMindMapId,
         title: node.subMindMapTitle,
@@ -274,7 +306,7 @@ function toReactFlowNode(
   return {
     id: node.id,
     type: "noteNode",
-    position: { x: node.positionX, y: node.positionY },
+    position,
     data: {
       noteId: node.noteId,
       shortcode: node.noteShortcode,
@@ -328,7 +360,11 @@ function panelPosition(
   clientX: number,
   clientY: number,
   container: HTMLDivElement | null,
-): PositionedPanel {
+): PositionedPanel | null {
+  if (!isFiniteCoordinate(clientX) || !isFiniteCoordinate(clientY)) {
+    return null;
+  }
+
   const rect = container?.getBoundingClientRect();
   if (!rect) {
     if (typeof window === "undefined") return { x: clientX, y: clientY };
@@ -339,8 +375,20 @@ function panelPosition(
     };
   }
 
+  if (
+    !isFiniteCoordinate(rect.left) ||
+    !isFiniteCoordinate(rect.top) ||
+    !isFiniteCoordinate(rect.width) ||
+    !isFiniteCoordinate(rect.height)
+  ) {
+    return null;
+  }
+
   const localX = clientX - rect.left;
   const localY = clientY - rect.top;
+  if (!isFiniteCoordinate(localX) || !isFiniteCoordinate(localY)) {
+    return null;
+  }
 
   return {
     x: Math.min(Math.max(12, localX), Math.max(12, rect.width - 280)),
@@ -380,6 +428,9 @@ export function CommonplaceMapCanvasFoundation({
   const [flowInstance, setFlowInstance] =
     useState<ReactFlowInstance<CommonplaceCanvasNodeData> | null>(null);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
+  const [reactFlowNodeTypes] = useState(() => COMMONPLACE_NODE_TYPES);
+  const [reactFlowEdgeTypes] = useState(() => COMMONPLACE_EDGE_TYPES);
+  const [reactFlowProOptions] = useState(() => COMMONPLACE_REACT_FLOW_PRO_OPTIONS);
   const [nodeContextMenu, setNodeContextMenu] =
     useState<NodeContextMenuState | null>(null);
   const [nodeDeleteConfirm, setNodeDeleteConfirm] =
@@ -483,6 +534,9 @@ export function CommonplaceMapCanvasFoundation({
   );
   const openEdgeEdit = useCallback<CommonplaceEdgeData["onEdit"]>(
     (edgeId, edgeType, label, clientX, clientY) => {
+      const position = panelPosition(clientX, clientY, canvasPanelRef.current);
+      if (!position) return;
+
       setDropError(null);
       setNodeContextMenu(null);
       setNodeDeleteConfirm(null);
@@ -492,7 +546,7 @@ export function CommonplaceMapCanvasFoundation({
         edgeId,
         edgeType,
         label: label ?? "",
-        ...panelPosition(clientX, clientY, canvasPanelRef.current),
+        ...position,
       });
     },
     [],
@@ -599,10 +653,13 @@ export function CommonplaceMapCanvasFoundation({
     if (!sourceRect) return null;
 
     const panelRect = panel.getBoundingClientRect();
-    return {
+    const point = {
       x: sourceRect.left - panelRect.left + sourceRect.width / 2,
       y: sourceRect.top - panelRect.top + sourceRect.height / 2,
     };
+    return isFiniteCoordinate(point.x) && isFiniteCoordinate(point.y)
+      ? point
+      : null;
   }, []);
 
   useEffect(() => {
@@ -723,9 +780,13 @@ export function CommonplaceMapCanvasFoundation({
         x: event.clientX,
         y: event.clientY,
       });
+      const safePosition = safeFlowPosition(position.x, position.y, {
+        x: 140 + nodes.length * 32,
+        y: 120 + nodes.length * 24,
+      });
 
       setSaveStatus("Saving...");
-      const result = await createNoteNode(draggedNote.noteId, position);
+      const result = await createNoteNode(draggedNote.noteId, safePosition);
       if (!result.ok) {
         setSaveStatus("Save failed");
         setDropError(
@@ -756,6 +817,7 @@ export function CommonplaceMapCanvasFoundation({
       createNoteNode,
       flowInstance,
       isMainMap,
+      nodes.length,
       onOpenSubMap,
       rememberSavedNodePositions,
       setNodes,
@@ -765,9 +827,13 @@ export function CommonplaceMapCanvasFoundation({
   const defaultClusterPosition = useCallback(() => {
     const rect = canvasPanelRef.current?.getBoundingClientRect();
     if (flowInstance && rect) {
-      return flowInstance.screenToFlowPosition({
+      const position = flowInstance.screenToFlowPosition({
         x: rect.left + rect.width / 2,
         y: rect.top + Math.min(rect.height / 2, 280),
+      });
+      return safeFlowPosition(position.x, position.y, {
+        x: 140 + nodes.length * 32,
+        y: 120 + nodes.length * 24,
       });
     }
 
@@ -824,6 +890,11 @@ export function CommonplaceMapCanvasFoundation({
       if (!isConnectableNode && !isMainMapVisualNode) return;
       event.preventDefault();
       event.stopPropagation();
+      const position =
+        panelPosition(event.clientX, event.clientY, canvasPanelRef.current) ??
+        getNodeCenterPoint(node.id);
+      if (!position) return;
+
       setDropError(null);
       setEdgeEdit(null);
       setEdgeDraft(null);
@@ -833,10 +904,10 @@ export function CommonplaceMapCanvasFoundation({
         nodeId: node.id,
         nodeType: node.type === "clusterNode" ? "cluster" : "note",
         label: labelForFlowNode(node),
-        ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
+        ...position,
       });
     },
-    [isMainMap, isSubMap],
+    [getNodeCenterPoint, isMainMap, isSubMap],
   );
 
   const handleStartConnection = useCallback(() => {
@@ -884,12 +955,17 @@ export function CommonplaceMapCanvasFoundation({
         return;
       }
 
+      const position =
+        panelPosition(event.clientX, event.clientY, canvasPanelRef.current) ??
+        getNodeCenterPoint(node.id);
+      if (!position) return;
+
       setEdgeDraft({
         sourceNodeId: connectionSourceNodeId,
         targetNodeId: node.id,
         edgeType: "solid",
         label: "",
-        ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
+        ...position,
       });
       setConnectionSourceNodeId(null);
       setConnectionSourcePoint(null);
@@ -899,6 +975,7 @@ export function CommonplaceMapCanvasFoundation({
     },
     [
       connectionSourceNodeId,
+      getNodeCenterPoint,
       isMainMap,
       isSubMap,
       setConnectionPointer,
@@ -925,9 +1002,13 @@ export function CommonplaceMapCanvasFoundation({
       if (!connectionSourcePoint) {
         setConnectionSourcePoint(getNodeCenterPoint(connectionSourceNodeId));
       }
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (!isFiniteCoordinate(x) || !isFiniteCoordinate(y)) return;
+
       setConnectionPointer({
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
+        x,
+        y,
       });
     },
     [
@@ -977,6 +1058,9 @@ export function CommonplaceMapCanvasFoundation({
     (event: ReactMouseEvent, edge: Edge<CommonplaceEdgeData>) => {
       if (!supportsEdges) return;
       event.stopPropagation();
+      const position = panelPosition(event.clientX, event.clientY, canvasPanelRef.current);
+      if (!position) return;
+
       setDropError(null);
       setNodeContextMenu(null);
       setNodeDeleteConfirm(null);
@@ -988,7 +1072,7 @@ export function CommonplaceMapCanvasFoundation({
         edgeId: edge.id,
         edgeType: edge.data?.edgeType ?? "solid",
         label: edge.data?.label ?? "",
-        ...panelPosition(event.clientX, event.clientY, canvasPanelRef.current),
+        ...position,
       });
     },
     [
@@ -1016,16 +1100,19 @@ export function CommonplaceMapCanvasFoundation({
       }
 
       const selectedEdge = selectedEdges[0];
+      const position = panelPosition(
+        window.innerWidth / 2,
+        window.innerHeight / 2,
+        canvasPanelRef.current,
+      );
+      if (!position) return;
+
       setDropError(null);
       setEdgeEdit({
         edgeId: selectedEdge.id,
         edgeType: selectedEdge.data?.edgeType ?? "solid",
         label: selectedEdge.data?.label ?? "",
-        ...panelPosition(
-          window.innerWidth / 2,
-          window.innerHeight / 2,
-          canvasPanelRef.current,
-        ),
+        ...position,
       });
     },
     [connectionSourceNodeId, edgeDraft, nodeContextMenu, supportsEdges],
@@ -1340,8 +1427,8 @@ export function CommonplaceMapCanvasFoundation({
           className="relative z-10 bg-transparent [&_.react-flow__connection-path]:!stroke-[#0F766E] [&_.react-flow__connection-path]:!stroke-[3px] [&_.react-flow__controls]:!z-40 [&_.react-flow__controls]:!pointer-events-auto [&_.react-flow__controls-button]:!pointer-events-auto [&_.react-flow__controls-button]:!border-[#C9D8D1] [&_.react-flow__controls-button]:!bg-white [&_.react-flow__controls-button]:!text-[#0F766E] [&_.react-flow__minimap]:!z-30 [&_.react-flow__pane]:!cursor-grab"
           nodes={visibleNodes}
           edges={edges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
+          nodeTypes={reactFlowNodeTypes}
+          edgeTypes={reactFlowEdgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeDragStop={handleNodeDragStop}
@@ -1361,7 +1448,7 @@ export function CommonplaceMapCanvasFoundation({
           zoomOnPinch
           zoomOnScroll
           connectOnClick={false}
-          proOptions={{ hideAttribution: true }}
+          proOptions={reactFlowProOptions}
         >
           <Background color="#B7D4C8" gap={24} size={1.2} />
           <MiniMap pannable zoomable nodeStrokeWidth={3} maskColor="rgba(238,243,241,0.72)" />
