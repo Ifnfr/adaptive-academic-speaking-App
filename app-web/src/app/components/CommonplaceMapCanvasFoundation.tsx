@@ -568,9 +568,6 @@ export function CommonplaceMapCanvasFoundation({
   const [flowInstance, setFlowInstance] =
     useState<ReactFlowInstance<CommonplaceCanvasNodeData> | null>(null);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
-  const [reactFlowNodeTypes] = useState(() => COMMONPLACE_NODE_TYPES);
-  const [reactFlowEdgeTypes] = useState(() => COMMONPLACE_EDGE_TYPES);
-  const [reactFlowProOptions] = useState(() => COMMONPLACE_REACT_FLOW_PRO_OPTIONS);
   const [nodeContextMenu, setNodeContextMenu] =
     useState<NodeContextMenuState | null>(null);
   const [nodeDeleteConfirm, setNodeDeleteConfirm] =
@@ -1593,8 +1590,8 @@ export function CommonplaceMapCanvasFoundation({
           className="relative z-10 bg-transparent [&_.react-flow__connection-path]:!stroke-[#0F766E] [&_.react-flow__connection-path]:!stroke-[3px] [&_.react-flow__controls]:!z-40 [&_.react-flow__controls]:!pointer-events-auto [&_.react-flow__controls-button]:!pointer-events-auto [&_.react-flow__controls-button]:!border-[#C9D8D1] [&_.react-flow__controls-button]:!bg-white [&_.react-flow__controls-button]:!text-[#0F766E] [&_.react-flow__minimap]:!z-30 [&_.react-flow__pane]:!cursor-grab"
           nodes={visibleNodes}
           edges={edges}
-          nodeTypes={reactFlowNodeTypes}
-          edgeTypes={reactFlowEdgeTypes}
+          nodeTypes={COMMONPLACE_NODE_TYPES}
+          edgeTypes={COMMONPLACE_EDGE_TYPES}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeDragStop={handleNodeDragStop}
@@ -1614,7 +1611,7 @@ export function CommonplaceMapCanvasFoundation({
           zoomOnPinch
           zoomOnScroll
           connectOnClick={false}
-          proOptions={reactFlowProOptions}
+          proOptions={COMMONPLACE_REACT_FLOW_PRO_OPTIONS}
         >
           <Background color="#B7D4C8" gap={24} size={1.2} />
           <MiniMap pannable zoomable nodeStrokeWidth={3} maskColor="rgba(238,243,241,0.72)" />
