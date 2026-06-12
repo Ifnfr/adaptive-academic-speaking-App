@@ -703,6 +703,12 @@ export async function POST(request: Request) {
   let evaluationResponse: PodchatEvaluateResponse;
 
   if (provider === "mock") {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "Mock provider is not allowed in production." },
+        { status: 400 }
+      );
+    }
     const text = buildMockPodchatEvaluation(validatedReq);
     const outputValidation = validateClaudeOutput(text);
     if (!outputValidation.valid) {

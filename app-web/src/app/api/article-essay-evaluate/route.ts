@@ -509,6 +509,7 @@ function getApiKey(provider: Provider): string | undefined {
 }
 
 function isArticleMockProvider(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
   return process.env.ARTICLE_AI_PROVIDER?.trim().toLowerCase() === "mock";
 }
 

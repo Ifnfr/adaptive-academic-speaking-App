@@ -825,6 +825,11 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
           <div className="lg:w-[46%] w-full max-w-md animate-card-entrance opacity-0">
             {CLERK_ENABLED ? (
               <ClerkLoginForm onLoginSuccess={onLoginSuccess} />
+            ) : process.env.NODE_ENV === "production" ? (
+              <div className="bg-red-50 border border-red-200 rounded-3xl p-8 text-red-700 font-sans text-sm shadow-sm">
+                <h3 className="font-semibold text-base mb-2">Service Configuration Error</h3>
+                <p className="leading-5">Authentication service is not configured. Please contact the system administrator to configure Clerk keys.</p>
+              </div>
             ) : (
               <LocalLoginForm onLoginSuccess={onLoginSuccess} />
             )}
