@@ -6,6 +6,9 @@
  * block; we also expose them as plain custom properties for inline use.
  */
 :root {
+  color-scheme: light;
+  accent-color: var(--brand-teal);
+
   /* Surfaces */
   --brand-bg: #f6f1e7;          /* warm ivory page background */
   --brand-surface: #ffffff;     /* white cards */
@@ -22,10 +25,15 @@
   --brand-teal: #0f766e;        /* primary accent (teal-700) */
   --brand-teal-soft: #ccfbf1;   /* teal background tint */
   --brand-teal-ink: #134e4a;    /* teal text on light bg */
+  --brand-accent-fill: #0f766e; /* filled selected/accent surfaces */
+  --brand-accent-fill-ink: #ffffff;
   --brand-gold: #b8860b;        /* warning / streak accent (dark goldenrod) */
   --brand-gold-soft: #fef3c7;   /* gold background tint */
   --brand-coral: #c2410c;       /* error accent (orange-700, coral-leaning) */
   --brand-coral-soft: #fee2e2;  /* coral background tint */
+  --brand-success: #15803d;
+  --brand-success-soft: #dcfce7;
+  --brand-success-ink: #166534;
 }
 
 /* Tailwind v4 theme bridge so utilities like text-foreground keep working. */
@@ -37,9 +45,9 @@
 }
 
 /*
- * The app is a focused light-theme tool for now. We intentionally do NOT
- * enable a `prefers-color-scheme: dark` override here so the visual identity
- * stays consistent across machines.
+ * App appearance is controlled by the server-backed profile setting. The
+ * `.dark` class below supplies the dark token set while the light tokens stay
+ * the default fallback.
  */
 
 body {
@@ -83,6 +91,10 @@ body {
  * Dark mode tokens.
  * When root has the `.dark` class, these variables override the default light ones.
  */
+html.dark {
+  color-scheme: dark;
+}
+
 .dark {
   /* Surfaces */
   --brand-bg: #0f0f0d;          /* dark rich background, warm tone */
@@ -100,10 +112,15 @@ body {
   --brand-teal: #14b8a6;        /* lighter teal-500 for readability on dark */
   --brand-teal-soft: #11332f;   /* dark teal background tint */
   --brand-teal-ink: #5eead4;    /* teal-300 for readable text on dark */
+  --brand-accent-fill: #0f766e; /* comfortable filled teal on dark */
+  --brand-accent-fill-ink: #ecfeff;
   --brand-gold: #f59e0b;        /* amber-500 */
   --brand-gold-soft: #452b07;   /* dark amber background tint */
   --brand-coral: #f97316;       /* orange-500 */
   --brand-coral-soft: #4c1d10;  /* dark orange background tint */
+  --brand-success: #22c55e;
+  --brand-success-soft: #12351f;
+  --brand-success-ink: #bbf7d0;
 }
 
 /*
@@ -293,9 +310,18 @@ body {
   background-color: var(--brand-coral-soft) !important;
   color: var(--brand-ink) !important;
 }
+.dark .bg-green-100,
+.dark .bg-green-50 {
+  background-color: var(--brand-success-soft) !important;
+  color: var(--brand-success-ink) !important;
+}
 .dark .border-red-200,
 .dark .border-red-100 {
   border-color: var(--brand-coral) !important;
+}
+.dark .border-green-200,
+.dark .border-green-100 {
+  border-color: var(--brand-success) !important;
 }
 .dark .bg-\[\#FFF4D8\],
 .dark .bg-amber-50 {
@@ -312,8 +338,14 @@ body {
   color: var(--brand-gold) !important;
 }
 .dark .text-red-700,
+.dark .text-red-600,
 .dark .text-\[\#8A1F15\] {
   color: var(--brand-coral) !important;
+}
+.dark .text-green-800,
+.dark .text-green-700,
+.dark .text-green-600 {
+  color: var(--brand-success-ink) !important;
 }
 
 /*

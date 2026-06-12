@@ -7,6 +7,7 @@ import {
   applyProfilePreferencesPatchToProfile,
   mapProfilePreferencesPatchToSupabaseUpdate,
 } from "../src/app/lib/storage/supabase-profile-adapter";
+import { COMMONPLACE_THEME_COLOR_IDS } from "../src/app/lib/commonplace-theme";
 import type {
   UserProfile,
   UserProfilePreferencesPatch,
@@ -434,6 +435,7 @@ async function setupMockSignedInAuthAndProfile(page: Page, initialMode: string =
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async updateProfile(_userId: string, patch: any) {
+        testWindow.__LAST_PROFILE_PATCH__ = patch;
         localProfileState = {
           ...localProfileState,
           displayName: patch.displayName === undefined ? localProfileState.displayName : (patch.displayName ?? ""),
@@ -453,6 +455,58 @@ async function setupMockSignedInAuthAndProfile(page: Page, initialMode: string =
 }
 
 test.describe("Settings view — signed-in appearance mode", () => {
+  test("Commonplace palette preview updates independently before save", async ({
+    page,
+  }) => {
+    await setupMockSignedInAuthAndProfile(page, "dark");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    for (const themeId of COMMONPLACE_THEME_COLOR_IDS) {
+      await expect(
+        page.getByTestId(`settings-commonplace-canvas-color-option-${themeId}`),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId(`settings-commonplace-card-color-option-${themeId}`),
+      ).toBeVisible();
+    }
+
+    const canvasPreview = page.getByTestId("settings-commonplace-canvas-preview");
+    const cardPreview = page.getByTestId("settings-commonplace-card-preview");
+    await expect(canvasPreview).toHaveCSS("background-color", "rgb(238, 243, 241)");
+    await expect(cardPreview).toHaveCSS("background-color", "rgb(255, 253, 248)");
+
+    await page
+      .getByTestId("settings-commonplace-canvas-color-option-ocean")
+      .click();
+    await expect(canvasPreview).toHaveCSS("background-color", "rgb(12, 74, 110)");
+    await expect(cardPreview).toHaveCSS("background-color", "rgb(255, 253, 248)");
+
+    await page
+      .getByTestId("settings-commonplace-card-color-option-terracotta")
+      .click();
+    await expect(canvasPreview).toHaveCSS("background-color", "rgb(12, 74, 110)");
+    await expect(cardPreview).toHaveCSS("background-color", "rgb(154, 52, 18)");
+
+    await page.locator("#profile-save-btn").click();
+    await expect(page.getByTestId("profile-save-success")).toBeVisible();
+
+    const savedPatch = await page.evaluate(() => {
+      const testWindow = window as typeof window & {
+        __LAST_PROFILE_PATCH__?: {
+          commonplaceCanvasColor?: string;
+          commonplaceCardColor?: string;
+        };
+      };
+
+      return testWindow.__LAST_PROFILE_PATCH__;
+    });
+    expect(savedPatch).toMatchObject({
+      commonplaceCanvasColor: "ocean",
+      commonplaceCardColor: "terracotta",
+    });
+  });
+
   test("dark theme selection toggles document class to dark", async ({ page }) => {
     await setupMockSignedInAuthAndProfile(page, "light");
     await page.goto("/");

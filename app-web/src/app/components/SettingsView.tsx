@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   AppLanguage,
   FeedbackLanguage,
@@ -18,6 +18,8 @@ import {
 } from "../lib/i18n";
 import {
   COMMONPLACE_THEME_CHOICES,
+  getCommonplaceCanvasTheme,
+  getCommonplaceCardTheme,
   normalizeCommonplaceThemeColorId,
   type CommonplaceThemeColorId,
 } from "../lib/commonplace-theme";
@@ -260,7 +262,7 @@ function CommonplaceThemeSwatches({
                 "flex min-h-[4.5rem] flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left transition-colors",
                 "focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60",
                 isSelected
-                  ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]"
+                  ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                   : "border-[var(--brand-border)] bg-white text-[var(--brand-ink)] hover:border-[var(--brand-teal)]/40",
               ].join(" ")}
               data-testid={`${testId}-option-${choice.id}`}
@@ -278,6 +280,111 @@ function CommonplaceThemeSwatches({
         })}
       </div>
     </fieldset>
+  );
+}
+
+function CommonplaceAppearancePreview({
+  canvasColor,
+  cardColor,
+}: {
+  canvasColor: CommonplaceThemeColorId;
+  cardColor: CommonplaceThemeColorId;
+}) {
+  const canvasTheme = useMemo(
+    () => getCommonplaceCanvasTheme(canvasColor),
+    [canvasColor],
+  );
+  const cardTheme = useMemo(
+    () => getCommonplaceCardTheme(cardColor),
+    [cardColor],
+  );
+
+  return (
+    <div
+      className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3"
+      data-testid="settings-commonplace-appearance-preview"
+    >
+      <div
+        className="overflow-hidden rounded-lg border"
+        data-commonplace-panel-surface="true"
+        data-testid="settings-commonplace-canvas-preview"
+        style={canvasTheme.panelStyle}
+      >
+        <div
+          className="relative h-36"
+          style={canvasTheme.mainBackgroundStyle}
+        >
+          <div
+            className="absolute inset-0 opacity-60"
+            style={{
+              backgroundImage: `linear-gradient(${canvasTheme.gridColor} 1px, transparent 1px), linear-gradient(90deg, ${canvasTheme.gridColor} 1px, transparent 1px)`,
+              backgroundSize: "24px 24px",
+            }}
+            aria-hidden="true"
+          />
+          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-[var(--commonplace-panel-border)] bg-white/85 px-2.5 py-1 text-[11px] font-semibold commonplace-panel-ink">
+            Canvas
+          </div>
+          <div className="absolute left-10 top-20 h-3 w-3 rounded-full bg-[var(--commonplace-panel-accent)] shadow-sm" />
+          <div className="absolute left-28 top-12 h-3 w-3 rounded-full bg-[var(--commonplace-panel-accent)] shadow-sm" />
+          <div className="absolute left-44 top-24 h-3 w-3 rounded-full bg-[var(--commonplace-panel-accent)] shadow-sm" />
+          <svg
+            className="absolute inset-0 h-full w-full"
+            aria-hidden="true"
+            viewBox="0 0 280 144"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M52 84 C90 44, 112 42, 126 56"
+              fill="none"
+              stroke="var(--commonplace-panel-accent)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              opacity="0.7"
+            />
+            <path
+              d="M140 60 C166 80, 178 92, 198 96"
+              fill="none"
+              stroke="var(--commonplace-panel-accent)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              opacity="0.7"
+            />
+          </svg>
+        </div>
+      </div>
+
+      <div
+        className="mt-3 overflow-hidden rounded-lg border shadow-sm"
+        data-commonplace-card-surface="true"
+        data-testid="settings-commonplace-card-preview"
+        style={cardTheme.style}
+      >
+        <div className="px-3 py-2.5">
+          <p className="commonplace-card-ink text-sm font-semibold">
+            Preview note card
+          </p>
+          <p className="commonplace-card-ink-soft mt-1 line-clamp-2 text-xs leading-5">
+            A compact note surface with its own color and readable ink.
+          </p>
+          <span
+            className="commonplace-card-tag mt-2 inline-flex rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold"
+            style={cardTheme.tagStyle}
+          >
+            #cp1
+          </span>
+        </div>
+        <div
+          className="border-t px-3 py-1.5 text-right"
+          data-commonplace-card-surface="true"
+          style={cardTheme.footerStyle}
+        >
+          <span className="commonplace-card-accent font-mono text-[11px] font-semibold">
+            Library card
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -621,6 +728,12 @@ function SignedInSettings({
                   disabled={isSaving}
                   testId="settings-commonplace-card-color"
                 />
+                <div className="lg:col-span-2">
+                  <CommonplaceAppearancePreview
+                    canvasColor={selectedCommonplaceCanvasColor}
+                    cardColor={selectedCommonplaceCardColor}
+                  />
+                </div>
               </div>
               <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
                 These colors apply only to Commonplace maps, Library cards, and
@@ -666,17 +779,17 @@ function SignedInSettings({
 
               {profileSaveStatus === "saved" && (
                 <p
-                  className="text-xs text-green-600"
-                  data-testid="profile-save-success"
-                >
+                className="text-xs text-[var(--brand-success-ink)]"
+                data-testid="profile-save-success"
+              >
                   {t("profile.saved")}
                 </p>
               )}
               {profileSaveStatus === "error" && profileSaveError && (
                 <p
-                  className="text-xs text-red-600"
-                  data-testid="profile-save-error"
-                >
+                className="text-xs text-[var(--brand-coral)]"
+                data-testid="profile-save-error"
+              >
                   {profileSaveError}
                 </p>
               )}
@@ -808,38 +921,38 @@ export function SettingsView({
             </div>
             
             {statusError && (
-              <p className="text-xs text-red-600 mb-3 font-sans">{statusError}</p>
+              <p className="text-xs text-[var(--brand-coral)] mb-3 font-sans">{statusError}</p>
             )}
             
             {providerStatus && (
               <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">Claude</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Claude?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Claude?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.providers?.Claude?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">Gemini</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Gemini?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Gemini?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.providers?.Gemini?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">DeepSeek</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.DeepSeek?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.DeepSeek?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.providers?.DeepSeek?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">AWS Polly (TTS)</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.ttsProviders?.Polly?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[var(--brand-ink)]">ElevenLabs (TTS)</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.ttsProviders?.ElevenLabs?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
@@ -936,13 +1049,13 @@ export function SettingsView({
               <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans text-sm">
                 <div className="flex items-center justify-between" data-testid="tts-status-polly">
                   <span className="text-[var(--brand-ink)]">AWS Polly</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.ttsProviders?.Polly?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between" data-testid="tts-status-elevenlabs">
                   <span className="text-[var(--brand-ink)]">ElevenLabs</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
                     {providerStatus.ttsProviders?.ElevenLabs?.configured ? 'Configured' : 'Missing'}
                   </span>
                 </div>

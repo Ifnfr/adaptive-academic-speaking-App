@@ -36,6 +36,26 @@ const profileRow: SupabaseProfileRow = {
   updated_at: "2026-05-27T01:00:00.000Z",
 };
 
+const EXACT_COMMONPLACE_THEME_IDS = [
+  "default",
+  "paper",
+  "sage",
+  "sand",
+  "sky",
+  "lavender",
+  "rose",
+  "slate",
+  "charcoal",
+  "emerald",
+  "forest",
+  "teal",
+  "ocean",
+  "navy",
+  "plum",
+  "terracotta",
+  "graphite",
+] as const;
+
 function readMigration(name: string, testInfo: TestInfo): string {
   return readFileSync(
     join(dirname(testInfo.file), "..", "..", "supabase", "migrations", name),
@@ -184,6 +204,30 @@ test.describe("Supabase profile schema", () => {
     expect(migration).not.toMatch(/create\s+policy/i);
     expect(migration).not.toMatch(/disable\s+row\s+level\s+security/i);
   });
+
+  test("expands Commonplace theme constraints without changing RLS policies", ({}, testInfo) => {
+    const migration = readMigration(
+      "20260612_003_expand_commonplace_theme_colors.sql",
+      testInfo,
+    );
+
+    expect(migration).toContain(
+      "drop constraint if exists profiles_commonplace_canvas_color_valid",
+    );
+    expect(migration).toContain(
+      "drop constraint if exists profiles_commonplace_card_color_valid",
+    );
+    expect(migration).toContain("profiles_commonplace_canvas_color_valid");
+    expect(migration).toContain("profiles_commonplace_card_color_valid");
+
+    for (const themeId of EXACT_COMMONPLACE_THEME_IDS) {
+      expect(migration).toContain(`'${themeId}'`);
+    }
+
+    expect(migration).not.toMatch(/create\s+policy/i);
+    expect(migration).not.toMatch(/disable\s+row\s+level\s+security/i);
+    expect(migration).not.toMatch(/\bupdate\s+profiles\b/i);
+  });
 });
 
 test.describe("Supabase profile adapter mapping", () => {
@@ -294,6 +338,18 @@ test.describe("Supabase profile adapter mapping", () => {
     });
     expect(payload).not.toHaveProperty("public_profile_enabled");
     expect(payload).not.toHaveProperty("leaderboard_opt_in");
+  });
+
+  test("maps expanded Commonplace theme ids to profile payloads", () => {
+    const payload = mapProfilePreferencesPatchToSupabaseUpdate({
+      commonplaceCanvasColor: "ocean",
+      commonplaceCardColor: "terracotta",
+    });
+
+    expect(payload).toEqual({
+      commonplace_canvas_color: "ocean",
+      commonplace_card_color: "terracotta",
+    });
   });
 
   test("maps privacy toggles explicitly when provided", () => {

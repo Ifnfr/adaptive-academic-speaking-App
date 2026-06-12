@@ -996,13 +996,18 @@ export function PodchatView({
                     className={
                       "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
                       (difficulty === option
-                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                        ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                         : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
                     }
                   >
                     <span className="text-sm font-semibold">{option}</span>
                     <span
-                      className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                      className={
+                        "mt-1 block text-xs " +
+                        (difficulty === option
+                          ? "text-[var(--brand-accent-fill-ink)]"
+                          : "text-[var(--brand-ink-soft)]")
+                      }
                       data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
                     >
                       {DIFFICULTY_LABEL[option]}
@@ -1110,13 +1115,18 @@ export function PodchatView({
                     className={
                       "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
                       (difficulty === option
-                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                        ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                         : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
                     }
                   >
                     <span className="text-sm font-semibold">{option}</span>
                     <span
-                      className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                      className={
+                        "mt-1 block text-xs " +
+                        (difficulty === option
+                          ? "text-[var(--brand-accent-fill-ink)]"
+                          : "text-[var(--brand-ink-soft)]")
+                      }
                       data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
                     >
                       {DIFFICULTY_LABEL[option]}
@@ -1205,13 +1215,18 @@ export function PodchatView({
                     className={
                       "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
                       (difficulty === option
-                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                        ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                         : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
                     }
                   >
                     <span className="text-sm font-semibold">{option}</span>
                     <span
-                      className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                      className={
+                        "mt-1 block text-xs " +
+                        (difficulty === option
+                          ? "text-[var(--brand-accent-fill-ink)]"
+                          : "text-[var(--brand-ink-soft)]")
+                      }
                       data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
                     >
                       {DIFFICULTY_LABEL[option]}
@@ -1269,7 +1284,7 @@ export function PodchatView({
                   className={
                     "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
                     (topic === option
-                      ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                       : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
                   }
                 >
@@ -1296,13 +1311,18 @@ export function PodchatView({
                   className={
                     "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
                     (difficulty === option
-                      ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                       : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
                   }
                 >
                   <span className="text-sm font-semibold">{option}</span>
                   <span
-                    className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                    className={
+                      "mt-1 block text-xs " +
+                      (difficulty === option
+                        ? "text-[var(--brand-accent-fill-ink)]"
+                        : "text-[var(--brand-ink-soft)]")
+                    }
                     data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
                   >
                     {DIFFICULTY_LABEL[option]}

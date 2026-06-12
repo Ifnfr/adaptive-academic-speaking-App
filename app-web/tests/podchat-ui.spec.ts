@@ -18,6 +18,30 @@ interface TtsPayload {
   text?: string;
 }
 
+function parseRgb(color: string): [number, number, number] {
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  expect(match).not.toBeNull();
+  return [Number(match![1]), Number(match![2]), Number(match![3])];
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]) {
+  const [rs, gs, bs] = [r, g, b].map((channel) => {
+    const srgb = channel / 255;
+    return srgb <= 0.03928
+      ? srgb / 12.92
+      : Math.pow((srgb + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function contrastRatio(colorA: string, colorB: string) {
+  const lumA = relativeLuminance(parseRgb(colorA));
+  const lumB = relativeLuminance(parseRgb(colorB));
+  const lighter = Math.max(lumA, lumB);
+  const darker = Math.min(lumA, lumB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 async function submitOnePodchatTurn(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Start a Podchat" }).click();
@@ -203,6 +227,56 @@ test.describe("Podchat Phase 1 connected UI", () => {
       });
     });
 
+  });
+
+  test("setup selected topic and difficulty use strong readable accent styling", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+
+    const selectedTopic = page.getByRole("radio", { name: "Technology" });
+    const selectedDifficulty = page.getByRole("radio", { name: /Intermediate/ });
+
+    await expect(selectedTopic).toHaveAttribute("aria-checked", "true");
+    await expect(selectedDifficulty).toHaveAttribute("aria-checked", "true");
+
+    const difficultyStyles = await selectedDifficulty.evaluate((element) => {
+      const duration = element.querySelector(
+        '[data-testid="podchat-difficulty-duration-intermediate"]',
+      );
+      const selected = getComputedStyle(element);
+      const durationStyle = duration ? getComputedStyle(duration) : null;
+
+      return {
+        backgroundColor: selected.backgroundColor,
+        borderColor: selected.borderColor,
+        color: selected.color,
+        durationColor: durationStyle?.color ?? "",
+      };
+    });
+
+    expect(difficultyStyles.backgroundColor).toBe("rgb(15, 118, 110)");
+    expect(difficultyStyles.borderColor).toBe("rgb(15, 118, 110)");
+    expect(difficultyStyles.backgroundColor).not.toBe("rgb(204, 251, 241)");
+    expect(difficultyStyles.color).toBe("rgb(255, 255, 255)");
+    expect(difficultyStyles.durationColor).toBe("rgb(255, 255, 255)");
+    expect(
+      contrastRatio(difficultyStyles.backgroundColor, difficultyStyles.color),
+    ).toBeGreaterThanOrEqual(4.5);
+
+    const topicStyles = await selectedTopic.evaluate((element) => {
+      const selected = getComputedStyle(element);
+      return {
+        backgroundColor: selected.backgroundColor,
+        borderColor: selected.borderColor,
+        color: selected.color,
+      };
+    });
+
+    expect(topicStyles.backgroundColor).toBe("rgb(15, 118, 110)");
+    expect(topicStyles.borderColor).toBe("rgb(15, 118, 110)");
+    expect(topicStyles.color).toBe("rgb(255, 255, 255)");
+    expect(contrastRatio(topicStyles.backgroundColor, topicStyles.color)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("runs full setup, speaking, and evaluation with mocked API routes and TTS success", async ({ page }) => {

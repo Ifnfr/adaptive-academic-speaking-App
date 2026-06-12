@@ -4,12 +4,37 @@ import {
   buildProfileSettingsPreferencesPatch,
   getProfileLanguagePreferenceState,
 } from "../src/app/components/SettingsView";
+import { COMMONPLACE_THEME_COLOR_IDS } from "../src/app/lib/commonplace-theme";
+
+const EXACT_COMMONPLACE_THEME_IDS = [
+  "default",
+  "paper",
+  "sage",
+  "sand",
+  "sky",
+  "lavender",
+  "rose",
+  "slate",
+  "charcoal",
+  "emerald",
+  "forest",
+  "teal",
+  "ocean",
+  "navy",
+  "plum",
+  "terracotta",
+  "graphite",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Unit tests for SettingsView helpers
 // ---------------------------------------------------------------------------
 
 test.describe("SettingsView helper functions", () => {
+  test("Commonplace theme choices expose the exact approved palette ids", () => {
+    expect(COMMONPLACE_THEME_COLOR_IDS).toEqual(EXACT_COMMONPLACE_THEME_IDS);
+  });
+
   test("buildProfileSettingsPreferencesPatch trims and normalizes empty display name & bio to null", () => {
     const patch = buildProfileSettingsPreferencesPatch({
       displayName: "  ",
@@ -30,6 +55,22 @@ test.describe("SettingsView helper functions", () => {
     expect(patch.commonplaceCanvasColor).toBe("default");
     expect(patch.commonplaceCardColor).toBe("default");
     expect(patch.appearanceMode).toBe("system");
+  });
+
+  test("buildProfileSettingsPreferencesPatch accepts the expanded Commonplace palette ids", () => {
+    const patch = buildProfileSettingsPreferencesPatch({
+      displayName: "Theme User",
+      bio: "",
+      publicProfileEnabled: false,
+      leaderboardOptIn: false,
+      preferredAppLanguage: "en",
+      feedbackLanguage: "en",
+      commonplaceCanvasColor: "ocean",
+      commonplaceCardColor: "terracotta",
+    });
+
+    expect(patch.commonplaceCanvasColor).toBe("ocean");
+    expect(patch.commonplaceCardColor).toBe("terracotta");
   });
 
   test("getProfileLanguagePreferenceState normalizes invalid values to defaults", () => {
