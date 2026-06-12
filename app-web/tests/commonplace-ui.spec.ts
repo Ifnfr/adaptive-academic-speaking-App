@@ -1106,6 +1106,116 @@ async function gotoApp(page: Page) {
       return;
     }
 
+    if (url.pathname === "/api/commonplace/maps/context") {
+      const mapId = url.searchParams.get("mapId");
+      const mapType = url.searchParams.get("mapType");
+
+      const context = await page.evaluate(
+        ({ mId, mType }) => {
+          const testWindow = window as typeof window & {
+            __COMMONPLACE_TEST_NOTES__?: Array<{
+              id: string;
+              shortcode: string;
+              title: string | null;
+              sourceBook: string;
+              insight: string;
+              tags: string[];
+            }>;
+            __COMMONPLACE_TEST_MAPS__?: Array<{ id: string; title: string; type: string }>;
+            __COMMONPLACE_TEST_MAP_NODES__?: Array<{
+              id: string;
+              mapId: string;
+              noteId: string | null;
+              positionX: number;
+              positionY: number;
+            }>;
+            __COMMONPLACE_TEST_MAP_EDGES__?: Array<{
+              id: string;
+              mapId: string;
+              sourceNodeId: string;
+              targetNodeId: string;
+              edgeType: "solid" | "dashed";
+              label: string | null;
+            }>;
+          };
+
+          const map = testWindow.__COMMONPLACE_TEST_MAPS__?.find(
+            (m) => m.id === mId && m.type === mType,
+          );
+          if (!map) return null;
+
+          const visualNodes = (testWindow.__COMMONPLACE_TEST_MAP_NODES__ ?? []).filter(
+            (n) => n.mapId === mId,
+          );
+
+          const nodes = visualNodes
+            .map((vn) => {
+              const note = testWindow.__COMMONPLACE_TEST_NOTES__?.find(
+                (n) => n.id === vn.noteId,
+              );
+              if (!note) return null;
+              return {
+                visualNodeId: vn.id,
+                noteId: vn.noteId || "",
+                shortcode: note.shortcode,
+                title: note.title,
+                sourceBook: note.sourceBook,
+                insightExcerpt: note.insight.slice(0, 320),
+                tags: note.tags.slice(0, 8),
+              };
+            })
+            .filter((node): node is NonNullable<typeof node> => Boolean(node));
+
+          const visualNodeIds = new Set(nodes.map((n) => n.visualNodeId));
+
+          const rawEdges = (testWindow.__COMMONPLACE_TEST_MAP_EDGES__ ?? []).filter(
+            (e) =>
+              e.mapId === mId &&
+              visualNodeIds.has(e.sourceNodeId) &&
+              visualNodeIds.has(e.targetNodeId),
+          );
+          const edges = rawEdges.map((re) => ({
+            sourceVisualNodeId: re.sourceNodeId,
+            targetVisualNodeId: re.targetNodeId,
+            edgeType: re.edgeType,
+            label: re.label,
+          }));
+
+          return {
+            source: "commonplace-map",
+            mapType: mType,
+            mapId: mId,
+            mapTitle: map.title,
+            counts: {
+              nodes: nodes.length,
+              edges: edges.length,
+              truncatedNodes: false,
+              truncatedEdges: false,
+            },
+            nodes,
+            edges,
+          };
+        },
+        { mId: mapId, mType: mapType },
+      );
+
+      if (!context) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "map_not_found" }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ context }),
+      });
+      return;
+    }
+
     await route.continue();
   });
 
@@ -2813,6 +2923,92 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(storedContext).toContain('"shortcode":"#wn1"');
     expect(storedContext).not.toMatch(forbiddenCommonplaceContextFieldPattern);
     expect(storedContext).not.toContain("quote");
+  });
+
+  test("Diskusi di Podchat supports Sub Mind Map with proper guards and handoff", async ({ page }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    // 1. Verify Main Map does not expose the button
+    await page.getByTestId("commonplace-main-maps-btn").click();
+    await page.getByLabel("New Main Map title").fill("Main Discussion Map");
+    await page.getByRole("button", { name: "+ New Main Map" }).click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Main Discussion Map" })
+      .getByRole("button", { name: "Open" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-discuss-button")).toHaveCount(0);
+
+    // Go back
+    await page.getByRole("button", { name: "Back to Main Maps" }).click();
+    await page.getByRole("button", { name: "← Library" }).click();
+
+    // 2. Open Sub Mind Map chooser via note detail
+    await page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i })
+      .click();
+    await page.getByTestId("commonplace-note-mind-map-btn").click();
+
+    // Create a new Sub Mind Map
+    await page.getByLabel("New Sub Mind Map title").fill("Sub Discussion Map");
+    await page.getByRole("button", { name: "+ New Sub Mind Map" }).click();
+    await page.getByRole("button", { name: /Sub Discussion Map/i }).click();
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+
+    // 3. Button is visible but disabled on empty Sub Map
+    const discussBtn = page.getByTestId("commonplace-map-discuss-button");
+    await expect(discussBtn).toBeVisible();
+    await expect(discussBtn).toBeDisabled();
+    await expect(discussBtn).toHaveAttribute(
+      "title",
+      "Add at least one note to discuss in Podchat",
+    );
+
+    // 4. Drag note onto canvas -> note drops are auto-saved on drop, so button is enabled
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 160, 200);
+    await expect(page.getByTestId("commonplace-map-note-node")).toHaveCount(1);
+    await expect(discussBtn).toBeEnabled();
+
+    // 5. Drag the node on the canvas to trigger unsaved changes -> button becomes disabled
+    const firstNode = page.getByTestId("commonplace-map-note-node").first();
+    await firstNode.dragTo(page.locator(".react-flow__pane"), {
+      force: true,
+      targetPosition: { x: 260, y: 300 },
+    });
+    await expect(discussBtn).toBeDisabled();
+    await expect(discussBtn).toHaveAttribute(
+      "title",
+      "Save changes before discussing in Podchat",
+    );
+
+    // Save changes -> button becomes enabled again
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText("Saved");
+    await expect(discussBtn).toBeEnabled();
+
+    // 6. Click button -> opens Podchat setup page with context preview
+    await discussBtn.click();
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+
+    const contextCard = page.getByTestId("podchat-commonplace-map-context-card");
+    await expect(contextCard).toBeVisible();
+    await expect(contextCard).toContainText("Sub Mind Map");
+    await expect(contextCard).toContainText("Sub Discussion Map");
+    await expect(contextCard).toContainText("1 visual notes");
+    await expect(contextCard).toContainText("0 connections");
+
+    // 7. Verify sessionStorage contains only compact reference
+    const storedContext = await page.evaluate(() =>
+      window.sessionStorage.getItem("fonetik:commonplace-podchat-context"),
+    );
+    expect(storedContext).toContain('"source":"commonplace-map"');
+    expect(storedContext).toContain('"mapType":"sub"');
+    expect(storedContext).not.toMatch(forbiddenCommonplaceContextFieldPattern);
+    expect(storedContext).not.toContain("insight");
+    expect(storedContext).not.toContain("nodes");
   });
 
   test("search filters sidebar and Library notes by title, source, shortcode, and tags", async ({

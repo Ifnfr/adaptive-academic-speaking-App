@@ -229,6 +229,51 @@ export type CommonplaceMainMapNodeKind = "cluster" | "note";
 
 export type CommonplaceMainMapEdgeType = CommonplaceMindMapEdgeType;
 
+export type CommonplaceSubMapDiscussionNode = {
+  visualNodeId: string;
+  noteId: string;
+  shortcode: string;
+  title: string | null;
+  sourceBook: string;
+  insightExcerpt: string;
+  tags: string[];
+};
+
+export type CommonplaceSubMapDiscussionEdge = {
+  sourceVisualNodeId: string;
+  targetVisualNodeId: string;
+  edgeType: CommonplaceMindMapEdgeType;
+  label: string | null;
+};
+
+export type CommonplaceSubMapDiscussionContext = {
+  source: "commonplace-map";
+  mapType: "sub";
+  mapId: string;
+  mapTitle: string;
+  counts: {
+    nodes: number;
+    edges: number;
+    truncatedNodes: boolean;
+    truncatedEdges: boolean;
+  };
+  nodes: CommonplaceSubMapDiscussionNode[];
+  edges: CommonplaceSubMapDiscussionEdge[];
+};
+
+export type CommonplaceSubMapDiscussionContextResult =
+  | { ok: true; context: CommonplaceSubMapDiscussionContext }
+  | { ok: false; error: CommonplaceError };
+
+export const COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS = {
+  maxNodes: 24,
+  maxEdges: 40,
+  maxInsightExcerptLength: 320,
+  maxTags: 8,
+  maxTagLength: 40,
+  maxEdgeLabelLength: 120,
+} as const;
+
 export type CommonplaceMainMapClusterInput = {
   localId: string;
   subMindMapId: string;
@@ -289,6 +334,11 @@ type MindMapRow = {
   parent_mindmap_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type DiscussionMapRow = {
+  id: string;
+  title: string | null;
 };
 
 type NodeJoinedRow = {
@@ -390,6 +440,34 @@ function cleanOptionalEdgeLabel(value: unknown): string | null | undefined {
   const trimmed = value.trim();
   if (trimmed.length > 80) return undefined;
   return trimmed || null;
+}
+
+function truncateText(value: unknown, maxLength: number): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function sanitizeDiscussionTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const tags: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const tag = truncateText(item, COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxTagLength);
+    if (!tag || tags.includes(tag)) continue;
+    tags.push(tag);
+    if (tags.length >= COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxTags) break;
+  }
+  return tags;
+}
+
+function sanitizeDiscussionLabel(value: unknown): string | null {
+  const label = truncateText(
+    value,
+    COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxEdgeLabelLength,
+  );
+  return label || null;
 }
 
 function mapSubMapEdgeRow(
@@ -995,6 +1073,129 @@ export async function listSubMapEdges(
       edges: ((data as EdgeRow[] | null) ?? []).map((row) =>
         mapSubMapEdgeRow(row, cleanMindMapId),
       ),
+    };
+  } catch {
+    return { ok: false, error: "commonplace_save_failed" };
+  }
+}
+
+export async function getCommonplaceSubMapDiscussionContext(
+  ownerId: string,
+  mindMapId: string,
+  supabaseClient: FonetikSupabaseClient,
+): Promise<CommonplaceSubMapDiscussionContextResult> {
+  const cleanOwnerId = cleanRequiredText(ownerId);
+  const cleanMindMapId = cleanRequiredText(mindMapId);
+  if (!cleanOwnerId || !cleanMindMapId) {
+    return { ok: false, error: "commonplace_validation_failed" };
+  }
+
+  try {
+    const { data: mapData, error: mapError } = await supabaseClient
+      .from(MINDMAPS_TABLE)
+      .select("id, title")
+      .eq("owner_id", cleanOwnerId)
+      .eq("id", cleanMindMapId)
+      .eq("type", "sub")
+      .maybeSingle();
+
+    if (mapError) return { ok: false, error: "commonplace_save_failed" };
+    if (!mapData) return { ok: false, error: "commonplace_not_found" };
+
+    const { data: nodeData, error: nodeError } = await supabaseClient
+      .from(NODES_TABLE)
+      .select(`
+        id,
+        note_id,
+        position_x,
+        position_y,
+        commonplace_notes (
+          shortcode,
+          title,
+          source_book,
+          insight,
+          tags
+        )
+      `)
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .order("updated_at", { ascending: false });
+
+    if (nodeError) return { ok: false, error: "commonplace_save_failed" };
+
+    const allNodes = ((nodeData as unknown as NodeJoinedRow[] | null) ?? [])
+      .map((row): CommonplaceSubMapDiscussionNode | null => {
+        const notesRel = row.commonplace_notes;
+        const noteObj = Array.isArray(notesRel) ? notesRel[0] : notesRel;
+        if (!noteObj) return null;
+
+        return {
+          visualNodeId: row.id,
+          noteId: row.note_id,
+          shortcode: truncateText(noteObj.shortcode, 40),
+          title: noteObj.title ? truncateText(noteObj.title, 160) : null,
+          sourceBook:
+            truncateText(noteObj.source_book, 160) || "Untitled Source",
+          insightExcerpt: truncateText(
+            noteObj.insight,
+            COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxInsightExcerptLength,
+          ),
+          tags: sanitizeDiscussionTags(noteObj.tags),
+        };
+      })
+      .filter((node): node is CommonplaceSubMapDiscussionNode => Boolean(node));
+
+    const { data: edgeData, error: edgeError } = await supabaseClient
+      .from(EDGES_TABLE)
+      .select("id, source_node_id, target_node_id, edge_type, label")
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId)
+      .order("created_at", { ascending: true });
+
+    if (edgeError) return { ok: false, error: "commonplace_save_failed" };
+
+    const includedNodeIds = new Set(
+      allNodes
+        .slice(0, COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxNodes)
+        .map((node) => node.visualNodeId),
+    );
+    const allEdges = ((edgeData as unknown as EdgeRow[] | null) ?? [])
+      .filter(
+        (row) =>
+          includedNodeIds.has(row.source_node_id) &&
+          includedNodeIds.has(row.target_node_id),
+      )
+      .map(
+        (row): CommonplaceSubMapDiscussionEdge => ({
+          sourceVisualNodeId: row.source_node_id,
+          targetVisualNodeId: row.target_node_id,
+          edgeType: cleanEdgeType(row.edge_type) ?? "solid",
+          label: sanitizeDiscussionLabel(row.label),
+        }),
+      );
+
+    const nodes = allNodes.slice(0, COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxNodes);
+    const edges = allEdges.slice(0, COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxEdges);
+    const mapRow = mapData as DiscussionMapRow;
+
+    return {
+      ok: true,
+      context: {
+        source: "commonplace-map",
+        mapType: "sub",
+        mapId: cleanMindMapId,
+        mapTitle: truncateText(mapRow.title, 160) || "Untitled Sub Mind Map",
+        counts: {
+          nodes: nodes.length,
+          edges: edges.length,
+          truncatedNodes:
+            allNodes.length > COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxNodes,
+          truncatedEdges:
+            allEdges.length > COMMONPLACE_SUB_MAP_DISCUSSION_LIMITS.maxEdges,
+        },
+        nodes,
+        edges,
+      },
     };
   } catch {
     return { ok: false, error: "commonplace_save_failed" };

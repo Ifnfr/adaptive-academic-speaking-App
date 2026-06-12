@@ -292,6 +292,11 @@ type CommonplaceViewProps = {
     insight: string;
     tags: string[];
   }) => void;
+  onDiscussMapInPodchat?: (context: {
+    source: "commonplace-map";
+    mapType: "sub";
+    mapId: string;
+  }) => void;
 };
 
 const emptyForm: CommonplaceFormState = {
@@ -1087,6 +1092,7 @@ export function CommonplaceView({
   commonplaceCanvasColor,
   commonplaceCardColor,
   onDiscussInPodchat,
+  onDiscussMapInPodchat,
 }: CommonplaceViewProps) {
   const [mode, setMode] = useState<CommonplaceMode>("library");
   const [notes, setNotes] = useState<CommonplaceNote[]>([]);
@@ -1830,6 +1836,27 @@ export function CommonplaceView({
     onDiscussInPodchat(context);
   };
 
+  const handleDiscussMapInPodchat = () => {
+    if (!selectedMap || selectedMap.type !== "sub" || !onDiscussMapInPodchat) return;
+
+    const context = {
+      source: "commonplace-map",
+      mapType: "sub",
+      mapId: selectedMap.id,
+    } as const;
+
+    try {
+      window.sessionStorage.setItem(
+        "fonetik:commonplace-podchat-context",
+        JSON.stringify(context),
+      );
+    } catch {
+      // Session storage is a convenience for resume; the direct handoff remains primary.
+    }
+
+    onDiscussMapInPodchat(context);
+  };
+
   const updateField = (field: keyof CommonplaceFormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
     if (
@@ -2057,6 +2084,7 @@ export function CommonplaceView({
                   updateEdge={(input) => updateMapCanvasEdge(selectedMap, input)}
                   deleteEdge={(edgeId) => deleteMapCanvasEdge(selectedMap, edgeId)}
                   deleteNode={(nodeId) => deleteMapCanvasNode(selectedMap, nodeId)}
+                  onDiscussMapInPodchat={onDiscussMapInPodchat ? handleDiscussMapInPodchat : undefined}
                 />
               )}
             </>

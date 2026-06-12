@@ -202,11 +202,47 @@ export type PodchatCommonplaceContext = {
   tags: string[];
 };
 
+export type PodchatCommonplaceMapContextRef = {
+  source: "commonplace-map";
+  mapType: "sub";
+  mapId: string;
+};
+
+type PodchatCommonplaceMapDiscussionContext = {
+  source: "commonplace-map";
+  mapType: "sub";
+  mapId: string;
+  mapTitle: string;
+  counts: {
+    nodes: number;
+    edges: number;
+    truncatedNodes: boolean;
+    truncatedEdges: boolean;
+  };
+  nodes: Array<{
+    visualNodeId: string;
+    noteId: string;
+    shortcode: string;
+    title: string | null;
+    sourceBook: string;
+    insightExcerpt: string;
+    tags: string[];
+  }>;
+  edges: Array<{
+    sourceVisualNodeId: string;
+    targetVisualNodeId: string;
+    edgeType: "solid" | "dashed";
+    label: string | null;
+  }>;
+};
+
 export interface PodchatViewProps {
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
   commonplaceContext?: PodchatCommonplaceContext | null;
   onClearCommonplaceContext?: () => void;
+  commonplaceMapContextRef?: PodchatCommonplaceMapContextRef | null;
+  onClearCommonplaceMapContext?: () => void;
   ttsProvider?: "polly" | "elevenlabs";
   elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
 }
@@ -216,6 +252,8 @@ export function PodchatView({
   onClearArticleContext,
   commonplaceContext,
   onClearCommonplaceContext,
+  commonplaceMapContextRef,
+  onClearCommonplaceMapContext,
   ttsProvider = "polly",
   elevenLabsModelId = "",
 }: PodchatViewProps) {
@@ -239,6 +277,12 @@ export function PodchatView({
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [evalData, setEvalData] = useState<PodchatEvaluateResponse | null>(null);
+  const [commonplaceMapContext, setCommonplaceMapContext] =
+    useState<PodchatCommonplaceMapDiscussionContext | null>(null);
+  const [commonplaceMapContextLoading, setCommonplaceMapContextLoading] =
+    useState(false);
+  const [commonplaceMapContextError, setCommonplaceMapContextError] =
+    useState<string | null>(null);
 
   // TTS audio playback states and refs
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
@@ -282,6 +326,66 @@ export function PodchatView({
   const commonplaceOpener = commonplaceContext
     ? `Today, we'll discuss your Commonplace note ${commonplaceContext.shortcode} from ${commonplaceLabel}. Explain the idea in your own words.`
     : null;
+  const commonplaceMapOpener = commonplaceMapContext
+    ? `Today, we'll discuss your Sub Mind Map "${commonplaceMapContext.mapTitle}". It includes ${commonplaceMapContext.counts.nodes} visual notes and ${commonplaceMapContext.counts.edges} connections. Start by explaining the strongest relationship you see.`
+    : null;
+
+  useEffect(() => {
+    if (!commonplaceMapContextRef) {
+      setTimeout(() => {
+        setCommonplaceMapContext(null);
+        setCommonplaceMapContextLoading(false);
+        setCommonplaceMapContextError(null);
+      }, 0);
+      return;
+    }
+
+    let isCurrent = true;
+    const loadContext = async () => {
+      setCommonplaceMapContext(null);
+      setCommonplaceMapContextLoading(true);
+      setCommonplaceMapContextError(null);
+      try {
+        const params = new URLSearchParams({
+          mapId: commonplaceMapContextRef.mapId,
+          mapType: commonplaceMapContextRef.mapType,
+        });
+        const response = await fetch(`/api/commonplace/maps/context?${params}`, {
+          method: "GET",
+          credentials: "same-origin",
+        });
+        const data = (await response.json().catch(() => null)) as
+          | {
+              context?: PodchatCommonplaceMapDiscussionContext;
+              error?: string;
+            }
+          | null;
+        if (!isCurrent) return;
+        if (response.ok && data?.context?.source === "commonplace-map") {
+          setCommonplaceMapContext(data.context);
+          return;
+        }
+        setCommonplaceMapContextError(
+          data?.error === "auth_required"
+            ? "Sign in again to discuss this map."
+            : "Could not load this map discussion context.",
+        );
+      } catch {
+        if (isCurrent) {
+          setCommonplaceMapContextError(
+            "Could not load this map discussion context.",
+          );
+        }
+      } finally {
+        if (isCurrent) setCommonplaceMapContextLoading(false);
+      }
+    };
+
+    void loadContext();
+    return () => {
+      isCurrent = false;
+    };
+  }, [commonplaceMapContextRef]);
 
   // --- Timer management ---
   function startTimer() {
@@ -450,7 +554,7 @@ export function PodchatView({
     const opener: PodchatTurn = {
       id: "podchat-turn-1",
       speaker: "host",
-      text: commonplaceOpener ?? HOST_OPENERS[topic],
+      text: commonplaceMapOpener ?? commonplaceOpener ?? HOST_OPENERS[topic],
     };
     setTurns([opener]);
     setSubmittedUserTurns(0);
@@ -484,6 +588,9 @@ export function PodchatView({
     }
     if (onClearCommonplaceContext) {
       onClearCommonplaceContext();
+    }
+    if (onClearCommonplaceMapContext) {
+      onClearCommonplaceMapContext();
     }
   }
 
@@ -744,6 +851,157 @@ export function PodchatView({
   }
 
   if (phase === "setup") {
+    if (commonplaceMapContextRef) {
+      const canStartMapPodchat =
+        Boolean(commonplaceMapContext) &&
+        !commonplaceMapContextLoading &&
+        !commonplaceMapContextError;
+      return (
+        <section className={card} data-testid="podchat-setup">
+          <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+              Commonplace map
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
+              Start a Podchat
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-soft)]">
+              Discuss a saved Sub Mind Map without changing the canvas.
+            </p>
+          </div>
+          <div className="p-6 flex flex-col gap-6">
+            <div
+              className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex flex-col gap-4"
+              data-testid="podchat-commonplace-map-context-card"
+            >
+              {commonplaceMapContextLoading && (
+                <p className="text-sm text-[var(--brand-ink-soft)]">
+                  Loading map context…
+                </p>
+              )}
+              {commonplaceMapContextError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] px-3 py-2 text-sm text-[#8A1F15]"
+                >
+                  {commonplaceMapContextError}
+                </p>
+              )}
+              {commonplaceMapContext && (
+                <>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                      Source
+                    </span>
+                    <span className="text-sm font-semibold text-[var(--brand-teal)] block mt-1">
+                      Sub Mind Map
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                      Map
+                    </span>
+                    <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">
+                      {commonplaceMapContext.mapTitle}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                      {commonplaceMapContext.counts.nodes} visual notes
+                    </span>
+                    <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                      {commonplaceMapContext.counts.edges} connections
+                    </span>
+                    {(commonplaceMapContext.counts.truncatedNodes ||
+                      commonplaceMapContext.counts.truncatedEdges) && (
+                      <span className="rounded-full border border-[#D99A25]/30 bg-[#FFF4D8] px-2.5 py-1 text-xs font-medium text-[#7A4A00]">
+                        Bounded preview
+                      </span>
+                    )}
+                  </div>
+                  {commonplaceMapContext.nodes.length > 0 && (
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                        Preview
+                      </span>
+                      <ul className="mt-2 grid gap-2">
+                        {commonplaceMapContext.nodes.slice(0, 3).map((node) => (
+                          <li
+                            key={node.visualNodeId}
+                            className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]"
+                          >
+                            <span className="font-semibold text-[var(--brand-ink)]">
+                              {node.title || node.shortcode}
+                            </span>
+                            <span className="ml-2 text-xs text-[var(--brand-muted)]">
+                              {node.shortcode}
+                            </span>
+                            <p className="mt-1 line-clamp-2">
+                              {node.insightExcerpt}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {commonplaceMapOpener && (
+              <p className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--brand-ink-soft)]">
+                {commonplaceMapOpener}
+              </p>
+            )}
+
+            <fieldset>
+              <legend className={labelClass}>Difficulty / Duration</legend>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                role="radiogroup"
+                aria-label="Podchat difficulty"
+              >
+                {DIFFICULTIES.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={difficulty === option}
+                    onClick={() => setDifficulty(option)}
+                    className={
+                      "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                      (difficulty === option
+                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/60 text-[var(--brand-teal-ink)]"
+                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                    }
+                  >
+                    <span className="text-sm font-semibold">{option}</span>
+                    <span
+                      className="mt-1 block text-xs text-[var(--brand-ink-soft)]"
+                      data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
+                    >
+                      {DIFFICULTY_LABEL[option]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="flex justify-center mt-2">
+              <button
+                type="button"
+                onClick={startPodchat}
+                className={buttonPrimary}
+                disabled={!canStartMapPodchat}
+              >
+                Start a Podchat
+              </button>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     if (commonplaceContext) {
       return (
         <section className={card} data-testid="podchat-setup">

@@ -57,6 +57,7 @@ import { PodchatView } from "./components/PodchatView";
 import type {
   PodchatArticleContext,
   PodchatCommonplaceContext,
+  PodchatCommonplaceMapContextRef,
 } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
 import { CommonplaceView } from "./components/CommonplaceView";
@@ -583,6 +584,8 @@ export default function Home() {
     useState<PodchatArticleContext | null>(null);
   const [pendingCommonplaceContext, setPendingCommonplaceContext] =
     useState<PodchatCommonplaceContext | null>(null);
+  const [pendingCommonplaceMapContextRef, setPendingCommonplaceMapContextRef] =
+    useState<PodchatCommonplaceMapContextRef | null>(null);
 
   // --- Gamification state (local, deterministic, no AI) ---
   const [xpProfile, setXpProfile] = useState<XpProfile>(() =>
@@ -1558,9 +1561,21 @@ export default function Home() {
   ) => {
     setPendingCommonplaceContext(context);
     setPendingArticleContext(null);
+    setPendingCommonplaceMapContextRef(null);
     setTarget(
       `Commonplace note ${context.shortcode}: ${context.insight.slice(0, 180)}`,
     );
+    setMode("Fluency Sprint");
+    setView("active");
+  };
+
+  const handleDiscussCommonplaceMapInPodchat = (
+    context: PodchatCommonplaceMapContextRef,
+  ) => {
+    setPendingCommonplaceMapContextRef(context);
+    setPendingCommonplaceContext(null);
+    setPendingArticleContext(null);
+    setTarget("Commonplace Sub Mind Map discussion");
     setMode("Fluency Sprint");
     setView("active");
   };
@@ -1945,11 +1960,13 @@ export default function Home() {
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
             <PodchatView
-              key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : "generic"}`}
+              key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : pendingCommonplaceMapContextRef ? "commonplace-map" : "generic"}`}
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
               commonplaceContext={pendingCommonplaceContext}
               onClearCommonplaceContext={() => setPendingCommonplaceContext(null)}
+              commonplaceMapContextRef={pendingCommonplaceMapContextRef}
+              onClearCommonplaceMapContext={() => setPendingCommonplaceMapContextRef(null)}
               ttsProvider={ttsProvider}
               elevenLabsModelId={elevenLabsModel}
             />
@@ -2017,6 +2034,7 @@ export default function Home() {
               commonplaceCanvasColor={ownerProfile?.commonplaceCanvasColor}
               commonplaceCardColor={ownerProfile?.commonplaceCardColor}
               onDiscussInPodchat={handleDiscussCommonplaceInPodchat}
+              onDiscussMapInPodchat={handleDiscussCommonplaceMapInPodchat}
             />
           )}
 
