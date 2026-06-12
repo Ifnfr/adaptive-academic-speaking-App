@@ -78,3 +78,226 @@ body {
   background-size: 24px 24px;
   background-position: 0 0;
 }
+
+/*
+ * Dark mode tokens.
+ * When root has the `.dark` class, these variables override the default light ones.
+ */
+.dark {
+  /* Surfaces */
+  --brand-bg: #0f0f0d;          /* dark rich background, warm tone */
+  --brand-surface: #171614;     /* dark surface/cards */
+  --brand-surface-2: #1e1d1a;   /* slightly lighter surface/recessed inputs */
+  --brand-border: #2c2a26;      /* dark border */
+  --brand-border-strong: #3d3b36;
+
+  /* Text */
+  --brand-ink: #f4f2ee;         /* off-white main text */
+  --brand-ink-soft: #dcd9d2;    /* secondary text */
+  --brand-muted: #9c978e;       /* muted labels */
+
+  /* Accents */
+  --brand-teal: #14b8a6;        /* lighter teal-500 for readability on dark */
+  --brand-teal-soft: #11332f;   /* dark teal background tint */
+  --brand-teal-ink: #5eead4;    /* teal-300 for readable text on dark */
+  --brand-gold: #f59e0b;        /* amber-500 */
+  --brand-gold-soft: #452b07;   /* dark amber background tint */
+  --brand-coral: #f97316;       /* orange-500 */
+  --brand-coral-soft: #4c1d10;  /* dark orange background tint */
+}
+
+/*
+ * Under dark mode, adjust the background pattern colors to have low contrast on dark background.
+ */
+.dark body {
+  background-image:
+    radial-gradient(
+      circle at 1px 1px,
+      rgba(244, 242, 238, 0.05) 1px,
+      transparent 0
+    );
+}
+
+.dark .brand-grid {
+  background-image:
+    linear-gradient(to right, rgba(244, 242, 238, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244, 242, 238, 0.03) 1px, transparent 1px);
+}
+
+/*
+ * Visual Overrides for Hardcoded Light Colors in Dark Mode
+ */
+
+/* Target bg-white only when not inside visual map notes or cluster nodes */
+.dark :not([data-node-kind="note"]):not([data-node-kind="cluster"]) .bg-white {
+  background-color: var(--brand-surface) !important;
+}
+
+/* Hardcoded white backgrounds & textareas/inputs/selects */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--brand-surface) !important;
+  color: var(--brand-ink) !important;
+  border-color: var(--brand-border) !important;
+}
+
+/* Override hardcoded stone-200 and stone-300 border utility classes in dark mode */
+.dark .border-stone-200,
+.dark .border-stone-200\/80,
+.dark .border-stone-300 {
+  border-color: var(--brand-border) !important;
+}
+
+/* CoverPage / Landing screen specific overrides */
+.dark .min-h-\[100dvh\].bg-\[\#F4F2E6\] {
+  background-color: var(--brand-bg) !important;
+  color: var(--brand-ink) !important;
+}
+
+.dark .bg-\[\#F4F2E6\] {
+  background-color: var(--brand-bg) !important;
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: var(--brand-ink) !important;
+}
+
+.dark .text-slate-600\/90 {
+  color: var(--brand-ink-soft) !important;
+}
+
+.dark .text-slate-500,
+.dark .text-stone-500 {
+  color: var(--brand-ink-soft) !important;
+}
+
+.dark .bg-white\/50 {
+  background-color: rgba(30, 29, 26, 0.5) !important;
+}
+
+.dark .bg-white\/60 {
+  background-color: rgba(23, 22, 20, 0.6) !important;
+}
+
+.dark .bg-white\/75 {
+  background-color: rgba(23, 22, 20, 0.75) !important;
+}
+
+.dark .bg-white\/80 {
+  background-color: rgba(23, 22, 20, 0.8) !important;
+}
+
+.dark .bg-white\/85 {
+  background-color: rgba(23, 22, 20, 0.85) !important;
+}
+
+.dark .bg-white\/95 {
+  background-color: rgba(23, 22, 20, 0.95) !important;
+}
+
+/* Custom checkbox / star bg-white/50 toggle box check */
+.dark .peer:checked ~ .peer-checked\:bg-\[\#1A554A\] {
+  background-color: var(--brand-teal) !important;
+}
+.dark .peer:checked ~ .peer-checked\:border-\[\#1A554A\] {
+  border-color: var(--brand-teal) !important;
+}
+
+/* Google Sign-in button text color */
+.dark .text-slate-700 {
+  color: var(--brand-ink) !important;
+}
+
+/* Overriding hardcoded brand dark teal elements in landing page */
+.dark .bg-\[\#1A554A\] {
+  background-color: var(--brand-teal) !important;
+}
+
+.dark .text-\[\#1A554A\] {
+  color: var(--brand-teal-ink) !important;
+}
+
+/* Drifting particles color */
+.dark [data-testid="particles-bg"] .particle-inner {
+  background-color: var(--brand-teal-ink) !important;
+}
+
+/* Floating label background overrides */
+.dark .peer-focus\:bg-white,
+.dark .peer-\[\:not\(\:placeholder-shown\)\]\:bg-white {
+  background-color: #171614 !important; /* matches --brand-surface */
+  color: var(--brand-teal-ink) !important;
+}
+
+/* Alert warning/error color overrides */
+.dark .bg-red-50 {
+  background-color: var(--brand-coral-soft) !important;
+  color: var(--brand-ink) !important;
+}
+.dark .border-red-200,
+.dark .border-red-100 {
+  border-color: var(--brand-coral) !important;
+}
+.dark .bg-\[\#FFF4D8\],
+.dark .bg-amber-50 {
+  background-color: var(--brand-gold-soft) !important;
+  color: var(--brand-ink) !important;
+}
+.dark .border-amber-200,
+.dark .border-amber-300,
+.dark .border-amber-100 {
+  border-color: var(--brand-gold) !important;
+}
+.dark .text-amber-700,
+.dark .text-\[\#7A4A00\] {
+  color: var(--brand-gold) !important;
+}
+.dark .text-red-700,
+.dark .text-\[\#8A1F15\] {
+  color: var(--brand-coral) !important;
+}
+
+/*
+ * React Flow controls styling under dark mode
+ */
+.dark .react-flow__controls-button {
+  background-color: var(--brand-surface) !important;
+  fill: var(--brand-ink) !important;
+  stroke: var(--brand-ink) !important;
+  border-bottom: 1px solid var(--brand-border) !important;
+  color: var(--brand-ink) !important;
+}
+.dark .react-flow__controls-button:hover {
+  background-color: var(--brand-surface-2) !important;
+}
+.dark .react-flow__controls-button svg {
+  fill: currentColor !important;
+}
+.dark .react-flow__minimap {
+  background-color: var(--brand-surface) !important;
+  border: 1px solid var(--brand-border) !important;
+}
+.dark .react-flow__minimap-mask {
+  fill: rgba(0, 0, 0, 0.6) !important;
+}
+
+/*
+ * Main Map Purple branding overrides
+ */
+.dark .text-\[\#332C85\] {
+  color: #a78bfa !important; /* light purple-400 */
+}
+.dark .border-\[\#534AB7\]\/30 {
+  border-color: rgba(167, 139, 250, 0.3) !important;
+}
+.dark .border-\[\#534AB7\]\/20 {
+  border-color: rgba(167, 139, 250, 0.2) !important;
+}
+.dark .border-\[\#534AB7\]\/25 {
+  border-color: rgba(167, 139, 250, 0.25) !important;
+}
+.dark .bg-\[\#F8F7FF\]:hover {
+  background-color: rgba(167, 139, 250, 0.1) !important;
+}

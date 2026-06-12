@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import {
   buildProfileSettingsPreferencesPatch,
   getProfileLanguagePreferenceState,
@@ -252,6 +252,25 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
 // ---------------------------------------------------------------------------
 
 test.describe("Settings view — signed-out (local mode)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+        return;
+      }
+      await route.continue();
+    });
+  });
+
   test("sidebar shows 'Settings' label and old combined label is removed", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("aside")).toContainText("Settings");
@@ -357,5 +376,130 @@ test.describe("Settings view — signed-out (local mode)", () => {
     // Navigate back
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(page.locator("body")).toContainText("Local Profile");
+  });
+});
+
+async function setupMockSignedInAuthAndProfile(page: Page, initialMode: string = "system") {
+  await page.route("**/*", async (route: Route) => {
+    const url = new URL(route.request().url());
+    if (
+      url.pathname === "/" &&
+      !url.searchParams.has("mockAuth") &&
+      route.request().resourceType() === "document"
+    ) {
+      url.searchParams.set("mockAuth", "true");
+      await route.fulfill({
+        status: 302,
+        headers: { location: url.toString() },
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.addInitScript((modeValue: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const testWindow = window as any;
+    testWindow.__MOCK_AUTH__ = {
+      isSignedIn: true,
+      userId: "test-user-theme-id",
+      email: "theme-test@example.com",
+      displayName: "Theme Tester",
+    };
+
+    let localProfileState = {
+      ownerId: "test-user-theme-id",
+      email: "theme-test@example.com",
+      displayName: "Theme Tester",
+      learnerLevel: "Intermediate",
+      preferredProvider: "Claude",
+      preferredMode: "Fluency Sprint",
+      avatarUrl: null,
+      bio: "Checking themes",
+      publicProfileEnabled: false,
+      leaderboardOptIn: false,
+      preferredAppLanguage: "en",
+      feedbackLanguage: "en",
+      targetLanguage: "en",
+      commonplaceCanvasColor: "default",
+      commonplaceCardColor: "default",
+      appearanceMode: modeValue,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    testWindow.__MOCK_PROFILE_ADAPTER__ = {
+      async loadProfile() {
+        return localProfileState;
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async updateProfile(_userId: string, patch: any) {
+        localProfileState = {
+          ...localProfileState,
+          displayName: patch.displayName === undefined ? localProfileState.displayName : (patch.displayName ?? ""),
+          bio: patch.bio === undefined ? localProfileState.bio : (patch.bio ?? ""),
+          publicProfileEnabled: patch.publicProfileEnabled ?? localProfileState.publicProfileEnabled,
+          leaderboardOptIn: patch.leaderboardOptIn ?? localProfileState.leaderboardOptIn,
+          preferredAppLanguage: patch.preferredAppLanguage ?? localProfileState.preferredAppLanguage,
+          feedbackLanguage: patch.feedbackLanguage ?? localProfileState.feedbackLanguage,
+          commonplaceCanvasColor: patch.commonplaceCanvasColor ?? localProfileState.commonplaceCanvasColor,
+          commonplaceCardColor: patch.commonplaceCardColor ?? localProfileState.commonplaceCardColor,
+          appearanceMode: patch.appearanceMode ?? localProfileState.appearanceMode,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    };
+  }, initialMode);
+}
+
+test.describe("Settings view — signed-in appearance mode", () => {
+  test("dark theme selection toggles document class to dark", async ({ page }) => {
+    await setupMockSignedInAuthAndProfile(page, "light");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    // Verify root does not have dark class initially
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+    // Select dark mode in settings
+    await page.locator("#profile-appearance-mode-select").selectOption("dark");
+    await page.locator("#profile-save-btn").click();
+
+    // Verify save success message
+    await expect(page.getByTestId("profile-save-success")).toBeVisible();
+
+    // Verify root gets dark class
+    await expect(page.locator("html")).toHaveClass(/dark/);
+  });
+
+  test("light theme selection removes dark class", async ({ page }) => {
+    await setupMockSignedInAuthAndProfile(page, "dark");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    // Verify root has dark class initially (since initial mode is dark)
+    await expect(page.locator("html")).toHaveClass(/dark/);
+
+    // Select light mode in settings
+    await page.locator("#profile-appearance-mode-select").selectOption("light");
+    await page.locator("#profile-save-btn").click();
+
+    // Verify root removes dark class
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+  });
+
+  test("system theme follows OS prefers-color-scheme setting", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await setupMockSignedInAuthAndProfile(page, "system");
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    // Should be dark because prefers-color-scheme is dark
+    await expect(page.locator("html")).toHaveClass(/dark/);
+
+    // Change media query to light
+    await page.emulateMedia({ colorScheme: "light" });
+    // Root should immediately update to light without refresh
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
   });
 });

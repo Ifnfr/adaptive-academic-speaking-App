@@ -454,6 +454,32 @@ export default function Home() {
     language: AppLanguage;
   } | null>(null);
 
+  // --- Global Theme Mode Application ---
+  useEffect(() => {
+    const mode = ownerProfile?.appearanceMode ?? "system";
+
+    function updateTheme() {
+      const isDark =
+        mode === "dark" ||
+        (mode === "system" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", isDark);
+    }
+
+    updateTheme();
+
+    if (mode === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener("change", updateTheme);
+        return () => mediaQuery.removeEventListener("change", updateTheme);
+      } else {
+        mediaQuery.addListener(updateTheme);
+        return () => mediaQuery.removeListener(updateTheme);
+      }
+    }
+  }, [ownerProfile?.appearanceMode]);
+
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
   const [mode, setMode] = useState<Mode>("Fluency Sprint");
@@ -796,13 +822,28 @@ export default function Home() {
     if (CLERK_ENABLED && !isClerkUserLoaded) return;
     if (!cloudAuthState.isLoaded) return;
     if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) return;
-    if (!isSupabaseConfigured()) return;
 
     let cancelled = false;
 
     async function runLoadProfile() {
       if (!cloudAuthState.userId || !cloudAuthState.getToken) return;
       try {
+        if (process.env.NODE_ENV !== "production") {
+          const testWindow = window as typeof window & {
+            __MOCK_PROFILE_ADAPTER__?: {
+              loadProfile?: (userId: string) => Promise<UserProfile | null>;
+              updateProfile?: (userId: string, patch: UserProfilePreferencesPatch) => Promise<void>;
+            };
+          };
+          if (testWindow.__MOCK_PROFILE_ADAPTER__?.loadProfile) {
+            const p = await testWindow.__MOCK_PROFILE_ADAPTER__.loadProfile(cloudAuthState.userId);
+            if (!cancelled) setOwnerProfile(p);
+            return;
+          }
+        }
+
+        if (!isSupabaseConfigured()) return;
+
         const token = await cloudAuthState.getToken();
         if (!token || cancelled) return;
         const supabaseClient = createBrowserSupabaseClient({
@@ -837,6 +878,26 @@ export default function Home() {
     setProfileSaveStatus("saving");
     setProfileSaveError(null);
     try {
+      if (process.env.NODE_ENV !== "production") {
+        const testWindow = window as typeof window & {
+          __MOCK_PROFILE_ADAPTER__?: {
+            loadProfile?: (userId: string) => Promise<UserProfile | null>;
+            updateProfile?: (userId: string, patch: UserProfilePreferencesPatch) => Promise<void>;
+          };
+        };
+        if (testWindow.__MOCK_PROFILE_ADAPTER__?.updateProfile) {
+          await testWindow.__MOCK_PROFILE_ADAPTER__.updateProfile(cloudAuthState.userId, patch);
+          setOwnerProfile((prev): UserProfile | null => {
+            if (!prev) return prev;
+            return applyProfilePreferencesPatchToProfile(prev, patch);
+          });
+          setProfileSaveStatus("saved");
+          return;
+        }
+      }
+
+      if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
+
       const token = await cloudAuthState.getToken();
       if (!token) throw new Error("No auth token");
       const supabaseClient = createBrowserSupabaseClient({
@@ -2409,12 +2470,32 @@ function SessionCloudAuthBridge({
   const { getToken, isLoaded, isSignedIn, userId } = useAuth();
 
   useEffect(() => {
-    const nextAuth = {
+    let nextAuth = {
       isLoaded,
       isSignedIn: isSignedIn === true,
       userId: userId ?? null,
       getToken: () => getToken(),
     };
+
+    if (process.env.NODE_ENV !== "production") {
+      const testWindow = window as typeof window & {
+        __MOCK_AUTH__?: {
+          isSignedIn: boolean;
+          userId: string;
+          email?: string;
+          displayName?: string;
+        };
+      };
+      if (testWindow.__MOCK_AUTH__) {
+        nextAuth = {
+          isLoaded: true,
+          isSignedIn: testWindow.__MOCK_AUTH__.isSignedIn,
+          userId: testWindow.__MOCK_AUTH__.userId,
+          getToken: async () => "mock-token",
+        };
+      }
+    }
+
     authRef.current = nextAuth;
     onAuthStateChange(nextAuth);
 
@@ -2432,10 +2513,29 @@ type ClerkUserBridgeProps = {
 };
 
 function ClerkUserBridge({ onUserChange }: ClerkUserBridgeProps) {
-  const { user, isLoaded } = useUser();
+  const clerkUser = useUser();
   useEffect(() => {
-    onUserChange(user, isLoaded);
-  }, [user, isLoaded, onUserChange]);
+    if (process.env.NODE_ENV !== "production") {
+      const testWindow = window as typeof window & {
+        __MOCK_AUTH__?: {
+          isSignedIn: boolean;
+          userId: string;
+          email?: string;
+          displayName?: string;
+        };
+      };
+      if (testWindow.__MOCK_AUTH__) {
+        const mockUser = {
+          id: testWindow.__MOCK_AUTH__.userId,
+          primaryEmailAddress: { emailAddress: testWindow.__MOCK_AUTH__.email ?? "test@example.com" },
+          fullName: testWindow.__MOCK_AUTH__.displayName ?? "Mock User",
+        } as unknown as ClerkUserType;
+        onUserChange(mockUser, true);
+        return;
+      }
+    }
+    onUserChange(clerkUser.user, clerkUser.isLoaded);
+  }, [clerkUser.user, clerkUser.isLoaded, onUserChange]);
   return null;
 }
 

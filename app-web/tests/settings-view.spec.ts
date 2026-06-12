@@ -54,6 +54,22 @@ test.describe("SettingsView helper functions", () => {
 
 test.describe("SettingsView Browser UI integration - Split Sidebar View", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+        return;
+      }
+      await route.continue();
+    });
     await page.goto("/");
   });
 
