@@ -1583,29 +1583,31 @@ export function CommonplaceMapCanvasFoundation({
       className="flex min-h-0 flex-col rounded-xl border border-[#C9D8D1] bg-[#FAF8F2]"
       data-testid="commonplace-map-canvas"
       data-canvas-theme={canvasTheme.id}
+      data-commonplace-panel-surface="true"
+      style={canvasTheme.panelStyle}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#C9D8D1] px-4 py-3 sm:px-5">
         <div>
           <button
             type="button"
             onClick={onBack}
-            className="mb-3 rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)]"
+            className="commonplace-panel-button mb-3 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white"
           >
             {backLabel ?? (isSubMap ? "Back to Sub Mind Maps" : "Back to Main Maps")}
           </button>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
+          <p className="commonplace-panel-accent text-xs font-semibold uppercase tracking-wide">
             {isSubMap ? "Sub Mind Map" : "Main Map"}
           </p>
-          <h2 className="mt-1 text-2xl font-semibold text-[var(--brand-ink)]">
+          <h2 className="commonplace-panel-ink mt-1 text-2xl font-semibold">
             {map.title}
           </h2>
-          <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
+          <p className="commonplace-panel-ink-soft mt-1 text-sm">
             {isMainMap
               ? "Clusters organize saved sub maps. Notes are individual ideas."
               : "Drag notes, move ideas, and connect relationships."}
           </p>
           {isSubMap && noteContext && (
-            <p className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
+            <p className="commonplace-panel-ink-soft mt-3 rounded-lg border border-[var(--commonplace-panel-border)] bg-white/70 px-3 py-2 text-sm">
               Opened from {noteContext.shortcode}: {noteContext.title}
             </p>
           )}
@@ -1615,7 +1617,7 @@ export function CommonplaceMapCanvasFoundation({
           {isMainMap && (
             <>
               <span
-                className="rounded-full border border-[#C9D8D1] bg-white px-3 py-1 text-xs font-semibold text-[#36564C]"
+                className="commonplace-panel-button rounded-full border px-3 py-1 text-xs font-semibold"
                 data-testid="commonplace-map-note-drag-guidance"
               >
                 Drag notes from the sidebar
@@ -1623,7 +1625,7 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={() => setIsClusterChooserOpen((current) => !current)}
-                className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
+                className="rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white"
                 data-testid="commonplace-map-add-cluster-button"
               >
                 + Add cluster
@@ -1639,7 +1641,7 @@ export function CommonplaceMapCanvasFoundation({
                   ? "border-[#0F766E]/25 bg-[#DDEBE5] text-[#134E44]"
                   : displayedSaveStatus === "Save failed"
                     ? "border-[#B42318]/25 bg-[#FFF4F3] text-[#8A1F15]"
-                    : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink-soft)]"
+                    : "commonplace-panel-button"
             }`}
             data-testid="commonplace-map-save-status"
           >
@@ -1655,7 +1657,7 @@ export function CommonplaceMapCanvasFoundation({
                 ? "bg-[var(--brand-teal)] text-white hover:bg-[#1C8A7A]"
                 : displayedSaveStatus === "Saving..."
                   ? "bg-[#0F766E]/80 text-white"
-                  : "border border-[var(--brand-border)] bg-white text-[var(--brand-ink-soft)]"
+                  : "commonplace-panel-button border"
             }`}
             data-testid="commonplace-map-save-button"
           >
@@ -1685,7 +1687,7 @@ export function CommonplaceMapCanvasFoundation({
                 type="button"
                 onClick={onDiscussMapInPodchat}
                 disabled={discussDisabled}
-                className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="commonplace-map-discuss-button"
                 title={discussTitle}
               >

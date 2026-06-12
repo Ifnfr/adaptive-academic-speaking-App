@@ -1222,6 +1222,30 @@ async function gotoApp(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 }
 
+function parseRgb(value: string): [number, number, number] {
+  const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!match) return [0, 0, 0];
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function relativeLuminance([red, green, blue]: [number, number, number]) {
+  const channels = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const foregroundLuminance = relativeLuminance(parseRgb(foreground));
+  const backgroundLuminance = relativeLuminance(parseRgb(background));
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 async function dragSidebarNoteToCanvas(
   page: Page,
   noteText: string,
@@ -2214,6 +2238,121 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     await page.getByRole("button", { name: "← Library" }).click();
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
+  });
+
+  test("Commonplace theme surfaces stay readable and independent in dark mode", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await gotoApp(page);
+    await expect(page.locator("html")).toHaveClass(/dark/);
+
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    const firstCard = page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i });
+    const addNoteTile = page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Tambah note/i });
+    const sidebarNote = page
+      .getByTestId("commonplace-sidebar-note-list")
+      .getByTestId("commonplace-sidebar-note")
+      .first();
+
+    await expect(firstCard).toHaveCSS("background-color", "rgb(255, 253, 248)");
+    await expect(addNoteTile).toHaveCSS("background-color", "rgb(255, 253, 248)");
+    await expect(sidebarNote).toHaveCSS("background-color", "rgb(255, 253, 248)");
+
+    const libraryContrast = await firstCard.evaluate((card) => {
+      const title = card.querySelector(".commonplace-card-ink");
+      const helper = card.querySelector(".commonplace-card-ink-soft");
+      const tag = card.querySelector(".commonplace-card-tag");
+      const background = window.getComputedStyle(card).backgroundColor;
+      return {
+        title: window.getComputedStyle(title ?? card).color,
+        helper: window.getComputedStyle(helper ?? card).color,
+        tagText: window.getComputedStyle(tag ?? card).color,
+        tagBackground: window.getComputedStyle(tag ?? card).backgroundColor,
+        background,
+      };
+    });
+    expect(contrastRatio(libraryContrast.title, libraryContrast.background)).toBeGreaterThan(7);
+    expect(contrastRatio(libraryContrast.helper, libraryContrast.background)).toBeGreaterThan(4.5);
+    expect(contrastRatio(libraryContrast.tagText, libraryContrast.tagBackground)).toBeGreaterThan(5);
+
+    const addTileContrast = await addNoteTile.evaluate((tile) => {
+      const title = tile.querySelector(".commonplace-card-ink");
+      const helper = tile.querySelector(".commonplace-card-ink-soft");
+      const background = window.getComputedStyle(tile).backgroundColor;
+      return {
+        title: window.getComputedStyle(title ?? tile).color,
+        helper: window.getComputedStyle(helper ?? tile).color,
+        background,
+      };
+    });
+    expect(contrastRatio(addTileContrast.title, addTileContrast.background)).toBeGreaterThan(7);
+    expect(contrastRatio(addTileContrast.helper, addTileContrast.background)).toBeGreaterThan(4.5);
+
+    await page.getByTestId("commonplace-main-maps-btn").click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Institutions Overview" })
+      .getByRole("button", { name: "Open" })
+      .click();
+
+    const mapCanvas = page.getByTestId("commonplace-map-canvas");
+    await expect(mapCanvas).toBeVisible();
+    await expect(mapCanvas).toHaveAttribute("data-canvas-theme", "default");
+    await expect(mapCanvas).toHaveCSS("background-color", "rgb(238, 243, 241)");
+    await expect(page.getByTestId("commonplace-map-main-background")).toHaveCount(1);
+
+    const headerContrast = await mapCanvas.evaluate((canvas) => {
+      const title = canvas.querySelector(".commonplace-panel-ink");
+      const subtitle = canvas.querySelector(".commonplace-panel-ink-soft");
+      const label = canvas.querySelector(".commonplace-panel-accent");
+      const saveStatus = canvas.querySelector("[data-testid='commonplace-map-save-status']");
+      const backButton = canvas.querySelector(".commonplace-panel-button");
+      const background = window.getComputedStyle(canvas).backgroundColor;
+      const saveStyles = window.getComputedStyle(saveStatus ?? canvas);
+      const backStyles = window.getComputedStyle(backButton ?? canvas);
+      return {
+        title: window.getComputedStyle(title ?? canvas).color,
+        subtitle: window.getComputedStyle(subtitle ?? canvas).color,
+        label: window.getComputedStyle(label ?? canvas).color,
+        background,
+        saveText: saveStyles.color,
+        saveBackground: saveStyles.backgroundColor,
+        backText: backStyles.color,
+        backBackground: backStyles.backgroundColor,
+      };
+    });
+    expect(contrastRatio(headerContrast.title, headerContrast.background)).toBeGreaterThan(7);
+    expect(contrastRatio(headerContrast.subtitle, headerContrast.background)).toBeGreaterThan(4.5);
+    expect(contrastRatio(headerContrast.label, headerContrast.background)).toBeGreaterThan(4.5);
+    expect(contrastRatio(headerContrast.saveText, headerContrast.saveBackground)).toBeGreaterThan(4.5);
+    expect(contrastRatio(headerContrast.backText, headerContrast.backBackground)).toBeGreaterThan(7);
+
+    const inventory = page.getByTestId("commonplace-map-inventory");
+    await expect(inventory).toBeVisible();
+    await expect(page.getByRole("button", { name: "zoom in" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "fit view" })).toBeEnabled();
+    const inventoryTextContrast = await inventory.evaluate((element) => {
+      const item = element.querySelector("[data-testid='commonplace-map-inventory-item']");
+      const styles = window.getComputedStyle(item ?? element);
+      const containerStyles = window.getComputedStyle(element);
+      return {
+        text: styles.color,
+        background:
+          styles.backgroundColor === "rgba(0, 0, 0, 0)"
+            ? containerStyles.backgroundColor
+            : styles.backgroundColor,
+      };
+    });
+    expect(
+      contrastRatio(inventoryTextContrast.text, inventoryTextContrast.background),
+    ).toBeGreaterThan(4.5);
   });
 
   test("Inventory stays map-scoped and confirms dirty map switching", async ({

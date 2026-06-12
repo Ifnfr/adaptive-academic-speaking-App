@@ -197,6 +197,63 @@ body {
   background-color: rgba(23, 22, 20, 0.95) !important;
 }
 
+/*
+ * Commonplace owns its canvas and card palettes. These surfaces can remain
+ * light/pastel in global dark mode, so their text and backgrounds are locked
+ * to Commonplace theme tokens instead of the global dark tokens.
+ */
+[data-commonplace-card-surface] {
+  background-color: var(--commonplace-card-bg) !important;
+  border-color: var(--commonplace-card-border) !important;
+  color: var(--commonplace-card-ink) !important;
+}
+
+[data-commonplace-card-surface] .commonplace-card-ink {
+  color: var(--commonplace-card-ink) !important;
+}
+
+[data-commonplace-card-surface] .commonplace-card-ink-soft {
+  color: var(--commonplace-card-ink-soft) !important;
+}
+
+[data-commonplace-card-surface] .commonplace-card-accent {
+  color: var(--commonplace-card-accent) !important;
+}
+
+[data-commonplace-card-surface] .commonplace-card-accent-soft {
+  color: var(--commonplace-card-accent-soft) !important;
+}
+
+[data-commonplace-card-surface] .commonplace-card-tag {
+  background-color: var(--commonplace-card-bg) !important;
+  border-color: var(--commonplace-card-border) !important;
+  color: var(--commonplace-card-accent-soft) !important;
+}
+
+[data-commonplace-panel-surface] {
+  background-color: var(--commonplace-panel-bg) !important;
+  border-color: var(--commonplace-panel-border) !important;
+  color: var(--commonplace-panel-ink) !important;
+}
+
+[data-commonplace-panel-surface] .commonplace-panel-ink {
+  color: var(--commonplace-panel-ink) !important;
+}
+
+[data-commonplace-panel-surface] .commonplace-panel-ink-soft {
+  color: var(--commonplace-panel-ink-soft) !important;
+}
+
+[data-commonplace-panel-surface] .commonplace-panel-accent {
+  color: var(--commonplace-panel-accent) !important;
+}
+
+[data-commonplace-panel-surface] .commonplace-panel-button {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+  border-color: var(--commonplace-panel-border) !important;
+  color: var(--commonplace-panel-ink) !important;
+}
+
 /* Custom checkbox / star bg-white/50 toggle box check */
 .dark .peer:checked ~ .peer-checked\:bg-\[\#1A554A\] {
   background-color: var(--brand-teal) !important;

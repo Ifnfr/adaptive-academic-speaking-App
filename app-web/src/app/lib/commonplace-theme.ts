@@ -1,5 +1,7 @@
 import type { CSSProperties } from "react";
 
+type CommonplaceThemeStyle = CSSProperties & Record<`--${string}`, string>;
+
 export const COMMONPLACE_THEME_COLOR_IDS = [
   "default",
   "paper",
@@ -34,12 +36,16 @@ type CommonplaceThemeOption = {
     hover: string;
     tag: string;
     tagBorder: string;
+    ink: string;
+    inkSoft: string;
+    accent: string;
+    accentSoft: string;
   };
 };
 
 export type CommonplaceCanvasTheme = {
   id: CommonplaceThemeColorId;
-  panelStyle: CSSProperties;
+  panelStyle: CommonplaceThemeStyle;
   mainBackgroundStyle: CSSProperties;
   subBackgroundStyle: CSSProperties;
   gridColor: string;
@@ -48,11 +54,11 @@ export type CommonplaceCanvasTheme = {
 
 export type CommonplaceCardTheme = {
   id: CommonplaceThemeColorId;
-  style: CSSProperties;
-  footerStyle: CSSProperties;
-  tagStyle: CSSProperties;
-  selectedStyle: CSSProperties;
-  addTileStyle: CSSProperties;
+  style: CommonplaceThemeStyle;
+  footerStyle: CommonplaceThemeStyle;
+  tagStyle: CommonplaceThemeStyle;
+  selectedStyle: CommonplaceThemeStyle;
+  addTileStyle: CommonplaceThemeStyle;
 };
 
 const COMMONPLACE_THEME_OPTIONS: Record<
@@ -78,6 +84,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#E4F3EC",
       tag: "#E4F3EC",
       tagBorder: "rgba(15,118,110,0.2)",
+      ink: "#263B35",
+      inkSoft: "#4F6A62",
+      accent: "#0F766E",
+      accentSoft: "#134E44",
     },
   },
   paper: {
@@ -99,6 +109,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#F4E8CE",
       tag: "#F4E8CE",
       tagBorder: "rgba(151,116,45,0.22)",
+      ink: "#3F3420",
+      inkSoft: "#65563F",
+      accent: "#806125",
+      accentSoft: "#5E4619",
     },
   },
   sage: {
@@ -120,6 +134,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#DDEBE5",
       tag: "#DDEBE5",
       tagBorder: "rgba(15,118,110,0.24)",
+      ink: "#243D35",
+      inkSoft: "#496B5F",
+      accent: "#0F766E",
+      accentSoft: "#134E44",
     },
   },
   sand: {
@@ -141,6 +159,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#ECD6AD",
       tag: "#F1E3C8",
       tagBorder: "rgba(151,103,32,0.22)",
+      ink: "#49371E",
+      inkSoft: "#675434",
+      accent: "#7A4A00",
+      accentSoft: "#5C3900",
     },
   },
   sky: {
@@ -162,6 +184,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#DBEAFE",
       tag: "#DBEAFE",
       tagBorder: "rgba(37,99,235,0.2)",
+      ink: "#24384F",
+      inkSoft: "#445B74",
+      accent: "#1D4ED8",
+      accentSoft: "#1E3A8A",
     },
   },
   lavender: {
@@ -183,6 +209,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#E9DDF8",
       tag: "#E9DDF8",
       tagBorder: "rgba(109,40,217,0.18)",
+      ink: "#3E3350",
+      inkSoft: "#5D506F",
+      accent: "#6D28D9",
+      accentSoft: "#4C1D95",
     },
   },
   rose: {
@@ -204,6 +234,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#F9DEE5",
       tag: "#F9DEE5",
       tagBorder: "rgba(190,24,93,0.18)",
+      ink: "#4F3038",
+      inkSoft: "#6B4F57",
+      accent: "#BE185D",
+      accentSoft: "#8A1246",
     },
   },
   slate: {
@@ -225,6 +259,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#E2E8F0",
       tag: "#E2E8F0",
       tagBorder: "rgba(51,65,85,0.18)",
+      ink: "#27313F",
+      inkSoft: "#4C5968",
+      accent: "#334155",
+      accentSoft: "#1E293B",
     },
   },
   charcoal: {
@@ -246,6 +284,10 @@ const COMMONPLACE_THEME_OPTIONS: Record<
       hover: "#D8DDD9",
       tag: "#E5E8E1",
       tagBorder: "rgba(47,67,61,0.18)",
+      ink: "#26302C",
+      inkSoft: "#4E5D58",
+      accent: "#2F433D",
+      accentSoft: "#1F2E2A",
     },
   },
 };
@@ -288,7 +330,16 @@ export function getCommonplaceCanvasTheme(
 
   return {
     id,
-    panelStyle: { backgroundColor: option.canvas.panel },
+    panelStyle: {
+      "--commonplace-panel-bg": option.canvas.panel,
+      "--commonplace-panel-ink": option.card.ink,
+      "--commonplace-panel-ink-soft": option.card.inkSoft,
+      "--commonplace-panel-accent": option.card.accent,
+      "--commonplace-panel-accent-soft": option.card.accentSoft,
+      "--commonplace-panel-border": option.card.border,
+      backgroundColor: option.canvas.panel,
+      borderColor: option.card.border,
+    },
     mainBackgroundStyle: {
       backgroundImage: [
         `radial-gradient(circle at 18% 18%, ${option.canvas.bubble} 0 120px, transparent 121px)`,
@@ -320,24 +371,59 @@ export function getCommonplaceCardTheme(
   return {
     id,
     style: {
+      "--commonplace-card-bg": option.card.surface,
+      "--commonplace-card-border": option.card.border,
+      "--commonplace-card-ink": option.card.ink,
+      "--commonplace-card-ink-soft": option.card.inkSoft,
+      "--commonplace-card-accent": option.card.accent,
+      "--commonplace-card-accent-soft": option.card.accentSoft,
       backgroundColor: option.card.surface,
       borderColor: option.card.border,
+      color: option.card.ink,
     },
     footerStyle: {
+      "--commonplace-card-bg": option.card.footer,
+      "--commonplace-card-border": option.card.border,
+      "--commonplace-card-ink": option.card.ink,
+      "--commonplace-card-ink-soft": option.card.inkSoft,
+      "--commonplace-card-accent": option.card.accent,
+      "--commonplace-card-accent-soft": option.card.accentSoft,
       backgroundColor: option.card.footer,
       borderColor: option.card.border,
+      color: option.card.accent,
     },
     tagStyle: {
+      "--commonplace-card-bg": option.card.tag,
+      "--commonplace-card-border": option.card.tagBorder,
+      "--commonplace-card-ink": option.card.ink,
+      "--commonplace-card-ink-soft": option.card.inkSoft,
+      "--commonplace-card-accent": option.card.accent,
+      "--commonplace-card-accent-soft": option.card.accentSoft,
       backgroundColor: option.card.tag,
       borderColor: option.card.tagBorder,
+      color: option.card.accentSoft,
     },
     selectedStyle: {
+      "--commonplace-card-bg": option.card.hover,
+      "--commonplace-card-border": "#0F766E",
+      "--commonplace-card-ink": option.card.ink,
+      "--commonplace-card-ink-soft": option.card.inkSoft,
+      "--commonplace-card-accent": option.card.accent,
+      "--commonplace-card-accent-soft": option.card.accentSoft,
       backgroundColor: option.card.hover,
       borderColor: "#0F766E",
+      color: option.card.ink,
     },
     addTileStyle: {
+      "--commonplace-card-bg": option.card.surface,
+      "--commonplace-card-border": "#0F766E73",
+      "--commonplace-card-ink": option.card.ink,
+      "--commonplace-card-ink-soft": option.card.inkSoft,
+      "--commonplace-card-accent": option.card.accent,
+      "--commonplace-card-accent-soft": option.card.accentSoft,
       backgroundColor: option.card.surface,
       borderColor: "#0F766E73",
+      color: option.card.ink,
     },
   };
 }

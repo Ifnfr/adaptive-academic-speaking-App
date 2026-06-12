@@ -2276,19 +2276,20 @@ function SidebarNoteButton({
       }}
       aria-label={`${displayTitle(note)} from ${note.sourceBook}`}
       style={selected ? cardTheme.selectedStyle : cardTheme.style}
+      data-commonplace-card-surface="true"
       className={`select-none rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
         selected
           ? ""
           : "hover:bg-[var(--brand-surface)]"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
     >
-      <span className="text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+      <span className="commonplace-card-accent text-[11px] font-semibold">
         {note.shortcode}
       </span>
-      <span className="mt-1 block truncate text-sm font-semibold text-[var(--brand-ink)]">
+      <span className="commonplace-card-ink mt-1 block truncate text-sm font-semibold">
         {displayTitle(note)}
       </span>
-      <span className="mt-1 block truncate text-xs text-[var(--brand-ink-soft)]">
+      <span className="commonplace-card-ink-soft mt-1 block truncate text-xs">
         {note.sourceBook}
       </span>
       {note.tags.length > 0 && (
@@ -2297,7 +2298,7 @@ function SidebarNoteButton({
             <span
               key={tag}
               style={cardTheme.tagStyle}
-              className="rounded-full border border-[var(--brand-teal)]/20 bg-white px-2 py-0.5 text-[10px] font-medium text-[var(--brand-teal-ink)]"
+              className="commonplace-card-tag rounded-full border px-2 py-0.5 text-[10px] font-medium"
             >
               #{tag}
             </span>
@@ -2347,17 +2348,18 @@ function LibraryView({
             type="button"
             onClick={() => onOpen(note.id)}
             style={cardTheme.style}
+            data-commonplace-card-surface="true"
             className="group flex h-[168px] min-w-0 flex-col overflow-hidden rounded-lg border border-[#C9D8D1] bg-[#FFFDF8] text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[#0F766E]/45 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2 focus:ring-offset-[#FAF8F2]"
           >
             <span className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2.5 pt-3">
-              <span className="line-clamp-2 min-h-[2.5rem] break-words text-sm font-semibold leading-5 text-[var(--brand-ink)]">
+              <span className="commonplace-card-ink line-clamp-2 min-h-[2.5rem] break-words text-sm font-semibold leading-5">
                 {displayTitle(note)}
               </span>
-              <span className="mt-1 line-clamp-1 min-h-4 break-words text-[11px] font-medium leading-4 text-[var(--brand-ink-soft)]">
+              <span className="commonplace-card-ink-soft mt-1 line-clamp-1 min-h-4 break-words text-[11px] font-medium leading-4">
                 {note.sourceBook}
                 {note.sourcePage ? `, p. ${note.sourcePage}` : ""}
               </span>
-              <span className="mt-2 line-clamp-2 min-h-[2.5rem] overflow-hidden break-words text-xs leading-5 text-[var(--brand-ink-soft)]">
+              <span className="commonplace-card-ink-soft mt-2 line-clamp-2 min-h-[2.5rem] overflow-hidden break-words text-xs leading-5">
                 {note.insight}
               </span>
               <span className="mt-auto flex min-h-[1.375rem] flex-wrap items-end gap-1 overflow-hidden pt-2">
@@ -2365,7 +2367,7 @@ function LibraryView({
                   <span
                     key={tag}
                     style={cardTheme.tagStyle}
-                    className="max-w-[6.5rem] truncate rounded-full border border-[#0F766E]/20 bg-[#E4F3EC] px-1.5 py-0.5 text-[10px] font-medium leading-4 text-[#134E44]"
+                    className="commonplace-card-tag max-w-[6.5rem] truncate rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-4"
                   >
                     #{tag}
                   </span>
@@ -2375,8 +2377,9 @@ function LibraryView({
             <span
               className="flex min-h-[2rem] items-center justify-end border-t border-[#C9D8D1] bg-[#FAF8F2] px-3 py-1.5"
               style={cardTheme.footerStyle}
+              data-commonplace-card-surface="true"
             >
-              <span className="max-w-full truncate font-mono text-[11px] font-semibold leading-4 text-[#0F766E]">
+              <span className="commonplace-card-accent max-w-full truncate font-mono text-[11px] font-semibold leading-4">
                 {note.shortcode}
               </span>
             </span>
@@ -2387,6 +2390,7 @@ function LibraryView({
           type="button"
           onClick={onCreate}
           style={cardTheme.addTileStyle}
+          data-commonplace-card-surface="true"
           className="flex h-[168px] flex-col items-start justify-between rounded-lg border border-dashed border-[#0F766E]/45 bg-[#FFFDF8] p-3 text-left transition-colors hover:bg-[#E4F3EC] focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2 focus:ring-offset-[#FAF8F2]"
           aria-describedby="commonplace-empty-helper"
         >
@@ -2407,12 +2411,12 @@ function LibraryView({
             </svg>
           </span>
           <span>
-            <span className="block text-sm font-semibold text-[var(--brand-ink)]">
+            <span className="commonplace-card-ink block text-sm font-semibold">
               Tambah note
             </span>
             <span
               id="commonplace-empty-helper"
-              className="mt-1 block text-xs leading-5 text-[var(--brand-ink-soft)]"
+              className="commonplace-card-ink-soft mt-1 block text-xs leading-5"
             >
               Start by saving one idea from a book.
             </span>
