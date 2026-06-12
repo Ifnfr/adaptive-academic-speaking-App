@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   getCommonplaceSubMapDiscussionContext,
+  getCommonplaceMainMapDiscussionContext,
   type CommonplaceMindMapType,
 } from "../../../../lib/storage/supabase-commonplace-mindmap-adapter";
 
@@ -56,7 +57,7 @@ function cleanRequiredText(value: unknown): string | null {
 }
 
 function cleanMapType(value: unknown): CommonplaceMindMapType | null {
-  return value === "sub" ? value : null;
+  return value === "sub" || value === "main" ? value : null;
 }
 
 function responseForStorageError(error: string) {
@@ -99,11 +100,18 @@ export async function GET(request: Request) {
     );
   }
 
-  const result = await getCommonplaceSubMapDiscussionContext(
-    ownerId,
-    mapId,
-    supabaseClient,
-  );
+  const result =
+    mapType === "main"
+      ? await getCommonplaceMainMapDiscussionContext(
+          ownerId,
+          mapId,
+          supabaseClient,
+        )
+      : await getCommonplaceSubMapDiscussionContext(
+          ownerId,
+          mapId,
+          supabaseClient,
+        );
   if (!result.ok) {
     return responseForStorageError(result.error);
   }

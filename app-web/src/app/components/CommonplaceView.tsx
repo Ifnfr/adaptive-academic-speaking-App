@@ -294,7 +294,7 @@ type CommonplaceViewProps = {
   }) => void;
   onDiscussMapInPodchat?: (context: {
     source: "commonplace-map";
-    mapType: "sub";
+    mapType: "sub" | "main";
     mapId: string;
   }) => void;
 };
@@ -1857,6 +1857,27 @@ export function CommonplaceView({
     onDiscussMapInPodchat(context);
   };
 
+  const handleDiscussMainMapInPodchat = () => {
+    if (!selectedMap || selectedMap.type !== "main" || !onDiscussMapInPodchat) return;
+
+    const context = {
+      source: "commonplace-map",
+      mapType: "main",
+      mapId: selectedMap.id,
+    } as const;
+
+    try {
+      window.sessionStorage.setItem(
+        "fonetik:commonplace-podchat-context",
+        JSON.stringify(context),
+      );
+    } catch {
+      // Session storage is a convenience for resume; the direct handoff remains primary.
+    }
+
+    onDiscussMapInPodchat(context);
+  };
+
   const updateField = (field: keyof CommonplaceFormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
     if (
@@ -2084,7 +2105,13 @@ export function CommonplaceView({
                   updateEdge={(input) => updateMapCanvasEdge(selectedMap, input)}
                   deleteEdge={(edgeId) => deleteMapCanvasEdge(selectedMap, edgeId)}
                   deleteNode={(nodeId) => deleteMapCanvasNode(selectedMap, nodeId)}
-                  onDiscussMapInPodchat={onDiscussMapInPodchat ? handleDiscussMapInPodchat : undefined}
+                  onDiscussMapInPodchat={
+                    onDiscussMapInPodchat
+                      ? selectedMap.type === "main"
+                        ? handleDiscussMainMapInPodchat
+                        : handleDiscussMapInPodchat
+                      : undefined
+                  }
                 />
               )}
             </>

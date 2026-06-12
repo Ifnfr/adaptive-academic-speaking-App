@@ -2939,7 +2939,14 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .getByRole("button", { name: "Open" })
       .click();
     await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
-    await expect(page.getByTestId("commonplace-map-discuss-button")).toHaveCount(0);
+    // P2: button is now visible on Main Map too, but disabled when map is empty
+    const mainMapDiscussBtn = page.getByTestId("commonplace-map-discuss-button");
+    await expect(mainMapDiscussBtn).toBeVisible();
+    await expect(mainMapDiscussBtn).toBeDisabled();
+    await expect(mainMapDiscussBtn).toHaveAttribute(
+      "title",
+      "Tambahkan node ke map sebelum diskusi.",
+    );
 
     // Go back
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
@@ -2997,7 +3004,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(contextCard).toBeVisible();
     await expect(contextCard).toContainText("Sub Mind Map");
     await expect(contextCard).toContainText("Sub Discussion Map");
-    await expect(contextCard).toContainText("1 visual notes");
+    await expect(contextCard).toContainText("1 visual node");
     await expect(contextCard).toContainText("0 connections");
 
     // 7. Verify sessionStorage contains only compact reference
@@ -3009,6 +3016,97 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(storedContext).not.toMatch(forbiddenCommonplaceContextFieldPattern);
     expect(storedContext).not.toContain("insight");
     expect(storedContext).not.toContain("nodes");
+  });
+
+  test("Diskusi di Podchat supports Main Map with proper guards and handoff", async ({ page }) => {
+    await gotoApp(page);
+    await page.getByRole("button", { name: "Commonplace" }).click();
+
+    // 1. Open Main Maps and create a new Main Map
+    await page.getByTestId("commonplace-main-maps-btn").click();
+    await page.getByLabel("New Main Map title").fill("Main Podchat Discussion Map");
+    await page.getByRole("button", { name: "+ New Main Map" }).click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Main Podchat Discussion Map" })
+      .getByRole("button", { name: "Open" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+
+    // 2. Button is visible but disabled on empty Main Map
+    const discussBtn = page.getByTestId("commonplace-map-discuss-button");
+    await expect(discussBtn).toBeVisible();
+    await expect(discussBtn).toBeDisabled();
+    await expect(discussBtn).toHaveAttribute(
+      "title",
+      "Tambahkan node ke map sebelum diskusi.",
+    );
+
+    // 3. Add a cluster node via the Add Cluster button
+    await page.getByTestId("commonplace-map-add-cluster-button").click();
+    await expect(page.getByTestId("commonplace-map-cluster-chooser")).toBeVisible();
+    await expect(
+      page.getByTestId("commonplace-map-cluster-option").first(),
+    ).toBeVisible();
+    await page
+      .getByTestId("commonplace-map-cluster-option")
+      .filter({ hasText: "Institutional Incentives" })
+      .click();
+    await expect(page.getByTestId("commonplace-map-cluster-node")).toHaveCount(1);
+
+    // 4. After adding cluster (unsaved) → button is disabled
+    await expect(discussBtn).toBeDisabled();
+    await expect(discussBtn).toHaveAttribute(
+      "title",
+      "Simpan map sebelum membahasnya di Podchat.",
+    );
+
+    // 5. Save → button becomes enabled
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText("Saved");
+    await expect(discussBtn).toBeEnabled();
+
+    // 6. Drag the cluster to trigger unsaved changes → button disabled again
+    const clusterNode = page.getByTestId("commonplace-map-cluster-node").first();
+    await clusterNode.dragTo(page.locator(".react-flow__pane"), {
+      force: true,
+      targetPosition: { x: 260, y: 300 },
+    });
+    await expect(discussBtn).toBeDisabled();
+    await expect(discussBtn).toHaveAttribute(
+      "title",
+      "Simpan map sebelum membahasnya di Podchat.",
+    );
+
+    // Save again → enabled
+    await page.getByTestId("commonplace-map-save-button").click();
+    await expect(page.getByTestId("commonplace-map-save-status")).toHaveText("Saved");
+    await expect(discussBtn).toBeEnabled();
+
+    // 7. Click → opens Podchat setup page with context preview
+    await discussBtn.click();
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+
+    const contextCard = page.getByTestId("podchat-commonplace-map-context-card");
+    await expect(contextCard).toBeVisible();
+    await expect(contextCard).toContainText("Main Map");
+    await expect(contextCard).toContainText("Main Podchat Discussion Map");
+
+    // 8. Verify sessionStorage contains only compact reference
+    const storedContext = await page.evaluate(() =>
+      window.sessionStorage.getItem("fonetik:commonplace-podchat-context"),
+    );
+    expect(storedContext).toContain('"source":"commonplace-map"');
+    expect(storedContext).toContain('"mapType":"main"');
+    expect(storedContext).not.toMatch(forbiddenCommonplaceContextFieldPattern);
+    expect(storedContext).not.toContain("nodes");
+    expect(storedContext).not.toContain("insight");
+    expect(storedContext).not.toContain("clusterNodes");
+
+    // 9. Sub Map discuss button is not affected (regression check)
+    // Main Map has no AI Suggest and no auto-connect
+    await expect(page.getByText("AI Suggest")).toHaveCount(0);
+    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
   });
 
   test("search filters sidebar and Library notes by title, source, shortcode, and tags", async ({

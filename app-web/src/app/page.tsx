@@ -1575,7 +1575,11 @@ export default function Home() {
     setPendingCommonplaceMapContextRef(context);
     setPendingCommonplaceContext(null);
     setPendingArticleContext(null);
-    setTarget("Commonplace Sub Mind Map discussion");
+    setTarget(
+      context.mapType === "main"
+        ? "Commonplace Main Map discussion"
+        : "Commonplace Sub Mind Map discussion",
+    );
     setMode("Fluency Sprint");
     setView("active");
   };

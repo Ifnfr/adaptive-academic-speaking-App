@@ -1665,24 +1665,34 @@ export function CommonplaceMapCanvasFoundation({
                 ? "Saved"
                 : "Save"}
           </button>
-          {isSubMap && onDiscussMapInPodchat && (
-            <button
-              type="button"
-              onClick={onDiscussMapInPodchat}
-              disabled={!nodes.some((n) => n.type === "noteNode") || hasUnsavedChanges}
-              className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5] disabled:cursor-not-allowed disabled:opacity-50"
-              data-testid="commonplace-map-discuss-button"
-              title={
-                hasUnsavedChanges
-                  ? "Save changes before discussing in Podchat"
-                  : !nodes.some((n) => n.type === "noteNode")
-                    ? "Add at least one note to discuss in Podchat"
-                    : "Discuss this Sub Mind Map in Podchat"
-              }
-            >
-              Diskusi di Podchat
-            </button>
-          )}
+          {(isSubMap || isMainMap) && onDiscussMapInPodchat && (() => {
+            const discussDisabled = isSubMap
+              ? !nodes.some((n) => n.type === "noteNode") || hasUnsavedChanges
+              : nodes.length === 0 || hasUnsavedChanges;
+            const discussTitle = isSubMap
+              ? hasUnsavedChanges
+                ? "Save changes before discussing in Podchat"
+                : !nodes.some((n) => n.type === "noteNode")
+                  ? "Add at least one note to discuss in Podchat"
+                  : "Discuss this Sub Mind Map in Podchat"
+              : hasUnsavedChanges
+                ? "Simpan map sebelum membahasnya di Podchat."
+                : nodes.length === 0
+                  ? "Tambahkan node ke map sebelum diskusi."
+                  : "Diskusi Main Map ini di Podchat";
+            return (
+              <button
+                type="button"
+                onClick={onDiscussMapInPodchat}
+                disabled={discussDisabled}
+                className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5] disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="commonplace-map-discuss-button"
+                title={discussTitle}
+              >
+                Diskusi di Podchat
+              </button>
+            );
+          })()}
         </div>
       </div>
 

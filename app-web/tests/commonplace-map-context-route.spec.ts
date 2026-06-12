@@ -7,6 +7,12 @@ const baseMapRow = {
   type: "sub",
 };
 
+const baseMainMapRow = {
+  id: "main-map-456",
+  title: "Main Map Title",
+  type: "main",
+};
+
 const baseNodeRow = {
   id: "node-1",
   note_id: "note-abc",
@@ -29,13 +35,55 @@ const baseEdgeRow = {
   label: "connection label",
 };
 
+const baseMainClusterNodeRow = {
+  id: "main-node-cluster-1",
+  node_kind: "cluster",
+  note_id: null,
+  sub_mindmap_id: "sub-map-ref-1",
+  position_x: 100,
+  position_y: 200,
+  commonplace_mindmaps: {
+    title: "Referenced Sub Map",
+  },
+  commonplace_notes: null,
+};
+
+const baseMainNoteNodeRow = {
+  id: "main-node-note-1",
+  node_kind: "note",
+  note_id: "note-abc",
+  sub_mindmap_id: null,
+  position_x: 300,
+  position_y: 400,
+  commonplace_mindmaps: null,
+  commonplace_notes: {
+    shortcode: "#note1",
+    title: "Note Title",
+    source_book: "Note Book",
+    insight: "This is a note insight excerpt.",
+    tags: ["growth"],
+  },
+};
+
+const baseMainEdgeRow = {
+  id: "main-edge-1",
+  source_node_id: "main-node-cluster-1",
+  target_node_id: "main-node-note-1",
+  edge_type: "solid",
+  label: "main edge label",
+};
+
 type MockOptions = {
   mapRow?: Record<string, unknown> | null;
   nodeRows?: Record<string, unknown>[];
   edgeRows?: Record<string, unknown>[];
+  mainNodeRows?: Record<string, unknown>[];
+  mainEdgeRows?: Record<string, unknown>[];
   mapError?: Error | null;
   nodeError?: Error | null;
   edgeError?: Error | null;
+  mainNodeError?: Error | null;
+  mainEdgeError?: Error | null;
 };
 
 function createMockSupabaseClient(options: MockOptions = {}) {
@@ -67,6 +115,24 @@ function createMockSupabaseClient(options: MockOptions = {}) {
           return Promise.resolve({
             data: options.edgeRows !== undefined ? options.edgeRows : [baseEdgeRow],
             error: options.edgeError ?? null,
+          });
+        }
+        if (table === "commonplace_main_map_nodes") {
+          return Promise.resolve({
+            data:
+              options.mainNodeRows !== undefined
+                ? options.mainNodeRows
+                : [baseMainClusterNodeRow, baseMainNoteNodeRow],
+            error: options.mainNodeError ?? null,
+          });
+        }
+        if (table === "commonplace_main_map_edges") {
+          return Promise.resolve({
+            data:
+              options.mainEdgeRows !== undefined
+                ? options.mainEdgeRows
+                : [baseMainEdgeRow],
+            error: options.mainEdgeError ?? null,
           });
         }
         return Promise.resolve({ data: [], error: null });
@@ -134,14 +200,27 @@ test.describe("Commonplace map context route", () => {
   test("rejects unsupported mapType", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
 
-    const response = await GET(buildRequest("sub-map-123", "main"));
+    const response = await GET(buildRequest("sub-map-123", "unknown"));
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "invalid_map_context_fields",
     });
   });
 
-  test("rejects unowned map", async () => {
+  test("accepts mapType main without error", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mock = createMockSupabaseClient({ mapRow: baseMainMapRow });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.context.mapType).toBe("main");
+    expect(data.context.source).toBe("commonplace-map");
+  });
+
+  test("rejects unowned map (sub)", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
     const mock = createMockSupabaseClient({ mapRow: null });
     testHooks.getSupabaseClient = () => mock.client;
@@ -153,6 +232,20 @@ test.describe("Commonplace map context route", () => {
     expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:user-123");
     expect(mock.calls).toContain("eq:commonplace_mindmaps:id:sub-map-123");
     expect(mock.calls).toContain("eq:commonplace_mindmaps:type:sub");
+  });
+
+  test("rejects unowned map (main)", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mock = createMockSupabaseClient({ mapRow: null });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "map_not_found" });
+
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:user-123");
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:id:main-map-456");
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:type:main");
   });
 
   test("returns only owner-scoped sub map data", async () => {
@@ -224,6 +317,248 @@ test.describe("Commonplace map context route", () => {
     expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:user-123");
     expect(mock.calls).toContain("eq:commonplace_mindmap_nodes:owner_id:user-123");
     expect(mock.calls).toContain("eq:commonplace_mindmap_edges:owner_id:user-123");
+  });
+
+  test("returns owner-scoped main map context with cluster and note nodes", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mock = createMockSupabaseClient({
+      mapRow: baseMainMapRow,
+      mainNodeRows: [baseMainClusterNodeRow, baseMainNoteNodeRow],
+      mainEdgeRows: [baseMainEdgeRow],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.context.mapType).toBe("main");
+    expect(data.context.mapId).toBe("main-map-456");
+    expect(data.context.mapTitle).toBe("Main Map Title");
+    expect(data.context.counts.nodes).toBe(2);
+    expect(data.context.counts.edges).toBe(1);
+    expect(data.context.counts.clusterNodes).toBe(1);
+    expect(data.context.counts.noteNodes).toBe(1);
+    expect(data.context.counts.truncatedNodes).toBe(false);
+    expect(data.context.counts.truncatedEdges).toBe(false);
+
+    const clusterNode = data.context.nodes.find(
+      (n: { nodeKind: string }) => n.nodeKind === "cluster",
+    );
+    expect(clusterNode).toMatchObject({
+      visualNodeId: "main-node-cluster-1",
+      nodeKind: "cluster",
+      referencedSubMindMapId: "sub-map-ref-1",
+      referencedSubMindMapTitle: "Referenced Sub Map",
+    });
+    expect(clusterNode).not.toHaveProperty("noteId");
+    expect(clusterNode).not.toHaveProperty("insight");
+    expect(clusterNode).not.toHaveProperty("insightExcerpt");
+
+    const noteNode = data.context.nodes.find(
+      (n: { nodeKind: string }) => n.nodeKind === "note",
+    );
+    expect(noteNode).toMatchObject({
+      visualNodeId: "main-node-note-1",
+      nodeKind: "note",
+      noteId: "note-abc",
+      shortcode: "#note1",
+      title: "Note Title",
+      sourceBook: "Note Book",
+      insightExcerpt: "This is a note insight excerpt.",
+      tags: ["growth"],
+    });
+    expect(noteNode).not.toHaveProperty("referencedSubMindMapId");
+    expect(noteNode).not.toHaveProperty("referencedSubMindMapTitle");
+
+    expect(data.context.edges[0]).toMatchObject({
+      sourceVisualNodeId: "main-node-cluster-1",
+      targetVisualNodeId: "main-node-note-1",
+      edgeType: "solid",
+      label: "main edge label",
+    });
+
+    expect(mock.calls).toContain("eq:commonplace_mindmaps:owner_id:user-123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_nodes:owner_id:user-123");
+    expect(mock.calls).toContain("eq:commonplace_main_map_edges:owner_id:user-123");
+  });
+
+  test("cluster node with no sub_mindmap_id is excluded from main map context", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const orphanCluster = {
+      ...baseMainClusterNodeRow,
+      id: "orphan-cluster",
+      sub_mindmap_id: null, // no referenced sub map — should be excluded
+    };
+    const mock = createMockSupabaseClient({
+      mapRow: baseMainMapRow,
+      mainNodeRows: [orphanCluster, baseMainNoteNodeRow],
+      mainEdgeRows: [],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.context.nodes).toHaveLength(1);
+    expect(data.context.nodes[0].nodeKind).toBe("note");
+  });
+
+  test("note node with no commonplace_notes relation is excluded from main map context", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const orphanNote = {
+      ...baseMainNoteNodeRow,
+      id: "orphan-note",
+      commonplace_notes: null,
+    };
+    const mock = createMockSupabaseClient({
+      mapRow: baseMainMapRow,
+      mainNodeRows: [baseMainClusterNodeRow, orphanNote],
+      mainEdgeRows: [],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.context.nodes).toHaveLength(1);
+    expect(data.context.nodes[0].nodeKind).toBe("cluster");
+  });
+
+  test("main map edges cross-referenced against included node IDs", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const edgeWithMissingTarget = {
+      id: "edge-orphan",
+      source_node_id: "main-node-cluster-1",
+      target_node_id: "non-existent-node",
+      edge_type: "solid",
+      label: null,
+    };
+    const mock = createMockSupabaseClient({
+      mapRow: baseMainMapRow,
+      mainNodeRows: [baseMainClusterNodeRow, baseMainNoteNodeRow],
+      mainEdgeRows: [baseMainEdgeRow, edgeWithMissingTarget],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.context.edges).toHaveLength(1);
+    expect(data.context.edges[0].sourceVisualNodeId).toBe("main-node-cluster-1");
+    expect(data.context.edges[0].targetVisualNodeId).toBe("main-node-note-1");
+  });
+
+  test("does not recursively expand cluster sub map contents", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mock = createMockSupabaseClient({
+      mapRow: baseMainMapRow,
+      mainNodeRows: [baseMainClusterNodeRow],
+      mainEdgeRows: [],
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    const clusterNode = data.context.nodes[0];
+    // Cluster node should have only identity info, no sub-node expansion
+    expect(clusterNode).not.toHaveProperty("nodes");
+    expect(clusterNode).not.toHaveProperty("subnodes");
+    expect(clusterNode).not.toHaveProperty("children");
+    expect(clusterNode.nodeKind).toBe("cluster");
+    expect(clusterNode.referencedSubMindMapId).toBe("sub-map-ref-1");
+  });
+
+  test("bounds and truncates main map nodes (max 30) and edges (max 50)", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+
+    const mainNodeRows = Array.from({ length: 35 }, (_, i) => ({
+      id: `main-node-${i}`,
+      node_kind: "note",
+      note_id: `note-${i}`,
+      sub_mindmap_id: null,
+      position_x: 0,
+      position_y: 0,
+      commonplace_mindmaps: null,
+      commonplace_notes: {
+        shortcode: `#n${i}`,
+        title: `Node ${i}`,
+        source_book: "Book",
+        insight: "Excerpt",
+        tags: [],
+      },
+    }));
+
+    const mainEdgeRows = [
+      {
+        id: "edge-valid",
+        source_node_id: "main-node-0",
+        target_node_id: "main-node-1",
+        edge_type: "solid",
+        label: "valid",
+      },
+      {
+        id: "edge-invalid",
+        source_node_id: "main-node-0",
+        target_node_id: "main-node-31", // sliced out (index >= 30)
+        edge_type: "solid",
+        label: "invalid",
+      },
+    ];
+
+    const mock = createMockSupabaseClient({
+      mapRow: baseMainMapRow,
+      mainNodeRows,
+      mainEdgeRows,
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.context.nodes).toHaveLength(30);
+    expect(data.context.counts.truncatedNodes).toBe(true);
+    expect(data.context.edges).toHaveLength(1);
+  });
+
+  test("excludes sensitive database columns from main map context output", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mock = createMockSupabaseClient({ mapRow: baseMainMapRow });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    const data = await response.json();
+
+    const keys = Object.keys(data.context);
+    expect(keys).not.toContain("ownerId");
+    expect(keys).not.toContain("owner_id");
+    expect(keys).not.toContain("email");
+    expect(keys).not.toContain("auth");
+    expect(keys).not.toContain("settings");
+
+    const nodeKeys = Object.keys(data.context.nodes[0]);
+    expect(nodeKeys).not.toContain("owner_id");
+    expect(nodeKeys).not.toContain("ownerId");
+  });
+
+  test("returns safe error status code on main map database errors", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mock = createMockSupabaseClient({
+      mapError: new Error("internal postgres crash"),
+    });
+    testHooks.getSupabaseClient = () => mock.client;
+
+    const response = await GET(buildRequest("main-map-456", "main"));
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data).toEqual({ error: "map_context_fetch_failed" });
+    expect(JSON.stringify(data)).not.toContain("postgres");
   });
 
   test("preserves duplicate visual nodes by visualNodeId", async () => {

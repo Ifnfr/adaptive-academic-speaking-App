@@ -204,29 +204,34 @@ export type PodchatCommonplaceContext = {
 
 export type PodchatCommonplaceMapContextRef = {
   source: "commonplace-map";
-  mapType: "sub";
+  mapType: "sub" | "main";
   mapId: string;
 };
 
 type PodchatCommonplaceMapDiscussionContext = {
   source: "commonplace-map";
-  mapType: "sub";
+  mapType: "sub" | "main";
   mapId: string;
   mapTitle: string;
   counts: {
     nodes: number;
     edges: number;
+    clusterNodes?: number;
+    noteNodes?: number;
     truncatedNodes: boolean;
     truncatedEdges: boolean;
   };
   nodes: Array<{
     visualNodeId: string;
-    noteId: string;
-    shortcode: string;
-    title: string | null;
-    sourceBook: string;
-    insightExcerpt: string;
-    tags: string[];
+    nodeKind?: "note" | "cluster";
+    noteId?: string;
+    shortcode?: string;
+    title?: string | null;
+    sourceBook?: string;
+    insightExcerpt?: string;
+    tags?: string[];
+    referencedSubMindMapId?: string;
+    referencedSubMindMapTitle?: string;
   }>;
   edges: Array<{
     sourceVisualNodeId: string;
@@ -327,7 +332,9 @@ export function PodchatView({
     ? `Today, we'll discuss your Commonplace note ${commonplaceContext.shortcode} from ${commonplaceLabel}. Explain the idea in your own words.`
     : null;
   const commonplaceMapOpener = commonplaceMapContext
-    ? `Today, we'll discuss your Sub Mind Map "${commonplaceMapContext.mapTitle}". It includes ${commonplaceMapContext.counts.nodes} visual notes and ${commonplaceMapContext.counts.edges} connections. Start by explaining the strongest relationship you see.`
+    ? commonplaceMapContext.mapType === "main"
+      ? `Today, we'll discuss your Main Map "${commonplaceMapContext.mapTitle}". It has ${commonplaceMapContext.counts.nodes} visual node${commonplaceMapContext.counts.nodes !== 1 ? "s" : ""} and ${commonplaceMapContext.counts.edges} connection${commonplaceMapContext.counts.edges !== 1 ? "s" : ""}. Start by describing what the overall map represents.`
+      : `Today, we'll discuss your Sub Mind Map "${commonplaceMapContext.mapTitle}". It includes ${commonplaceMapContext.counts.nodes} visual note${commonplaceMapContext.counts.nodes !== 1 ? "s" : ""} and ${commonplaceMapContext.counts.edges} connection${commonplaceMapContext.counts.edges !== 1 ? "s" : ""}. Start by explaining the strongest relationship you see.`
     : null;
 
   useEffect(() => {
@@ -866,7 +873,7 @@ export function PodchatView({
               Start a Podchat
             </h2>
             <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-soft)]">
-              Discuss a saved Sub Mind Map without changing the canvas.
+              Discuss a saved Commonplace map without changing the canvas.
             </p>
           </div>
           <div className="p-6 flex flex-col gap-6">
@@ -894,7 +901,7 @@ export function PodchatView({
                       Source
                     </span>
                     <span className="text-sm font-semibold text-[var(--brand-teal)] block mt-1">
-                      Sub Mind Map
+                      {commonplaceMapContext.mapType === "main" ? "Main Map" : "Sub Mind Map"}
                     </span>
                   </div>
                   <div>
@@ -907,11 +914,21 @@ export function PodchatView({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
-                      {commonplaceMapContext.counts.nodes} visual notes
+                      {commonplaceMapContext.counts.nodes} visual node{commonplaceMapContext.counts.nodes !== 1 ? "s" : ""}
                     </span>
                     <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
-                      {commonplaceMapContext.counts.edges} connections
+                      {commonplaceMapContext.counts.edges} connection{commonplaceMapContext.counts.edges !== 1 ? "s" : ""}
                     </span>
+                    {typeof commonplaceMapContext.counts.clusterNodes === "number" && commonplaceMapContext.mapType === "main" && (
+                      <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                        {commonplaceMapContext.counts.clusterNodes} cluster{commonplaceMapContext.counts.clusterNodes !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {typeof commonplaceMapContext.counts.noteNodes === "number" && commonplaceMapContext.mapType === "main" && (
+                      <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                        {commonplaceMapContext.counts.noteNodes} note{commonplaceMapContext.counts.noteNodes !== 1 ? "s" : ""}
+                      </span>
+                    )}
                     {(commonplaceMapContext.counts.truncatedNodes ||
                       commonplaceMapContext.counts.truncatedEdges) && (
                       <span className="rounded-full border border-[#D99A25]/30 bg-[#FFF4D8] px-2.5 py-1 text-xs font-medium text-[#7A4A00]">
@@ -930,15 +947,23 @@ export function PodchatView({
                             key={node.visualNodeId}
                             className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]"
                           >
-                            <span className="font-semibold text-[var(--brand-ink)]">
-                              {node.title || node.shortcode}
-                            </span>
-                            <span className="ml-2 text-xs text-[var(--brand-muted)]">
-                              {node.shortcode}
-                            </span>
-                            <p className="mt-1 line-clamp-2">
-                              {node.insightExcerpt}
-                            </p>
+                            {node.nodeKind === "cluster" ? (
+                              <span className="font-semibold text-[var(--brand-ink)]">
+                                📁 {node.referencedSubMindMapTitle || "Sub Mind Map"}
+                              </span>
+                            ) : (
+                              <>
+                                <span className="font-semibold text-[var(--brand-ink)]">
+                                  {node.title || node.shortcode}
+                                </span>
+                                <span className="ml-2 text-xs text-[var(--brand-muted)]">
+                                  {node.shortcode}
+                                </span>
+                                <p className="mt-1 line-clamp-2">
+                                  {node.insightExcerpt}
+                                </p>
+                              </>
+                            )}
                           </li>
                         ))}
                       </ul>
