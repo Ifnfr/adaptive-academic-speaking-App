@@ -1,190 +1,465 @@
 # fonetik Project Context
 
-## Product
+Last updated: 2026-06-12
 
-**fonetik**  
-**Speak Better**  
-AI-Powered academic speaking practice.
+This document is the current handoff source of truth for AI agents working on
+the fonetik repository.
 
-fonetik is a local-first MVP for practicing academic speaking. It combines
-local session setup, local prompt generation, browser speech-to-text, AI
-feedback, retry practice, CSV summaries, local progress review, and several
-small coaching features.
+## Product Identity
+
+- Product/UI name: **fonetik**
+- Tagline: **Speak Better**
+- Current active workstream: **Commonplace**
+- Production app: https://adaptive-academic-speaking-app.vercel.app/
+- Primary app package: `app-web`
+- GitHub repository: `Ifnfr/adaptive-academic-speaking-App`
+- Default branch: `main`
+- Latest relevant commit at this update: `90b8185 Add Commonplace server-persisted theme settings`
+
+fonetik is a local-first academic speaking practice app. It combines practice
+sessions, vocabulary work, article-based speaking tasks, profile/settings,
+cloud-backed signed-in persistence, and a Commonplace system for saving ideas
+and arranging them visually in maps.
 
 ## Current Stack
 
 - Next.js App Router
-- React
+- React 19
 - TypeScript
-- Tailwind CSS
-- Browser localStorage
-- Web Speech API
-- Server-side API routes for Claude, DeepSeek, and Gemini
+- Tailwind CSS 4
+- Clerk authentication
+- Supabase Postgres with RLS
+- React Flow for Commonplace map canvases
+- Playwright for targeted UI and route validation
+- Vercel production deployment
+- Browser `localStorage` for the older local-first practice features
 
 ## Current MVP Scope
 
-- Light fonetik dashboard UI (sidebar navigation and topbar status)
-- Active Session and Session Setup (mode cards, level selection, provider choice)
-- Browser speech-to-text and manual transcript input
-- Local Speaking Prompt generation (by level, mode, and session type)
-- AI Feedback with level-specific scores (1-5 range)
-- Retry Loop for targeted speaking improvement
-- End Session CSV and Copy CSV
-- Session Log and Copy Last CSV
-- Progress view, Day Streak, and Local Level-Up Check
-- Diagnostic Mode (recommended level, bottleneck, plan)
-- Weekly Review Agent using recent session summaries
-- Mental Model Session for response quality patterns
-- Friendly provider errors (handling missing keys, rate limits, model availability)
-- Foundation-level calibration for simple outputs
-- Robust JSON parsing for Weekly Review and Mental Model
-- **Vocabulary Notebook 2.0**: Recent Vocabulary Preview (showing 5 newest items) + View All / Dictionary Mode (detailing POS, collocations, sentence history, and delete/status actions) + Active Recall Practice (5-card queue prioritized by recency/underuse, with skip support, card progress, and input verification).
-- **AI Vocabulary Correction**: `/api/vocabulary-correction` API checking user sentences, returning targetUsageRole explanations, and incrementing correctUseCount for natural sentences (no auto-replacing).
-- **Gamification Engine**: Local XP events, pending XP tracking, Speaker Levels, and daily claims (includes 20 XP vocab_recall_session_completed reward capped at 2 per day, duplicate-protected).
-- **Article Practice**: paste URL, server-side fetch, and generate copyright-safe academic speaking task results
-- **Article Vocabulary Save**: save useful vocab cards directly to Vocabulary Notebook (duplicate-safe)
-- **Article Practice → Active Session Bridge**: "Practice This Speaking Task" copies details to Today's Target, switches mode to "Reading-to-Speaking", and switches view to Active Session setup without auto-starting the session.
-- **Profile and Settings**: Dedicated, separate owner-only views replacing the old combined Settings layout. Profile acts as a read-only learner identity / achievement page (rendering avatars/initials, display names, bios, speaker levels, XP progress, streaks, sessions count, vocabulary counts, badges list, and summaries). Settings is dedicated to editable details (display name, bio), private account email labeling, language preferences (App Language and Feedback Language), target language fixed to English, public profile toggle, and leaderboard opt-in toggle. Profile preferences are saved to Supabase when signed in.
-- **UI & AI Feedback Localization**:
-  - **App Language**: Renders English and Indonesian UI labels for all core wired views (Sidebar, Topbar, Session Setup, Vocabulary Notebook, Article Practice, Gamification, Session Log, Weekly Review, Mental Model, etc.).
-  - **Feedback Language**: Controls the language of explanations, weaknesses, and reviews (English or Indonesian) across all AI API routes. Indonesian feedback is concise and beginner-friendly.
-  - **Target Practice Language**: Remains English only. Corrected phrases, examples, target structures, and reference models are not translated. Stored transcripts/history are not translated retroactively.
-- **User Leaderboard**: A user-only leaderboard component ranking users by valid XP.
-  - Supports Daily, Weekly, Monthly, and All-time filters (Weekly is the default).
-  - Only displays users with `leaderboard_opt_in = true` and XP > 0.
-  - Opted-out signed-in users see private visibility and a simulated position (`previewRank`) while remaining hidden publicly.
-  - No coins, energy, shop, extra points, or house systems are featured.
-  - Only safe public fields are exposed (rank, display name/fallback, initials/avatar, level, period XP, badge counts). No email, owner IDs, source IDs, raw XP events, transcripts, or learning details are exposed.
-- **Learning Path (Phase 1 & Phase 2)**: A local-first, static-curriculum guided journey.
-  - **Phase 1: Confidence Foundation**: Includes Unit 1 (Introduce Yourself) and Unit 2 (My Daily Life) spread across Days 1-14, featuring a "Today's Mission" focus.
-  - **Phase 2: Everyday Interaction**: Extends the sequential journey to Days 15-28, featuring Unit 3 (Asking and Answering) and Unit 4 (Expressing Simple Preferences). Phase 2 appears immediately after completing Phase 1.
-  - **Phase 2 Renderers**: Introduces safe, guided interactions using Fluency Sprint, Progressive Sentence Builder, Supported Conversation, Pronunciation Awareness, and Reflection Card.
-  - Progress is purely local and deterministic, stored in `fonetik:learning-path-progress:v1`.
-  - MicroLessonShell wraps interactive cards.
-  - **Privacy Boundaries**: Phase 2 uses scripted/static curriculum data and guided interactions. It does not introduce raw learner speech processing, backend audio handling, recording uploads, or AI scoring. No free speaking, open roleplay, or generative AI conversation. Stores only safe progress locally. Never stores transcripts, recordings, email, or usage IDs in local progress.
-  - MVP limitations: No adaptive unlocking yet, no Tutor Memory-driven sequencing yet, no AI planner, and no Supabase cloud sync is present in the MVP.
-- **Feedback Normalization Engine (Foundation)**: A pure, stateless helper pipeline that normalizes untrusted raw feedback signals into a safe, 10-category taxonomy (fluency, clarity, structure, grammar, vocabulary, reasoning, listening, academic_tone, confidence, engagement). It securely generates deterministic retry actions, summary aggregations, and Learning Path recommendation hints. Strict privacy enforcement ensures no user transcripts, PII, or raw AI text pass through the pipeline. It currently has no UI or storage integration.
-- **Adaptive Tutor Memory (Foundation)**: Pure, side-effect-free TypeScript helpers that build safe TutorMemoryProfile objects, generate deterministic recommendations, and provide Learning Path advisory hints without UI, storage, API routes, or AI/model calls.
+- Dashboard shell with sidebar navigation and topbar status.
+- Active Session and Session Setup with mode cards, level selection, provider
+  choice, browser speech-to-text, manual transcript input, prompt generation,
+  AI feedback, retry practice, CSV summaries, and local session log.
+- Vocabulary Notebook 2.0 with recent preview, dictionary mode, sentence
+  history, delete/status actions, active recall practice, and AI vocabulary
+  correction through `/api/vocabulary-correction`.
+- Gamification with local XP events, pending XP, Speaker Levels, daily claims,
+  badges, and duplicate-protected reward rules.
+- Article Practice with URL fetch, copyright-safe task generation, vocabulary
+  save, and Article Practice -> Active Session bridge.
+- Profile and Settings split into owner-only views. Settings handles editable
+  profile fields, language preferences, public profile toggle, leaderboard
+  opt-in, provider preferences, and Commonplace appearance preferences.
+- UI and AI feedback localization. App language can render English/Indonesian
+  UI labels for wired views. Feedback language controls AI explanation
+  language. Target practice language remains English only.
+- User-only leaderboard using sanitized public fields only.
+- Learning Path Phase 1 and Phase 2 as static, local-first curriculum.
+- Feedback Normalization, Adaptive Tutor Memory, Human-Approved Improvement
+  Loop, and Developer Diagnostics foundations as pure helper libraries with
+  strict privacy boundaries and no UI/storage/model side effects.
+- Commonplace Library, note CRUD, map registry, React Flow canvases, Inventory,
+  Sub Mind Maps, Main Maps, mixed visual nodes, mixed visual edges, drag-back
+  visual node removal, and server-persisted Commonplace theme settings.
 
-### Adaptive Tutor Memory (Foundation Details)
+## Commonplace Terminology
 
-- **Headless & Stateless Foundation**: The Adaptive Tutor Memory engine is implemented as a pure library of stateless helper functions. It handles no direct storage, does not mutate user state, has no Supabase schema elements, does not create Next.js API routes, and does not invoke AI models.
-- **Components & Files**:
-  - `src/app/lib/tutor-memory/types.ts`: Safe type structures for profiles and recommendations.
-  - `src/app/lib/tutor-memory/build.ts`: Builds a `TutorMemoryProfile` by ingesting whitelisted `FeedbackSignalSummary` inputs and current Learning Path progress snapshots.
-  - `src/app/lib/tutor-memory/recommend.ts`: Evaluates profiles to output deterministic advisory recommendations (`TutorMemoryRecommendation`).
-  - `src/app/lib/tutor-memory/learning-path-bridge.ts`: Combines sequential Learning Path progress with the advisory recommendations. It guarantees that Learning Path order is strictly preserved and never hard-locked or bypassed.
-  - `tests/tutor-memory-privacy.spec.ts`: Dedicated privacy QA test suite ensuring absolute security compliance.
-- **Privacy Boundary**: Safe profiles and recommendations are strictly limited to category-level signals. In compliance with privacy guidelines, the foundation explicitly rejects and filters out the following forbidden patterns:
-  - Transcripts or retry transcripts
-  - Raw corrections or vocabulary sentences
-  - Article URLs
-  - User emails or account details
-  - Owner IDs, user IDs, or source IDs
-  - CSV payload contents or raw session history details
-  - Raw provider responses, prompt text, or generated feedback text
-  - Audio recordings or voice blobs
-  - Clinical, psychological, or negative learner labels (e.g. "struggling", "failing", "weakness")
+- **Library note**: the source note record stored in Commonplace. It contains
+  source book, title, insight, tags, connections, shortcode, and related note
+  metadata.
+- **Visual node**: a canvas instance. It is not the Library note itself.
+- One Library note can appear multiple times on the same map as independent
+  visual node instances with different node IDs and positions.
+- **Sub Mind Map**: an idea-level note map. It contains visual note nodes and
+  edges between those visual node IDs.
+- **Main Map**: a higher-level visual map. It can contain cluster nodes and
+  note nodes.
+- **Cluster node**: a Main Map visual reference to a Sub Mind Map.
+- **Edge**: a connection between visual node IDs, not raw note IDs.
+- **Inventory**: the saved map navigation panel inside map canvases. Use this
+  term. Do not call the current UI "Laci" or "Drawer".
 
-- **Human-Approved Improvement Loop (Foundation)**: Pure, side-effect-free helper functions that detect learning and practice friction from safe aggregate metrics, compile structured improvement proposals, and format markdown checklists for developers. It has no auto-execution capability, and does not add UI, storage, schemas, API routes, or AI models.
-- **Developer Diagnostics (Foundation)**: A pure, developer-facing helper foundation that combines safe readiness snapshots, diagnostic reports, Phase 2 readiness checks, and Improvement Loop proposal candidates without modifying UI, storage, Supabase, API routes, or AI models.
+## Commonplace Current Capabilities
 
-### Human-Approved Improvement Loop (Foundation Details)
+### Library and Notes
 
-- **Pure Helper Library**: Operates completely in memory as a set of stateless functions under `src/app/lib/improvement-loop/`. It does not modify files automatically, does not integrate with database tables or API routes, and does not make AI calls.
-- **Key Modules**:
-  - `types.ts`: Safe TS interface and union definitions for proposals.
-  - `build.ts`: Builds standardized proposal structures with deterministic proposal IDs.
-  - `friction.ts`: Detects friction triggers from aggregate counts (completion rates, card retry counts, category recurrence).
-  - `checklist.ts`: Formats developer-facing checklist markdown with explicit manual verification items.
-  - `tests/improvement-loop-privacy.spec.ts`: Audits the codebase to block private learner leakage, database queries, and LLM requests.
-- **Privacy Boundary**: In compliance with strict security requirements, the Improvement Loop works strictly with safe aggregate metrics and counts. It is forbidden to serialize or ingest: transcripts, retry transcripts, exact user sentences, raw AI corrections, URLs, emails, owner/source IDs, CSV records, recordings, or clinical/negative learner labels.
+- Commonplace runs as a dedicated mode with the standard Fonetik sidebar hidden
+  and a Commonplace sidebar visible.
+- Library grid is the default Commonplace view.
+- `+ Baru` and the Add Note tile open the in-place create form.
+- Source book, title, and insight are required fields in the UI.
+- Note cards and sidebar notes open the existing detail view.
+- Create, read, edit, and delete note flows use server routes.
+- `POST /api/commonplace/notes` remains the production note-creation path.
+- Library notes are preserved when their visual nodes are removed from maps.
 
-### Developer Diagnostics (Foundation Details)
+### Sub Mind Maps
 
-- **Pure Helper Foundation**: Operates completely in memory as a set of stateless analysis and assessment functions under `src/app/lib/developer-diagnostics/`. It does not modify application files, database tables, or localStorage, has no UI integration, and does not call any LLM models or API endpoints.
-- **Key Modules**:
-  - `developer-diagnostics/types`: Safe type structures, contracts, and a runtime snapshot validator.
-  - `developer-diagnostics/snapshot`: Aggregates safe metrics and metadata from other foundations into a standardized snapshot.
-  - `developer-diagnostics/report`: Compiles structured, developer-facing markdown diagnostic and advisory reports.
-  - `developer-diagnostics/phase2-readiness`: Evaluates technical readiness levels and blockers for future adaptive features.
-  - `developer-diagnostics/improvement-connector`: Maps diagnostic snapshots to human-approved improvement loop proposal candidates.
-  - `developer-diagnostics privacy tests`: Dedicated test suites verifying strict security and serialization boundaries.
-- **System Relationships**:
-  - **Learning Path & Micro-Practice**: Collects safe aggregate counts (completed cards, attempts, reset events) to assess engine stability.
-  - **Feedback Normalization & Tutor Memory**: Reads category-level signal presence to verify that advisory bridge contracts are complete.
-  - **Human-Approved Improvement Loop**: Supplies formatted snapshots that can be converted into human-approved improvement candidates.
-  - **Phase 2 Curriculum Planning**: Serves as a gateway/blocker evaluator before static curriculum bridges are replaced with adaptive paths.
-- **Privacy Boundary & Safe Input Scope**: Read access is strictly limited to safe aggregate metrics, available categories, and readiness metadata. The system is prohibited from serializing, storing, or processing: user/owner/session/source IDs, emails, transcripts, raw AI corrections, user sentences, article URLs, raw event payloads, recordings, raw provider responses, or clinical/negative learner labels.
+- Sub Mind Maps use React Flow.
+- Notes can be dragged from the sidebar into a Sub Mind Map canvas.
+- The same Library note can be dragged into the same Sub Map more than once.
+- Duplicate visual nodes have different node IDs and independent positions.
+- Node movement marks unsaved changes. Manual Save persists positions.
+- Connect Idea supports solid and dashed edges with optional labels.
+- Self-edges are rejected.
+- Edge source and target use visual node IDs.
+- Edge edit, edge type change, label update, delete, save, reload persistence,
+  and node preservation after edge delete are implemented.
+- Canvas note nodes can be dragged back to the Library/sidebar area. Drag-back
+  removes only the visual node from the canvas and preserves the source Library
+  note.
+- Sub Map visual node DELETE is enabled.
+- Connected visible edges are removed locally when a visual node is removed.
+
+### Main Maps
+
+- Main Map registry allows multiple Main Maps. Do not collapse it to one map.
+- Main Map supports cluster visual nodes that reference saved Sub Mind Maps.
+- Main Map supports individual note visual nodes.
+- Sidebar notes can be dragged into Main Map canvas.
+- Duplicate Main Map note nodes are allowed.
+- Main Map note nodes can be moved, saved, and reloaded.
+- Main Map visual note deletion preserves Library notes.
+- Main Map cluster deletion preserves referenced Sub Mind Maps.
+- Main Map supports mixed visual-node edges:
+  - cluster -> cluster
+  - cluster -> note
+  - note -> cluster
+  - note -> note
+- Main Map edge labels and solid/dashed edge types are preserved.
+- Self-edges are rejected.
+- Foreign/cross-map nodes are rejected.
+- Cluster and note visual affordances, toolbar copy, and empty-state copy have
+  been hardened.
+
+### Inventory
+
+- Inventory is the saved-map panel inside the map canvas.
+- It appears only in map views.
+- It lists Main Maps and Sub Mind Maps separately.
+- Opening saved Main/Sub Maps from Inventory works.
+- Active map marker is present.
+- Main -> Main, Main -> Sub, Sub -> Sub, and Sub -> Main switching works.
+- Unsaved-change confirmation uses real dirty state, including failed-save
+  dirty state.
+- No visible "Laci" or "Drawer" copy should remain in current UI.
+
+### Save State and Runtime Behavior
+
+- Manual save state supports unsaved, saving, saved, and save-failed states.
+- Autosave has not been introduced.
+- Canvas workspace was expanded in Phase 10C:
+  - Old: `h-[min(68dvh,720px)] min-h-[460px]`
+  - New: `h-[min(78dvh,860px)] min-h-[420px] sm:min-h-[520px] lg:min-h-[560px]`
+- Header vertical pressure was reduced.
+- React Flow controls remain clickable.
+- Inventory does not block controls.
+
+### Commonplace Theme Settings
+
+- Phase 10D added Commonplace-only server-persisted theme settings.
+- Commit: `90b8185 Add Commonplace server-persisted theme settings`
+- Remote Supabase migration was applied and verified.
+- New `profiles` columns:
+  - `commonplace_canvas_color`
+  - `commonplace_card_color`
+- Both columns are `text not null default 'default'`.
+- Allowed color IDs:
+  - `default`
+  - `paper`
+  - `sage`
+  - `sand`
+  - `sky`
+  - `lavender`
+  - `rose`
+  - `slate`
+  - `charcoal`
+- Settings has a Commonplace appearance section.
+- Canvas color and card color are independent.
+- There are no fixed theme bundles.
+- There is no arbitrary custom hex input.
+- The source of truth is server persistence, not `localStorage`.
+- Theme applies only to Commonplace.
+- Main/Sub map canvas uses the selected canvas color.
+- Commonplace sidebar and Library note cards use the selected card color.
+- Visual note node tag/identity colors are preserved.
+- Global fonetik theme is unchanged.
+- Authenticated production smoke passed after the remote migration.
+- Final smoke-test preference state was restored to Default/Default.
+
+## Commonplace Phase History
+
+### Phase 8E
+
+- Main Map individual note visual nodes implemented.
+- Sidebar notes can be dragged into Main Map canvas.
+- Duplicate Main Map note nodes are allowed.
+- Main Map note nodes can be moved, saved, and reloaded.
+- Original Library notes are preserved.
+
+### Phase 8F
+
+- Main Map mixed node UX hardened.
+- Cluster vs note visual affordances clarified.
+- Main Map toolbar and copy clarified.
+- Main Map empty state clarified.
+
+### Phase 8G
+
+- Safe Main Map visual node deletion implemented.
+- Deleting visual note nodes preserves Library notes.
+- Deleting visual cluster nodes preserves referenced Sub Mind Maps.
+
+### Phase 8H
+
+- Manual save-state UX hardened.
+- Unsaved/saving/saved/save-failed states work.
+- Autosave was not introduced.
+
+### Phase 8I
+
+- Main Map mixed edge capability audit completed.
+- Schema can support mixed visual-node edges.
+
+### Phase 8J
+
+- Main Map mixed visual-node edges implemented.
+- Supported directions: cluster -> cluster, cluster -> note, note -> cluster,
+  note -> note.
+- Edge labels and solid/dashed edge types are preserved.
+- Self-edges are rejected.
+- Foreign/cross-map nodes are rejected.
+- Sub Mind Map still uses Connect Idea.
+
+### Phase 8K
+
+- Main/Sub Map regression audit passed.
+- No blocking regressions found.
+
+### React Flow Warning Cleanup
+
+- NaN `left` CSS warning was addressed.
+- React Flow `nodeTypes`/`edgeTypes` warning remains known non-blocking, likely
+  React Flow v11/dev behavior.
+- Clerk development-key warning remains expected in dev/test.
+
+### Canvas Bugfix
+
+- Commit: `309c994 Fix Commonplace connection UI and drag-back node removal`
+- Connection preview now starts from node-side geometry instead of node center.
+- Solid/Dashed edge choices are visually explicit.
+- Canvas note nodes can be dragged back to Library/sidebar.
+- Drag-back removes only the visual node from canvas.
+- Original Library note remains.
+- Sub Map node DELETE is enabled.
+- Main Map node DELETE behavior is preserved.
+- Connected visible edges are removed locally.
+- Production manual QA confirmed these paths work.
+
+### Phase 9A
+
+- Inventory / saved maps panel added inside map canvas.
+- Separate Main Maps and Sub Mind Maps lists.
+- Opening saved Main/Sub Maps from Inventory works.
+- Active map marker added.
+- Route/adapter behavior unchanged.
+
+### Phase 9B
+
+- Inventory navigation hardened.
+- Inventory appears only in map views.
+- Main -> Main, Main -> Sub, Sub -> Sub, and Sub -> Main switching works.
+- Unsaved-change confirmation uses real dirty state, including failed-save
+  dirty state.
+- No visible "Laci" or "Drawer" copy remains.
+
+### Phase 9C
+
+- Inventory regression audit passed.
+- No risks/gaps found.
+
+### Phase 10A
+
+- Local runtime QA passed through a Playwright-managed browser.
+- Library, Sub Mind Map, Main Map, Inventory, save/reload, mixed edges,
+  drag-back, and data-safety paths passed locally.
+
+### Phase 10B
+
+- Production public/auth/library QA passed.
+- Authenticated production canvas automation was blocked by browser drag
+  limitations.
+- User manually verified production canvas bugfix paths successfully.
+
+### Phase 10C
+
+- Canvas workspace expanded.
+- Header vertical pressure reduced.
+- React Flow controls remained clickable.
+- Inventory does not block controls.
+
+### Phase 10D
+
+- Commonplace-only server-persisted theme settings implemented.
+- Remote Supabase migration applied and verified.
+- Authenticated production smoke passed.
+- Final preference state restored to Default/Default.
 
 ## API Routes
 
-- `/api/feedback` (session feedback)
-- `/api/diagnostic` (diagnostic tests)
-- `/api/weekly-review` (session trend review)
-- `/api/mental-model` (micro drills & quality criteria)
-- `/api/vocabulary-correction` (vocabulary usage feedback)
-- `/api/article-practice` (URL text processing & prompt generation)
-- `/api/leaderboard` (user-only leaderboard query; supports period=daily|weekly|monthly|all-time; runs server-side with a privileged service-role client for read/select only; does not mutate data or leak private learning details)
+- `/api/feedback` - session feedback
+- `/api/diagnostic` - diagnostic tests
+- `/api/weekly-review` - session trend review
+- `/api/mental-model` - micro drills and quality criteria
+- `/api/vocabulary-correction` - vocabulary usage feedback
+- `/api/article-practice` - URL text processing and prompt generation
+- `/api/leaderboard` - user-only sanitized leaderboard
+- `/api/commonplace/notes` - Commonplace note CRUD
+- `/api/commonplace/maps` - Main/Sub Mind Map registry behavior
+- `/api/commonplace/maps/nodes` - visual node list/create/update/delete paths
+- `/api/commonplace/maps/edges` - visual edge list/create/update/delete paths
 
-## Local Data
+## Database Schema and Cloud Status
 
-- Stored primarily in browser `localStorage`.
-- Storage keys:
-  - `adaptive-speaking-app:sessions` (practice session log)
-  - `adaptive-speaking-app:vocabulary` (notebook words & usage history)
-  - `adaptive-speaking-app:xp-profile` (total/pending/streak gamification status)
-  - `adaptive-speaking-app:xp-events` (history of XP events for caps & diagnostics)
-  - `adaptive-speaking-app:badges` (locked/earned badge lists)
-- Clerk auth and Supabase client integration is active as a best-effort, non-blocking write path for completed sessions, vocabulary notebook changes, and gamification data (XP profile, XP events, badges).
-- Hybrid local-first migration is in progress: `localStorage` remains the local source of truth.
-
-## Database Schema & Cloud Status
-
-- Supabase Postgres schema and RLS policies exist in `supabase/migrations/`.
-- Supabase client integration exists under `app-web/src/app/lib/supabase/`.
-- The app writes newly completed normal sessions, vocabulary changes, and gamification updates to Supabase as a best-effort, non-blocking cloud save when Clerk is signed in and Supabase is configured.
-- Vocabulary deletions in the cloud are diff-based. Gamification events are also diffed to only upload newly added events.
-- Cloud duplicate XP prevention relies on a unique database constraint on `(owner_id, type, source_id)` for `xp_events`.
-- XP rules remain local and deterministic. AI never decides XP values.
-- Database cascade deletes automatically clean up child sentences and corrections for deleted vocabulary items.
-- The app supports loading a cloud snapshot preview. Signed-in users can trigger a user-confirmed cloud restore (available only if local browser data is empty) or cloud import (if local data exists, using a conservative merge plan and compatibility guard).
-- During restore/import, local storage is never cleared, no cloud data is deleted or mutated, and no XP recalculations occur. CSV payloads, nested vocabulary relationships, and XP source details are preserved exactly. XP events are deduped on import using type and sourceId.
-- Profile and Settings views load and save owner-scoped profile preferences when signed in. `public_profile_enabled`, `leaderboard_opt_in`, `preferred_app_language` (as preferredAppLanguage), `feedback_language` (as feedbackLanguage), and `target_language` (as targetLanguage) are stored. The profile view is not public, the User Leaderboard is implemented to display sanitized rankings, and learning stats shown on the Profile page are count-based summaries derived from local browser state only.
-- Leaderboard Privacy & Security: The leaderboard API uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to perform read/select queries on profiles and XP events. It does not perform mutations or write operations. It filters out non-opted-in or zero-XP users. No private learning data (email, transcripts, corrections, vocabulary, URLs) is ever returned or rendered.
-- Profile saves include display name, bio, public profile enabled, leaderboard opt-in, preferredAppLanguage, feedbackLanguage, and targetLanguage. The Settings UI does not write learning data to localStorage and does not expose transcripts, retry transcripts, vocabulary sentence history, AI corrections, article URLs, weaknesses, retry tasks, CSV/session raw content, XP event source IDs, or private notes. Stored history is not retroactively translated.
+- Supabase schema and RLS policies live in `supabase/migrations/`.
+- Supabase integration code lives under `app-web/src/app/lib/supabase/` and
+  Commonplace storage adapters under `app-web/src/app/lib/storage/`.
 - RLS policies expect Clerk JWT subject via `auth.jwt()->>'sub'`.
-- Clerk's native Supabase integration is used to verify database operations.
-- No database credentials should be committed.
-- Tables prepared/defined: profiles, speaking_sessions, vocabulary_items,
-  vocabulary_sentences, vocabulary_corrections, xp_profiles, xp_events,
-  badges, global_ai_response_cache, ai_usage_events, ai_request_idempotency.
-- The `global_ai_response_cache` table does **not** store raw HTML or full
-  article bodies — only structured, copyright-safe speaking-task metadata.
-- **Article Practice Caching**: Exact-match global caching is implemented for `/api/article-practice`. The cache key includes normalized URL, learner level, provider, mode, focus, feedbackLanguage, targetLanguage, and promptVersion. Cache lookup is executed prior to querying providers. Cache writes utilize the server-only `SUPABASE_SERVICE_ROLE_KEY` to prevent cache poisoning, and public write (INSERT/UPDATE/DELETE) privileges are completely disabled. It is not semantic vector caching yet. Global caching is currently limited to `/api/article-practice` only. Personal or semi-personal AI routes, including speaking feedback, diagnostics, weekly reviews, mental model outputs, vocabulary corrections, personal transcripts, and user sentences, are not globally cached.
-- **AI Usage Ledger**: The `ai_usage_events` table records metadata-only usage events for `/api/article-practice`. Each row includes feature, provider, model, prompt version, cached flag, request status, estimated input/output tokens, estimated cost (USD), and optional error code. RLS is enabled with no public policies; writes use the server-only service role. Token estimates use chars / 4; cost estimates use a static price map and may be null for unknown models. Usage logging is non-blocking and does not affect route behavior or API responses. Personal route usage logging is future work.
-- **Request Idempotency**: The `ai_request_idempotency` table caches status and response JSON for `/api/article-practice` using the `X-Fonetik-Idempotency-Key` header (validated length of 8-128 chars, hashed with SHA-256) and a deterministic hash of the request parameters (incorporating both `feedbackLanguage` and `targetLanguage`). Succeeding requests return the stored JSON within 20 minutes (fail-open safety, no raw HTML/text stored, writes/reads via server-only service role, RLS enabled with no public policies). In-progress requests are treated as misses to avoid blocking. Personal route idempotency is future work.
+- Clerk's native Supabase integration is used for database operations.
+- Do not commit database credentials.
+- Existing core tables include:
+  - `profiles`
+  - `speaking_sessions`
+  - `vocabulary_items`
+  - `vocabulary_sentences`
+  - `vocabulary_corrections`
+  - `xp_profiles`
+  - `xp_events`
+  - `badges`
+  - `global_ai_response_cache`
+  - `ai_usage_events`
+  - `ai_request_idempotency`
+  - `commonplace_notes`
+  - `commonplace_shortcode_counters`
+  - `commonplace_mindmaps`
+  - `commonplace_mindmap_nodes`
+  - `commonplace_mindmap_edges`
+  - `commonplace_main_map_nodes`
+  - `commonplace_main_map_edges`
+- `commonplace_mindmap_nodes` allows duplicate Library note instances in the
+  same Sub Map. Identity is by node ID, not note ID.
+- `commonplace_mindmap_edges.edge_type` supports `solid` and `dashed`.
+- Main Map visual node schema supports `node_kind` values `cluster` and `note`.
+- Main Map edge schema supports `edge_type` values `solid` and `dashed`.
+- `profiles` now stores Commonplace appearance preferences:
+  - `commonplace_canvas_color`
+  - `commonplace_card_color`
+- Remote Supabase Phase 10D migration has been applied and verified.
+- RLS and policies were not weakened by Commonplace migrations.
 
-## Not In Current MVP
+## Local Data and Cloud Boundaries
 
-- Automated background sync or advanced interactive conflict resolution UI (Clerk and Supabase are configured for best-effort writes, read-only snapshot previews, and user-initiated restore/import; the app is not fully cloud-first yet)
-- Public profile pages (privacy toggles exist and default off, but the dedicated profile pages themselves are future-facing only)
-- User Leaderboard polish or deeper profile redesigns (the core user-only leaderboard is now fully implemented as MVP)
-- Full multi-target-language support (target practice language remains fixed to English only)
-- Deployment workflow
-- Mobile app
-- Dedicated Deep Feedback mode (currently routes to Quick Feedback)
-- Advanced RAG or vector database search
-- Persisted Weekly Review or Mental Model history
-- Pronunciation scoring or audio recording exports
-- Article Practice history or article-specific metadata in CSV
-- Advanced Active Recall Practice algorithm / SM-2 (uses Active Recall Practice prioritization queue instead)
-- Bulk AI classification or tagging of vocabulary items
-- Automated "Generate Sentence" or auto-answer templates (users must supply original sentences)
+- Older speaking/vocabulary/gamification features remain local-first.
+- Stored primarily in browser `localStorage`:
+  - `adaptive-speaking-app:sessions`
+  - `adaptive-speaking-app:vocabulary`
+  - `adaptive-speaking-app:xp-profile`
+  - `adaptive-speaking-app:xp-events`
+  - `adaptive-speaking-app:badges`
+  - `fonetik:learning-path-progress:v1`
+- Clerk/Supabase integration is active as a best-effort signed-in cloud path for
+  supported features.
+- Cloud restore/import is user-confirmed and conservative.
+- During restore/import, local storage is never cleared, cloud data is not
+  deleted or mutated, and XP is not recalculated.
+- Commonplace note/map data is server-backed and owner-scoped.
+- Commonplace theme settings are server-backed in `profiles`.
 
-## Working Notes
+## Privacy and Security Boundaries
 
-- API keys belong only in `app-web/.env.local`.
+- Provider keys belong only in local/server env files.
 - Provider keys must not use `NEXT_PUBLIC_`.
-- `.env.local`, `.next`, and `node_modules` should not be committed.
-- Supabase migration files are schema-only; do not add real keys or secrets.
+- `.env.local`, `.next`, and `node_modules` must not be committed.
+- Supabase migration files are schema-only and must never contain real keys.
+- Do not expose secrets, database URLs, passwords, service-role keys, API keys,
+  auth tokens, provider payloads, or raw private user data.
+- Do not weaken Supabase RLS.
+- Do not store raw provider payloads in Commonplace.
+- Do not store audio/STT/TTS fields or storage paths in Commonplace notes/maps.
+- AI Suggest must not be implemented before a capability/privacy audit.
+
+## Validation Status
+
+Latest relevant local validations across Commonplace phases have passed:
+
+- `npm.cmd run lint`
+- `npx.cmd tsc --noEmit`
+- `npx.cmd playwright test tests/commonplace-ui.spec.ts --reporter=line --workers=1`
+- Commonplace route tests for notes, maps, map nodes, and map edges where
+  relevant
+- Supabase/Commonplace adapter tests
+- Profile adapter/settings tests where relevant
+- `git diff --check`
+
+Runtime validation status:
+
+- Phase 10A local runtime QA passed.
+- Phase 10B production public/auth/library QA passed.
+- Production manual QA confirmed the canvas bugfix paths.
+- Phase 10D authenticated production smoke passed after remote migration.
+
+Known non-blocking warnings:
+
+- React Flow `nodeTypes`/`edgeTypes` warning may appear in dev/test output.
+- Clerk development-key warning may appear in dev/test output.
+- These are known warnings and are not current blockers.
+
+## Current Hard Rules for Future Agents
+
+- Use "Inventory" for saved map navigation.
+- Do not call the current saved-map panel "Laci" or "Drawer".
+- Do not collapse multiple Main Maps into one.
+- Do not confuse Library notes with visual nodes.
+- Do not delete source Library notes when removing canvas visual nodes.
+- Do not delete referenced Sub Mind Maps when removing cluster nodes.
+- Edges connect visual node IDs, not raw note IDs.
+- Do not modify auth, env, package, provider settings, or unrelated features
+  unless explicitly requested.
+- Do not weaken Supabase RLS.
+- Do not expose secrets.
+- Do not apply migrations remotely unless explicitly instructed.
+- Do not push or deploy without explicit instruction.
+- Do not implement autosave unless explicitly scoped.
+- Do not implement AI Suggest without a capability/privacy audit first.
+
+## Recommended Next Roadmap
+
+1. Commit this context update if review passes.
+2. Run an AI Suggest Capability Audit.
+3. Only after audit, decide whether to implement AI Suggest.
+
+AI Suggest must remain:
+
+- user-approved
+- no auto-connect
+- no semantic auto-edge creation without approval
+- no raw provider payload stored
+- no unnecessary sensitive data sent to a provider
+- safe error handling
+- tested with route, UI, and privacy coverage
+
+## Not In Current MVP / Still Future
+
+- AI Suggest
+- Semantic auto-edge creation
+- Autosave for maps
+- Public profile pages
+- Full multi-target-language practice
+- Mobile app
+- Advanced RAG or vector search
+- Persisted Weekly Review / Mental Model history
+- Pronunciation scoring or audio recording exports
+- Article Practice history
+- Advanced spaced-repetition algorithm such as SM-2
+- Bulk AI classification or tagging of vocabulary items
+- Automated generated user answers or sentence templates
