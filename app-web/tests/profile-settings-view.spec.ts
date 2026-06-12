@@ -47,6 +47,7 @@ const baseProfile: UserProfile = {
   targetLanguage: null,
   commonplaceCanvasColor: "default",
   commonplaceCardColor: "default",
+  appearanceMode: "system",
   createdAt: "2026-05-27T00:00:00.000Z",
   updatedAt: "2026-05-27T00:00:00.000Z",
 };
@@ -63,6 +64,7 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
       targetLanguage: "en",
       commonplaceCanvasColor: "sage",
       commonplaceCardColor: "paper",
+      appearanceMode: "dark",
     };
     const update = mapProfilePreferencesPatchToSupabaseUpdate(patch);
     const keys = Object.keys(update);
@@ -75,6 +77,7 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
     expect(keys).toContain("target_language");
     expect(keys).toContain("commonplace_canvas_color");
     expect(keys).toContain("commonplace_card_color");
+    expect(keys).toContain("appearance_mode");
     // Email must not appear (it's excluded from UserProfilePreferencesPatch)
     expect(keys).not.toContain("email");
   });
@@ -211,6 +214,7 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
       targetLanguage: "en",
       commonplaceCanvasColor: "sage",
       commonplaceCardColor: "paper",
+      appearanceMode: "system",
     });
     expect(Object.keys(patch).sort()).toEqual(
       [
@@ -223,6 +227,7 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
         "preferredAppLanguage",
         "publicProfileEnabled",
         "targetLanguage",
+        "appearanceMode",
       ].sort(),
     );
   });

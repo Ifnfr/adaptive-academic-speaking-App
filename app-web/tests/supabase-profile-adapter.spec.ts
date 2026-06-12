@@ -31,6 +31,7 @@ const profileRow: SupabaseProfileRow = {
   target_language: "en",
   commonplace_canvas_color: "sage",
   commonplace_card_color: "paper",
+  appearance_mode: "dark",
   created_at: "2026-05-27T00:00:00.000Z",
   updated_at: "2026-05-27T01:00:00.000Z",
 };
@@ -203,6 +204,7 @@ test.describe("Supabase profile adapter mapping", () => {
       targetLanguage: "en",
       commonplaceCanvasColor: "sage",
       commonplaceCardColor: "paper",
+      appearanceMode: "dark",
       createdAt: "2026-05-27T00:00:00.000Z",
       updatedAt: "2026-05-27T01:00:00.000Z",
     });
@@ -226,6 +228,7 @@ test.describe("Supabase profile adapter mapping", () => {
         target_language: null,
         commonplace_canvas_color: "not-a-theme",
         commonplace_card_color: null,
+        appearance_mode: "invalid-mode",
       }),
     ).toEqual({
       ownerId: "user_clerk_123",
@@ -243,6 +246,7 @@ test.describe("Supabase profile adapter mapping", () => {
       targetLanguage: null,
       commonplaceCanvasColor: "default",
       commonplaceCardColor: "default",
+      appearanceMode: "system",
       createdAt: "2026-05-27T00:00:00.000Z",
       updatedAt: "2026-05-27T01:00:00.000Z",
     });
@@ -418,6 +422,7 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
         targetLanguage: "en",
         commonplaceCanvasColor: "lavender",
         commonplaceCardColor: "sand",
+        appearanceMode: "light",
       },
       mock.client,
     );
@@ -437,6 +442,7 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
       target_language: "en",
       commonplace_canvas_color: "lavender",
       commonplace_card_color: "sand",
+      appearance_mode: "light",
     });
   });
 

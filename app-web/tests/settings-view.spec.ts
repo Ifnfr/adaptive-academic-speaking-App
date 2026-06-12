@@ -29,6 +29,7 @@ test.describe("SettingsView helper functions", () => {
     expect(patch.targetLanguage).toBe("en");
     expect(patch.commonplaceCanvasColor).toBe("default");
     expect(patch.commonplaceCardColor).toBe("default");
+    expect(patch.appearanceMode).toBe("system");
   });
 
   test("getProfileLanguagePreferenceState normalizes invalid values to defaults", () => {

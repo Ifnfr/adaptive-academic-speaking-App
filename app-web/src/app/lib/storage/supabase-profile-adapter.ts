@@ -13,6 +13,19 @@ import {
   type CommonplaceThemeColorId,
 } from "../commonplace-theme";
 
+export type AppAppearanceMode = "light" | "dark" | "system";
+
+export function assertAppAppearanceMode(value: unknown): AppAppearanceMode {
+  if (value === "light" || value === "dark" || value === "system") {
+    return value;
+  }
+  return "system";
+}
+
+export function normalizeAppAppearanceMode(value: unknown): AppAppearanceMode {
+  return assertAppAppearanceMode(value);
+}
+
 const PROFILES_TABLE = "profiles";
 
 export type SupabaseProfileRow = {
@@ -32,6 +45,7 @@ export type SupabaseProfileRow = {
   target_language: string | null;
   commonplace_canvas_color?: string | null;
   commonplace_card_color?: string | null;
+  appearance_mode?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -52,6 +66,7 @@ export type UserProfile = {
   targetLanguage: string | null;
   commonplaceCanvasColor: CommonplaceThemeColorId;
   commonplaceCardColor: CommonplaceThemeColorId;
+  appearanceMode: AppAppearanceMode;
   createdAt: string;
   updatedAt: string;
 };
@@ -74,6 +89,7 @@ export type UserProfilePatch = ClerkProfileSeed & {
   targetLanguage?: string | null;
   commonplaceCanvasColor?: CommonplaceThemeColorId;
   commonplaceCardColor?: CommonplaceThemeColorId;
+  appearanceMode?: AppAppearanceMode;
 };
 
 export type UserProfilePreferencesPatch = Omit<UserProfilePatch, "email">;
@@ -94,6 +110,7 @@ export type SupabaseProfileUpsert = {
   target_language?: string | null;
   commonplace_canvas_color?: CommonplaceThemeColorId;
   commonplace_card_color?: CommonplaceThemeColorId;
+  appearance_mode?: AppAppearanceMode;
 };
 
 export type SupabaseProfileUpdate = Omit<SupabaseProfileUpsert, "owner_id">;
@@ -132,6 +149,16 @@ function assignCommonplaceThemeColor(
   target[key] = assertCommonplaceThemeColorId(value);
 }
 
+function assignAppAppearanceMode(
+  target: Record<string, unknown>,
+  key: string,
+  value: AppAppearanceMode | undefined,
+): void {
+  if (value === undefined) return;
+  target[key] = assertAppAppearanceMode(value);
+}
+
+
 export function mapSupabaseRowToUserProfile(
   row: SupabaseProfileRow,
 ): UserProfile {
@@ -155,6 +182,7 @@ export function mapSupabaseRowToUserProfile(
     commonplaceCardColor: normalizeCommonplaceThemeColorId(
       row.commonplace_card_color,
     ),
+    appearanceMode: normalizeAppAppearanceMode(row.appearance_mode),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -190,6 +218,7 @@ export function mapProfilePatchToSupabaseUpsert(
     "commonplace_card_color",
     patch.commonplaceCardColor,
   );
+  assignAppAppearanceMode(row, "appearance_mode", patch.appearanceMode);
   assignBoolean(row, "public_profile_enabled", patch.publicProfileEnabled);
   assignBoolean(row, "leaderboard_opt_in", patch.leaderboardOptIn);
 
@@ -248,6 +277,10 @@ export function applyProfilePreferencesPatchToProfile(
       patch.commonplaceCardColor === undefined
         ? profile.commonplaceCardColor
         : assertCommonplaceThemeColorId(patch.commonplaceCardColor),
+    appearanceMode:
+      patch.appearanceMode === undefined
+        ? profile.appearanceMode
+        : assertAppAppearanceMode(patch.appearanceMode),
   };
 }
 

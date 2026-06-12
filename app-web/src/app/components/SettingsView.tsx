@@ -21,7 +21,12 @@ import {
   normalizeCommonplaceThemeColorId,
   type CommonplaceThemeColorId,
 } from "../lib/commonplace-theme";
-import type { UserProfile, UserProfilePreferencesPatch } from "../lib/storage/supabase-profile-adapter";
+import {
+  type UserProfile,
+  type UserProfilePreferencesPatch,
+  type AppAppearanceMode,
+  assertAppAppearanceMode,
+} from "../lib/storage/supabase-profile-adapter";
 
 // UI tokens matching style
 const card =
@@ -95,6 +100,7 @@ export function buildProfileSettingsPreferencesPatch({
   feedbackLanguage,
   commonplaceCanvasColor,
   commonplaceCardColor,
+  appearanceMode,
 }: {
   displayName: string;
   bio: string;
@@ -104,6 +110,7 @@ export function buildProfileSettingsPreferencesPatch({
   feedbackLanguage: FeedbackLanguage;
   commonplaceCanvasColor?: CommonplaceThemeColorId;
   commonplaceCardColor?: CommonplaceThemeColorId;
+  appearanceMode?: AppAppearanceMode;
 }): UserProfilePreferencesPatch {
   return {
     displayName: displayName.trim() ? displayName.trim() : null,
@@ -117,8 +124,10 @@ export function buildProfileSettingsPreferencesPatch({
       commonplaceCanvasColor,
     ),
     commonplaceCardColor: normalizeCommonplaceThemeColorId(commonplaceCardColor),
+    appearanceMode: assertAppAppearanceMode(appearanceMode),
   };
 }
+
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -359,6 +368,10 @@ function SignedInSettings({
     useState<CommonplaceThemeColorId>(
       normalizeCommonplaceThemeColorId(profile?.commonplaceCardColor),
     );
+  const [selectedAppearanceMode, setSelectedAppearanceMode] =
+    useState<AppAppearanceMode>(
+      assertAppAppearanceMode(profile?.appearanceMode),
+    );
 
   const isSaving = profileSaveStatus === "saving";
 
@@ -373,6 +386,7 @@ function SignedInSettings({
         feedbackLanguage: selectedFeedbackLanguage,
         commonplaceCanvasColor: selectedCommonplaceCanvasColor,
         commonplaceCardColor: selectedCommonplaceCardColor,
+        appearanceMode: selectedAppearanceMode,
       }),
     );
   }
@@ -612,6 +626,31 @@ function SignedInSettings({
                 These colors apply only to Commonplace maps, Library cards, and
                 sidebar cards.
               </p>
+            </div>
+
+            {/* Global Appearance Section */}
+            <div>
+              <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
+                App appearance
+              </p>
+              <div className="grid gap-3 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-4 sm:grid-cols-3">
+                <label className="flex flex-col gap-1.5 font-sans">
+                  <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                    Theme mode
+                  </span>
+                  <select
+                    id="profile-appearance-mode-select"
+                    value={selectedAppearanceMode}
+                    disabled={isSaving}
+                    onChange={(e) => setSelectedAppearanceMode(e.target.value as AppAppearanceMode)}
+                    className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="system">System</option>
+                  </select>
+                </label>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 font-sans">
