@@ -1316,6 +1316,15 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     );
     await expect(firstCard).toContainText("#wn1");
     await expect(firstCard).toContainText("#politics");
+    const defaultLibraryTheme = await firstCard.evaluate((element) => {
+      const styles = window.getComputedStyle(element);
+      return {
+        backgroundColor: styles.backgroundColor,
+        borderColor: styles.borderColor,
+      };
+    });
+    expect(defaultLibraryTheme.backgroundColor).toBe("rgb(255, 253, 248)");
+    expect(defaultLibraryTheme.borderColor).toBe("rgb(201, 216, 209)");
     const cardBox = await firstCard.boundingBox();
     expect(cardBox?.height).toBeLessThan(190);
     expect(cardBox?.width).toBeLessThan(220);
@@ -1341,6 +1350,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(cardSpacing.rowGap).toBeGreaterThanOrEqual(20);
     await expect(secondCard).toBeVisible();
     await expect(addNoteTile).toBeVisible();
+    await expect(addNoteTile).toHaveCSS(
+      "background-color",
+      "rgb(255, 253, 248)",
+    );
     const secondCardBox = await secondCard.boundingBox();
     const addNoteBox = await addNoteTile.boundingBox();
     expect((addNoteBox?.x ?? 0) - ((secondCardBox?.x ?? 0) + (secondCardBox?.width ?? 0))).toBeGreaterThanOrEqual(12);
@@ -1372,6 +1385,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       .getByRole("button", { name: "Open" })
       .click();
     await expect(page.getByTestId("commonplace-map-canvas")).toBeVisible();
+    await expect(page.getByTestId("commonplace-map-canvas")).toHaveAttribute(
+      "data-canvas-theme",
+      "default",
+    );
     await expect(
       page
         .getByTestId("commonplace-sidebar-note-list")

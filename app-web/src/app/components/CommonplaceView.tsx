@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import type { FonetikSupabaseClient } from "../lib/supabase";
+import {
+  getCommonplaceCardTheme,
+  normalizeCommonplaceThemeColorId,
+  type CommonplaceThemeColorId,
+  type CommonplaceCardTheme,
+} from "../lib/commonplace-theme";
 import { CommonplaceMapCanvasFoundation } from "./CommonplaceMapCanvasFoundation";
 import {
   createCommonplaceNote,
@@ -276,6 +282,8 @@ type CommonplaceViewProps = {
   getToken?: (() => Promise<string | null>) | null;
   supabaseConfigured?: boolean;
   onBackToFonetik?: () => void;
+  commonplaceCanvasColor?: CommonplaceThemeColorId | null;
+  commonplaceCardColor?: CommonplaceThemeColorId | null;
   onDiscussInPodchat?: (context: {
     source: "commonplace";
     shortcode: string;
@@ -1076,6 +1084,8 @@ export function CommonplaceView({
   getToken,
   supabaseConfigured = isSupabaseConfigured(),
   onBackToFonetik,
+  commonplaceCanvasColor,
+  commonplaceCardColor,
   onDiscussInPodchat,
 }: CommonplaceViewProps) {
   const [mode, setMode] = useState<CommonplaceMode>("library");
@@ -1111,6 +1121,13 @@ export function CommonplaceView({
 
   const testStorage = getTestStorage();
   const effectiveOwnerId = ownerId ?? (testStorage ? DEFAULT_TEST_OWNER_ID : null);
+  const effectiveCanvasColor = normalizeCommonplaceThemeColorId(
+    commonplaceCanvasColor,
+  );
+  const cardTheme = useMemo(
+    () => getCommonplaceCardTheme(commonplaceCardColor),
+    [commonplaceCardColor],
+  );
 
   const storage = useMemo<CommonplaceStorage | null>(() => {
     if (testStorage) return testStorage;
@@ -1868,6 +1885,7 @@ export function CommonplaceView({
           isLoading={isLoading}
           viewportBounded={libraryMode}
           canDragNotesToCanvas={sidebarNoteDragMode}
+          cardTheme={cardTheme}
           onSearchChange={setSearchQuery}
           onBackToFonetik={onBackToFonetik}
           onCreate={openCreate}
@@ -1909,6 +1927,7 @@ export function CommonplaceView({
                   <LibraryView
                     notes={filteredNotes}
                     isLoading={isLoading}
+                    cardTheme={cardTheme}
                     onCreate={openCreate}
                     onOpen={openDetail}
                   />
@@ -1984,6 +2003,7 @@ export function CommonplaceView({
               {mode === "map_detail_placeholder" && selectedMap && (
                 <CommonplaceMapCanvasFoundation
                   map={selectedMap}
+                  canvasColor={effectiveCanvasColor}
                   noteContext={mapNoteContext}
                   onBack={handleMapCanvasBack}
                   backLabel={
@@ -2054,6 +2074,7 @@ function CommonplaceSidebar({
   isLoading,
   viewportBounded,
   canDragNotesToCanvas,
+  cardTheme,
   onSearchChange,
   onBackToFonetik,
   onCreate,
@@ -2065,6 +2086,7 @@ function CommonplaceSidebar({
   isLoading: boolean;
   viewportBounded: boolean;
   canDragNotesToCanvas: boolean;
+  cardTheme: CommonplaceCardTheme;
   onSearchChange: (value: string) => void;
   onBackToFonetik?: () => void;
   onCreate: () => void;
@@ -2137,6 +2159,7 @@ function CommonplaceSidebar({
                 note={note}
                 selected={note.id === selectedNoteId}
                 draggable={canDragNotesToCanvas}
+                cardTheme={cardTheme}
                 onClick={() => onOpen(note.id)}
               />
             ))}
@@ -2151,11 +2174,13 @@ function SidebarNoteButton({
   note,
   selected,
   draggable,
+  cardTheme,
   onClick,
 }: {
   note: CommonplaceNote;
   selected: boolean;
   draggable: boolean;
+  cardTheme: CommonplaceCardTheme;
   onClick: () => void;
 }) {
   const visibleTags = note.tags.slice(0, 2);
@@ -2195,10 +2220,11 @@ function SidebarNoteButton({
         onClick();
       }}
       aria-label={`${displayTitle(note)} from ${note.sourceBook}`}
+      style={selected ? cardTheme.selectedStyle : cardTheme.style}
       className={`select-none rounded-lg border px-3 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
         selected
-          ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]"
-          : "border-[var(--brand-border)] bg-white hover:bg-[var(--brand-surface)]"
+          ? ""
+          : "hover:bg-[var(--brand-surface)]"
       } ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
     >
       <span className="text-[11px] font-semibold text-[var(--brand-teal-ink)]">
@@ -2215,6 +2241,7 @@ function SidebarNoteButton({
           {visibleTags.map((tag) => (
             <span
               key={tag}
+              style={cardTheme.tagStyle}
               className="rounded-full border border-[var(--brand-teal)]/20 bg-white px-2 py-0.5 text-[10px] font-medium text-[var(--brand-teal-ink)]"
             >
               #{tag}
@@ -2234,11 +2261,13 @@ function SidebarNoteButton({
 function LibraryView({
   notes,
   isLoading,
+  cardTheme,
   onCreate,
   onOpen,
 }: {
   notes: CommonplaceNote[];
   isLoading: boolean;
+  cardTheme: CommonplaceCardTheme;
   onCreate: () => void;
   onOpen: (noteId: string) => void;
 }) {
@@ -2262,6 +2291,7 @@ function LibraryView({
             key={note.id}
             type="button"
             onClick={() => onOpen(note.id)}
+            style={cardTheme.style}
             className="group flex h-[168px] min-w-0 flex-col overflow-hidden rounded-lg border border-[#C9D8D1] bg-[#FFFDF8] text-left shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-[#0F766E]/45 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2 focus:ring-offset-[#FAF8F2]"
           >
             <span className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2.5 pt-3">
@@ -2279,6 +2309,7 @@ function LibraryView({
                 {note.tags.slice(0, 2).map((tag) => (
                   <span
                     key={tag}
+                    style={cardTheme.tagStyle}
                     className="max-w-[6.5rem] truncate rounded-full border border-[#0F766E]/20 bg-[#E4F3EC] px-1.5 py-0.5 text-[10px] font-medium leading-4 text-[#134E44]"
                   >
                     #{tag}
@@ -2286,7 +2317,10 @@ function LibraryView({
                 ))}
               </span>
             </span>
-            <span className="flex min-h-[2rem] items-center justify-end border-t border-[#C9D8D1] bg-[#FAF8F2] px-3 py-1.5">
+            <span
+              className="flex min-h-[2rem] items-center justify-end border-t border-[#C9D8D1] bg-[#FAF8F2] px-3 py-1.5"
+              style={cardTheme.footerStyle}
+            >
               <span className="max-w-full truncate font-mono text-[11px] font-semibold leading-4 text-[#0F766E]">
                 {note.shortcode}
               </span>
@@ -2297,6 +2331,7 @@ function LibraryView({
         <button
           type="button"
           onClick={onCreate}
+          style={cardTheme.addTileStyle}
           className="flex h-[168px] flex-col items-start justify-between rounded-lg border border-dashed border-[#0F766E]/45 bg-[#FFFDF8] p-3 text-left transition-colors hover:bg-[#E4F3EC] focus:outline-none focus:ring-2 focus:ring-[#0F766E] focus:ring-offset-2 focus:ring-offset-[#FAF8F2]"
           aria-describedby="commonplace-empty-helper"
         >

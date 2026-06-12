@@ -16,6 +16,11 @@ import {
   normalizeTargetLanguage,
   useI18n,
 } from "../lib/i18n";
+import {
+  COMMONPLACE_THEME_CHOICES,
+  normalizeCommonplaceThemeColorId,
+  type CommonplaceThemeColorId,
+} from "../lib/commonplace-theme";
 import type { UserProfile, UserProfilePreferencesPatch } from "../lib/storage/supabase-profile-adapter";
 
 // UI tokens matching style
@@ -88,6 +93,8 @@ export function buildProfileSettingsPreferencesPatch({
   leaderboardOptIn,
   preferredAppLanguage,
   feedbackLanguage,
+  commonplaceCanvasColor,
+  commonplaceCardColor,
 }: {
   displayName: string;
   bio: string;
@@ -95,6 +102,8 @@ export function buildProfileSettingsPreferencesPatch({
   leaderboardOptIn: boolean;
   preferredAppLanguage: AppLanguage;
   feedbackLanguage: FeedbackLanguage;
+  commonplaceCanvasColor?: CommonplaceThemeColorId;
+  commonplaceCardColor?: CommonplaceThemeColorId;
 }): UserProfilePreferencesPatch {
   return {
     displayName: displayName.trim() ? displayName.trim() : null,
@@ -104,6 +113,10 @@ export function buildProfileSettingsPreferencesPatch({
     preferredAppLanguage: normalizeAppLanguage(preferredAppLanguage),
     feedbackLanguage: normalizeFeedbackLanguage(feedbackLanguage),
     targetLanguage: DEFAULT_TARGET_LANGUAGE,
+    commonplaceCanvasColor: normalizeCommonplaceThemeColorId(
+      commonplaceCanvasColor,
+    ),
+    commonplaceCardColor: normalizeCommonplaceThemeColorId(commonplaceCardColor),
   };
 }
 
@@ -206,6 +219,59 @@ function LanguageSelect<T extends string>({
   );
 }
 
+function CommonplaceThemeSwatches({
+  legend,
+  value,
+  onChange,
+  disabled,
+  testId,
+}: {
+  legend: string;
+  value: CommonplaceThemeColorId;
+  onChange: (value: CommonplaceThemeColorId) => void;
+  disabled?: boolean;
+  testId: string;
+}) {
+  return (
+    <fieldset className="min-w-0" data-testid={testId}>
+      <legend className="text-xs font-medium text-[var(--brand-ink-soft)]">
+        {legend}
+      </legend>
+      <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+        {COMMONPLACE_THEME_CHOICES.map((choice) => {
+          const isSelected = value === choice.id;
+          return (
+            <button
+              key={choice.id}
+              type="button"
+              aria-pressed={isSelected}
+              disabled={disabled}
+              onClick={() => onChange(choice.id)}
+              className={[
+                "flex min-h-[4.5rem] flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left transition-colors",
+                "focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60",
+                isSelected
+                  ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]"
+                  : "border-[var(--brand-border)] bg-white text-[var(--brand-ink)] hover:border-[var(--brand-teal)]/40",
+              ].join(" ")}
+              data-testid={`${testId}-option-${choice.id}`}
+            >
+              <span
+                className="h-6 w-6 rounded-full border border-black/10 shadow-inner"
+                style={{ backgroundColor: choice.swatch }}
+                aria-hidden="true"
+              />
+              <span className="text-[11px] font-semibold leading-4">
+                {choice.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Signed-out Settings
 // ---------------------------------------------------------------------------
@@ -285,6 +351,14 @@ function SignedInSettings({
   const [selectedTargetLanguage] = useState<TargetLanguage>(
     initialLanguagePreferences.targetLanguage
   );
+  const [selectedCommonplaceCanvasColor, setSelectedCommonplaceCanvasColor] =
+    useState<CommonplaceThemeColorId>(
+      normalizeCommonplaceThemeColorId(profile?.commonplaceCanvasColor),
+    );
+  const [selectedCommonplaceCardColor, setSelectedCommonplaceCardColor] =
+    useState<CommonplaceThemeColorId>(
+      normalizeCommonplaceThemeColorId(profile?.commonplaceCardColor),
+    );
 
   const isSaving = profileSaveStatus === "saving";
 
@@ -297,6 +371,8 @@ function SignedInSettings({
         leaderboardOptIn,
         preferredAppLanguage: selectedAppLanguage,
         feedbackLanguage: selectedFeedbackLanguage,
+        commonplaceCanvasColor: selectedCommonplaceCanvasColor,
+        commonplaceCardColor: selectedCommonplaceCardColor,
       }),
     );
   }
@@ -512,6 +588,32 @@ function SignedInSettings({
             </div>
 
             {/* Actions & Status */}
+            <div>
+              <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
+                Commonplace appearance
+              </p>
+              <div className="grid gap-4 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-4 lg:grid-cols-2">
+                <CommonplaceThemeSwatches
+                  legend="Canvas color"
+                  value={selectedCommonplaceCanvasColor}
+                  onChange={setSelectedCommonplaceCanvasColor}
+                  disabled={isSaving}
+                  testId="settings-commonplace-canvas-color"
+                />
+                <CommonplaceThemeSwatches
+                  legend="Card color"
+                  value={selectedCommonplaceCardColor}
+                  onChange={setSelectedCommonplaceCardColor}
+                  disabled={isSaving}
+                  testId="settings-commonplace-card-color"
+                />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
+                These colors apply only to Commonplace maps, Library cards, and
+                sidebar cards.
+              </p>
+            </div>
+
             <div className="flex flex-col gap-2 font-sans">
               <button
                 id="profile-save-btn"

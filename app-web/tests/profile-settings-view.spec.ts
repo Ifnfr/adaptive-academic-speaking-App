@@ -45,6 +45,8 @@ const baseProfile: UserProfile = {
   preferredAppLanguage: null,
   feedbackLanguage: null,
   targetLanguage: null,
+  commonplaceCanvasColor: "default",
+  commonplaceCardColor: "default",
   createdAt: "2026-05-27T00:00:00.000Z",
   updatedAt: "2026-05-27T00:00:00.000Z",
 };
@@ -59,6 +61,8 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
       preferredAppLanguage: "id",
       feedbackLanguage: "id",
       targetLanguage: "en",
+      commonplaceCanvasColor: "sage",
+      commonplaceCardColor: "paper",
     };
     const update = mapProfilePreferencesPatchToSupabaseUpdate(patch);
     const keys = Object.keys(update);
@@ -69,6 +73,8 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
     expect(keys).toContain("preferred_app_language");
     expect(keys).toContain("feedback_language");
     expect(keys).toContain("target_language");
+    expect(keys).toContain("commonplace_canvas_color");
+    expect(keys).toContain("commonplace_card_color");
     // Email must not appear (it's excluded from UserProfilePreferencesPatch)
     expect(keys).not.toContain("email");
   });
@@ -192,6 +198,8 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
       leaderboardOptIn: true,
       preferredAppLanguage: "id",
       feedbackLanguage: "id",
+      commonplaceCanvasColor: "sage",
+      commonplaceCardColor: "paper",
     });
     expect(patch).toEqual({
       displayName: "Test User",
@@ -201,12 +209,16 @@ test.describe("ProfileSettingsView preference patch — allowed fields only", ()
       preferredAppLanguage: "id",
       feedbackLanguage: "id",
       targetLanguage: "en",
+      commonplaceCanvasColor: "sage",
+      commonplaceCardColor: "paper",
     });
     expect(Object.keys(patch).sort()).toEqual(
       [
         "bio",
         "displayName",
         "feedbackLanguage",
+        "commonplaceCanvasColor",
+        "commonplaceCardColor",
         "leaderboardOptIn",
         "preferredAppLanguage",
         "publicProfileEnabled",

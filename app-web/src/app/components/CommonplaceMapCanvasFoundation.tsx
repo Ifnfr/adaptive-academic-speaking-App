@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -43,6 +42,10 @@ import type {
   CommonplaceSubMapEdgeListResult,
   CommonplaceSubMapEdgeResult,
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
+import {
+  getCommonplaceCanvasTheme,
+  type CommonplaceThemeColorId,
+} from "../lib/commonplace-theme";
 import {
   CommonplaceClusterNode,
   type CommonplaceClusterNodeData,
@@ -112,6 +115,7 @@ type EdgeEditState = PositionedPanel & {
 
 type CommonplaceMapCanvasFoundationProps = {
   map: CommonplaceMindMapSummary;
+  canvasColor?: CommonplaceThemeColorId | null;
   noteContext: MapNoteContext | null;
   onBack: () => void;
   backLabel?: string;
@@ -247,25 +251,6 @@ const COMMONPLACE_EDGE_TYPES: EdgeTypes = {
 const COMMONPLACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true };
 
 const COMMONPLACE_NOTE_DRAG_TYPE = "application/commonplace-note";
-
-const subMapBubbleBackgroundStyle: CSSProperties = {
-  backgroundImage: [
-    "radial-gradient(circle at 24% 28%, rgba(15,118,110,0.16) 0 2px, transparent 3px)",
-    "radial-gradient(circle at 24% 28%, transparent 0 82px, rgba(183,212,200,0.72) 83px 85px, transparent 86px)",
-    "radial-gradient(circle at 68% 34%, transparent 0 118px, rgba(183,212,200,0.58) 119px 121px, transparent 122px)",
-    "radial-gradient(circle at 52% 72%, transparent 0 96px, rgba(183,212,200,0.52) 97px 99px, transparent 100px)",
-    "radial-gradient(circle at 15% 82%, rgba(221,235,229,0.7) 0 34px, transparent 35px)",
-    "linear-gradient(180deg, rgba(221,235,229,0.82), rgba(238,243,241,0.52))",
-  ].join(", "),
-};
-
-const mainMapBackgroundStyle: CSSProperties = {
-  backgroundImage: [
-    "radial-gradient(circle at 18% 18%, rgba(221,235,229,0.82) 0 120px, transparent 121px)",
-    "radial-gradient(circle at 82% 76%, rgba(221,235,229,0.65) 0 150px, transparent 151px)",
-    "linear-gradient(180deg, #EEF3F1, #E8F0ED)",
-  ].join(", "),
-};
 
 function titleForNode(node: CommonplaceMapCanvasNoteNode): string {
   return node.noteTitle?.trim() || node.noteSourceBook || "Untitled Source";
@@ -594,6 +579,7 @@ function EdgeTypeChoiceButtons({
 
 export function CommonplaceMapCanvasFoundation({
   map,
+  canvasColor,
   noteContext,
   onBack,
   backLabel,
@@ -647,6 +633,10 @@ export function CommonplaceMapCanvasFoundation({
 
   const isSubMap = map.type === "sub";
   const isMainMap = map.type === "main";
+  const canvasTheme = useMemo(
+    () => getCommonplaceCanvasTheme(canvasColor),
+    [canvasColor],
+  );
   const supportsEdges = isSubMap || isMainMap;
   const hasInventory = Boolean(onOpenInventoryMap);
   const isSavingMapChange = saveStatus === "Saving...";
@@ -1590,6 +1580,7 @@ export function CommonplaceMapCanvasFoundation({
     <section
       className="flex min-h-0 flex-col rounded-xl border border-[#C9D8D1] bg-[#FAF8F2]"
       data-testid="commonplace-map-canvas"
+      data-canvas-theme={canvasTheme.id}
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#C9D8D1] px-4 py-3 sm:px-5">
         <div>
@@ -1704,9 +1695,8 @@ export function CommonplaceMapCanvasFoundation({
       <div
         ref={canvasPanelRef}
         onMouseMove={handleCanvasMouseMove}
-        className={`relative h-[min(78dvh,860px)] min-h-[420px] sm:min-h-[520px] lg:min-h-[560px] overflow-hidden transition-shadow ${
-          isSubMap ? "bg-[#EEF3F1]" : "bg-[#EEF3F1]"
-        } ${
+        style={canvasTheme.panelStyle}
+        className={`relative h-[min(78dvh,860px)] min-h-[420px] overflow-hidden transition-shadow sm:min-h-[520px] lg:min-h-[560px] ${
           isCanvasDragActive
             ? "ring-2 ring-inset ring-[var(--brand-teal)]/45"
             : ""
@@ -1715,7 +1705,11 @@ export function CommonplaceMapCanvasFoundation({
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 z-0"
-          style={isSubMap ? subMapBubbleBackgroundStyle : mainMapBackgroundStyle}
+          style={
+            isSubMap
+              ? canvasTheme.subBackgroundStyle
+              : canvasTheme.mainBackgroundStyle
+          }
           data-testid={isSubMap ? "commonplace-map-bubble-background" : "commonplace-map-main-background"}
         />
         {isSubMap && (
@@ -1811,8 +1805,8 @@ export function CommonplaceMapCanvasFoundation({
           connectOnClick={false}
           proOptions={COMMONPLACE_REACT_FLOW_PRO_OPTIONS}
         >
-          <Background color="#B7D4C8" gap={24} size={1.2} />
-          <MiniMap pannable zoomable nodeStrokeWidth={3} maskColor="rgba(238,243,241,0.72)" />
+          <Background color={canvasTheme.gridColor} gap={24} size={1.2} />
+          <MiniMap pannable zoomable nodeStrokeWidth={3} maskColor={canvasTheme.minimapMaskColor} />
           <Controls showInteractive={false} />
         </ReactFlow>
 

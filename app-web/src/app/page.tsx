@@ -2014,6 +2014,8 @@ export default function Home() {
               getToken={cloudAuthState.getToken}
               supabaseConfigured={isSupabaseConfigured()}
               onBackToFonetik={handleBackFromCommonplace}
+              commonplaceCanvasColor={ownerProfile?.commonplaceCanvasColor}
+              commonplaceCardColor={ownerProfile?.commonplaceCardColor}
               onDiscussInPodchat={handleDiscussCommonplaceInPodchat}
             />
           )}

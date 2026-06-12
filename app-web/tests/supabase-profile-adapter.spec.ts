@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { dirname, join } from "node:path";
+import { expect, test, type TestInfo } from "@playwright/test";
 import {
   loadSupabaseProfile,
   mapClerkProfileSeedToSupabaseUpsert,
@@ -29,9 +29,18 @@ const profileRow: SupabaseProfileRow = {
   preferred_app_language: "en",
   feedback_language: "id",
   target_language: "en",
+  commonplace_canvas_color: "sage",
+  commonplace_card_color: "paper",
   created_at: "2026-05-27T00:00:00.000Z",
   updated_at: "2026-05-27T01:00:00.000Z",
 };
+
+function readMigration(name: string, testInfo: TestInfo): string {
+  return readFileSync(
+    join(dirname(testInfo.file), "..", "..", "supabase", "migrations", name),
+    "utf8",
+  );
+}
 
 const privateFieldNames = [
   "transcript",
@@ -134,16 +143,10 @@ function createUpdateProfileClientMock(error: Error | null = null) {
 }
 
 test.describe("Supabase profile schema", () => {
-  test("adds profile foundation fields without public profile policies", () => {
-    const migration = readFileSync(
-      join(
-        process.cwd(),
-        "..",
-        "supabase",
-        "migrations",
-        "20260527_005_add_profile_foundation_fields.sql",
-      ),
-      "utf8",
+  test("adds profile foundation fields without public profile policies", ({}, testInfo) => {
+    const migration = readMigration(
+      "20260527_005_add_profile_foundation_fields.sql",
+      testInfo,
     );
 
     expect(migration).toContain("add column if not exists avatar_url text");
@@ -160,6 +163,25 @@ test.describe("Supabase profile schema", () => {
     expect(migration).toContain("add column if not exists feedback_language text");
     expect(migration).toContain("add column if not exists target_language text");
     expect(migration).not.toMatch(/create\s+policy[\s\S]*public/i);
+  });
+
+  test("adds Commonplace theme fields without changing RLS policies", ({}, testInfo) => {
+    const migration = readMigration(
+      "20260612_001_add_commonplace_theme_profile_fields.sql",
+      testInfo,
+    );
+
+    expect(migration).toContain(
+      "add column if not exists commonplace_canvas_color text not null default 'default'",
+    );
+    expect(migration).toContain(
+      "add column if not exists commonplace_card_color text not null default 'default'",
+    );
+    expect(migration).toContain("profiles_commonplace_canvas_color_valid");
+    expect(migration).toContain("profiles_commonplace_card_color_valid");
+    expect(migration).toContain("'charcoal'");
+    expect(migration).not.toMatch(/create\s+policy/i);
+    expect(migration).not.toMatch(/disable\s+row\s+level\s+security/i);
   });
 });
 
@@ -179,6 +201,8 @@ test.describe("Supabase profile adapter mapping", () => {
       preferredAppLanguage: "en",
       feedbackLanguage: "id",
       targetLanguage: "en",
+      commonplaceCanvasColor: "sage",
+      commonplaceCardColor: "paper",
       createdAt: "2026-05-27T00:00:00.000Z",
       updatedAt: "2026-05-27T01:00:00.000Z",
     });
@@ -200,6 +224,8 @@ test.describe("Supabase profile adapter mapping", () => {
         preferred_app_language: null,
         feedback_language: null,
         target_language: null,
+        commonplace_canvas_color: "not-a-theme",
+        commonplace_card_color: null,
       }),
     ).toEqual({
       ownerId: "user_clerk_123",
@@ -215,6 +241,8 @@ test.describe("Supabase profile adapter mapping", () => {
       preferredAppLanguage: null,
       feedbackLanguage: null,
       targetLanguage: null,
+      commonplaceCanvasColor: "default",
+      commonplaceCardColor: "default",
       createdAt: "2026-05-27T00:00:00.000Z",
       updatedAt: "2026-05-27T01:00:00.000Z",
     });
@@ -244,6 +272,8 @@ test.describe("Supabase profile adapter mapping", () => {
       preferredAppLanguage: "en",
       feedbackLanguage: "id",
       targetLanguage: "en",
+      commonplaceCanvasColor: "sky",
+      commonplaceCardColor: "rose",
     });
 
     expect(payload).toEqual({
@@ -255,6 +285,8 @@ test.describe("Supabase profile adapter mapping", () => {
       preferred_app_language: "en",
       feedback_language: "id",
       target_language: "en",
+      commonplace_canvas_color: "sky",
+      commonplace_card_color: "rose",
     });
     expect(payload).not.toHaveProperty("public_profile_enabled");
     expect(payload).not.toHaveProperty("leaderboard_opt_in");
@@ -270,6 +302,19 @@ test.describe("Supabase profile adapter mapping", () => {
       public_profile_enabled: true,
       leaderboard_opt_in: false,
     });
+  });
+
+  test("rejects invalid Commonplace theme ids before updating profiles", () => {
+    expect(() =>
+      mapProfilePreferencesPatchToSupabaseUpdate({
+        commonplaceCanvasColor: "neon" as never,
+      }),
+    ).toThrow("invalid_commonplace_theme_color");
+    expect(() =>
+      mapProfilePreferencesPatchToSupabaseUpdate({
+        commonplaceCardColor: "#ffffff" as never,
+      }),
+    ).toThrow("invalid_commonplace_theme_color");
   });
 
   test("does not include private learning fields in profile payloads", () => {
@@ -371,6 +416,8 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
         preferredAppLanguage: "en",
         feedbackLanguage: "id",
         targetLanguage: "en",
+        commonplaceCanvasColor: "lavender",
+        commonplaceCardColor: "sand",
       },
       mock.client,
     );
@@ -388,6 +435,8 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
       preferred_app_language: "en",
       feedback_language: "id",
       target_language: "en",
+      commonplace_canvas_color: "lavender",
+      commonplace_card_color: "sand",
     });
   });
 
