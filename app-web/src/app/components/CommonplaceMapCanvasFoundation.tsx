@@ -408,29 +408,37 @@ function MapInventory({
   subMaps: CommonplaceMindMapSummary[];
   onOpen: (map: CommonplaceMindMapSummary) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(
+    () =>
+      typeof window === "undefined" ||
+      window.matchMedia("(min-width: 640px)").matches,
+  );
+
   return (
     <details
-      open
-      className="mx-4 mt-4 rounded-xl border border-[#C9D8D1] bg-white/80 p-3 text-sm shadow-sm sm:mx-5"
+      open={isOpen}
+      onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      className="mx-3 mt-3 rounded-xl border border-[#C9D8D1] bg-white/80 p-2.5 text-sm shadow-sm sm:mx-5 sm:mt-4 sm:p-3"
       data-testid="commonplace-map-inventory"
+      data-open={isOpen ? "true" : "false"}
     >
       <summary className="cursor-pointer list-none rounded-lg px-1 py-1 focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]">
         <span className="flex items-center justify-between gap-3">
-          <span>
+          <span className="min-w-0">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
               Inventory
             </span>
-            <span className="block text-xs font-medium text-[var(--brand-ink-soft)]">
+            <span className="block truncate text-xs font-medium text-[var(--brand-ink-soft)]">
               Saved maps
             </span>
           </span>
-          <span className="text-xs font-semibold text-[var(--brand-ink-soft)]">
-            Open saved maps
+          <span className="shrink-0 text-xs font-semibold text-[var(--brand-ink-soft)]">
+            {isOpen ? "Hide maps" : "Open saved maps"}
           </span>
         </span>
       </summary>
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      <div className="mt-3 grid max-h-[min(52dvh,26rem)] gap-3 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin] lg:max-h-none lg:grid-cols-2 lg:overflow-visible lg:pr-0">
         <MapInventoryGroup
           title="Main Maps"
           emptyText="No Main Maps yet."
@@ -664,6 +672,35 @@ export function CommonplaceMapCanvasFoundation({
       : connectionSourceNode?.type === "clusterNode"
         ? (connectionSourceNode.data as CommonplaceClusterNodeData).title
         : "";
+  const hasDiscussableNodes = isSubMap
+    ? nodes.some((node) => node.type === "noteNode")
+    : nodes.length > 0;
+  const discussDisabled =
+    (isSubMap || isMainMap) && (!hasDiscussableNodes || hasUnsavedChanges);
+  const discussHelperText = isSubMap
+    ? hasUnsavedChanges
+      ? "Save changes before discussing this Sub Mind Map in Podchat."
+      : !hasDiscussableNodes
+        ? "Add at least one note before discussing this Sub Mind Map."
+        : "Ready to discuss this Sub Mind Map in Podchat."
+    : hasUnsavedChanges
+      ? "Simpan map sebelum membahasnya di Podchat."
+      : !hasDiscussableNodes
+        ? "Tambahkan node ke map sebelum diskusi."
+        : "Main Map siap dibahas di Podchat.";
+  const saveHelperText =
+    displayedSaveStatus === "Saved"
+      ? "No unsaved map changes."
+      : displayedSaveStatus === "Unsaved changes"
+        ? "Save map changes before switching context or discussing in Podchat."
+        : displayedSaveStatus === "Saving..."
+          ? "Saving map changes now."
+          : "Save failed. Try again before leaving this map.";
+  const connectHelperText = connectionSourceNodeId
+    ? `Choose a different ${isMainMap ? "visual node" : "note"} to connect from ${connectionSourceLabel}.`
+    : supportsEdges
+      ? "Right-click a map node to connect ideas or visual nodes."
+      : "";
   const visibleNodes = useMemo<Node<CommonplaceCanvasNodeData>[]>(
     () =>
       nodes.map((node) => ({
@@ -1586,19 +1623,19 @@ export function CommonplaceMapCanvasFoundation({
       data-commonplace-panel-surface="true"
       style={canvasTheme.panelStyle}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#C9D8D1] px-4 py-3 sm:px-5">
-        <div>
+      <div className="grid gap-3 border-b border-[#C9D8D1] px-3 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
           <button
             type="button"
             onClick={onBack}
-            className="commonplace-panel-button mb-3 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-white"
+            className="commonplace-panel-button mb-3 min-h-10 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] sm:min-h-0 sm:py-1.5"
           >
             {backLabel ?? (isSubMap ? "Back to Sub Mind Maps" : "Back to Main Maps")}
           </button>
           <p className="commonplace-panel-accent text-xs font-semibold uppercase tracking-wide">
             {isSubMap ? "Sub Mind Map" : "Main Map"}
           </p>
-          <h2 className="commonplace-panel-ink mt-1 text-2xl font-semibold">
+          <h2 className="commonplace-panel-ink mt-1 break-words text-xl font-semibold sm:text-2xl">
             {map.title}
           </h2>
           <p className="commonplace-panel-ink-soft mt-1 text-sm">
@@ -1613,88 +1650,105 @@ export function CommonplaceMapCanvasFoundation({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {isMainMap && (
-            <>
-              <span
-                className="commonplace-panel-button rounded-full border px-3 py-1 text-xs font-semibold"
-                data-testid="commonplace-map-note-drag-guidance"
-              >
-                Drag notes from the sidebar
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsClusterChooserOpen((current) => !current)}
-                className="rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white"
-                data-testid="commonplace-map-add-cluster-button"
-              >
-                + Add cluster
-              </button>
-            </>
-          )}
-          <span
-            aria-live="polite"
-            className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-              displayedSaveStatus === "Unsaved changes"
-                ? "border-[#D99A25]/35 bg-[#FFF4D8] text-[#7A4A00]"
-                : displayedSaveStatus === "Saving..."
-                  ? "border-[#0F766E]/25 bg-[#DDEBE5] text-[#134E44]"
-                  : displayedSaveStatus === "Save failed"
-                    ? "border-[#B42318]/25 bg-[#FFF4F3] text-[#8A1F15]"
-                    : "commonplace-panel-button"
-            }`}
-            data-testid="commonplace-map-save-status"
-          >
-            {displayedSaveStatus}
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={!canSaveMap}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
-              displayedSaveStatus === "Unsaved changes" ||
-              displayedSaveStatus === "Save failed"
-                ? "bg-[var(--brand-teal)] text-white hover:bg-[#1C8A7A]"
-                : displayedSaveStatus === "Saving..."
-                  ? "bg-[#0F766E]/80 text-white"
-                  : "commonplace-panel-button border"
-            }`}
-            data-testid="commonplace-map-save-button"
-          >
-            {displayedSaveStatus === "Saving..."
-              ? "Saving..."
-              : displayedSaveStatus === "Saved"
-                ? "Saved"
-                : "Save"}
-          </button>
-          {(isSubMap || isMainMap) && onDiscussMapInPodchat && (() => {
-            const discussDisabled = isSubMap
-              ? !nodes.some((n) => n.type === "noteNode") || hasUnsavedChanges
-              : nodes.length === 0 || hasUnsavedChanges;
-            const discussTitle = isSubMap
-              ? hasUnsavedChanges
-                ? "Save changes before discussing in Podchat"
-                : !nodes.some((n) => n.type === "noteNode")
-                  ? "Add at least one note to discuss in Podchat"
-                  : "Discuss this Sub Mind Map in Podchat"
-              : hasUnsavedChanges
-                ? "Simpan map sebelum membahasnya di Podchat."
-                : nodes.length === 0
-                  ? "Tambahkan node ke map sebelum diskusi."
-                  : "Diskusi Main Map ini di Podchat";
-            return (
+        <div
+          className="flex min-w-0 flex-col gap-2 lg:max-w-[24rem] lg:items-end"
+          data-testid="commonplace-map-action-panel"
+        >
+          <div className="flex w-full flex-wrap items-center gap-2 lg:justify-end">
+            {isMainMap && (
+              <>
+                <span
+                  className="commonplace-panel-button min-h-9 rounded-full border px-3 py-2 text-xs font-semibold sm:min-h-0 sm:py-1"
+                  data-testid="commonplace-map-note-drag-guidance"
+                >
+                  Drag notes from the sidebar
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsClusterChooserOpen((current) => !current)}
+                  className="min-h-11 rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] sm:min-h-0"
+                  data-testid="commonplace-map-add-cluster-button"
+                  aria-expanded={isClusterChooserOpen}
+                >
+                  + Add cluster
+                </button>
+              </>
+            )}
+            <span
+              aria-live="polite"
+              className={`min-h-9 rounded-full border px-3 py-2 text-xs font-semibold sm:min-h-0 sm:py-1 ${
+                displayedSaveStatus === "Unsaved changes"
+                  ? "border-[#D99A25]/35 bg-[#FFF4D8] text-[#7A4A00]"
+                  : displayedSaveStatus === "Saving..."
+                    ? "border-[#0F766E]/25 bg-[#DDEBE5] text-[#134E44]"
+                    : displayedSaveStatus === "Save failed"
+                      ? "border-[#B42318]/25 bg-[#FFF4F3] text-[#8A1F15]"
+                      : "commonplace-panel-button"
+              }`}
+              data-testid="commonplace-map-save-status"
+            >
+              {displayedSaveStatus}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={!canSaveMap}
+              aria-describedby="commonplace-map-save-helper"
+              className={`min-h-11 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-70 sm:min-h-0 ${
+                displayedSaveStatus === "Unsaved changes" ||
+                displayedSaveStatus === "Save failed"
+                  ? "bg-[var(--brand-teal)] text-white hover:bg-[#1C8A7A]"
+                  : displayedSaveStatus === "Saving..."
+                    ? "bg-[#0F766E]/80 text-white"
+                    : "commonplace-panel-button border"
+              }`}
+              data-testid="commonplace-map-save-button"
+            >
+              {displayedSaveStatus === "Saving..."
+                ? "Saving..."
+                : displayedSaveStatus === "Saved"
+                  ? "Saved"
+                  : "Save"}
+            </button>
+            {(isSubMap || isMainMap) && onDiscussMapInPodchat && (
               <button
                 type="button"
                 onClick={onDiscussMapInPodchat}
                 disabled={discussDisabled}
-                className="rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                aria-describedby="commonplace-map-discuss-helper"
+                className="min-h-11 rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
                 data-testid="commonplace-map-discuss-button"
-                title={discussTitle}
               >
                 Diskusi di Podchat
               </button>
-            );
-          })()}
+            )}
+          </div>
+          <div
+            className="w-full rounded-lg border border-[var(--commonplace-panel-border)] bg-white/65 px-3 py-2 text-xs leading-5 text-[var(--brand-ink-soft)] lg:max-w-md"
+            data-testid="commonplace-map-action-helper"
+          >
+            <p id="commonplace-map-save-helper" data-testid="commonplace-map-save-helper">
+              {saveHelperText}
+            </p>
+            {(isSubMap || isMainMap) && onDiscussMapInPodchat && (
+              <p
+                id="commonplace-map-discuss-helper"
+                className="mt-1"
+                data-testid="commonplace-map-discuss-helper"
+              >
+                {discussHelperText}
+              </p>
+            )}
+            {supportsEdges && (
+              <p
+                id="commonplace-map-connect-helper"
+                className="mt-1"
+                data-testid="commonplace-map-connect-helper"
+              >
+                {connectHelperText}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1728,7 +1782,7 @@ export function CommonplaceMapCanvasFoundation({
         ref={canvasPanelRef}
         onMouseMove={handleCanvasMouseMove}
         style={canvasTheme.panelStyle}
-        className={`relative h-[min(78dvh,860px)] min-h-[420px] overflow-hidden transition-shadow sm:min-h-[520px] lg:min-h-[560px] ${
+        className={`relative h-[min(70dvh,860px)] min-h-[360px] overflow-hidden transition-shadow sm:h-[min(78dvh,860px)] sm:min-h-[520px] lg:min-h-[560px] ${
           isCanvasDragActive
             ? "ring-2 ring-inset ring-[var(--brand-teal)]/45"
             : ""

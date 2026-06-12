@@ -1222,6 +1222,45 @@ async function gotoApp(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 }
 
+async function openCommonplace(page: Page) {
+  const mobileToggle = page.getByTestId("mobile-nav-toggle");
+  const mobileToggleByName = page.getByRole("button", {
+    name: /open navigation menu/i,
+  });
+  if (await mobileToggle.click({ timeout: 1500 }).then(() => true).catch(() => false)) {
+    await page
+      .getByTestId("mobile-nav-drawer")
+      .getByRole("button", { name: "Commonplace" })
+      .click();
+    return;
+  }
+  if (
+    await mobileToggleByName
+      .click({ timeout: 5000 })
+      .then(() => true)
+      .catch(() => false)
+  ) {
+    await page
+      .getByTestId("mobile-nav-drawer")
+      .getByRole("button", { name: "Commonplace" })
+      .click();
+    return;
+  }
+
+  await page.getByRole("button", { name: "Commonplace" }).click();
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const metrics = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+    bodyScrollWidth: document.body.scrollWidth,
+  }));
+
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+  expect(metrics.bodyScrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+}
+
 function parseRgb(value: string): [number, number, number] {
   const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
   if (!match) return [0, 0, 0];
@@ -1398,6 +1437,85 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await page.getByRole("button", { name: /Kembali ke Fonetik/ }).click();
     await expect(page.locator("h1", { hasText: "Vocabulary Notebook" })).toBeVisible();
     await expect(page.locator("header")).toContainText("Vocabulary Notebook");
+  });
+
+  test("Commonplace map actions and Inventory stay usable on mobile and tablet", async ({
+    page,
+  }) => {
+    for (const viewport of [
+      { width: 360, height: 760, inventoryOpen: false },
+      { width: 390, height: 844, inventoryOpen: false },
+      { width: 768, height: 1024, inventoryOpen: true },
+    ]) {
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      await gotoApp(page);
+      await openCommonplace(page);
+      await expectNoHorizontalOverflow(page);
+
+      await page.getByTestId("commonplace-main-maps-btn").click();
+      await page
+        .locator("article")
+        .filter({ hasText: "Institutions Overview" })
+        .getByRole("button", { name: "Open" })
+        .click();
+
+      const mapCanvas = page.getByTestId("commonplace-map-canvas");
+      await expect(mapCanvas).toBeVisible();
+      await expect(page.getByTestId("commonplace-map-action-panel")).toBeVisible();
+      await expect(page.getByTestId("commonplace-map-save-button")).toBeDisabled();
+      await expect(page.getByTestId("commonplace-map-save-button")).toHaveAttribute(
+        "aria-describedby",
+        "commonplace-map-save-helper",
+      );
+      await expect(page.getByTestId("commonplace-map-save-helper")).toHaveText(
+        "No unsaved map changes.",
+      );
+
+      const discussBtn = page.getByTestId("commonplace-map-discuss-button");
+      await expect(discussBtn).toBeVisible();
+      await expect(discussBtn).toBeDisabled();
+      await expect(discussBtn).toHaveAttribute(
+        "aria-describedby",
+        "commonplace-map-discuss-helper",
+      );
+      await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
+        "Tambahkan node ke map sebelum diskusi.",
+      );
+      await expect(page.getByTestId("commonplace-map-connect-helper")).toHaveText(
+        "Right-click a map node to connect ideas or visual nodes.",
+      );
+
+      const inventory = page.getByTestId("commonplace-map-inventory");
+      await expect(inventory).toBeVisible();
+      await expect(inventory).toHaveAttribute(
+        "data-open",
+        viewport.inventoryOpen ? "true" : "false",
+      );
+      if (!viewport.inventoryOpen) {
+        await expect(inventory).toContainText("Open saved maps");
+        await expect(
+          inventory.getByTestId("commonplace-map-inventory-item").first(),
+        ).toBeHidden();
+        await inventory.locator("summary").click();
+        await expect(inventory).toHaveAttribute("data-open", "true");
+      }
+      await expect(
+        inventory
+          .getByTestId("commonplace-map-inventory-item")
+          .filter({ hasText: "Institutions Overview" }),
+      ).toHaveAttribute("data-active", "true");
+
+      await page.locator(".react-flow__controls").scrollIntoViewIfNeeded();
+      await expect(page.getByRole("button", { name: "zoom in" })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "fit view" })).toBeEnabled();
+      const controlsBox = await page.locator(".react-flow__controls").boundingBox();
+      expect(controlsBox?.width ?? 0).toBeGreaterThanOrEqual(24);
+      expect(controlsBox?.height ?? 0).toBeGreaterThanOrEqual(24);
+      await expectNoHorizontalOverflow(page);
+    }
   });
 
   test("Library is default and exposes grid, Add Note tile, and Main Maps registry", async ({
@@ -1592,7 +1710,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     }
     await expect(inventory).toContainText("Inventory");
     await expect(inventory).toContainText("Saved maps");
-    await expect(inventory).toContainText("Open saved maps");
+    await expect(inventory).toContainText("Hide maps");
     await expect(inventory).toContainText("Main Maps");
     await expect(inventory).toContainText("Sub Mind Maps");
     await expect(inventory).toContainText("Institutions Overview");
@@ -2223,7 +2341,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Add a saved Sub Mind Map as a cluster, or drag notes from the sidebar.",
     );
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
-    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveCount(0);
     await expect(page.getByTestId("commonplace-map-inventory")).toContainText("Saved maps");
 
     await page.getByRole("button", { name: "Back to Main Maps" }).click();
@@ -2823,7 +2941,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       "Saved",
     );
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
-    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveCount(0);
     await page.getByRole("button", { name: "Back to Sub Mind Maps" }).click();
 
     await page.getByLabel("New Sub Mind Map title").fill("Attention Systems");
@@ -3039,7 +3157,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(subNodesAfterReturn).toHaveLength(1);
     expect(subNodesAfterReturn[0]).toMatchObject({ id: "sub-node-created-4" });
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
-    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveCount(0);
   });
 
   test("Diskusi di Podchat passes only compact Commonplace context", async ({ page }) => {
@@ -3083,7 +3201,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(mainMapDiscussBtn).toBeVisible();
     await expect(mainMapDiscussBtn).toBeDisabled();
     await expect(mainMapDiscussBtn).toHaveAttribute(
-      "title",
+      "aria-describedby",
+      "commonplace-map-discuss-helper",
+    );
+    await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
       "Tambahkan node ke map sebelum diskusi.",
     );
 
@@ -3109,8 +3230,11 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(discussBtn).toBeVisible();
     await expect(discussBtn).toBeDisabled();
     await expect(discussBtn).toHaveAttribute(
-      "title",
-      "Add at least one note to discuss in Podchat",
+      "aria-describedby",
+      "commonplace-map-discuss-helper",
+    );
+    await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
+      "Add at least one note before discussing this Sub Mind Map.",
     );
 
     // 4. Drag note onto canvas -> note drops are auto-saved on drop, so button is enabled
@@ -3125,9 +3249,8 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       targetPosition: { x: 260, y: 300 },
     });
     await expect(discussBtn).toBeDisabled();
-    await expect(discussBtn).toHaveAttribute(
-      "title",
-      "Save changes before discussing in Podchat",
+    await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
+      "Save changes before discussing this Sub Mind Map in Podchat.",
     );
 
     // Save changes -> button becomes enabled again
@@ -3177,7 +3300,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(discussBtn).toBeVisible();
     await expect(discussBtn).toBeDisabled();
     await expect(discussBtn).toHaveAttribute(
-      "title",
+      "aria-describedby",
+      "commonplace-map-discuss-helper",
+    );
+    await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
       "Tambahkan node ke map sebelum diskusi.",
     );
 
@@ -3195,8 +3321,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     // 4. After adding cluster (unsaved) → button is disabled
     await expect(discussBtn).toBeDisabled();
-    await expect(discussBtn).toHaveAttribute(
-      "title",
+    await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
       "Simpan map sebelum membahasnya di Podchat.",
     );
 
@@ -3212,8 +3337,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
       targetPosition: { x: 260, y: 300 },
     });
     await expect(discussBtn).toBeDisabled();
-    await expect(discussBtn).toHaveAttribute(
-      "title",
+    await expect(page.getByTestId("commonplace-map-discuss-helper")).toHaveText(
       "Simpan map sebelum membahasnya di Podchat.",
     );
 
@@ -3245,7 +3369,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     // 9. Sub Map discuss button is not affected (regression check)
     // Main Map has no AI Suggest and no auto-connect
     await expect(page.getByText("AI Suggest")).toHaveCount(0);
-    await expect(page.getByText(/connect idea/i)).toHaveCount(0);
+    await expect(page.getByTestId("commonplace-map-connect-idea")).toHaveCount(0);
   });
 
   test("search filters sidebar and Library notes by title, source, shortcode, and tags", async ({
