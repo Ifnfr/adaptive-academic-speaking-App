@@ -27,6 +27,9 @@
   --brand-teal-ink: #134e4a;    /* teal text on light bg */
   --brand-accent-fill: #0f766e; /* filled selected/accent surfaces */
   --brand-accent-fill-ink: #ffffff;
+  --brand-level-card-bg: var(--brand-teal-ink);
+  --brand-level-card-border: var(--brand-teal-ink);
+  --brand-level-card-text: #ffffff;
   --brand-gold: #b8860b;        /* warning / streak accent (dark goldenrod) */
   --brand-gold-soft: #fef3c7;   /* gold background tint */
   --brand-coral: #c2410c;       /* error accent (orange-700, coral-leaning) */
@@ -114,6 +117,9 @@ html.dark {
   --brand-teal-ink: #5eead4;    /* teal-300 for readable text on dark */
   --brand-accent-fill: #0f766e; /* comfortable filled teal on dark */
   --brand-accent-fill-ink: #ecfeff;
+  --brand-level-card-bg: var(--brand-teal-soft);
+  --brand-level-card-border: var(--brand-teal-soft);
+  --brand-level-card-text: #ffffff;
   --brand-gold: #f59e0b;        /* amber-500 */
   --brand-gold-soft: #452b07;   /* dark amber background tint */
   --brand-coral: #f97316;       /* orange-500 */

@@ -556,4 +556,43 @@ test.describe("Settings view — signed-in appearance mode", () => {
     // Root should immediately update to light without refresh
     await expect(page.locator("html")).not.toHaveClass(/dark/);
   });
+
+  test("sidebar current level card uses dark-safe colors in both modes", async ({ page }) => {
+    // 1. In Light Mode
+    await setupMockSignedInAuthAndProfile(page, "light");
+    await page.goto("/");
+
+    const currentLevelCard = page.getByTestId("sidebar-current-level-card");
+    await expect(currentLevelCard).toBeVisible();
+
+    let styles = await currentLevelCard.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        backgroundColor: computed.backgroundColor,
+        borderColor: computed.borderColor,
+        color: computed.color,
+      };
+    });
+
+    // In light mode, it should be dark forest teal: rgb(19, 78, 74) which is #134e4a
+    expect(styles.backgroundColor).toBe("rgb(19, 78, 74)");
+    expect(styles.borderColor).toBe("rgb(19, 78, 74)");
+
+    // 2. In Dark Mode
+    await setupMockSignedInAuthAndProfile(page, "dark");
+    await page.goto("/");
+
+    styles = await currentLevelCard.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        backgroundColor: computed.backgroundColor,
+        borderColor: computed.borderColor,
+        color: computed.color,
+      };
+    });
+
+    // In dark mode, it should be dark teal: rgb(17, 51, 47) which is #11332f
+    expect(styles.backgroundColor).toBe("rgb(17, 51, 47)");
+    expect(styles.borderColor).toBe("rgb(17, 51, 47)");
+  });
 });

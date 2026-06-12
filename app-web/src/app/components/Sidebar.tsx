@@ -120,7 +120,10 @@ export function Sidebar({
         </div>
 
         {/* Current level */}
-        <div className="overflow-hidden rounded-2xl border border-[var(--brand-teal-ink)] bg-[var(--brand-teal-ink)] text-white shadow-sm">
+        <div
+          className="overflow-hidden rounded-2xl border border-[var(--brand-level-card-border)] bg-[var(--brand-level-card-bg)] text-[var(--brand-level-card-text)] shadow-sm"
+          data-testid="sidebar-current-level-card"
+        >
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
               {t("sidebar.currentLevel")}
