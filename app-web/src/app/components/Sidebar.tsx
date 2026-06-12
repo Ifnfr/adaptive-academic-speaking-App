@@ -56,11 +56,10 @@ type SidebarItemProps = {
 
 function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
   const base =
-    "w-full min-h-11 rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]";
+    "app-button w-full justify-start px-3 py-2 text-left";
   const activeClass =
     "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-medium";
-  const idleClass =
-    "text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface-2)] hover:text-[var(--brand-ink)]";
+  const idleClass = "app-button-ghost text-[var(--brand-ink-soft)]";
   return (
     <li>
       <button
@@ -90,8 +89,7 @@ export function Sidebar({
   onSelectView,
 }: SidebarProps) {
   const { t } = useI18n(appLanguage);
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const card = "app-panel brand-grid";
 
   return (
     <aside className="lg:h-screen lg:w-[252px] lg:flex-shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-[var(--brand-border)] lg:bg-[var(--brand-bg)] lg:p-4 [scrollbar-width:thin]">

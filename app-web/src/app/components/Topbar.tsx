@@ -24,8 +24,7 @@ export function Topbar({
   appLanguage,
 }: TopbarProps) {
   const { t } = useI18n(appLanguage);
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const card = "app-panel brand-grid";
 
   return (
     <header
@@ -43,14 +42,14 @@ export function Topbar({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
+        <span className="app-status app-status-info">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
           {hasActiveSession ? t("topbar.sessionActive") : t("topbar.idle")}
         </span>
-        <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
+        <span className="app-status app-status-info">
           {mode}
         </span>
-        <span className="inline-flex items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-[11px] text-[var(--brand-ink-soft)]">
+        <span className="app-status app-status-info">
           {level}
         </span>
         {authSlot}
