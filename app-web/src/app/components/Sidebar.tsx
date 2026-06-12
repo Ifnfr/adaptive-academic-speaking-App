@@ -17,7 +17,7 @@ export type SidebarView =
   | "learning-path"
   | "profile";
 
-type SidebarProps = {
+export type SidebarProps = {
   view: SidebarView;
   level: string;
   sessionsCount: number;
@@ -56,7 +56,7 @@ type SidebarItemProps = {
 
 function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
   const base =
-    "w-full rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]";
+    "w-full min-h-11 rounded-lg px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]";
   const activeClass =
     "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-medium";
   const idleClass =

@@ -1,8 +1,28 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function expectNoHorizontalOverflow(page: Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const allowedRoundingError = 1;
+        return (
+          document.documentElement.scrollWidth <=
+            window.innerWidth + allowedRoundingError &&
+          document.body.scrollWidth <= window.innerWidth + allowedRoundingError
+        );
+      }),
+    )
+    .toBe(true);
+}
+
+async function gotoMockApp(page: Page) {
+  await page.goto("/?mockAuth=true");
+  await expect(page.getByTestId("podchat-setup")).toBeVisible();
+}
 
 test.describe("Sidebar Simplification Flows", () => {
   test("diagnostic and level-up check are not in sidebar but features remain accessible", async ({ page }) => {
-    await page.goto("/");
+    await gotoMockApp(page);
 
     // Wait for hydration to complete
     await expect(page.locator("aside")).not.toContainText("Loading speaker progress");
@@ -35,5 +55,92 @@ test.describe("Sidebar Simplification Flows", () => {
     await expect(page.locator("h2:has-text(\"Progress & Quest\")")).toBeVisible();
     await expect(page.locator("p:has-text(\"Level-Up Check\")")).toBeVisible();
     await expect(page.locator("h3:has-text(\"Local readiness check\")")).toBeVisible();
+  });
+
+  test("mobile shell shows main content first and opens navigation drawer", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 760 });
+    await gotoMockApp(page);
+
+    await expect(page.getByTestId("mobile-nav-toggle")).toBeVisible();
+    await expect(page.locator("aside").first()).toBeHidden();
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
+    const toggleBox = await page.getByTestId("mobile-nav-toggle").boundingBox();
+    expect(toggleBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    await page.getByTestId("mobile-nav-toggle").click();
+    const drawer = page.getByTestId("mobile-nav-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText("Active Session");
+    await expect(drawer).toContainText("Commonplace");
+    await expect(drawer).toContainText("Settings");
+
+    await drawer.getByRole("button", { name: "Settings" }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.getByTestId("mobile-shell-bar")).toContainText(
+      "Settings",
+    );
+    await expect(page.locator("h2").first()).toContainText(
+      /Profile & Settings/i,
+    );
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("mobile shell has no horizontal overflow at 360 and 390 widths", async ({
+    page,
+  }) => {
+    for (const width of [360, 390]) {
+      await page.setViewportSize({ width, height: width === 360 ? 760 : 844 });
+      await gotoMockApp(page);
+      await expectNoHorizontalOverflow(page);
+      await page.getByTestId("mobile-nav-toggle").click();
+      await expect(page.getByTestId("mobile-nav-drawer")).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("mobile-nav-drawer")).toBeHidden();
+    }
+  });
+
+  test("mobile drawer reaches Commonplace and returns to Podchat", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoMockApp(page);
+
+    await page.getByTestId("mobile-nav-toggle").click();
+    await page
+      .getByTestId("mobile-nav-drawer")
+      .getByRole("button", { name: "Commonplace" })
+      .click();
+    await expect(page.getByTestId("mobile-shell-bar")).toContainText(
+      "Commonplace",
+    );
+    await expect(page.getByTestId("mobile-nav-drawer")).toBeHidden();
+    await expectNoHorizontalOverflow(page);
+
+    await page.getByTestId("mobile-nav-toggle").click();
+    await page
+      .getByTestId("mobile-nav-drawer")
+      .getByRole("button", { name: "Active Session" })
+      .click();
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await expect(page.getByTestId("mobile-nav-drawer")).toBeHidden();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("desktop sidebar remains visible at 1024 and 1366 widths", async ({
+    page,
+  }) => {
+    for (const width of [1024, 1366]) {
+      await page.setViewportSize({ width, height: 768 });
+      await gotoMockApp(page);
+      await expect(page.getByTestId("mobile-nav-toggle")).toBeHidden();
+      await expect(page.locator("aside")).toBeVisible();
+      await expect(page.locator("aside")).toContainText("Active Session");
+      await expectNoHorizontalOverflow(page);
+    }
   });
 });

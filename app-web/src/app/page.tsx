@@ -50,7 +50,11 @@ import {
 } from "./components/MentalModelView";
 import { SessionLogView } from "./components/SessionLogView";
 import { LeaderboardView } from "./components/LeaderboardView";
-import { Sidebar, type SidebarView } from "./components/Sidebar";
+import {
+  Sidebar,
+  type SidebarProps,
+  type SidebarView,
+} from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
 import { PodchatView } from "./components/PodchatView";
@@ -1040,11 +1044,17 @@ export default function Home() {
   // sub-pages that reuse existing data.
   type View = SidebarView;
   const [view, setView] = useState<View>("active");
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const mobileNavPanelRef = useRef<HTMLDivElement | null>(null);
+  const handleCloseMobileNav = () => setIsMobileNavOpen(false);
+  const handleToggleMobileNav = () =>
+    setIsMobileNavOpen((currentIsOpen) => !currentIsOpen);
   const handleSelectView = (nextView: SidebarView) => {
     if (nextView === "commonplace" && view !== "commonplace") {
       window.sessionStorage.setItem(LAST_FONETIK_VIEW_SESSION_KEY, view);
     }
     setView(nextView);
+    setIsMobileNavOpen(false);
   };
 
   const handleBackFromCommonplace = () => {
@@ -1073,6 +1083,28 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, [view]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen) {
+      return;
+    }
+
+    mobileNavPanelRef.current?.focus();
+    const previousBodyOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileNavOpen(false);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobileNavOpen]);
 
   const previousSession = sessions[0] ?? null;
   // Lightweight day-streak derived from session.date strings. No new storage.
@@ -1923,6 +1955,22 @@ export default function Home() {
     }
   };
 
+  const sidebarProps: SidebarProps = {
+    view,
+    level,
+    sessionsCount: sessions.length,
+    dayStreak,
+    levelPhase: LEVEL_PHASE[level],
+    nextLevel: nextLevelHint(level),
+    speakerLevel: speakerProgress.currentLevel.level,
+    speakerLevelName: speakerProgress.currentLevel.name,
+    totalXp: xpProfile.totalXp,
+    gamificationReady,
+    appLanguage,
+    onSelectView: handleSelectView,
+  };
+  const currentViewTitle = viewTitle(view, homeT);
+
   return (
     <>
       {CLERK_ENABLED && (
@@ -1953,6 +2001,18 @@ export default function Home() {
               : "lg:h-screen lg:max-h-screen lg:overflow-hidden"
           }`}
         >
+          <MobileShellBar
+            isOpen={isMobileNavOpen}
+            title={currentViewTitle}
+            onToggle={handleToggleMobileNav}
+          />
+          {isMobileNavOpen && (
+            <MobileNavigationDrawer
+              panelRef={mobileNavPanelRef}
+              sidebarProps={sidebarProps}
+              onClose={handleCloseMobileNav}
+            />
+          )}
           <div
             className={`flex w-full flex-col lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:px-0 lg:py-0 ${
               view === "commonplace"
@@ -1962,20 +2022,9 @@ export default function Home() {
           >
         {/* Sidebar */}
         {view !== "commonplace" && (
-          <Sidebar
-            view={view}
-            level={level}
-            sessionsCount={sessions.length}
-            dayStreak={dayStreak}
-            levelPhase={LEVEL_PHASE[level]}
-            nextLevel={nextLevelHint(level)}
-            speakerLevel={speakerProgress.currentLevel.level}
-            speakerLevelName={speakerProgress.currentLevel.name}
-            totalXp={xpProfile.totalXp}
-            gamificationReady={gamificationReady}
-            appLanguage={appLanguage}
-            onSelectView={handleSelectView}
-          />
+          <div className="hidden lg:block">
+            <Sidebar {...sidebarProps} />
+          </div>
         )}
         {/* Main */}
         <main
@@ -2591,6 +2640,103 @@ function cloudSnapshotStatusLabel(
     default:
       return "Local only";
   }
+}
+
+type MobileShellBarProps = {
+  isOpen: boolean;
+  title: string;
+  onToggle: () => void;
+};
+
+function MobileShellBar({ isOpen, title, onToggle }: MobileShellBarProps) {
+  return (
+    <div
+      className="sticky top-0 z-40 flex min-h-[64px] w-full items-center justify-between gap-3 border-b border-[var(--brand-border)] bg-[var(--brand-bg)]/95 px-4 py-2.5 backdrop-blur lg:hidden"
+      data-testid="mobile-shell-bar"
+    >
+      <button
+        type="button"
+        aria-controls="mobile-navigation-drawer"
+        aria-expanded={isOpen}
+        aria-label={isOpen ? "Close navigation menu" : "Open navigation menu"}
+        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 text-sm font-semibold text-[var(--brand-ink)] shadow-sm transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+        data-testid="mobile-nav-toggle"
+        onClick={onToggle}
+      >
+        <span
+          className="flex h-4 w-4 flex-col justify-center gap-1"
+          aria-hidden="true"
+        >
+          <span className="block h-0.5 w-4 rounded-full bg-current" />
+          <span className="block h-0.5 w-4 rounded-full bg-current" />
+          <span className="block h-0.5 w-4 rounded-full bg-current" />
+        </span>
+        Menu
+      </button>
+      <div className="min-w-0 text-right">
+        <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
+          fonetik
+        </p>
+        <p className="truncate text-sm font-semibold text-[var(--brand-ink)]">
+          {title}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type MobileNavigationDrawerProps = {
+  panelRef: MutableRefObject<HTMLDivElement | null>;
+  sidebarProps: SidebarProps;
+  onClose: () => void;
+};
+
+function MobileNavigationDrawer({
+  panelRef,
+  sidebarProps,
+  onClose,
+}: MobileNavigationDrawerProps) {
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden" data-testid="mobile-nav-root">
+      <button
+        type="button"
+        aria-label="Close navigation menu"
+        className="absolute inset-0 h-full w-full cursor-default bg-black/45"
+        data-testid="mobile-nav-backdrop"
+        tabIndex={-1}
+        onClick={onClose}
+      />
+      <div
+        ref={panelRef}
+        id="mobile-navigation-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+        tabIndex={-1}
+        className="relative h-[100svh] w-[min(21rem,calc(100%-2rem))] overflow-y-auto overscroll-contain border-r border-[var(--brand-border)] bg-[var(--brand-bg)] p-3 shadow-2xl focus:outline-none [scrollbar-width:thin]"
+        data-testid="mobile-nav-drawer"
+      >
+        <div className="mb-3 flex min-h-11 items-center justify-between gap-3 px-1">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
+              fonetik
+            </p>
+            <p className="truncate text-sm font-semibold text-[var(--brand-ink-soft)]">
+              Navigation
+            </p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 text-sm font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <Sidebar {...sidebarProps} />
+      </div>
+    </div>
+  );
 }
 
 // ---------- Topbar copy helpers ----------
