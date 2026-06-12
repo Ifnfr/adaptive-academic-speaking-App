@@ -152,13 +152,13 @@ body {
 }
 
 .app-button-primary {
-  border-color: var(--brand-teal);
-  background-color: var(--brand-teal);
-  color: var(--brand-teal-ink);
+  border-color: var(--brand-accent-fill);
+  background-color: var(--brand-accent-fill);
+  color: var(--brand-accent-fill-ink);
 }
 
 .app-button-primary:hover:not(:disabled):not([aria-disabled="true"]) {
-  background-color: color-mix(in oklab, var(--brand-teal), black 10%);
+  background-color: color-mix(in oklab, var(--brand-accent-fill), black 10%);
 }
 
 .app-button-secondary {

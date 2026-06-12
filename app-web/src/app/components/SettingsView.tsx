@@ -30,12 +30,14 @@ import {
   assertAppAppearanceMode,
 } from "../lib/storage/supabase-profile-adapter";
 
-// UI tokens matching style
-const card =
-  "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid overflow-hidden";
+// Shared visual primitives from globals.css, scoped here for Settings.
+const card = "app-panel brand-grid";
 const cardHeader =
-  "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
-const cardBody = "p-6";
+  "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-5 py-4 sm:px-6";
+const cardBody = "p-5 sm:p-6";
+const settingsPanel = "app-panel-muted px-4 py-4";
+const settingsSectionTitle =
+  "mb-2 text-sm font-semibold text-[var(--brand-ink)]";
 
 export type SettingsViewProps = {
   isSignedIn: boolean;
@@ -72,6 +74,10 @@ function formatJoinedDate(isoString: string | undefined): string {
 function getInitial(displayName: string, email: string | null): string {
   const name = displayName || email || "?";
   return name.trim().charAt(0).toUpperCase();
+}
+
+function providerStatusTone(configured: boolean): string {
+  return configured ? "app-status-success" : "app-status-error";
 }
 
 export function getProfileLanguagePreferenceState(
@@ -152,15 +158,15 @@ function Toggle({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-4 py-3 border-b border-[var(--brand-border)] last:border-b-0">
+    <div className="flex items-start gap-4 border-b border-[var(--brand-border)] py-3 last:border-b-0">
       <div className="flex-1 min-w-0">
         <label
           htmlFor={id}
-          className="block text-sm font-medium text-[var(--brand-ink)] cursor-pointer"
+          className="block cursor-pointer text-sm font-semibold text-[var(--brand-ink)]"
         >
           {label}
         </label>
-        <p className="mt-0.5 text-xs text-[var(--brand-ink-soft)]">{description}</p>
+        <p className="app-helper mt-0.5">{description}</p>
       </div>
       <button
         id={id}
@@ -172,10 +178,10 @@ function Toggle({
         onClick={() => onChange(!checked)}
         className={[
           "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent",
-          "transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-1",
+          "transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]",
           "disabled:cursor-not-allowed disabled:opacity-50",
           checked
-            ? "bg-[var(--brand-teal-ink)]"
+            ? "bg-[var(--brand-accent-fill)]"
             : "bg-[var(--brand-border)]",
         ].join(" ")}
       >
@@ -210,7 +216,7 @@ function LanguageSelect<T extends string>({
 }) {
   return (
     <label className="flex flex-col gap-1.5 font-sans">
-      <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+      <span className="app-label">
         {label}
       </span>
       <select
@@ -218,7 +224,7 @@ function LanguageSelect<T extends string>({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value as T)}
-        className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="app-field"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -245,7 +251,7 @@ function CommonplaceThemeSwatches({
 }) {
   return (
     <fieldset className="min-w-0" data-testid={testId}>
-      <legend className="text-xs font-medium text-[var(--brand-ink-soft)]">
+      <legend className="app-label">
         {legend}
       </legend>
       <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
@@ -259,11 +265,11 @@ function CommonplaceThemeSwatches({
               disabled={disabled}
               onClick={() => onChange(choice.id)}
               className={[
-                "flex min-h-[4.5rem] flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left transition-colors",
-                "focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60",
+                "flex min-h-[4.5rem] flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left text-xs font-semibold transition-colors",
+                "focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:opacity-60",
                 isSelected
                   ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
-                  : "border-[var(--brand-border)] bg-white text-[var(--brand-ink)] hover:border-[var(--brand-teal)]/40",
+                  : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)] hover:border-[var(--brand-teal)]/40 hover:bg-[var(--brand-surface-2)]",
               ].join(" ")}
               data-testid={`${testId}-option-${choice.id}`}
             >
@@ -272,7 +278,7 @@ function CommonplaceThemeSwatches({
                 style={{ backgroundColor: choice.swatch }}
                 aria-hidden="true"
               />
-              <span className="text-[11px] font-semibold leading-4">
+              <span className="leading-4">
                 {choice.label}
               </span>
             </button>
@@ -280,6 +286,28 @@ function CommonplaceThemeSwatches({
         })}
       </div>
     </fieldset>
+  );
+}
+
+function ProviderStatusRow({
+  label,
+  configured,
+  testId,
+}: {
+  label: string;
+  configured: boolean;
+  testId?: string;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between gap-3"
+      data-testid={testId}
+    >
+      <span className="min-w-0 text-sm text-[var(--brand-ink)]">{label}</span>
+      <span className={`app-status ${providerStatusTone(configured)}`}>
+        {configured ? "Configured" : "Missing"}
+      </span>
+    </div>
   );
 }
 
@@ -301,7 +329,7 @@ function CommonplaceAppearancePreview({
 
   return (
     <div
-      className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3"
+      className="app-panel-muted p-3"
       data-testid="settings-commonplace-appearance-preview"
     >
       <div
@@ -397,26 +425,26 @@ function SignedOutSettings({ t }: { t: Translate }) {
       {/* Local profile info notice */}
       <div className={card}>
         <div className={cardHeader}>
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+          <p className="app-label text-[var(--brand-gold)]">
             {t("profile.localProfile")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
             {t("profile.profileSettings")}
           </h2>
-          <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans">
+          <p className="app-helper mt-1">
             You are using fonetik in local mode.
           </p>
         </div>
         <div className={cardBody}>
-          <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 font-sans">
+          <div className="app-message app-message-info">
             <p className="text-sm font-medium text-[var(--brand-ink)]">
               Learning data stays on this browser
             </p>
-            <p className="mt-2 text-xs text-[var(--brand-ink-soft)] leading-relaxed">
+            <p className="mt-2">
               Your sessions, vocabulary, XP, and badges are stored only in this
               browser&apos;s local storage. No account is required to practice.
             </p>
-            <p className="mt-4 text-xs text-[var(--brand-ink-soft)] leading-relaxed">
+            <p className="mt-4">
               To enable cloud backup and profile settings, configure Clerk and
               Supabase credentials in{" "}
               <code className="rounded bg-[var(--brand-surface-2)] px-1 py-0.5 font-mono text-xs border border-[var(--brand-border)]">
@@ -516,7 +544,7 @@ function SignedInSettings({
       {/* Account info card */}
       <div className={card}>
         <div className={cardHeader}>
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+          <p className="app-label text-[var(--brand-gold)]">
             {t("profile.account")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
@@ -526,7 +554,7 @@ function SignedInSettings({
         <div className={cardBody}>
           {profileLoadError && (
             <div
-              className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 font-sans"
+              className="app-message app-message-error mb-4"
               data-testid="profile-load-error"
             >
               {profileLoadError}
@@ -575,13 +603,13 @@ function SignedInSettings({
       {/* Editable preferences card */}
       <div className={card}>
         <div className={cardHeader}>
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-gold)]">
+          <p className="app-label text-[var(--brand-gold)]">
             {t("profile.profileSettingsSection")}
           </p>
           <h3 className="mt-1 text-base font-semibold text-[var(--brand-ink)]">
             {t("profile.profilePrivacy")}
           </h3>
-          <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans leading-relaxed">
+          <p className="app-helper mt-1">
             Enabling sharing settings will never publish transcripts, retry
             transcripts, vocabulary sentences, AI corrections, article URLs,
             weaknesses, retry tasks, session CSV content, or private notes.
@@ -593,7 +621,7 @@ function SignedInSettings({
             <div>
               <label
                 htmlFor="profile-display-name-input"
-                className="block text-sm font-medium text-[var(--brand-ink)] mb-1.5"
+                className="app-label mb-1.5"
               >
                 {t("profile.displayName")}
               </label>
@@ -604,7 +632,7 @@ function SignedInSettings({
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={80}
                 disabled={isSaving}
-                className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:opacity-50"
+                className="app-field"
                 placeholder="Your display name"
               />
             </div>
@@ -613,10 +641,10 @@ function SignedInSettings({
             <div>
               <label
                 htmlFor="profile-bio-input"
-                className="block text-sm font-medium text-[var(--brand-ink)] mb-1.5"
+                className="app-label mb-1.5"
               >
                 {t("profile.bio")}
-                <span className="ml-1 text-xs font-normal text-[var(--brand-muted)] font-mono">
+                <span className="ml-1 font-mono text-xs font-normal text-[var(--brand-muted)]">
                   ({bio.length}/200)
                 </span>
               </label>
@@ -627,17 +655,17 @@ function SignedInSettings({
                 maxLength={200}
                 rows={3}
                 disabled={isSaving}
-                className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] resize-none disabled:opacity-50"
+                className="app-field resize-none"
                 placeholder="A short note about your learning goals (optional)"
               />
             </div>
 
             {/* Privacy switches */}
             <div>
-              <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
+              <p className={settingsSectionTitle}>
                 Sharing &amp; privacy
               </p>
-              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 divide-y divide-[var(--brand-border)]">
+              <div className={`${settingsPanel} divide-y divide-[var(--brand-border)] py-0`}>
                 <Toggle
                   id="toggle-public-profile"
                   label={t("profile.publicProfile")}
@@ -659,10 +687,10 @@ function SignedInSettings({
 
             {/* Language selectors */}
             <div>
-              <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
+              <p className={settingsSectionTitle}>
                 {t("profile.languagePreferences")}
               </p>
-              <div className="grid gap-3 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-4 sm:grid-cols-3">
+              <div className={`${settingsPanel} grid gap-3 sm:grid-cols-3`}>
                 <LanguageSelect
                   id="profile-app-language-select"
                   label={t("profile.appLanguage")}
@@ -688,20 +716,20 @@ function SignedInSettings({
                   disabled={isSaving}
                 />
                 <label className="flex flex-col gap-1.5 font-sans">
-                  <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                  <span className="app-label">
                     {t("profile.targetLanguage")}
                   </span>
                   <select
                     id="profile-target-language-select"
                     value={selectedTargetLanguage}
                     disabled
-                    className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="app-field"
                   >
                     <option value={DEFAULT_TARGET_LANGUAGE}>
                       {t("profile.english")}
                     </option>
                   </select>
-                  <span className="text-[11px] text-[var(--brand-muted)] font-sans">
+                  <span className="app-helper text-[11px]">
                     {t("profile.targetLanguageFixed")}
                   </span>
                 </label>
@@ -710,10 +738,10 @@ function SignedInSettings({
 
             {/* Actions & Status */}
             <div>
-              <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
+              <p className={settingsSectionTitle}>
                 Commonplace appearance
               </p>
-              <div className="grid gap-4 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-4 lg:grid-cols-2">
+              <div className={`${settingsPanel} grid gap-4 lg:grid-cols-2`}>
                 <CommonplaceThemeSwatches
                   legend="Canvas color"
                   value={selectedCommonplaceCanvasColor}
@@ -735,7 +763,7 @@ function SignedInSettings({
                   />
                 </div>
               </div>
-              <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
+              <p className="app-helper mt-2">
                 These colors apply only to Commonplace maps, Library cards, and
                 sidebar cards.
               </p>
@@ -743,12 +771,12 @@ function SignedInSettings({
 
             {/* Global Appearance Section */}
             <div>
-              <p className="text-sm font-medium text-[var(--brand-ink)] mb-2">
+              <p className={settingsSectionTitle}>
                 App appearance
               </p>
-              <div className="grid gap-3 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-4 sm:grid-cols-3">
+              <div className={`${settingsPanel} grid gap-3 sm:grid-cols-3`}>
                 <label className="flex flex-col gap-1.5 font-sans">
-                  <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                  <span className="app-label">
                     Theme mode
                   </span>
                   <select
@@ -756,7 +784,7 @@ function SignedInSettings({
                     value={selectedAppearanceMode}
                     disabled={isSaving}
                     onChange={(e) => setSelectedAppearanceMode(e.target.value as AppAppearanceMode)}
-                    className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="app-field"
                   >
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
@@ -766,30 +794,30 @@ function SignedInSettings({
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 font-sans">
+            <div className="flex flex-col gap-2 font-sans sm:items-start">
               <button
                 id="profile-save-btn"
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="rounded-lg bg-[var(--brand-teal-ink)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-1"
+                className="app-button app-button-primary"
               >
                 {isSaving ? t("profile.saving") : t("profile.saveProfileSettings")}
               </button>
 
               {profileSaveStatus === "saved" && (
                 <p
-                className="text-xs text-[var(--brand-success-ink)]"
-                data-testid="profile-save-success"
-              >
+                  className="app-message app-message-success w-full"
+                  data-testid="profile-save-success"
+                >
                   {t("profile.saved")}
                 </p>
               )}
               {profileSaveStatus === "error" && profileSaveError && (
                 <p
-                className="text-xs text-[var(--brand-coral)]"
-                data-testid="profile-save-error"
-              >
+                  className="app-message app-message-error w-full"
+                  data-testid="profile-save-error"
+                >
                   {profileSaveError}
                 </p>
               )}
@@ -876,27 +904,27 @@ export function SettingsView({
       {/* Global AI Provider Card */}
       <div className={card}>
         <div className={cardHeader}>
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+          <p className="app-label text-[var(--brand-teal)]">
             AI Configuration
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
             Default AI Provider
           </h2>
-          <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans">
+          <p className="app-helper mt-1">
             Choose which server-side AI provider supported features should use. API keys stay on the server and are never stored in the browser.
           </p>
         </div>
         <div className={cardBody}>
           <div className="max-w-xs mb-6">
             <label className="flex flex-col gap-1.5 font-sans">
-              <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+              <span className="app-label">
                 AI Provider
               </span>
               <select
                 id="default-ai-provider-select"
                 value={defaultAiProvider}
                 onChange={(e) => onDefaultAiProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
-                className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                className="app-field"
               >
                 <option value="Claude">Claude</option>
                 <option value="Gemini">Gemini</option>
@@ -906,7 +934,7 @@ export function SettingsView({
           </div>
 
           <div className="border-t border-[var(--brand-border)] pt-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium text-[var(--brand-ink)]">
                 Server Provider Status
               </p>
@@ -914,48 +942,38 @@ export function SettingsView({
                 type="button"
                 onClick={handleCheckStatus}
                 disabled={isCheckingStatus}
-                className="rounded-lg bg-[var(--brand-surface-2)] border border-[var(--brand-border)] px-3 py-1.5 text-xs font-medium text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] disabled:opacity-50 transition-colors"
+                className="app-button app-button-secondary min-h-9 px-3 py-1.5 text-xs"
               >
                 {isCheckingStatus ? "Checking..." : "Check Status"}
               </button>
             </div>
             
             {statusError && (
-              <p className="text-xs text-[var(--brand-coral)] mb-3 font-sans">{statusError}</p>
+              <p className="app-message app-message-error mb-3">{statusError}</p>
             )}
             
             {providerStatus && (
-              <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--brand-ink)]">Claude</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Claude?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.providers?.Claude?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--brand-ink)]">Gemini</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.Gemini?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.providers?.Gemini?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--brand-ink)]">DeepSeek</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.providers?.DeepSeek?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.providers?.DeepSeek?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--brand-ink)]">AWS Polly (TTS)</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.ttsProviders?.Polly?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--brand-ink)]">ElevenLabs (TTS)</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.ttsProviders?.ElevenLabs?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
+              <div className={`${settingsPanel} flex flex-col gap-3 font-sans`}>
+                <ProviderStatusRow
+                  label="Claude"
+                  configured={providerStatus.providers?.Claude?.configured === true}
+                />
+                <ProviderStatusRow
+                  label="Gemini"
+                  configured={providerStatus.providers?.Gemini?.configured === true}
+                />
+                <ProviderStatusRow
+                  label="DeepSeek"
+                  configured={providerStatus.providers?.DeepSeek?.configured === true}
+                />
+                <ProviderStatusRow
+                  label="AWS Polly (TTS)"
+                  configured={providerStatus.ttsProviders?.Polly?.configured === true}
+                />
+                <ProviderStatusRow
+                  label="ElevenLabs (TTS)"
+                  configured={providerStatus.ttsProviders?.ElevenLabs?.configured === true}
+                />
               </div>
             )}
           </div>
@@ -965,20 +983,20 @@ export function SettingsView({
       {/* TTS Provider Card */}
       <div className={card}>
         <div className={cardHeader}>
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+          <p className="app-label text-[var(--brand-teal)]">
             Voice Configuration
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
             Text-to-Speech Provider
           </h2>
-          <p className="mt-1 text-xs text-[var(--brand-ink-soft)] font-sans">
+          <p className="app-helper mt-1">
             Choose which server-side voice engine reads AI host responses aloud. API keys stay on the server and are never stored in the browser.
           </p>
         </div>
         <div className={cardBody}>
           <div className="max-w-xs">
             <label className="flex flex-col gap-1.5 font-sans">
-              <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+              <span className="app-label">
                 TTS Provider
               </span>
               <select
@@ -987,7 +1005,7 @@ export function SettingsView({
                 onChange={(e) =>
                   onDefaultTtsProviderChange?.(e.target.value as "polly" | "elevenlabs")
                 }
-                className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                className="app-field"
               >
                 <option value="polly">AWS Polly</option>
                 <option value="elevenlabs">ElevenLabs</option>
@@ -999,7 +1017,7 @@ export function SettingsView({
           {defaultTtsProvider === "elevenlabs" && (
             <div className="mt-4 max-w-xs">
               <label className="flex flex-col gap-1.5 font-sans">
-                <span className="text-xs font-medium text-[var(--brand-ink-soft)]">
+                <span className="app-label">
                   ElevenLabs Model
                 </span>
                 <select
@@ -1010,7 +1028,7 @@ export function SettingsView({
                       e.target.value as "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | ""
                     )
                   }
-                  className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                  className="app-field"
                 >
                   <option value="">-- Select a Model --</option>
                   <option value="eleven_flash_v2_5">
@@ -1029,7 +1047,7 @@ export function SettingsView({
 
           {/* TTS Provider Status Section */}
           <div className="border-t border-[var(--brand-border)] mt-5 pt-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium text-[var(--brand-ink)] font-sans">
                 TTS Provider Status
               </p>
@@ -1038,7 +1056,7 @@ export function SettingsView({
                   type="button"
                   onClick={handleCheckStatus}
                   disabled={isCheckingStatus}
-                  className="rounded-lg bg-[var(--brand-surface-2)] border border-[var(--brand-border)] px-3 py-1.5 text-xs font-medium text-[var(--brand-ink)] hover:bg-[var(--brand-surface)] disabled:opacity-50 transition-colors"
+                  className="app-button app-button-secondary min-h-9 px-3 py-1.5 text-xs"
                 >
                   {isCheckingStatus ? "Checking..." : "Check Status"}
                 </button>
@@ -1046,25 +1064,23 @@ export function SettingsView({
             </div>
 
             {providerStatus ? (
-              <div className="flex flex-col gap-2 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 font-sans text-sm">
-                <div className="flex items-center justify-between" data-testid="tts-status-polly">
-                  <span className="text-[var(--brand-ink)]">AWS Polly</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.Polly?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.ttsProviders?.Polly?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between" data-testid="tts-status-elevenlabs">
-                  <span className="text-[var(--brand-ink)]">ElevenLabs</span>
-                  <span className={`text-xs font-medium px-2 py-1 rounded-md ${providerStatus.ttsProviders?.ElevenLabs?.configured ? 'bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]' : 'bg-[var(--brand-coral-soft)] text-[var(--brand-coral)]'}`}>
-                    {providerStatus.ttsProviders?.ElevenLabs?.configured ? 'Configured' : 'Missing'}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-[var(--brand-ink-soft)] leading-relaxed">
+              <div className={`${settingsPanel} flex flex-col gap-3 font-sans text-sm`}>
+                <ProviderStatusRow
+                  label="AWS Polly"
+                  configured={providerStatus.ttsProviders?.Polly?.configured === true}
+                  testId="tts-status-polly"
+                />
+                <ProviderStatusRow
+                  label="ElevenLabs"
+                  configured={providerStatus.ttsProviders?.ElevenLabs?.configured === true}
+                  testId="tts-status-elevenlabs"
+                />
+                <p className="app-helper mt-1">
                   This checks whether server-side voice provider credentials are present. It does not validate quota, billing, or provider availability.
                 </p>
               </div>
             ) : (
-              <p className="text-xs text-[var(--brand-ink-soft)] font-sans">
+              <p className="app-helper font-sans">
                 Click Check Status above to verify server credentials.
               </p>
             )}
