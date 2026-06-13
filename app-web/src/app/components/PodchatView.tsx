@@ -314,14 +314,18 @@ export function PodchatView({
     [turns],
   );
 
-  const buttonPrimary =
-    "rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:bg-[var(--brand-border-strong)] disabled:text-[var(--brand-muted)]";
-  const buttonSecondary =
-    "rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-4 py-2 text-sm font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50";
-  const labelClass =
-    "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const buttonPrimary = "app-button app-button-primary";
+  const buttonSecondary = "app-button app-button-secondary";
+  const buttonDanger = "app-button app-button-danger";
+  const labelClass = "app-label mb-2";
+  const card = "app-panel brand-grid";
+  const contextPanel = "app-panel-muted p-4 flex flex-col gap-4";
+  const optionButtonBase =
+    "min-h-20 rounded-xl border p-4 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
+  const selectedOptionClass =
+    "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]";
+  const idleOptionClass =
+    "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-surface)]";
 
   const commonplaceLabel =
     commonplaceContext?.title?.trim() ||
@@ -878,7 +882,7 @@ export function PodchatView({
           </div>
           <div className="p-6 flex flex-col gap-6">
             <div
-              className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex flex-col gap-4"
+              className={contextPanel}
               data-testid="podchat-commonplace-map-context-card"
             >
               {commonplaceMapContextLoading && (
@@ -889,7 +893,7 @@ export function PodchatView({
               {commonplaceMapContextError && (
                 <p
                   role="alert"
-                  className="rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] px-3 py-2 text-sm text-[#8A1F15]"
+                  className="app-message app-message-error"
                 >
                   {commonplaceMapContextError}
                 </p>
@@ -913,25 +917,25 @@ export function PodchatView({
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                    <span className="app-status app-status-info">
                       {commonplaceMapContext.counts.nodes} visual node{commonplaceMapContext.counts.nodes !== 1 ? "s" : ""}
                     </span>
-                    <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                    <span className="app-status app-status-info">
                       {commonplaceMapContext.counts.edges} connection{commonplaceMapContext.counts.edges !== 1 ? "s" : ""}
                     </span>
                     {typeof commonplaceMapContext.counts.clusterNodes === "number" && commonplaceMapContext.mapType === "main" && (
-                      <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                      <span className="app-status app-status-info">
                         {commonplaceMapContext.counts.clusterNodes} cluster{commonplaceMapContext.counts.clusterNodes !== 1 ? "s" : ""}
                       </span>
                     )}
                     {typeof commonplaceMapContext.counts.noteNodes === "number" && commonplaceMapContext.mapType === "main" && (
-                      <span className="rounded-full border border-[var(--brand-border)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--brand-ink-soft)]">
+                      <span className="app-status app-status-info">
                         {commonplaceMapContext.counts.noteNodes} note{commonplaceMapContext.counts.noteNodes !== 1 ? "s" : ""}
                       </span>
                     )}
                     {(commonplaceMapContext.counts.truncatedNodes ||
                       commonplaceMapContext.counts.truncatedEdges) && (
-                      <span className="rounded-full border border-[#D99A25]/30 bg-[#FFF4D8] px-2.5 py-1 text-xs font-medium text-[#7A4A00]">
+                      <span className="app-status app-status-warning">
                         Bounded preview
                       </span>
                     )}
@@ -945,7 +949,7 @@ export function PodchatView({
                         {commonplaceMapContext.nodes.slice(0, 3).map((node) => (
                           <li
                             key={node.visualNodeId}
-                            className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]"
+                            className="app-panel-muted px-3 py-2 text-sm text-[var(--brand-ink-soft)]"
                           >
                             {node.nodeKind === "cluster" ? (
                               <span className="font-semibold text-[var(--brand-ink)]">
@@ -974,7 +978,7 @@ export function PodchatView({
             </div>
 
             {commonplaceMapOpener && (
-              <p className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--brand-ink-soft)]">
+              <p className="app-message app-message-info">
                 {commonplaceMapOpener}
               </p>
             )}
@@ -994,10 +998,10 @@ export function PodchatView({
                     aria-checked={difficulty === option}
                     onClick={() => setDifficulty(option)}
                     className={
-                      "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                      optionButtonBase + " " +
                       (difficulty === option
-                        ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
-                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                        ? selectedOptionClass
+                        : idleOptionClass)
                     }
                   >
                     <span className="text-sm font-semibold">{option}</span>
@@ -1048,7 +1052,7 @@ export function PodchatView({
           </div>
           <div className="p-6 flex flex-col gap-6">
             <div
-              className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex flex-col gap-4"
+              className={contextPanel}
               data-testid="podchat-commonplace-context-card"
             >
               <div>
@@ -1084,7 +1088,7 @@ export function PodchatView({
                     {commonplaceContext.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-full border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-2.5 py-1 text-xs font-medium text-[var(--brand-teal-ink)]"
+                        className="app-status app-status-info"
                       >
                         #{tag}
                       </span>
@@ -1094,7 +1098,7 @@ export function PodchatView({
               )}
             </div>
 
-            <p className="rounded-xl border border-[var(--brand-border)] bg-white px-4 py-3 text-sm leading-6 text-[var(--brand-ink-soft)]">
+            <p className="app-message app-message-info">
               {commonplaceOpener}
             </p>
 
@@ -1113,10 +1117,10 @@ export function PodchatView({
                     aria-checked={difficulty === option}
                     onClick={() => setDifficulty(option)}
                     className={
-                      "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                      optionButtonBase + " " +
                       (difficulty === option
-                        ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
-                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                        ? selectedOptionClass
+                        : idleOptionClass)
                     }
                   >
                     <span className="text-sm font-semibold">{option}</span>
@@ -1165,7 +1169,7 @@ export function PodchatView({
             </p>
           </div>
           <div className="p-6 flex flex-col gap-6">
-            <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex flex-col gap-4" data-testid="podchat-article-context-card">
+            <div className={contextPanel} data-testid="podchat-article-context-card">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">Article Title</span>
                 <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">{articleContext.articleTitle}</span>
@@ -1213,10 +1217,10 @@ export function PodchatView({
                     aria-checked={difficulty === option}
                     onClick={() => setDifficulty(option)}
                     className={
-                      "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                      optionButtonBase + " " +
                       (difficulty === option
-                        ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
-                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                        ? selectedOptionClass
+                        : idleOptionClass)
                     }
                   >
                     <span className="text-sm font-semibold">{option}</span>
@@ -1261,9 +1265,8 @@ export function PodchatView({
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--brand-ink-soft)]">
             Choose a topic and difficulty, then practice a timed conversation.
-            Keep speaking until time runs out. This Phase 1 preview uses
-            deterministic mock turns and does not use microphone capture, audio
-            recording, or cloud storage.
+            Keep speaking until time runs out. Your spoken response is
+            transcribed for the conversation and evaluation flow.
           </p>
         </div>
         <div className="p-6">
@@ -1282,10 +1285,10 @@ export function PodchatView({
                   aria-checked={topic === option}
                   onClick={() => setTopic(option)}
                   className={
-                    "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                    optionButtonBase + " " +
                     (topic === option
-                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
-                      : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                      ? selectedOptionClass
+                      : idleOptionClass)
                   }
                 >
                   <span className="text-sm font-semibold">{option}</span>
@@ -1309,10 +1312,10 @@ export function PodchatView({
                   aria-checked={difficulty === option}
                   onClick={() => setDifficulty(option)}
                   className={
-                    "rounded-xl border p-4 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] " +
+                    optionButtonBase + " " +
                     (difficulty === option
-                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
-                      : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]")
+                      ? selectedOptionClass
+                      : idleOptionClass)
                   }
                 >
                   <span className="text-sm font-semibold">{option}</span>
@@ -1378,9 +1381,9 @@ export function PodchatView({
 
         {evalError && (
           <section className={`${card} p-6`} data-testid="podchat-evaluation-error">
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-              <h3 className="text-sm font-semibold text-red-800">Evaluation Error</h3>
-              <p className="mt-2 text-sm text-red-700">{evalError}</p>
+            <div className="app-message app-message-error">
+              <h3 className="text-sm font-semibold">Evaluation Error</h3>
+              <p className="mt-2 text-sm">{evalError}</p>
               <button
                 type="button"
                 onClick={() => triggerEvaluation(turns)}
@@ -1441,9 +1444,9 @@ export function PodchatView({
                   <h3 className={labelClass}>Corrections / Grammar Notes</h3>
                   <div className="mt-2 flex flex-col gap-3">
                     {evalData.corrections.map((c: PodchatCorrection, i: number) => (
-                      <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
-                        <p className="text-xs text-red-600 line-through">&quot;{c.original}&quot;</p>
-                        <p className="mt-1 text-sm font-medium text-emerald-700">&quot;{c.improved}&quot;</p>
+                      <div key={i} className="app-panel-muted p-4">
+                        <p className="text-xs text-[var(--brand-coral)] line-through">&quot;{c.original}&quot;</p>
+                        <p className="mt-1 text-sm font-medium text-[var(--brand-success-ink)]">&quot;{c.improved}&quot;</p>
                         <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">{c.explanation}</p>
                       </div>
                     ))}
@@ -1467,9 +1470,9 @@ export function PodchatView({
                   <h3 className={labelClass}>Vocabulary suggestions</h3>
                   <div className="mt-2 flex flex-col gap-3">
                     {evalData.vocabularySuggestions.map((v: PodchatVocabularySuggestion, i: number) => (
-                      <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                      <div key={i} className="app-panel-muted p-4">
                         <p className="text-sm font-semibold text-[var(--brand-ink)]">
-                          Instead of <span className="underline decoration-red-500">{v.originalOrBasic}</span>, try: <span className="text-[var(--brand-teal)]">{v.suggestion}</span>
+                          Instead of <span className="underline decoration-[var(--brand-coral)]">{v.originalOrBasic}</span>, try: <span className="text-[var(--brand-teal)]">{v.suggestion}</span>
                         </p>
                         <p className="mt-2 text-xs italic text-[var(--brand-ink-soft)]">Example: &quot;{v.example}&quot;</p>
                       </div>
@@ -1483,7 +1486,7 @@ export function PodchatView({
                   <h3 className={labelClass}>Recurring Errors</h3>
                   <div className="mt-2 flex flex-col gap-3">
                     {evalData.recurringErrors.map((re: PodchatRecurringError, i: number) => (
-                      <div key={i} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+                      <div key={i} className="app-panel-muted p-4">
                         <p className="text-sm font-semibold text-[var(--brand-ink)]">{re.label}</p>
                         <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">Evidence: <span className="italic">&quot;{re.evidence}&quot;</span></p>
                         <p className="mt-2 text-xs text-[var(--brand-teal-ink)]">Practice: {re.practiceFocus}</p>
@@ -1528,25 +1531,25 @@ export function PodchatView({
           <div className="flex flex-wrap gap-2 text-xs font-medium">
             <span
               className={
-                "rounded-full border px-3 py-1 " +
+                "app-status " +
                 (isTimeExpired
-                  ? "border-red-300 bg-red-50 text-red-700"
+                  ? "app-status-error"
                   : remainingSeconds <= 60
-                    ? "border-amber-300 bg-amber-50 text-amber-700"
-                    : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)]")
+                    ? "app-status-warning"
+                    : "app-status-info")
               }
               data-testid="podchat-time-left"
             >
               {isTimeExpired ? "Time's up" : `Time left: ${formatTime(remainingSeconds)}`}
             </span>
             <span
-              className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-[var(--brand-ink)]"
+              className="app-status app-status-info"
               data-testid="podchat-turns-completed"
             >
               Turns completed: {submittedUserTurns}
             </span>
             <span
-              className="rounded-full border border-[var(--brand-teal)]/40 bg-[var(--brand-teal-soft)] px-3 py-1 text-[var(--brand-teal-ink)]"
+              className="app-status app-status-info"
               data-testid="podchat-status"
             >
               {statusLabel(status, isTtsSpeaking)}
@@ -1568,10 +1571,10 @@ export function PodchatView({
                   className={
                     "rounded-xl border p-4 transition-opacity " +
                     (isCurrent
-                      ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]/50"
+                      ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]"
                       : isPrevious
                         ? "border-[var(--brand-border)] bg-[var(--brand-surface-2)]"
-                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] opacity-45 blur-[1px]")
+                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] opacity-70")
                   }
                 >
                   <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
@@ -1585,16 +1588,16 @@ export function PodchatView({
             })}
 
             {status === "submitting" && (
-              <div className="flex items-center gap-2 p-4 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] animate-pulse" data-testid="podchat-loading-turn">
-                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              <div className="app-message app-message-info flex items-center gap-2" data-testid="podchat-loading-turn">
+                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)]"></div>
+                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] opacity-70"></div>
+                <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] opacity-40"></div>
                 <span className="text-xs text-[var(--brand-muted)]">Host is thinking...</span>
               </div>
             )}
           </div>
 
-          <div className="mt-6 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+          <div className="app-panel-muted mt-6 p-4">
             <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
               Speaking Practice
             </h3>
@@ -1604,17 +1607,17 @@ export function PodchatView({
 
             {/* Recording State Views */}
             {recordingState === "recording" && (
-              <div className="mt-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 animate-pulse" data-testid="podchat-recording-indicator">
+              <div className="app-message app-message-error mt-4 flex items-center gap-3" data-testid="podchat-recording-indicator">
                 <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--brand-coral)] opacity-30"></span>
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-[var(--brand-coral)]"></span>
                 </span>
                 <span className="text-sm font-medium">Recording spoken response...</span>
               </div>
             )}
 
             {recordingState === "transcribing" && (
-              <div className="mt-4 flex items-center gap-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-[var(--brand-muted)]" data-testid="podchat-transcribing-status">
+              <div className="app-message app-message-info mt-4 flex items-center gap-3" data-testid="podchat-transcribing-status">
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-[var(--brand-teal)] border-t-transparent"></div>
                 <span className="text-sm font-medium">Transcribing spoken answer...</span>
               </div>
@@ -1638,12 +1641,12 @@ export function PodchatView({
             )}
 
             {turnError && (
-              <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-800" data-testid="podchat-turn-error">
+              <div className="app-message app-message-error mt-4 text-xs" data-testid="podchat-turn-error">
                 {turnError}
               </div>
             )}
             {ttsError && (
-              <div className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800" data-testid="podchat-tts-error">
+              <div className="app-message app-message-warning mt-4 text-xs" data-testid="podchat-tts-error">
                 {ttsError}
               </div>
             )}
@@ -1665,7 +1668,7 @@ export function PodchatView({
                 <button
                   type="button"
                   onClick={stopRecording}
-                  className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+                  className={buttonDanger}
                   data-testid="podchat-stop-recording"
                 >
                   Stop Recording
