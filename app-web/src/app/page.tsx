@@ -88,7 +88,10 @@ import {
   type CloudSnapshotRuntimeResult,
 } from "./lib/storage/cloud-snapshot-runtime";
 import type { SyncMergePlan } from "./lib/storage/sync-merge";
-import { writeVocabularyChangesToCloud } from "./lib/storage/vocab-cloud-runtime";
+import {
+  writeVocabularyChangesToCloud,
+  loadVocabularyFromCloud,
+} from "./lib/storage/vocab-cloud-runtime";
 import {
   writeXpProfileToCloud,
   writeXpEventsToCloud,
@@ -486,6 +489,7 @@ export default function Home() {
     useState<CloudSnapshotRuntimeResult | null>(null);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
   const sessionHistoryCloudLoadKeyRef = useRef<string | null>(null);
+  const vocabularyCloudLoadKeyRef = useRef<string | null>(null);
   const commonplacePodchatRestoreRef = useRef(false);
   const suppressCloudWritesRef = useRef(false);
   const bootstrappedUserRef = useRef<string | null>(null);
@@ -546,6 +550,8 @@ export default function Home() {
     language: AppLanguage;
   } | null>(null);
   const [sessionHistorySaveError, setSessionHistorySaveError] =
+    useState<string | null>(null);
+  const [vocabCloudError, setVocabCloudError] =
     useState<string | null>(null);
 
   // --- Global Theme Mode Application ---
@@ -876,6 +882,42 @@ export default function Home() {
       if (result.status === "failed") {
         setSessionHistorySaveError(
           "Could not load cloud session history. Local fallback remains available.",
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudAuthState]);
+
+  useEffect(() => {
+    if (!cloudAuthState.isLoaded) return;
+
+    if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) {
+      vocabularyCloudLoadKeyRef.current = null;
+      window.setTimeout(() => {
+        setVocabularyItems(storage.loadVocabulary());
+        setVocabCloudError(null);
+      }, 0);
+      return;
+    }
+
+    const loadKey = `cloud:${cloudAuthState.userId}`;
+    if (vocabularyCloudLoadKeyRef.current === loadKey) return;
+    vocabularyCloudLoadKeyRef.current = loadKey;
+
+    let cancelled = false;
+    void loadVocabularyFromCloud({ auth: cloudAuthState }).then((result) => {
+      if (cancelled) return;
+      if (result.status === "loaded") {
+        setVocabularyItems(result.vocabulary);
+        setVocabCloudError(null);
+        return;
+      }
+      if (result.status === "failed") {
+        setVocabCloudError(
+          "Could not load cloud vocabulary notebook. Local fallback remains available.",
         );
       }
     });
@@ -1307,13 +1349,37 @@ export default function Home() {
 
   const persistVocabulary = (nextItems: VocabItem[]) => {
     const prevItems = vocabularyItems;
+    const auth = sessionCloudAuthRef.current;
+
+    if (auth.isLoaded && auth.isSignedIn) {
+      setVocabularyItems(nextItems);
+      setVocabCloudError(null);
+      void writeVocabularyChangesToCloud({
+        auth,
+        previous: prevItems,
+        next: nextItems,
+      }).then((result) => {
+        if (result.status === "saved") {
+          return;
+        }
+        if (result.status === "skipped") {
+          storage.saveVocabulary(nextItems);
+          setVocabCloudError(
+            "Vocabulary notebook is using local fallback because cloud notebook is unavailable.",
+          );
+          return;
+        }
+        if (result.status === "failed") {
+          setVocabCloudError(
+            "Vocabulary change finished, but cloud save failed. Please check your connection.",
+          );
+        }
+      });
+      return;
+    }
+
     setVocabularyItems(nextItems);
     storage.saveVocabulary(nextItems);
-    void writeVocabularyChangesToCloud({
-      auth: sessionCloudAuthRef.current,
-      previous: prevItems,
-      next: nextItems,
-    });
   };
 
   const handleSaveArticleVocabularyCandidate = (candidate: {
@@ -2277,7 +2343,13 @@ export default function Home() {
 
           {/* ===================== Vocabulary Notebook view ===================== */}
           {view === "vocabulary" && (
-            <VocabularyNotebookView
+            <>
+              {vocabCloudError && (
+                <p className="app-message app-message-warning">
+                  {vocabCloudError}
+                </p>
+              )}
+              <VocabularyNotebookView
               mode={vocabularyMode}
               items={vocabularyItems}
               stats={vocabularyStats}
@@ -2324,6 +2396,7 @@ export default function Home() {
               onSkipPracticeCard={handleSkipVocabularyPracticeCard}
               onNextPracticeCard={handleNextVocabularyPracticeCard}
             />
+            </>
           )}
 
           {/* ===================== Commonplace Library view ===================== */}

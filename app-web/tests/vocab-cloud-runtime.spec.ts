@@ -1,10 +1,11 @@
 import { expect, test } from "@playwright/test";
 import {
   writeVocabularyChangesToCloud,
+  loadVocabularyFromCloud,
 } from "../src/app/lib/storage/vocab-cloud-runtime";
 import type { VocabItem, VocabUserSentence, VocabSentenceCorrection } from "../src/app/lib/vocabulary";
 import type { SessionCloudAuthState } from "../src/app/lib/storage/session-cloud-runtime";
-import type { FonetikSupabaseClient } from "../src/app/lib/supabase";
+import type { FonetikSupabaseClient, CreateBrowserSupabaseClientOptions } from "../src/app/lib/supabase";
 
 const testItem: VocabItem = {
   version: 1,
@@ -223,5 +224,82 @@ test.describe("Vocabulary Cloud Runtime difference writes", () => {
     });
 
     expect(result).toEqual({ status: "failed", reason: "write-failed" });
+  });
+});
+
+test.describe("Vocabulary Cloud Runtime load checks", () => {
+  test("loads signed-in vocabulary from Supabase when available", async () => {
+    const loadCalls: Array<{
+      ownerId: string;
+      client: FonetikSupabaseClient;
+    }> = [];
+
+    const dummyClient = { marker: "supabase-client" } as unknown as FonetikSupabaseClient;
+    let createClientOptions: CreateBrowserSupabaseClientOptions | null = null;
+
+    const result = await loadVocabularyFromCloud({
+      auth: signedInAuth,
+      isConfigured: () => true,
+      createClient: (options) => {
+        createClientOptions = options;
+        return dummyClient;
+      },
+      loadVocabulary: async (ownerId, supabaseClient) => {
+        loadCalls.push({ ownerId, client: supabaseClient });
+        return [testItem];
+      },
+    });
+
+    expect(result).toEqual({
+      status: "loaded",
+      vocabulary: [testItem],
+    });
+    expect(loadCalls).toEqual([
+      {
+        ownerId: "user_clerk_123",
+        client: dummyClient,
+      },
+    ]);
+    const token = await (createClientOptions as CreateBrowserSupabaseClientOptions | null)?.accessToken?.();
+    expect(token).toBe("clerk-token");
+  });
+
+  test("does not create a Supabase client when loading signed-out vocabulary", async () => {
+    let loadCallsCount = 0;
+
+    const result = await loadVocabularyFromCloud({
+      auth: {
+        isLoaded: true,
+        isSignedIn: false,
+        userId: null,
+        getToken: null,
+      },
+      isConfigured: () => true,
+      createClient: () => {
+        throw new Error("client should not be created");
+      },
+      loadVocabulary: async () => {
+        loadCallsCount++;
+        return [];
+      },
+    });
+
+    expect(result).toEqual({ status: "skipped", reason: "signed-out" });
+    expect(loadCallsCount).toBe(0);
+  });
+
+  test("returns failed status without throwing when a read fails", async () => {
+    const dummyClient = { marker: "supabase-client" } as unknown as FonetikSupabaseClient;
+
+    const result = await loadVocabularyFromCloud({
+      auth: signedInAuth,
+      isConfigured: () => true,
+      createClient: () => dummyClient,
+      loadVocabulary: async () => {
+        throw new Error("read failed");
+      },
+    });
+
+    expect(result).toEqual({ status: "failed", reason: "read-failed" });
   });
 });

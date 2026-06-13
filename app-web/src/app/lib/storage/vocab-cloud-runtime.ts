@@ -3,6 +3,8 @@
 import {
   createBrowserSupabaseClient,
   isSupabaseConfigured,
+  getSupabaseAccessToken,
+  createSupabaseAccessTokenProvider,
   type CreateBrowserSupabaseClientOptions,
   type FonetikSupabaseClient,
 } from "../supabase";
@@ -11,6 +13,7 @@ import {
   upsertSentenceRows,
   upsertCorrectionRow,
   deleteVocabItemRow,
+  loadSupabaseVocabulary,
 } from "./supabase-vocab-adapter";
 import type { VocabItem, VocabUserSentence, VocabSentenceCorrection } from "../vocabulary";
 import type { SessionCloudAuthState } from "./session-cloud-runtime";
@@ -94,7 +97,7 @@ export async function writeVocabularyChangesToCloud({
 
   let firstToken: string | null = null;
   try {
-    firstToken = await auth.getToken();
+    firstToken = await getSupabaseAccessToken(auth.getToken);
   } catch {
     return { status: "skipped", reason: "missing-token" };
   }
@@ -106,13 +109,7 @@ export async function writeVocabularyChangesToCloud({
   let supabaseClient: FonetikSupabaseClient | null = null;
   try {
     supabaseClient = createClient({
-      accessToken: async () => {
-        try {
-          return (await auth.getToken?.()) ?? firstToken;
-        } catch {
-          return firstToken;
-        }
-      },
+      accessToken: createSupabaseAccessTokenProvider(auth.getToken, firstToken),
     });
   } catch {
     return { status: "skipped", reason: "missing-client" };
@@ -184,5 +181,89 @@ export async function writeVocabularyChangesToCloud({
     return { status: "saved" };
   } catch {
     return { status: "failed", reason: "write-failed" };
+  }
+}
+
+export type VocabCloudReadResult =
+  | {
+      status: "skipped";
+      reason:
+        | "auth-loading"
+        | "signed-out"
+        | "missing-user"
+        | "supabase-not-configured"
+        | "missing-token"
+        | "missing-client";
+    }
+  | { status: "loaded"; vocabulary: VocabItem[] }
+  | { status: "failed"; reason: "read-failed" };
+
+export type LoadVocabularyFromCloudOptions = {
+  auth: SessionCloudAuthState;
+  isConfigured?: () => boolean;
+  createClient?: (
+    options: CreateBrowserSupabaseClientOptions,
+  ) => FonetikSupabaseClient | null;
+  loadVocabulary?: (
+    ownerId: string,
+    supabaseClient: FonetikSupabaseClient,
+  ) => Promise<VocabItem[]>;
+};
+
+export async function loadVocabularyFromCloud({
+  auth,
+  isConfigured = isSupabaseConfigured,
+  createClient = createBrowserSupabaseClient,
+  loadVocabulary = loadSupabaseVocabulary,
+}: LoadVocabularyFromCloudOptions): Promise<VocabCloudReadResult> {
+  if (!auth.isLoaded) {
+    return { status: "skipped", reason: "auth-loading" };
+  }
+
+  if (!auth.isSignedIn) {
+    return { status: "skipped", reason: "signed-out" };
+  }
+
+  if (!auth.userId) {
+    return { status: "skipped", reason: "missing-user" };
+  }
+
+  if (!auth.getToken) {
+    return { status: "skipped", reason: "missing-token" };
+  }
+
+  if (!isConfigured()) {
+    return { status: "skipped", reason: "supabase-not-configured" };
+  }
+
+  let firstToken: string | null = null;
+  try {
+    firstToken = await getSupabaseAccessToken(auth.getToken);
+  } catch {
+    return { status: "skipped", reason: "missing-token" };
+  }
+
+  if (!firstToken) {
+    return { status: "skipped", reason: "missing-token" };
+  }
+
+  let supabaseClient: FonetikSupabaseClient | null = null;
+  try {
+    supabaseClient = createClient({
+      accessToken: createSupabaseAccessTokenProvider(auth.getToken, firstToken),
+    });
+  } catch {
+    return { status: "skipped", reason: "missing-client" };
+  }
+
+  if (!supabaseClient) {
+    return { status: "skipped", reason: "missing-client" };
+  }
+
+  try {
+    const vocabulary = await loadVocabulary(auth.userId, supabaseClient);
+    return { status: "loaded", vocabulary };
+  } catch {
+    return { status: "failed", reason: "read-failed" };
   }
 }
