@@ -76,9 +76,11 @@ import {
   type CloudImportActionResult,
   type CloudRestoreActionResult,
 } from "./components/CloudSyncStatusPanel";
-import { storage } from "./lib/storage";
+import { storage, type StoredSessionRecord } from "./lib/storage";
 import {
   DISABLED_SESSION_CLOUD_AUTH,
+  loadCompletedSessionsFromCloud,
+  writeCompletedSessionToCloud,
   type SessionCloudAuthState,
 } from "./lib/storage/session-cloud-runtime";
 import {
@@ -345,6 +347,21 @@ function updateSessions(next: SessionRecord[]): void {
   notifySessionsListeners();
 }
 
+function replaceSessionsFromCloud(next: SessionRecord[]): void {
+  sessionsCache = next.slice(0, MAX_STORED_SESSIONS);
+  sessionsHydrated = true;
+  notifySessionsListeners();
+}
+
+function prependCloudSession(session: SessionRecord): void {
+  sessionsCache = [
+    session,
+    ...sessionsCache.filter((item) => item.id !== session.id),
+  ].slice(0, MAX_STORED_SESSIONS);
+  sessionsHydrated = true;
+  notifySessionsListeners();
+}
+
 // Trim long upstream provider errors and strip stack-trace-like noise so the UI
 // stays short and readable. Friendly route-level messages (no colon, short)
 // pass through as-is.
@@ -407,6 +424,7 @@ export default function Home() {
   const [cloudSnapshotResult, setCloudSnapshotResult] =
     useState<CloudSnapshotRuntimeResult | null>(null);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
+  const sessionHistoryCloudLoadKeyRef = useRef<string | null>(null);
   const suppressCloudWritesRef = useRef(false);
   const bootstrappedUserRef = useRef<string | null>(null);
   const [clerkUser, setClerkUser] = useState<ClerkUserType>(null);
@@ -465,6 +483,8 @@ export default function Home() {
     userId: string;
     language: AppLanguage;
   } | null>(null);
+  const [sessionHistorySaveError, setSessionHistorySaveError] =
+    useState<string | null>(null);
 
   // --- Global Theme Mode Application ---
   useEffect(() => {
@@ -769,6 +789,39 @@ export default function Home() {
     xpEvents,
     xpProfile,
   ]);
+
+  useEffect(() => {
+    if (!cloudAuthState.isLoaded) return;
+
+    if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) {
+      sessionHistoryCloudLoadKeyRef.current = null;
+      replaceSessionsFromCloud(loadSessions());
+      return;
+    }
+
+    const loadKey = `cloud:${cloudAuthState.userId}`;
+    if (sessionHistoryCloudLoadKeyRef.current === loadKey) return;
+    sessionHistoryCloudLoadKeyRef.current = loadKey;
+
+    let cancelled = false;
+    void loadCompletedSessionsFromCloud({ auth: cloudAuthState }).then((result) => {
+      if (cancelled) return;
+      if (result.status === "loaded") {
+        replaceSessionsFromCloud(result.sessions as SessionRecord[]);
+        setSessionHistorySaveError(null);
+        return;
+      }
+      if (result.status === "failed") {
+        setSessionHistorySaveError(
+          "Could not load cloud session history. Local fallback remains available.",
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudAuthState]);
 
   // --- Profile Bootstrap Runtime ---
   useEffect(() => {
@@ -1954,6 +2007,38 @@ export default function Home() {
     }
   };
 
+  const handleSessionHistoryRecord = useCallback((session: StoredSessionRecord) => {
+    const sessionRecord = session as SessionRecord;
+    const auth = sessionCloudAuthRef.current;
+    if (auth.isLoaded && auth.isSignedIn) {
+      setSessionHistorySaveError(null);
+      void writeCompletedSessionToCloud({
+        auth,
+        session: sessionRecord,
+      }).then((result) => {
+        if (result.status === "saved") {
+          prependCloudSession(sessionRecord);
+          return;
+        }
+        if (result.status === "skipped") {
+          updateSessions([sessionRecord, ...sessionsCache]);
+          setSessionHistorySaveError(
+            "Session history is using local fallback because cloud history is unavailable.",
+          );
+          return;
+        }
+        if (result.status === "failed") {
+          setSessionHistorySaveError(
+            "Session evaluation finished, but cloud history save failed. Please try another session after checking your connection.",
+          );
+        }
+      });
+      return;
+    }
+
+    updateSessions([sessionRecord, ...sessionsCache]);
+  }, []);
+
   const sidebarProps: SidebarProps = {
     view,
     level,
@@ -2061,16 +2146,26 @@ export default function Home() {
                 : "block space-y-6 lg:pb-10 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
             }`}
           >
-            <CloudSyncStatusPanel
+          <CloudSyncStatusPanel
             result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
             onConfirmRestore={handleConfirmCloudRestore}
             onConfirmImport={handleConfirmCloudImport}
           />
+          {sessionHistorySaveError && (
+            <p className="app-message app-message-warning">
+              {sessionHistorySaveError}
+            </p>
+          )}
 
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
             <PodchatView
               key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : pendingCommonplaceMapContextRef ? "commonplace-map" : "generic"}`}
+              sessionLevel={level}
+              sessionMode={mode}
+              sessionProvider={aiProvider}
+              todayTarget={target}
+              onSessionHistoryRecord={handleSessionHistoryRecord}
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
               commonplaceContext={pendingCommonplaceContext}

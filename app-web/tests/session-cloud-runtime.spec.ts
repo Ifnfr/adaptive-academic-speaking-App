@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  loadCompletedSessionsFromCloud,
   writeCompletedSessionToCloud,
   type SessionCloudAuthState,
 } from "../src/app/lib/storage/session-cloud-runtime";
@@ -193,5 +194,73 @@ test.describe("best-effort session cloud runtime", () => {
     });
 
     expect(result).toEqual({ status: "failed", reason: "write-failed" });
+  });
+
+  test("loads signed-in session history from Supabase when available", async () => {
+    const clientMock = createClientMock();
+    const loadCalls: Array<{
+      ownerId: string;
+      client: FonetikSupabaseClient;
+    }> = [];
+
+    const result = await loadCompletedSessionsFromCloud({
+      auth: signedInAuth,
+      isConfigured: () => true,
+      createClient: clientMock.createClient,
+      loadSessions: async (ownerId, supabaseClient) => {
+        loadCalls.push({ ownerId, client: supabaseClient });
+        return [completedSession];
+      },
+    });
+
+    const accessToken = clientMock.getOptions()?.accessToken;
+
+    expect(result).toEqual({
+      status: "loaded",
+      sessions: [completedSession],
+    });
+    expect(loadCalls).toEqual([
+      {
+        ownerId: "user_clerk_123",
+        client: clientMock.client,
+      },
+    ]);
+    await expect(accessToken?.()).resolves.toBe("clerk-session-token");
+  });
+
+  test("does not create a Supabase client when loading signed-out history", async () => {
+    const clientMock = createClientMock();
+
+    const result = await loadCompletedSessionsFromCloud({
+      auth: {
+        isLoaded: true,
+        isSignedIn: false,
+        userId: null,
+        getToken: null,
+      },
+      isConfigured: () => true,
+      createClient: clientMock.createClient,
+      loadSessions: async () => {
+        throw new Error("load should not run");
+      },
+    });
+
+    expect(result).toEqual({ status: "skipped", reason: "signed-out" });
+    expect(clientMock.getOptions()).toBeNull();
+  });
+
+  test("returns failed without throwing when the Supabase read fails", async () => {
+    const clientMock = createClientMock();
+
+    const result = await loadCompletedSessionsFromCloud({
+      auth: signedInAuth,
+      isConfigured: () => true,
+      createClient: clientMock.createClient,
+      loadSessions: async () => {
+        throw new Error("cloud read failed");
+      },
+    });
+
+    expect(result).toEqual({ status: "failed", reason: "read-failed" });
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { StoredSessionRecord } from "../lib/storage/types";
 
 type PodchatPhase =
   | "setup"
@@ -242,6 +243,11 @@ type PodchatCommonplaceMapDiscussionContext = {
 };
 
 export interface PodchatViewProps {
+  sessionLevel?: string;
+  sessionMode?: string;
+  sessionProvider?: string;
+  todayTarget?: string;
+  onSessionHistoryRecord?: (record: StoredSessionRecord) => void;
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
   commonplaceContext?: PodchatCommonplaceContext | null;
@@ -253,6 +259,11 @@ export interface PodchatViewProps {
 }
 
 export function PodchatView({
+  sessionLevel = "Intermediate",
+  sessionMode = "Fluency Sprint",
+  sessionProvider = "Claude",
+  todayTarget = "",
+  onSessionHistoryRecord,
   articleContext,
   onClearArticleContext,
   commonplaceContext,
@@ -313,6 +324,67 @@ export function PodchatView({
         .join("\n\n"),
     [turns],
   );
+
+  function buildSessionCsv(record: StoredSessionRecord): string {
+    const escapeCsv = (value: string | number) => {
+      const text = String(value);
+      return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+
+    return [
+      "Date,Level,Mode,Main_Weakness,Evidence,Next_Target",
+      [
+        record.date,
+        record.level,
+        record.mode,
+        record.mainWeakness,
+        record.evidence,
+        record.retryTask,
+      ]
+        .map(escapeCsv)
+        .join(","),
+    ].join("\n");
+  }
+
+  function buildSessionHistoryRecord(
+    finalTurns: PodchatTurn[],
+    evaluation: PodchatEvaluateResponse,
+  ): StoredSessionRecord {
+    const now = new Date();
+    const date = now.toISOString();
+    const transcript = finalTurns
+      .map((turn) => `${speakerLabel(turn.speaker)}: ${turn.text}`)
+      .join("\n");
+    const firstError = evaluation.recurringErrors[0] ?? null;
+    const recordWithoutCsv: Omit<StoredSessionRecord, "csv"> = {
+      id: `podchat-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+      date,
+      level: sessionLevel,
+      mode: sessionMode,
+      feedbackType: "Deep",
+      sessionType: "Standard",
+      provider: sessionProvider,
+      todayTarget: todayTarget.trim() || `${topic} Podchat practice`,
+      durationSeconds,
+      transcript,
+      mainWeakness:
+        firstError?.label ||
+        evaluation.nextPracticeFocus ||
+        "Review the session feedback.",
+      evidence: firstError?.evidence || evaluation.summary,
+      betterPhrase: evaluation.betterSentences[0] ?? "",
+      retryTask: firstError?.practiceFocus || evaluation.nextPracticeFocus,
+      retryTranscript: "",
+    };
+    const record: StoredSessionRecord = {
+      ...recordWithoutCsv,
+      csv: "",
+    };
+    return {
+      ...record,
+      csv: buildSessionCsv(record),
+    };
+  }
 
   const buttonPrimary = "app-button app-button-primary";
   const buttonSecondary = "app-button app-button-secondary";
@@ -740,6 +812,9 @@ export function PodchatView({
       }
       const data = await response.json();
       setEvalData(data);
+      onSessionHistoryRecord?.(
+        buildSessionHistoryRecord(finalTurns, data as PodchatEvaluateResponse),
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setEvalError(msg || "An error occurred during evaluation.");
