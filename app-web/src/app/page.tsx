@@ -95,6 +95,8 @@ import {
 import {
   isSupabaseConfigured,
   createBrowserSupabaseClient,
+  createSupabaseAccessTokenProvider,
+  getSupabaseAccessToken,
 } from "./lib/supabase";
 import {
   bootstrapProfile,
@@ -784,17 +786,14 @@ export default function Home() {
     async function runBootstrap() {
       if (!cloudAuthState.userId || !cloudAuthState.getToken) return;
       try {
-        const token = await cloudAuthState.getToken();
+        const token = await getSupabaseAccessToken(cloudAuthState.getToken);
         if (!token || cancelled) return;
 
         const supabaseClient = createBrowserSupabaseClient({
-          accessToken: async () => {
-            try {
-              return (await cloudAuthState.getToken?.()) ?? token;
-            } catch {
-              return token;
-            }
-          },
+          accessToken: createSupabaseAccessTokenProvider(
+            cloudAuthState.getToken,
+            token,
+          ),
         });
         if (!supabaseClient || cancelled) return;
 
@@ -854,16 +853,13 @@ export default function Home() {
 
         if (!isSupabaseConfigured()) return;
 
-        const token = await cloudAuthState.getToken();
+        const token = await getSupabaseAccessToken(cloudAuthState.getToken);
         if (!token || cancelled) return;
         const supabaseClient = createBrowserSupabaseClient({
-          accessToken: async () => {
-            try {
-              return (await cloudAuthState.getToken?.()) ?? token;
-            } catch {
-              return token;
-            }
-          },
+          accessToken: createSupabaseAccessTokenProvider(
+            cloudAuthState.getToken,
+            token,
+          ),
         });
         if (!supabaseClient || cancelled) return;
         const p = await loadSupabaseProfile(cloudAuthState.userId, supabaseClient);
@@ -908,16 +904,13 @@ export default function Home() {
 
       if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
 
-      const token = await cloudAuthState.getToken();
+      const token = await getSupabaseAccessToken(cloudAuthState.getToken);
       if (!token) throw new Error("No auth token");
       const supabaseClient = createBrowserSupabaseClient({
-        accessToken: async () => {
-          try {
-            return (await cloudAuthState.getToken?.()) ?? token;
-          } catch {
-            return token;
-          }
-        },
+        accessToken: createSupabaseAccessTokenProvider(
+          cloudAuthState.getToken,
+          token,
+        ),
       });
       if (!supabaseClient) throw new Error("No Supabase client");
       await updateSupabaseProfilePreferences(

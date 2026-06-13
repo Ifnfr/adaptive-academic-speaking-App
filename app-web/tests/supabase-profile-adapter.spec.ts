@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, test, type TestInfo } from "@playwright/test";
 import {
+  createSupabaseAccessTokenProvider,
+  getSupabaseAccessToken,
+} from "../src/app/lib/supabase";
+import {
   loadSupabaseProfile,
   mapClerkProfileSeedToSupabaseUpsert,
   mapProfilePatchToSupabaseUpsert,
@@ -134,14 +138,28 @@ function createUpsertProfileClientMock(error: Error | null = null) {
   };
 }
 
-function createUpdateProfileClientMock(error: Error | null = null) {
+function createUpdateProfileClientMock({
+  data = { owner_id: "user_clerk_123" },
+  error = null,
+}: {
+  data?: { owner_id: string } | null;
+  error?: Error | null;
+} = {}) {
   const calls: string[] = [];
   let updateRow: unknown = null;
 
   const query = {
     eq(column: string, value: string) {
       calls.push(`eq:${column}:${value}`);
-      return Promise.resolve({ error });
+      return query;
+    },
+    select(columns: string) {
+      calls.push(`select:${columns}`);
+      return query;
+    },
+    maybeSingle() {
+      calls.push("maybeSingle");
+      return Promise.resolve({ data, error });
     },
   };
 
@@ -393,6 +411,40 @@ test.describe("Supabase profile adapter mapping", () => {
   });
 });
 
+test.describe("Supabase browser token helpers", () => {
+  test("requests the Clerk Supabase JWT template before falling back", async () => {
+    const calls: unknown[] = [];
+    const token = await getSupabaseAccessToken(async (options?: unknown) => {
+      calls.push(options);
+      return "supabase-jwt";
+    });
+
+    expect(token).toBe("supabase-jwt");
+    expect(calls).toEqual([{ template: "supabase" }]);
+  });
+
+  test("falls back to the default Clerk token when the Supabase template is unavailable", async () => {
+    const calls: unknown[] = [];
+    const token = await getSupabaseAccessToken(async (options?: unknown) => {
+      calls.push(options);
+      if (options) throw new Error("template missing");
+      return "default-jwt";
+    });
+
+    expect(token).toBe("default-jwt");
+    expect(calls).toEqual([{ template: "supabase" }, undefined]);
+  });
+
+  test("creates a reusable Supabase access token provider with a stable fallback", async () => {
+    const provider = createSupabaseAccessTokenProvider(
+      async () => null,
+      "first-jwt",
+    );
+
+    await expect(provider()).resolves.toBe("first-jwt");
+  });
+});
+
 test.describe("Supabase profile adapter mocked client behavior", () => {
   test("loads an owner-scoped profile row", async () => {
     const mock = createLoadProfileClientMock({ data: profileRow });
@@ -487,6 +539,8 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
       "from:profiles",
       "update",
       "eq:owner_id:user_clerk_123",
+      "select:owner_id",
+      "maybeSingle",
     ]);
     expect(mock.getUpdateRow()).toEqual({
       display_name: "New Name",
@@ -516,9 +570,9 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
   });
 
   test("throws the Supabase error returned by update", async () => {
-    const mock = createUpdateProfileClientMock(
-      new Error("profile update failed"),
-    );
+    const mock = createUpdateProfileClientMock({
+      error: new Error("profile update failed"),
+    });
 
     await expect(
       updateSupabaseProfilePreferences(
@@ -527,6 +581,18 @@ test.describe("Supabase profile adapter mocked client behavior", () => {
         mock.client,
       ),
     ).rejects.toThrow("profile update failed");
+  });
+
+  test("throws when profile preferences update does not affect an owner row", async () => {
+    const mock = createUpdateProfileClientMock({ data: null });
+
+    await expect(
+      updateSupabaseProfilePreferences(
+        "user_clerk_123",
+        { publicProfileEnabled: true },
+        mock.client,
+      ),
+    ).rejects.toThrow("profile_preferences_update_missing_row");
   });
 });
 

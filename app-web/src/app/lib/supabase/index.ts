@@ -3,7 +3,11 @@ export {
   isSupabaseConfigured,
   type SupabaseBrowserConfig,
 } from "./config";
-export { createBrowserSupabaseClient } from "./browserClient";
+export {
+  createBrowserSupabaseClient,
+  createSupabaseAccessTokenProvider,
+  getSupabaseAccessToken,
+} from "./browserClient";
 export type {
   CreateBrowserSupabaseClientOptions,
   FonetikSupabaseClient,

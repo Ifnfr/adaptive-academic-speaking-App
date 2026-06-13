@@ -326,13 +326,19 @@ export async function updateSupabaseProfilePreferences(
   const payload = mapProfilePreferencesPatchToSupabaseUpdate(patch);
   if (Object.keys(payload).length === 0) return;
 
-  const { error } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from(PROFILES_TABLE)
     .update(payload)
-    .eq("owner_id", ownerId);
+    .eq("owner_id", ownerId)
+    .select("owner_id")
+    .maybeSingle();
 
   if (error) {
     throw error;
+  }
+
+  if (!data) {
+    throw new Error("profile_preferences_update_missing_row");
   }
 }
 
