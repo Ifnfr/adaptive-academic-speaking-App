@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -408,6 +409,11 @@ export default function Home() {
   const bootstrappedUserRef = useRef<string | null>(null);
   const [clerkUser, setClerkUser] = useState<ClerkUserType>(null);
   const [isClerkUserLoaded, setIsClerkUserLoaded] = useState(false);
+
+  const handleUserChange = useCallback((u: ClerkUserType, loaded: boolean) => {
+    setClerkUser(u);
+    setIsClerkUserLoaded(loaded);
+  }, []);
 
   // --- Landing / Login Cover Page State ---
   const [coverState, setCoverState] = useState<"landing" | "login" | "app">("landing");
@@ -1981,10 +1987,7 @@ export default function Home() {
       )}
       {CLERK_ENABLED && (
         <ClerkUserBridge
-          onUserChange={(u, loaded) => {
-            setClerkUser(u);
-            setIsClerkUserLoaded(loaded);
-          }}
+          onUserChange={handleUserChange}
         />
       )}
 
@@ -2517,9 +2520,10 @@ function SessionCloudAuthBridge({
   onAuthStateChange,
 }: SessionCloudAuthBridgeProps) {
   const { getToken, isLoaded, isSignedIn, userId } = useAuth();
+  const lastStateRef = useRef<{ isLoaded: boolean; isSignedIn: boolean; userId: string | null } | null>(null);
 
   useEffect(() => {
-    let nextAuth = {
+    let nextAuth: SessionCloudAuthState = {
       isLoaded,
       isSignedIn: isSignedIn === true,
       userId: userId ?? null,
@@ -2545,14 +2549,29 @@ function SessionCloudAuthBridge({
       }
     }
 
-    authRef.current = nextAuth;
-    onAuthStateChange(nextAuth);
+    const last = lastStateRef.current;
+    if (
+      !last ||
+      last.isLoaded !== nextAuth.isLoaded ||
+      last.isSignedIn !== nextAuth.isSignedIn ||
+      last.userId !== nextAuth.userId
+    ) {
+      lastStateRef.current = {
+        isLoaded: nextAuth.isLoaded,
+        isSignedIn: nextAuth.isSignedIn,
+        userId: nextAuth.userId,
+      };
+      authRef.current = nextAuth;
+      onAuthStateChange(nextAuth);
+    }
+  }, [authRef, getToken, isLoaded, isSignedIn, onAuthStateChange, userId]);
 
+  useEffect(() => {
     return () => {
       authRef.current = DISABLED_SESSION_CLOUD_AUTH;
       onAuthStateChange(DISABLED_SESSION_CLOUD_AUTH);
     };
-  }, [authRef, getToken, isLoaded, isSignedIn, onAuthStateChange, userId]);
+  }, [authRef, onAuthStateChange]);
 
   return null;
 }
@@ -2563,7 +2582,12 @@ type ClerkUserBridgeProps = {
 
 function ClerkUserBridge({ onUserChange }: ClerkUserBridgeProps) {
   const clerkUser = useUser();
+  const lastUserRef = useRef<{ id: string | null; loaded: boolean } | null>(null);
+
   useEffect(() => {
+    let currentUser: ClerkUserType = null;
+    let isLoaded = false;
+
     if (process.env.NODE_ENV !== "production") {
       const testWindow = window as typeof window & {
         __MOCK_AUTH__?: {
@@ -2574,16 +2598,28 @@ function ClerkUserBridge({ onUserChange }: ClerkUserBridgeProps) {
         };
       };
       if (testWindow.__MOCK_AUTH__) {
-        const mockUser = {
+        currentUser = {
           id: testWindow.__MOCK_AUTH__.userId,
           primaryEmailAddress: { emailAddress: testWindow.__MOCK_AUTH__.email ?? "test@example.com" },
           fullName: testWindow.__MOCK_AUTH__.displayName ?? "Mock User",
         } as unknown as ClerkUserType;
-        onUserChange(mockUser, true);
-        return;
+        isLoaded = true;
       }
     }
-    onUserChange(clerkUser.user, clerkUser.isLoaded);
+
+    if (!currentUser && !isLoaded) {
+      currentUser = clerkUser.user;
+      isLoaded = clerkUser.isLoaded;
+    }
+
+    const currentId = currentUser?.id ?? null;
+    const lastId = lastUserRef.current?.id ?? null;
+    const lastLoaded = lastUserRef.current?.loaded ?? false;
+
+    if (currentId !== lastId || isLoaded !== lastLoaded) {
+      lastUserRef.current = { id: currentId, loaded: isLoaded };
+      onUserChange(currentUser, isLoaded);
+    }
   }, [clerkUser.user, clerkUser.isLoaded, onUserChange]);
   return null;
 }
