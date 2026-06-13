@@ -41,18 +41,24 @@ export function Topbar({
           {description}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="app-status app-status-info">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
-          {hasActiveSession ? t("topbar.sessionActive") : t("topbar.idle")}
-        </span>
-        <span className="app-status app-status-info">
-          {mode}
-        </span>
-        <span className="app-status app-status-info">
-          {level}
-        </span>
-        {authSlot}
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="app-status app-status-info">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
+            {hasActiveSession ? t("topbar.sessionActive") : t("topbar.idle")}
+          </span>
+          <span className="app-status app-status-info">
+            {mode}
+          </span>
+          <span className="app-status app-status-info">
+            {level}
+          </span>
+        </div>
+        {authSlot && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {authSlot}
+          </div>
+        )}
       </div>
     </header>
   );

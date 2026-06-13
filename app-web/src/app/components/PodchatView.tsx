@@ -323,7 +323,7 @@ export function PodchatView({
   const optionButtonBase =
     "min-h-20 rounded-xl border p-4 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)]";
   const selectedOptionClass =
-    "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]";
+    "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)] dark:bg-[var(--brand-teal-soft)] dark:text-[var(--brand-teal-ink)] dark:border-[var(--brand-teal)]";
   const idleOptionClass =
     "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-surface)]";
 
@@ -1009,7 +1009,7 @@ export function PodchatView({
                       className={
                         "mt-1 block text-xs " +
                         (difficulty === option
-                          ? "text-[var(--brand-accent-fill-ink)]"
+                          ? "text-[var(--brand-accent-fill-ink)] dark:text-[var(--brand-teal-ink)]"
                           : "text-[var(--brand-ink-soft)]")
                       }
                       data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
@@ -1128,7 +1128,7 @@ export function PodchatView({
                       className={
                         "mt-1 block text-xs " +
                         (difficulty === option
-                          ? "text-[var(--brand-accent-fill-ink)]"
+                          ? "text-[var(--brand-accent-fill-ink)] dark:text-[var(--brand-teal-ink)]"
                           : "text-[var(--brand-ink-soft)]")
                       }
                       data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
@@ -1228,7 +1228,7 @@ export function PodchatView({
                       className={
                         "mt-1 block text-xs " +
                         (difficulty === option
-                          ? "text-[var(--brand-accent-fill-ink)]"
+                          ? "text-[var(--brand-accent-fill-ink)] dark:text-[var(--brand-teal-ink)]"
                           : "text-[var(--brand-ink-soft)]")
                       }
                       data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
@@ -1323,7 +1323,7 @@ export function PodchatView({
                     className={
                       "mt-1 block text-xs " +
                       (difficulty === option
-                        ? "text-[var(--brand-accent-fill-ink)]"
+                        ? "text-[var(--brand-accent-fill-ink)] dark:text-[var(--brand-teal-ink)]"
                         : "text-[var(--brand-ink-soft)]")
                     }
                     data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}

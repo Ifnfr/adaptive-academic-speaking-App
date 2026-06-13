@@ -537,7 +537,7 @@ export function ArticlePracticeView({
                   key={option.value}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
                     articleInputMode === option.value
-                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
+                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)] dark:bg-[var(--brand-teal-soft)] dark:text-[var(--brand-teal-ink)] dark:border-[var(--brand-teal)]"
                       : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)]"
                   }`}
                 >

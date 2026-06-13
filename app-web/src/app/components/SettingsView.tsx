@@ -268,7 +268,7 @@ function CommonplaceThemeSwatches({
                 "flex min-h-[4.5rem] flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left text-xs font-semibold transition-colors",
                 "focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:opacity-60",
                 isSelected
-                  ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
+                  ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)] dark:bg-[var(--brand-teal-soft)] dark:text-[var(--brand-teal-ink)] dark:border-[var(--brand-teal)]"
                   : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)] hover:border-[var(--brand-teal)]/40 hover:bg-[var(--brand-surface-2)]",
               ].join(" ")}
               data-testid={`${testId}-option-${choice.id}`}
