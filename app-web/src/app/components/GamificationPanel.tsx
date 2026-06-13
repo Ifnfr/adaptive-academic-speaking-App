@@ -1,11 +1,28 @@
-import { useState, useEffect } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 import type { SpeakerLevelProgress, XpProfile, XpEvent } from "../lib/gamification";
 import { XP_RULES, getLocalDateString } from "../lib/gamification";
-import { loadProgress } from "../lib/learning-path/progress";
 import { XpClaimCard } from "./XpClaimCard";
 import type { SidebarView } from "./Sidebar";
+
+const learningPathEnabled = false;
+
+type QuestStatus =
+  | "completed"
+  | "inProgress"
+  | "available"
+  | "locked"
+  | "comeBackLater"
+  | "optional";
+
+type DailyQuest = {
+  id: string;
+  title: string;
+  desc: string;
+  status: QuestStatus;
+  xpHint: string | null;
+  view: SidebarView | null;
+};
 
 type GamificationPanelProps = {
   profile: XpProfile;
@@ -39,50 +56,12 @@ export function GamificationPanel({
   const { t } = useI18n(appLanguage);
   const percent = Math.round(progress.progressRatio * 100);
 
-  const [lpStatus, setLpStatus] = useState<"completed" | "inProgress" | "available">("available");
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const lp = loadProgress();
-        if (lp && lp.cards) {
-          const todayStr = getLocalDateString();
-          const cards = Object.values(lp.cards);
-
-          const hasCompletedToday = cards.some(
-            (card) =>
-              card.status === "completed" &&
-              card.lastUpdatedAt &&
-              getLocalDateString(new Date(card.lastUpdatedAt)) === todayStr
-          );
-
-          if (hasCompletedToday) {
-            setLpStatus("completed");
-            return;
-          }
-
-          const hasInProgressToday = cards.some(
-            (card) =>
-              (card.status === "viewed" || card.status === "attempted" || card.status === "recorded") &&
-              card.lastUpdatedAt &&
-              getLocalDateString(new Date(card.lastUpdatedAt)) === todayStr
-          );
-
-          if (hasInProgressToday) {
-            setLpStatus("inProgress");
-            return;
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load learning path progress for quests", e);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
   const todayStr = getLocalDateString();
   const eventsToday = xpEvents ? xpEvents.filter((e) => e.localDate === todayStr) : [];
 
+  const sentencePracticeCompletedToday = eventsToday.some(
+    (e) => e.type === "vocab_sentence_submitted"
+  );
   const podchatCompletedToday = eventsToday.some(
     (e) =>
       e.type === "podchat_beginner_evaluated" ||
@@ -104,14 +83,26 @@ export function GamificationPanel({
     (e) => e.type === "weekly_review_completed"
   );
 
-  const quests = [
+  const quests: DailyQuest[] = [
+    ...(learningPathEnabled
+      ? [
+          {
+            id: "lp",
+            title: t("progress.quests.lp.title"),
+            desc: t("progress.quests.lp.desc"),
+            status: "available" as const,
+            xpHint: null,
+            view: "learning-path" as const,
+          },
+        ]
+      : []),
     {
-      id: "lp",
-      title: t("progress.quests.lp.title"),
-      desc: t("progress.quests.lp.desc"),
-      status: lpStatus,
-      xpHint: null,
-      view: "learning-path",
+      id: "sentence-practice",
+      title: "Sentence Practice",
+      desc: "Use one saved word in a complete sentence.",
+      status: sentencePracticeCompletedToday ? "completed" : "available",
+      xpHint: `+${XP_RULES.vocab_sentence_submitted.xp} XP`,
+      view: "vocabulary",
     },
     {
       id: "speaking",

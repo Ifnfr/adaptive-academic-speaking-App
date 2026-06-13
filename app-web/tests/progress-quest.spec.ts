@@ -46,17 +46,28 @@ test.describe("Progress & Quest UI Clarity Tests", () => {
     // 3. Daily Quest section appears below Daily Claim
     const dailyQuestTitle = page.locator("h3:has-text(\"Daily Quest\")");
     await expect(dailyQuestTitle).toBeVisible();
-    
+
     const dailyQuestSubtitle = page.locator("p:has-text(\"Complete these activities to build your daily speaking habit.\")");
     await expect(dailyQuestSubtitle).toBeVisible();
 
-    // 4. Daily Quest list shows the expected safe quest titles
-    const lpQuest = page.getByText("Today's Learning Path").first();
-    await expect(lpQuest).toBeVisible();
-    
+    // 4. Daily Quest list hides disabled Learning Path and shows active safe quest titles
+    const dailyQuestSection = page.getByTestId("daily-quests-section");
+    await expect(dailyQuestSection).not.toContainText("Today's Learning Path");
+    await expect(dailyQuestSection).not.toContainText("Complete your recommended lesson.");
+
+    const sentenceQuest = dailyQuestSection
+      .locator(".app-panel")
+      .filter({ hasText: "Sentence Practice" })
+      .first();
+    await expect(sentenceQuest).toBeVisible();
+    await expect(sentenceQuest).toContainText(
+      "Use one saved word in a complete sentence.",
+    );
+    await expect(sentenceQuest).toContainText("+15 XP");
+
     const speakingQuest = page.getByText("Speaking Practice").first();
     await expect(speakingQuest).toBeVisible();
-    
+
     const vocabQuest = page.getByText("Vocabulary Review").first();
     await expect(vocabQuest).toBeVisible();
 
@@ -70,7 +81,7 @@ test.describe("Progress & Quest UI Clarity Tests", () => {
     await expect(claimQuest).toBeVisible();
 
     // 5. Quest copy does not mention raw scoring, transcript, AI grading, or punitive labels
-    const questContainerText = await page.getByTestId("daily-quests-section").innerText();
+    const questContainerText = await dailyQuestSection.innerText();
     const forbiddenWords = ["failed", "missed", "bad", "weak", "punitive"];
     for (const word of forbiddenWords) {
       expect(questContainerText.toLowerCase()).not.toContain(word);
@@ -89,5 +100,11 @@ test.describe("Progress & Quest UI Clarity Tests", () => {
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
     await expect(page.getByRole("radio", { name: "Economics" })).toBeVisible();
     await expect(page.getByRole("radio", { name: /Intermediate/ })).toBeVisible();
+
+    // 7. Sentence Practice goes to Vocabulary Notebook, never the disabled Learning Path
+    await sidebarProgressQuestBtn.click();
+    await sentenceQuest.getByRole("button", { name: /Go/ }).click();
+    await expect(page.locator("h2:has-text(\"Vocabulary Notebook\")")).toBeVisible();
+    await expect(page.locator("[data-testid='learning-path-container']")).not.toBeVisible();
   });
 });
