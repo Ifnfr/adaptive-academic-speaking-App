@@ -310,6 +310,12 @@ const emptyForm: CommonplaceFormState = {
   relevance: "",
 };
 
+const buttonPrimary = "app-button app-button-primary";
+const buttonSecondary = "app-button app-button-secondary";
+const buttonDanger = "app-button app-button-danger";
+const panel = "app-panel brand-grid";
+const panelMuted = "app-panel-muted";
+
 const DEFAULT_TEST_OWNER_ID = "commonplace-test-owner";
 
 function splitList(value: string): string[] {
@@ -1946,7 +1952,7 @@ export function CommonplaceView({
           }`}
         >
           {unavailableMessage ? (
-            <div className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)]">
+            <div className="app-message app-message-info">
               {unavailableMessage}
             </div>
           ) : (
@@ -1954,7 +1960,7 @@ export function CommonplaceView({
               {error && (
                 <p
                   role="alert"
-                  className="mb-4 rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] px-4 py-3 text-sm text-[#8A1F15]"
+                  className="app-message app-message-error mb-4"
                 >
                   {error}
                 </p>
@@ -1966,7 +1972,7 @@ export function CommonplaceView({
                     <button
                       type="button"
                       onClick={openMainMapsRegistry}
-                      className="rounded-lg border border-[var(--brand-teal)]/25 bg-[var(--brand-teal-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-teal-ink)] transition-colors hover:bg-[#BFEDE5]"
+                      className={`${buttonSecondary} min-h-9 px-3 py-1.5 text-xs`}
                       data-testid="commonplace-main-maps-btn"
                     >
                       Main Maps
@@ -2160,7 +2166,7 @@ function CommonplaceSidebar({
       <button
         type="button"
         onClick={onBackToFonetik}
-        className="w-full rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-left text-sm font-semibold text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+        className={`${buttonSecondary} w-full justify-start text-left`}
       >
         ← Kembali ke Fonetik
       </button>
@@ -2172,7 +2178,7 @@ function CommonplaceSidebar({
         <button
           type="button"
           onClick={onCreate}
-          className="rounded-lg bg-[var(--brand-teal)] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2"
+          className={`${buttonPrimary} min-h-9 px-3 py-1.5 text-xs`}
         >
           + Baru
         </button>
@@ -2189,7 +2195,7 @@ function CommonplaceSidebar({
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Title, book, shortcode, tag"
-          className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] outline-none placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-teal)] focus:ring-2 focus:ring-[var(--brand-teal)]/20"
+          className="app-field"
         />
       </label>
 
@@ -2199,11 +2205,11 @@ function CommonplaceSidebar({
         style={viewportBounded ? { maxHeight: "32rem" } : undefined}
       >
         {isLoading ? (
-          <p className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info">
             Loading notes...
           </p>
         ) : notes.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-white/70 px-3 py-4 text-sm leading-6 text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info border-dashed">
             No matching notes yet.
           </p>
         ) : (
@@ -2329,7 +2335,7 @@ function LibraryView({
 }) {
   if (isLoading) {
     return (
-      <p className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-3 text-sm text-[var(--brand-ink-soft)] lg:min-h-0 lg:flex-1">
+      <p className="app-message app-message-info lg:min-h-0 lg:flex-1">
         Loading Commonplace notes...
       </p>
     );
@@ -2453,7 +2459,7 @@ function NoteForm({
             {mode === "edit" ? "Edit note" : "Create note"}
           </h3>
           {shortcode && (
-            <p className="mt-1 text-sm text-[#534AB7]">
+            <p className="mt-1 text-sm text-[var(--brand-teal)]">
               Shortcode {shortcode}
             </p>
           )}
@@ -2461,7 +2467,7 @@ function NoteForm({
         <button
           type="button"
           onClick={onBack}
-          className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+          className={buttonSecondary}
         >
           ← Library
         </button>
@@ -2537,14 +2543,14 @@ function NoteForm({
           type="button"
           onClick={onSubmit}
           disabled={isSaving}
-          className="rounded-lg bg-[#534AB7] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#413797] disabled:cursor-not-allowed disabled:opacity-70"
+          className={buttonPrimary}
         >
           {isSaving ? "Saving..." : "Save note"}
         </button>
         <button
           type="button"
           onClick={onBack}
-          className="rounded-lg border border-[var(--brand-border)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+          className={buttonSecondary}
         >
           Cancel
         </button>
@@ -2588,21 +2594,21 @@ function NoteDetail({
           <button
             type="button"
             onClick={onBack}
-            className="rounded-lg border border-[var(--brand-border)] bg-white px-4 py-2 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+            className={buttonSecondary}
           >
             ← Library
           </button>
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-lg border border-[#534AB7]/30 bg-[#EEEDFE] px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#E3E0FF]"
+            className={buttonSecondary}
           >
             Edit
           </button>
         </div>
 
         <div>
-          <p className="text-sm font-semibold text-[#534AB7]">
+          <p className="text-sm font-semibold text-[var(--brand-teal)]">
             {note.shortcode}
           </p>
           <h3 className="mt-1 text-2xl font-semibold text-[var(--brand-ink)]">
@@ -2640,7 +2646,7 @@ function NoteDetail({
         <button
           type="button"
           onClick={onOpenMindMap}
-          className="rounded-lg border border-[#534AB7]/30 bg-white px-4 py-2 text-sm font-semibold text-[#332C85] hover:bg-[#EEEDFE]"
+          className={buttonSecondary}
           data-testid="commonplace-note-mind-map-btn"
         >
           Buka Mind Map
@@ -2649,7 +2655,7 @@ function NoteDetail({
             <button
               type="button"
               onClick={onDiscussInPodchat}
-              className="rounded-lg border border-[#1F7A7A]/30 bg-[#EAF8F7] px-4 py-2 text-sm font-semibold text-[#155E5E] hover:bg-[#D8F0EF]"
+              className={buttonPrimary}
             >
               Diskusi di Podchat
             </button>
@@ -2657,7 +2663,7 @@ function NoteDetail({
           <button
             type="button"
             onClick={onAskDelete}
-            className="rounded-lg border border-[#B42318]/25 bg-white px-4 py-2 text-sm font-semibold text-[#8A1F15] hover:bg-[#FFF4F3]"
+            className={buttonDanger}
           >
             Delete
           </button>
@@ -2669,11 +2675,11 @@ function NoteDetail({
       </div>
 
       {deleteConfirmVisible && (
-        <div className="rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] p-4">
-          <p className="text-sm font-semibold text-[#8A1F15]">
+        <div className="app-message app-message-error">
+          <p className="text-sm font-semibold">
             Delete this note?
           </p>
-          <p className="mt-1 text-sm text-[#8A1F15]">
+          <p className="mt-1 text-sm">
             This removes only this Commonplace note.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -2681,14 +2687,14 @@ function NoteDetail({
               type="button"
               onClick={onConfirmDelete}
               disabled={isSaving}
-              className="rounded-lg bg-[#8A1F15] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+              className={buttonDanger}
             >
               {isSaving ? "Deleting..." : "Confirm delete"}
             </button>
             <button
               type="button"
               onClick={onCancelDelete}
-              className="rounded-lg border border-[#B42318]/25 bg-white px-4 py-2 text-sm font-semibold text-[#8A1F15]"
+              className={buttonSecondary}
             >
               Cancel
             </button>
@@ -2722,7 +2728,7 @@ function TextInput({
     <label htmlFor={id} className="flex flex-col gap-2 text-sm font-semibold text-[var(--brand-ink)]">
       <span>
         {label}
-        {required && <span className="text-[#8A1F15]"> *</span>}
+        {required && <span className="text-[var(--brand-coral)]"> *</span>}
       </span>
       <input
         id={id}
@@ -2732,14 +2738,14 @@ function TextInput({
         aria-invalid={error ? "true" : undefined}
         aria-describedby={errorId}
         onChange={(event) => onChange(event.target.value)}
-        className={`rounded-lg border bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] outline-none focus:ring-2 ${
+        className={`app-field ${
           error
-            ? "border-[#B42318] focus:border-[#B42318] focus:ring-[#B42318]/20"
-            : "border-[var(--brand-border)] focus:border-[var(--brand-teal)] focus:ring-[var(--brand-teal)]/20"
+            ? "border-[var(--brand-coral)] focus:border-[var(--brand-coral)]"
+            : ""
         }`}
       />
       {error && (
-        <span id={errorId} className="text-xs font-medium text-[#8A1F15]">
+        <span id={errorId} className="app-error-text">
           {error}
         </span>
       )}
@@ -2772,7 +2778,7 @@ function TextArea({
     <label htmlFor={id} className="flex flex-col gap-2 text-sm font-semibold text-[var(--brand-ink)]">
       <span>
         {label}
-        {required && <span className="text-[#8A1F15]"> *</span>}
+        {required && <span className="text-[var(--brand-coral)]"> *</span>}
       </span>
       <textarea
         id={id}
@@ -2783,14 +2789,14 @@ function TextArea({
         aria-invalid={error ? "true" : undefined}
         aria-describedby={errorId}
         onChange={(event) => onChange(event.target.value)}
-        className={`resize-y rounded-lg border bg-white px-3 py-2 text-sm font-normal leading-6 text-[var(--brand-ink)] outline-none focus:ring-2 ${
+        className={`app-field resize-y leading-6 ${
           error
-            ? "border-[#B42318] focus:border-[#B42318] focus:ring-[#B42318]/20"
-            : "border-[var(--brand-border)] focus:border-[var(--brand-teal)] focus:ring-[var(--brand-teal)]/20"
+            ? "border-[var(--brand-coral)] focus:border-[var(--brand-coral)]"
+            : ""
         }`}
       />
       {error && (
-        <span id={errorId} className="text-xs font-medium text-[#8A1F15]">
+        <span id={errorId} className="app-error-text">
           {error}
         </span>
       )}
@@ -2800,7 +2806,7 @@ function TextArea({
 
 function DetailBlock({ label, value }: { label: string; value: string }) {
   return (
-    <section className="rounded-lg border border-[var(--brand-border)] bg-white p-4">
+    <section className="app-panel-muted p-4">
       <h4 className="text-sm font-semibold text-[var(--brand-ink)]">{label}</h4>
       <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--brand-ink-soft)]">
         {value}
@@ -2819,7 +2825,7 @@ function DetailList({
   onSelectValue?: (value: string) => void;
 }) {
   return (
-    <section className="rounded-lg border border-[var(--brand-border)] bg-white p-4">
+    <section className="app-panel-muted p-4">
       <h4 className="text-sm font-semibold text-[var(--brand-ink)]">{label}</h4>
       <div className="mt-3 flex flex-wrap gap-2">
         {values.map((value) =>
@@ -2828,14 +2834,14 @@ function DetailList({
               key={value}
               type="button"
               onClick={() => onSelectValue(value)}
-              className="rounded-full border border-[#534AB7]/20 bg-[#EEEDFE] px-2.5 py-1 text-xs text-[#332C85] hover:bg-[#E3E0FF]"
+              className="app-status app-status-info hover:border-[var(--brand-border-strong)]"
             >
               {value}
             </button>
           ) : (
             <span
               key={value}
-              className="rounded-full border border-[#534AB7]/20 bg-[#EEEDFE] px-2.5 py-1 text-xs text-[#332C85]"
+              className="app-status app-status-info"
             >
               {value}
             </span>
@@ -2887,7 +2893,7 @@ function MainMapsRegistry({
 }) {
   return (
     <section
-      className="flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--brand-border)] bg-white p-5"
+      className={`${panel} flex min-h-0 flex-1 flex-col p-5`}
       data-testid="commonplace-main-maps-registry"
     >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--brand-border)] pb-4">
@@ -2895,7 +2901,7 @@ function MainMapsRegistry({
           <button
             type="button"
             onClick={onBack}
-            className="mb-3 rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+            className={`${buttonSecondary} mb-3 min-h-9 px-3 py-1.5`}
           >
             ← Library
           </button>
@@ -2911,14 +2917,14 @@ function MainMapsRegistry({
             value={newTitle}
             onChange={(event) => onNewTitleChange(event.target.value)}
             placeholder="New Main Map title"
-            className="rounded-lg border border-[var(--brand-border)] px-3 py-2 text-sm"
+            className="app-field min-w-[14rem]"
             aria-label="New Main Map title"
           />
           <button
             type="button"
             onClick={onCreate}
             disabled={isSaving}
-            className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+            className={buttonPrimary}
           >
             + New Main Map
           </button>
@@ -2927,11 +2933,11 @@ function MainMapsRegistry({
 
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
         {isLoading ? (
-          <p className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info">
             Loading Main Maps...
           </p>
         ) : maps.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info border-dashed">
             No Main Maps yet.
           </p>
         ) : (
@@ -2994,8 +3000,8 @@ function MapRegistryCard({
   const isConfirmingDelete = deleteMapId === map.id;
 
   return (
-    <article className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 shadow-sm">
-      <span className="rounded-full bg-[var(--brand-teal-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+    <article className={`${panelMuted} p-4`}>
+      <span className="app-status app-status-info">
         {map.type === "main" ? "Main Map" : "Sub Mind Map"}
       </span>
       {isRenaming ? (
@@ -3003,7 +3009,7 @@ function MapRegistryCard({
           <input
             value={renameTitle}
             onChange={(event) => onRenameTitleChange(event.target.value)}
-            className="rounded-lg border border-[var(--brand-border)] px-3 py-2 text-sm"
+            className="app-field"
             aria-label={`Rename ${map.title}`}
           />
           <div className="flex gap-2">
@@ -3011,14 +3017,14 @@ function MapRegistryCard({
               type="button"
               onClick={() => onSaveRename(map)}
               disabled={isSaving}
-              className="rounded-lg bg-[var(--brand-teal)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-70"
+              className={`${buttonPrimary} min-h-9 px-3 py-1.5 text-xs`}
             >
               Save
             </button>
             <button
               type="button"
               onClick={onCancelRename}
-              className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-xs font-semibold"
+              className={`${buttonSecondary} min-h-9 px-3 py-1.5 text-xs`}
             >
               Cancel
             </button>
@@ -3036,21 +3042,21 @@ function MapRegistryCard({
             <button
               type="button"
               onClick={() => onOpen(map)}
-              className="rounded-lg bg-[var(--brand-teal)] px-3 py-1.5 text-xs font-semibold text-white"
+              className={`${buttonPrimary} min-h-9 px-3 py-1.5 text-xs`}
             >
               Open
             </button>
             <button
               type="button"
               onClick={() => onStartRename(map)}
-              className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-xs font-semibold"
+              className={`${buttonSecondary} min-h-9 px-3 py-1.5 text-xs`}
             >
               Rename
             </button>
             <button
               type="button"
               onClick={() => onAskDelete(map.id)}
-              className="rounded-lg border border-[#B42318]/25 bg-white px-3 py-1.5 text-xs font-semibold text-[#8A1F15]"
+              className={`${buttonDanger} min-h-9 px-3 py-1.5 text-xs`}
             >
               Delete
             </button>
@@ -3058,11 +3064,11 @@ function MapRegistryCard({
         </>
       )}
       {isConfirmingDelete && (
-        <div className="mt-3 rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] p-3">
-          <p className="text-xs font-semibold text-[#8A1F15]">
+        <div className="app-message app-message-error mt-3 p-3">
+          <p className="text-xs font-semibold">
             Delete this map?
           </p>
-          <p className="mt-1 text-xs text-[#8A1F15]">
+          <p className="mt-1 text-xs">
             Phase 3 uses hard delete and blocks maps that already have graph data.
           </p>
           <div className="mt-2 flex gap-2">
@@ -3070,14 +3076,14 @@ function MapRegistryCard({
               type="button"
               onClick={() => onConfirmDelete(map)}
               disabled={isSaving}
-              className="rounded-lg bg-[#8A1F15] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-70"
+              className={`${buttonDanger} min-h-9 px-3 py-1.5 text-xs`}
             >
               Confirm delete
             </button>
             <button
               type="button"
               onClick={onCancelDelete}
-              className="rounded-lg border border-[#B42318]/25 bg-white px-3 py-1.5 text-xs font-semibold text-[#8A1F15]"
+              className={`${buttonSecondary} min-h-9 px-3 py-1.5 text-xs`}
             >
               Cancel
             </button>
@@ -3111,13 +3117,13 @@ function SubMindMapChooser({
 }) {
   return (
     <section
-      className="rounded-xl border border-[var(--brand-border)] bg-white p-5"
+      className={`${panel} p-5`}
       data-testid="commonplace-sub-map-chooser"
     >
       <button
         type="button"
         onClick={onBack}
-        className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-1.5 text-sm font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface-2)]"
+        className={`${buttonSecondary} min-h-9 px-3 py-1.5`}
       >
         ← Detail Note
       </button>
@@ -3134,25 +3140,25 @@ function SubMindMapChooser({
           value={newTitle}
           onChange={(event) => onNewTitleChange(event.target.value)}
           placeholder="New Sub Mind Map title"
-          className="rounded-lg border border-[var(--brand-border)] px-3 py-2 text-sm"
+          className="app-field min-w-[14rem]"
           aria-label="New Sub Mind Map title"
         />
         <button
           type="button"
           onClick={onCreate}
           disabled={isSaving}
-          className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
+          className={buttonPrimary}
         >
           + New Sub Mind Map
         </button>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {isLoading ? (
-          <p className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info">
             Loading Sub Mind Maps...
           </p>
         ) : maps.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] p-4 text-sm text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info border-dashed">
             No Sub Mind Maps yet.
           </p>
         ) : (
@@ -3161,9 +3167,9 @@ function SubMindMapChooser({
               key={map.id}
               type="button"
               onClick={() => onOpen(map)}
-              className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-left shadow-sm hover:border-[var(--brand-teal)]"
+              className={`${panelMuted} p-4 text-left hover:border-[var(--brand-teal)]`}
             >
-              <span className="rounded-full bg-[var(--brand-teal-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand-teal-ink)]">
+              <span className="app-status app-status-info">
                 Sub Mind Map
               </span>
               <span className="mt-3 block text-base font-semibold text-[var(--brand-ink)]">

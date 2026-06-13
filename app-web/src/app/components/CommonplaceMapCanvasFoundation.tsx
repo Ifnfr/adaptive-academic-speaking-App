@@ -228,7 +228,7 @@ function CommonplaceConnectionEdge({
           <button
             type="button"
             onClick={openEdit}
-            className="nodrag nopan rounded-full border border-[var(--brand-border)] bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-[var(--brand-ink)] shadow-sm transition-colors hover:bg-[var(--brand-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+            className="nodrag nopan app-status app-status-info shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -252,6 +252,11 @@ const COMMONPLACE_EDGE_TYPES: EdgeTypes = {
 const COMMONPLACE_REACT_FLOW_PRO_OPTIONS = { hideAttribution: true };
 
 const COMMONPLACE_NOTE_DRAG_TYPE = "application/commonplace-note";
+const buttonPrimary = "app-button app-button-primary";
+const buttonSecondary = "app-button app-button-secondary";
+const buttonDanger = "app-button app-button-danger";
+const popoverPanel =
+  "absolute z-50 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] text-sm shadow-lg";
 
 function titleForNode(node: CommonplaceMapCanvasNoteNode): string {
   return node.noteTitle?.trim() || node.noteSourceBook || "Untitled Source";
@@ -418,7 +423,7 @@ function MapInventory({
     <details
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      className="mx-3 mt-3 rounded-xl border border-[#C9D8D1] bg-white/80 p-2.5 text-sm shadow-sm sm:mx-5 sm:mt-4 sm:p-3"
+      className="mx-3 mt-3 rounded-xl border border-[var(--commonplace-panel-border,var(--brand-border))] bg-[var(--brand-surface)]/90 p-2.5 text-sm shadow-sm sm:mx-5 sm:mt-4 sm:p-3"
       data-testid="commonplace-map-inventory"
       data-open={isOpen ? "true" : "false"}
     >
@@ -484,7 +489,7 @@ function MapInventoryGroup({
         </span>
       </div>
       {maps.length === 0 ? (
-        <p className="rounded-md border border-dashed border-[var(--brand-border-strong)] bg-white px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
+        <p className="rounded-md border border-dashed border-[var(--brand-border-strong)] bg-[var(--brand-surface-2)] px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
           {emptyText}
         </p>
       ) : (
@@ -500,7 +505,7 @@ function MapInventoryGroup({
                 className={`rounded-md border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
                   isActive
                     ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]"
-                    : "border-transparent bg-white text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]"
+                    : "border-transparent bg-[var(--brand-surface)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-surface-2)]"
                 }`}
                 data-active={isActive ? "true" : "false"}
                 data-testid="commonplace-map-inventory-item"
@@ -508,7 +513,7 @@ function MapInventoryGroup({
                 <span className="flex items-center justify-between gap-2">
                   <span className="truncate text-xs font-semibold">{map.title}</span>
                   {isActive && (
-                    <span className="shrink-0 rounded-full bg-[var(--brand-teal)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    <span className="shrink-0 rounded-full bg-[var(--brand-accent-fill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--brand-accent-fill-ink)]">
                       Active
                     </span>
                   )}
@@ -569,8 +574,8 @@ function EdgeTypeChoiceButtons({
             aria-pressed={isSelected}
             className={`rounded-lg border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
               isSelected
-                ? "border-[#0F766E] bg-[#DDEBE5] text-[#134E44]"
-                : "border-[var(--brand-border)] bg-white text-[var(--brand-ink)] hover:border-[#0F766E]/35"
+                ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
+                : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)] hover:border-[var(--brand-teal)]/35"
             }`}
             data-testid={`commonplace-map-edge-type-option-${choice.type}`}
           >
@@ -1666,7 +1671,7 @@ export function CommonplaceMapCanvasFoundation({
                 <button
                   type="button"
                   onClick={() => setIsClusterChooserOpen((current) => !current)}
-                  className="min-h-11 rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] sm:min-h-0"
+                  className="commonplace-panel-button min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] sm:min-h-0"
                   data-testid="commonplace-map-add-cluster-button"
                   aria-expanded={isClusterChooserOpen}
                 >
@@ -1678,11 +1683,11 @@ export function CommonplaceMapCanvasFoundation({
               aria-live="polite"
               className={`min-h-9 rounded-full border px-3 py-2 text-xs font-semibold sm:min-h-0 sm:py-1 ${
                 displayedSaveStatus === "Unsaved changes"
-                  ? "border-[#D99A25]/35 bg-[#FFF4D8] text-[#7A4A00]"
+                  ? "app-status-warning"
                   : displayedSaveStatus === "Saving..."
-                    ? "border-[#0F766E]/25 bg-[#DDEBE5] text-[#134E44]"
+                    ? "app-status-info"
                     : displayedSaveStatus === "Save failed"
-                      ? "border-[#B42318]/25 bg-[#FFF4F3] text-[#8A1F15]"
+                      ? "app-status-error"
                       : "commonplace-panel-button"
               }`}
               data-testid="commonplace-map-save-status"
@@ -1697,9 +1702,9 @@ export function CommonplaceMapCanvasFoundation({
               className={`min-h-11 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-70 sm:min-h-0 ${
                 displayedSaveStatus === "Unsaved changes" ||
                 displayedSaveStatus === "Save failed"
-                  ? "bg-[var(--brand-teal)] text-white hover:bg-[#1C8A7A]"
+                  ? "bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)] hover:bg-[#1C8A7A]"
                   : displayedSaveStatus === "Saving..."
-                    ? "bg-[#0F766E]/80 text-white"
+                    ? "bg-[var(--brand-accent-fill)]/80 text-[var(--brand-accent-fill-ink)]"
                     : "commonplace-panel-button border"
               }`}
               data-testid="commonplace-map-save-button"
@@ -1716,7 +1721,7 @@ export function CommonplaceMapCanvasFoundation({
                 onClick={onDiscussMapInPodchat}
                 disabled={discussDisabled}
                 aria-describedby="commonplace-map-discuss-helper"
-                className="min-h-11 rounded-lg border border-[color:var(--commonplace-panel-accent)] bg-white/70 px-3 py-2 text-sm font-semibold text-[var(--commonplace-panel-accent-soft)] transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
+                className="commonplace-panel-button min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors hover:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0"
                 data-testid="commonplace-map-discuss-button"
               >
                 Diskusi di Podchat
@@ -1724,7 +1729,7 @@ export function CommonplaceMapCanvasFoundation({
             )}
           </div>
           <div
-            className="w-full rounded-lg border border-[var(--commonplace-panel-border)] bg-white/65 px-3 py-2 text-xs leading-5 text-[var(--brand-ink-soft)] lg:max-w-md"
+            className="w-full rounded-lg border border-[var(--commonplace-panel-border)] bg-[var(--brand-surface)]/80 px-3 py-2 text-xs leading-5 text-[var(--brand-ink-soft)] lg:max-w-md"
             data-testid="commonplace-map-action-helper"
           >
             <p id="commonplace-map-save-helper" data-testid="commonplace-map-save-helper">
@@ -1755,7 +1760,7 @@ export function CommonplaceMapCanvasFoundation({
       {loadError && (
         <p
           role="alert"
-          className="mx-4 mt-4 rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] px-4 py-3 text-sm text-[#8A1F15] sm:mx-5"
+          className="app-message app-message-error mx-4 mt-4 sm:mx-5"
         >
           {loadError}
         </p>
@@ -1763,7 +1768,7 @@ export function CommonplaceMapCanvasFoundation({
       {dropError && (
         <p
           role="alert"
-          className="mx-4 mt-4 rounded-lg border border-[#B42318]/20 bg-[#FFF4F3] px-4 py-3 text-sm text-[#8A1F15] sm:mx-5"
+          className="app-message app-message-error mx-4 mt-4 sm:mx-5"
         >
           {dropError}
         </p>
@@ -1807,7 +1812,7 @@ export function CommonplaceMapCanvasFoundation({
         )}
         {isMainMap && isClusterChooserOpen && (
           <div
-            className="absolute left-4 top-4 z-30 w-[min(22rem,calc(100%-2rem))] rounded-xl border border-[var(--brand-border)] bg-white p-3 text-sm shadow-lg"
+            className={`${popoverPanel} left-4 top-4 z-30 w-[min(22rem,calc(100%-2rem))] rounded-xl p-3`}
             data-testid="commonplace-map-cluster-chooser"
             onPointerDown={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
@@ -1825,7 +1830,7 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={() => setIsClusterChooserOpen(false)}
-                className="rounded-md px-2 py-1 text-xs font-semibold text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface)]"
+                className="rounded-md px-2 py-1 text-xs font-semibold text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
               >
                 Close
               </button>
@@ -1923,7 +1928,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {isLibraryReturnDragActive && (
           <div
-            className="pointer-events-none absolute left-4 top-4 z-40 rounded-lg border border-[#0F766E]/35 bg-white px-3 py-2 text-sm font-semibold text-[#134E44] shadow-sm"
+            className="pointer-events-none absolute left-4 top-4 z-40 rounded-lg border border-[var(--brand-teal)]/35 bg-[var(--brand-surface)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] shadow-sm"
             data-testid="commonplace-map-return-to-library-hint"
           >
             Drop on Library sidebar to remove this visual card.
@@ -1932,7 +1937,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {isCanvasDragActive && (
           <div
-            className="pointer-events-none absolute inset-4 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--brand-teal)] bg-white/60 text-sm font-semibold text-[var(--brand-teal-ink)] shadow-inner"
+            className="pointer-events-none absolute inset-4 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--brand-teal)] bg-[var(--brand-surface)]/70 text-sm font-semibold text-[var(--brand-teal-ink)] shadow-inner"
             data-testid="commonplace-map-drop-zone"
           >
             Drop note here
@@ -1944,7 +1949,7 @@ export function CommonplaceMapCanvasFoundation({
             className="pointer-events-none absolute inset-0 flex items-center justify-center p-6"
             data-testid="commonplace-map-empty-state"
           >
-            <p className="max-w-sm rounded-xl border border-[var(--brand-border)] bg-white/95 px-4 py-3 text-center text-sm font-medium leading-6 text-[var(--brand-ink-soft)] shadow-sm">
+            <p className="max-w-sm rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)]/95 px-4 py-3 text-center text-sm font-medium leading-6 text-[var(--brand-ink-soft)] shadow-sm">
               {isSubMap
                 ? "Canvas is ready. Drag notes from the sidebar to add them here."
                 : "Add a saved Sub Mind Map as a cluster, or drag notes from the sidebar."}
@@ -1954,7 +1959,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {supportsEdges && nodeContextMenu && (
           <div
-            className="absolute z-50 w-56 rounded-lg border border-[var(--brand-border)] bg-white p-2 text-sm shadow-lg"
+            className={`${popoverPanel} w-56 p-2`}
             style={{ left: nodeContextMenu.x, top: nodeContextMenu.y }}
             data-testid="commonplace-map-node-context-menu"
             onPointerDown={(event) => event.stopPropagation()}
@@ -1979,7 +1984,7 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={handleAskDeleteVisualNode}
-                className="mt-1 w-full rounded-md px-3 py-2 text-left font-semibold text-[#8A1F15] hover:bg-[#FFF4F3] focus:outline-none focus:ring-2 focus:ring-[#B42318]/30"
+                className="mt-1 w-full rounded-md px-3 py-2 text-left font-semibold text-[var(--brand-coral)] hover:bg-[var(--brand-coral-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-coral)]/30"
                 data-testid="commonplace-map-delete-visual-node"
               >
                 Delete visual {nodeContextMenu.nodeType === "cluster" ? "cluster" : "note"}
@@ -1997,7 +2002,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {isMainMap && nodeDeleteConfirm && (
           <div
-            className="absolute z-50 w-80 rounded-lg border border-[var(--brand-border)] bg-white p-4 text-sm shadow-lg"
+            className={`${popoverPanel} w-80 p-4`}
             style={{ left: nodeDeleteConfirm.x, top: nodeDeleteConfirm.y }}
             data-testid="commonplace-map-node-delete-confirm"
             onPointerDown={(event) => event.stopPropagation()}
@@ -2024,7 +2029,7 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={() => setNodeDeleteConfirm(null)}
-                className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)]"
+                className={`${buttonSecondary} min-h-9 px-3 py-2 text-xs`}
               >
                 Cancel
               </button>
@@ -2032,7 +2037,7 @@ export function CommonplaceMapCanvasFoundation({
                 type="button"
                 onClick={() => void handleDeleteVisualNode()}
                 disabled={isSavingMapChange}
-                className="rounded-lg border border-[#B42318]/30 bg-[#B42318] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8A1F15] disabled:cursor-not-allowed disabled:opacity-70"
+                className={`${buttonDanger} min-h-9 px-3 py-2 text-xs`}
                 data-testid="commonplace-map-node-delete-confirm-button"
               >
                 Delete visual node
@@ -2043,7 +2048,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {supportsEdges && connectionSourceNode && (
           <div
-            className="pointer-events-none absolute left-4 top-4 z-30 rounded-lg border border-[#0F766E]/35 bg-white px-3 py-2 text-sm font-semibold text-[#134E44] shadow-sm"
+            className="pointer-events-none absolute left-4 top-4 z-30 rounded-lg border border-[var(--brand-teal)]/35 bg-[var(--brand-surface)] px-3 py-2 text-sm font-semibold text-[var(--brand-teal-ink)] shadow-sm"
             data-testid="commonplace-map-connection-mode"
           >
             {isMainMap
@@ -2054,7 +2059,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {supportsEdges && edgeDraft && (
           <div
-            className="absolute z-50 w-72 rounded-lg border border-[var(--brand-border)] bg-white p-4 text-sm shadow-lg"
+            className={`${popoverPanel} w-72 p-4`}
             style={{ left: edgeDraft.x, top: edgeDraft.y }}
             data-testid="commonplace-map-edge-create-popover"
             onPointerDown={(event) => event.stopPropagation()}
@@ -2078,7 +2083,7 @@ export function CommonplaceMapCanvasFoundation({
                       : current,
                   )
                 }
-                className="mt-1 w-full rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-medium text-[var(--brand-ink)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]/20"
+                className="app-field mt-1 font-medium"
                 data-testid="commonplace-map-edge-type-select"
               >
                 <option value="solid">Solid / direct</option>
@@ -2104,7 +2109,7 @@ export function CommonplaceMapCanvasFoundation({
                 }
                 maxLength={80}
                 placeholder="Optional label"
-                className="mt-1 w-full rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]/20"
+                className="app-field mt-1"
                 data-testid="commonplace-map-edge-label-input"
               />
             </label>
@@ -2112,7 +2117,7 @@ export function CommonplaceMapCanvasFoundation({
               <button
                 type="button"
                 onClick={cancelConnectionMode}
-                className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)]"
+                className={`${buttonSecondary} min-h-9 px-3 py-2 text-xs`}
               >
                 Cancel
               </button>
@@ -2120,7 +2125,7 @@ export function CommonplaceMapCanvasFoundation({
                 type="button"
                 onClick={() => void handleCreateEdge()}
                 disabled={isSavingMapChange}
-                className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)] disabled:cursor-not-allowed disabled:opacity-70"
+                className={`${buttonPrimary} min-h-9 px-3 py-2 text-xs`}
               >
                 Create
               </button>
@@ -2130,7 +2135,7 @@ export function CommonplaceMapCanvasFoundation({
 
         {supportsEdges && edgeEdit && (
           <div
-            className="absolute z-50 w-72 rounded-lg border border-[var(--brand-border)] bg-white p-4 text-sm shadow-lg"
+            className={`${popoverPanel} w-72 p-4`}
             style={{ left: edgeEdit.x, top: edgeEdit.y }}
             data-testid="commonplace-map-edge-edit-popover"
             onPointerDown={(event) => event.stopPropagation()}
@@ -2154,7 +2159,7 @@ export function CommonplaceMapCanvasFoundation({
                       : current,
                   )
                 }
-                className="mt-1 w-full rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-medium text-[var(--brand-ink)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]/20"
+                className="app-field mt-1 font-medium"
               >
                 <option value="solid">Solid / direct</option>
                 <option value="dashed">Dashed / speculative</option>
@@ -2179,14 +2184,14 @@ export function CommonplaceMapCanvasFoundation({
                 }
                 maxLength={80}
                 placeholder="Optional label"
-                className="mt-1 w-full rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-sm font-normal text-[var(--brand-ink)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]/20"
+                className="app-field mt-1"
               />
             </label>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setEdgeEdit(null)}
-                className="rounded-lg border border-[var(--brand-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--brand-ink)] hover:bg-[var(--brand-surface)]"
+                className={`${buttonSecondary} min-h-9 px-3 py-2 text-xs`}
               >
                 Cancel
               </button>
@@ -2194,7 +2199,7 @@ export function CommonplaceMapCanvasFoundation({
                 type="button"
                 onClick={() => void handleDeleteEdge()}
                 disabled={isSavingMapChange}
-                className="rounded-lg border border-[#B42318]/30 bg-white px-3 py-2 text-xs font-semibold text-[#8A1F15] hover:bg-[#FFF4F3] disabled:cursor-not-allowed disabled:opacity-70"
+                className={`${buttonDanger} min-h-9 px-3 py-2 text-xs`}
                 data-testid="commonplace-map-edge-delete-button"
               >
                 Delete
@@ -2203,7 +2208,7 @@ export function CommonplaceMapCanvasFoundation({
                 type="button"
                 onClick={() => void handleUpdateEdge()}
                 disabled={isSavingMapChange}
-                className="rounded-lg bg-[var(--brand-teal)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-teal-ink)] disabled:cursor-not-allowed disabled:opacity-70"
+                className={`${buttonPrimary} min-h-9 px-3 py-2 text-xs`}
               >
                 Save
               </button>
