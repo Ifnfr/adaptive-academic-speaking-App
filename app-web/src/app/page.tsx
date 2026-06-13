@@ -2065,7 +2065,7 @@ export default function Home() {
             className={`flex-1 min-h-0 flex flex-col ${
               view === "commonplace"
                 ? "gap-0 overflow-visible lg:pb-0 lg:pr-0"
-                : "gap-6 lg:pb-24 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
+                : "gap-6 lg:pb-10 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
             }`}
           >
             <CloudSyncStatusPanel
@@ -2323,7 +2323,7 @@ export default function Home() {
 
           <footer
             id="system"
-            className="mt-8 mb-4 text-center text-xs text-[var(--brand-muted)] flex-shrink-0"
+            className="mt-2 text-center text-xs text-[var(--brand-muted)]"
           >
             fonetik · AI-Powered academic speaking practice · Local-only practice tool
           </footer>

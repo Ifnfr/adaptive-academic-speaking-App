@@ -328,11 +328,11 @@ html.dark {
 
 .dark {
   /* Surfaces */
-  --brand-bg: #0a0a09;          /* dark rich background, warm tone */
-  --brand-surface: #1b1a17;     /* dark surface/cards */
-  --brand-surface-2: #24221f;   /* slightly lighter surface/recessed inputs */
-  --brand-border: #34312c;      /* dark border */
-  --brand-border-strong: #46423b;
+  --brand-bg: #0f0f0d;          /* dark rich background, warm tone */
+  --brand-surface: #171614;     /* dark surface/cards */
+  --brand-surface-2: #1e1d1a;   /* slightly lighter surface/recessed inputs */
+  --brand-border: #2c2a26;      /* dark border */
+  --brand-border-strong: #3d3b36;
 
   /* Text */
   --brand-ink: #f4f2ee;         /* off-white main text */
