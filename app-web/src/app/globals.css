@@ -135,7 +135,9 @@ body {
     background-color 150ms ease,
     border-color 150ms ease,
     color 150ms ease,
-    opacity 150ms ease;
+    opacity 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
 }
 
 .app-button:focus-visible {
@@ -149,6 +151,16 @@ body {
 .app-button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-button:hover:not(:disabled):not([aria-disabled="true"]) {
+    transform: translateY(-1px);
+  }
+}
+
+.app-button:active:not(:disabled):not([aria-disabled="true"]) {
+  transform: translateY(1px);
 }
 
 .app-button-primary {
@@ -258,6 +270,11 @@ body {
   font-weight: 600;
   line-height: 1rem;
   white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
 }
 
 .app-status-info {
@@ -292,6 +309,7 @@ body {
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
   line-height: 1.5;
+  animation: app-message-enter 180ms ease-out both;
 }
 
 .app-message-info {
@@ -316,6 +334,34 @@ body {
   border-color: var(--brand-coral);
   background-color: var(--brand-coral-soft);
   color: var(--brand-coral);
+}
+
+@keyframes app-message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-button,
+  .app-status {
+    transition-duration: 1ms;
+  }
+
+  .app-button:hover:not(:disabled):not([aria-disabled="true"]),
+  .app-button:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: none;
+  }
+
+  .app-message {
+    animation: none;
+  }
 }
 
 /*
