@@ -2062,10 +2062,10 @@ export default function Home() {
 
           <div
             data-testid="main-scroll-container"
-            className={`flex-1 min-h-0 flex flex-col ${
+            className={`flex-1 min-h-0 ${
               view === "commonplace"
-                ? "gap-0 overflow-visible lg:pb-0 lg:pr-0"
-                : "gap-6 lg:pb-10 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
+                ? "flex flex-col gap-0 overflow-visible lg:pb-0 lg:pr-0"
+                : "block space-y-6 lg:pb-10 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
             }`}
           >
             <CloudSyncStatusPanel
@@ -2321,13 +2321,15 @@ export default function Home() {
             />
           )}
 
-          <footer
-            id="system"
-            className="mt-2 text-center text-xs text-[var(--brand-muted)]"
-          >
-            fonetik · AI-Powered academic speaking practice · Local-only practice tool
-          </footer>
           </div>
+          {view !== "commonplace" && (
+            <footer
+              id="system"
+              className="mt-4 text-center text-xs text-[var(--brand-muted)] flex-shrink-0"
+            >
+              fonetik · AI-Powered academic speaking practice · Local-only practice tool
+            </footer>
+          )}
         </main>
       </div>
     </div>
