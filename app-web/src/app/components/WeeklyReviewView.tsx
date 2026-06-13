@@ -56,15 +56,14 @@ export function WeeklyReviewView({
   onRunWeeklyReview,
 }: WeeklyReviewViewProps) {
   const { t } = useI18n(appLanguage);
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const card = "app-panel brand-grid";
   const cardHeader =
-    "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
+    "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
   const cardBody = "p-6";
   const labelClass =
-    "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
-  const buttonPrimary =
-    "rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:bg-[var(--brand-border-strong)] disabled:text-[var(--brand-muted)]";
+    "app-label mb-2 block";
+  const buttonPrimary = "app-button app-button-primary";
+  const buttonDanger = "app-button app-button-danger";
 
   return (
     <section className={card}>
@@ -80,12 +79,12 @@ export function WeeklyReviewView({
             {t("common.weeklyTagline")}
           </p>
         </div>
-        <span className="inline-flex w-fit rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-1 text-xs text-[var(--brand-ink-soft)]">
+        <span className="app-status">
           Server memory
         </span>
       </div>
       <div className={`${cardBody} flex flex-col gap-5`}>
-        <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+        <div className="app-panel-muted p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className={labelClass}>{t("common.readyToReview")}</p>
@@ -112,7 +111,7 @@ export function WeeklyReviewView({
         {weeklyReviewError && (
           <div
             role="alert"
-            className="rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
+            className="app-message app-message-error"
           >
             <p>{weeklyReviewError}</p>
             <p className="mt-1 text-xs opacity-80">
@@ -123,7 +122,7 @@ export function WeeklyReviewView({
                 type="button"
                 onClick={onRunWeeklyReview}
                 disabled={weeklyReviewLoading}
-                className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${buttonDanger} min-h-9 px-3 py-1.5 text-xs`}
               >
                 {weeklyReviewLoading ? t("review.tryingAgain") : t("review.tryAgain")}
               </button>
@@ -132,14 +131,14 @@ export function WeeklyReviewView({
         )}
 
         {weeklyReviewResult && (
-          <div className="rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+          <div className="app-panel-muted border-l-4 border-l-[var(--brand-teal)] p-5">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
               {t("review.resultTitle")}
             </h3>
 
             {weeklyReviewResult.warnings.length > 0 ? (
               <div className="flex flex-col gap-4">
-                <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)] p-6 text-center">
+                <div className="app-message app-message-info border-dashed p-6 text-center">
                   {weeklyReviewResult.warnings.map((warning, idx) => (
                     <p key={idx} className="text-sm font-medium text-[var(--brand-ink)]">
                       {warning}

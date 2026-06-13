@@ -48,14 +48,14 @@ export function GamificationPanel({
         if (lp && lp.cards) {
           const todayStr = getLocalDateString();
           const cards = Object.values(lp.cards);
-          
+
           const hasCompletedToday = cards.some(
             (card) =>
               card.status === "completed" &&
               card.lastUpdatedAt &&
               getLocalDateString(new Date(card.lastUpdatedAt)) === todayStr
           );
-          
+
           if (hasCompletedToday) {
             setLpStatus("completed");
             return;
@@ -67,7 +67,7 @@ export function GamificationPanel({
               card.lastUpdatedAt &&
               getLocalDateString(new Date(card.lastUpdatedAt)) === todayStr
           );
-          
+
           if (hasInProgressToday) {
             setLpStatus("inProgress");
             return;
@@ -177,24 +177,24 @@ export function GamificationPanel({
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
       case "completed":
-        return "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20";
+        return "app-status app-status-success";
       case "inProgress":
-        return "bg-sky-500/10 text-sky-600 border border-sky-500/20";
+        return "app-status app-status-info";
       case "available":
-        return "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] border border-[var(--brand-teal)]/20";
+        return "app-status app-status-info";
       case "locked":
-        return "bg-gray-500/10 text-gray-400 border border-gray-500/20 opacity-60";
+        return "app-status opacity-70";
       case "comeBackLater":
-        return "bg-amber-500/10 text-amber-600 border border-amber-500/20";
+        return "app-status app-status-warning";
       case "optional":
-        return "bg-purple-500/10 text-purple-600 border border-purple-500/20";
+        return "app-status";
       default:
-        return "bg-gray-500/10 text-gray-400 border border-gray-500/20";
+        return "app-status";
     }
   };
 
   return (
-    <div className="rounded-xl border-l-4 border-[var(--brand-gold)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+    <div className="app-panel-muted border-l-4 border-l-[var(--brand-gold)] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
@@ -207,7 +207,7 @@ export function GamificationPanel({
             {t("game.gamificationSeparate")}
           </p>
         </div>
-        <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] px-4 py-3">
+        <div className="app-panel px-4 py-3">
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
             Total XP
           </p>
@@ -250,16 +250,13 @@ export function GamificationPanel({
       </div>
 
       {earnedBadgeLabels.length > 0 && (
-        <div className="mt-5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
+        <div className="app-panel mt-5 p-4">
           <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
             {t("game.earnedBadges")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {earnedBadgeLabels.map((label) => (
-              <span
-                key={label}
-                className="rounded-full border border-[var(--brand-gold)]/40 bg-[var(--brand-gold)]/10 px-3 py-1 text-xs font-medium text-[var(--brand-ink)]"
-              >
+              <span key={label} className="app-status app-status-warning">
                 {label}
               </span>
             ))}
@@ -291,7 +288,7 @@ export function GamificationPanel({
             return (
               <div
                 key={quest.id}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 shadow-sm transition-all duration-200 hover:border-[var(--brand-border)]"
+                className="app-panel flex flex-col p-4 transition-colors sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -299,11 +296,11 @@ export function GamificationPanel({
                       {quest.title}
                     </span>
                     {quest.xpHint && (
-                      <span className="rounded bg-[var(--brand-gold-soft)] border border-[var(--brand-gold)]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--brand-ink)]">
+                      <span className="app-status app-status-warning px-1.5 py-0.5 text-[10px]">
                         {quest.xpHint}
                       </span>
                     )}
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${statusStyle}`}>
+                    <span className={`${statusStyle} text-[10px] uppercase tracking-wider`}>
                       {statusLabel}
                     </span>
                   </div>
@@ -316,7 +313,7 @@ export function GamificationPanel({
                   <div className="mt-3 sm:mt-0 flex justify-end">
                     <button
                       onClick={() => onSelectView(quest.view as SidebarView)}
-                      className="rounded-lg bg-[var(--brand-teal-soft)] hover:bg-[var(--brand-surface-2)] text-[var(--brand-teal-ink)] border border-[var(--brand-teal)]/20 px-3 py-1.5 text-xs font-semibold transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                      className="app-button app-button-secondary min-h-9 px-3 py-1.5 text-xs"
                     >
                       {t("progress.quests.go")} ➔
                     </button>
@@ -333,7 +330,7 @@ export function GamificationPanel({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
+    <div className="app-panel p-4">
       <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
         {label}
       </p>

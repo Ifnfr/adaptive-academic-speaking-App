@@ -493,17 +493,16 @@ export function ArticlePracticeView({
       setEssayEvaluationLoadingKey("");
     }
   };
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const card = "app-panel brand-grid";
   const cardHeader =
-    "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
+    "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
   const cardBody = "p-6";
   const labelClass =
-    "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
-  const inputClass =
-    "w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]";
-  const buttonPrimary =
-    "rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:bg-[var(--brand-border-strong)] disabled:text-[var(--brand-muted)]";
+    "app-label mb-2 block";
+  const inputClass = "app-field";
+  const buttonPrimary = "app-button app-button-primary";
+  const buttonSecondary = "app-button app-button-secondary";
+  const buttonDanger = "app-button app-button-danger";
 
   return (
     <section className={card}>
@@ -520,7 +519,7 @@ export function ArticlePracticeView({
       </div>
 
       <div className={`${cardBody} flex flex-col gap-5`}>
-        <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+        <div className="app-panel-muted p-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <SummaryCell label={t("article.provider")} value={provider} />
             <SummaryCell label={t("article.level")} value={level} />
@@ -538,7 +537,7 @@ export function ArticlePracticeView({
                   key={option.value}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
                     articleInputMode === option.value
-                      ? "border-[var(--brand-teal)] bg-[var(--brand-teal)]/10 text-[var(--brand-teal-ink)]"
+                      ? "border-[var(--brand-accent-fill)] bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)]"
                       : "border-[var(--brand-border)] bg-[var(--brand-surface)] text-[var(--brand-ink)]"
                   }`}
                 >
@@ -690,7 +689,7 @@ export function ArticlePracticeView({
                   <button
                     type="button"
                     onClick={handleCopyMarkdownPrompt}
-                    className="w-full rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-3 py-2 text-xs font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] sm:w-auto"
+                    className={`${buttonSecondary} w-full px-3 py-2 text-xs sm:w-auto`}
                   >
                     Copy prompt
                   </button>
@@ -811,7 +810,7 @@ export function ArticlePracticeView({
         {articlePracticeError && (
           <div
             role="alert"
-            className="rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
+            className="app-message app-message-error"
           >
             <p>{articlePracticeError}</p>
             <p className="mt-1 text-xs opacity-80">
@@ -822,7 +821,7 @@ export function ArticlePracticeView({
                 type="button"
                 onClick={onGenerateArticlePractice}
                 disabled={articlePracticeLoading}
-                className="rounded-lg border border-[var(--brand-coral)]/60 bg-white px-3 py-1.5 text-xs font-medium text-[var(--brand-coral)] transition-colors hover:bg-[var(--brand-coral-soft)]/60 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${buttonDanger} min-h-9 px-3 py-1.5 text-xs`}
               >
                 {articlePracticeLoading ? t("article.tryingAgain") : t("article.tryAgain")}
               </button>
@@ -831,12 +830,12 @@ export function ArticlePracticeView({
         )}
 
         {articlePracticeResult && (
-          <div className="rounded-xl border-l-4 border-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+          <div className="app-panel-muted border-l-4 border-l-[var(--brand-teal)] p-5">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
               {t("article.result")}
             </h3>
 
-            <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4">
+            <div className="app-panel p-4">
               <p className={labelClass}>{t("article.snapshot")}</p>
               <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
                 <SummaryCell
@@ -862,7 +861,7 @@ export function ArticlePracticeView({
                   </a>
                 </div>
               </dl>
-              <p className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-xs text-[var(--brand-ink-soft)]">
+              <p className="app-message mt-4 px-3 py-2 text-xs">
                 {t("article.snapTagline")}
               </p>
             </div>
@@ -917,8 +916,8 @@ export function ArticlePracticeView({
                           onClick={() => handleSaveWord(item)}
                           className={
                             saved
-                              ? "shrink-0 rounded-md border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-2.5 py-1 text-xs text-[var(--brand-muted)] cursor-default"
-                              : "shrink-0 rounded-md border border-[var(--brand-teal)]/50 bg-[var(--brand-teal)]/10 px-2.5 py-1 text-xs font-medium text-[var(--brand-teal-ink)] transition-colors hover:bg-[var(--brand-teal)]/20 focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]"
+                              ? "app-button app-button-secondary min-h-8 shrink-0 cursor-default px-2.5 py-1 text-xs"
+                              : "app-button app-button-primary min-h-8 shrink-0 px-2.5 py-1 text-xs"
                           }
                         >
                           {saved ? t("vocab.wordSaved") : t("vocab.saveToNotebook")}
@@ -938,7 +937,7 @@ export function ArticlePracticeView({
               <p className="mt-2 text-sm text-[var(--brand-ink)]">
                 {articlePracticeResult.speakingTask.instruction}
               </p>
-              <p className="mt-3 inline-flex rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-1 text-xs text-[var(--brand-ink-soft)]">
+              <p className="app-status mt-3">
                 {articlePracticeResult.speakingTask.timeLimitSeconds} {t("article.seconds")}
               </p>
               <div className="mt-4">
@@ -990,7 +989,7 @@ export function ArticlePracticeView({
                     <button
                       type="button"
                       onClick={handleResetWritingPractice}
-                      className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-xs font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]"
+                      className={`${buttonSecondary} min-h-9 px-3 py-2 text-xs`}
                     >
                       Reset Writing Practice
                     </button>
@@ -1019,10 +1018,10 @@ export function ArticlePracticeView({
                             </h5>
                           </div>
                           <div className="flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-2.5 py-1 text-[var(--brand-ink-soft)]">
+                            <span className="app-status">
                               {getFriendlyTargetSkill(question.targetSkill)}
                             </span>
-                            <span className="rounded-full border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-2.5 py-1 text-[var(--brand-ink-soft)]">
+                            <span className="app-status">
                               {question.suggestedWordCount.min}-
                               {question.suggestedWordCount.max} words
                             </span>
@@ -1080,7 +1079,7 @@ export function ArticlePracticeView({
                 {essayEvaluationError && (
                   <div
                     role="alert"
-                    className="mt-4 rounded-lg border border-[var(--brand-coral)]/50 bg-[var(--brand-coral-soft)] px-4 py-3 text-sm text-[var(--brand-coral)]"
+                    className="app-message app-message-error mt-4"
                   >
                     {essayEvaluationError}
                   </div>
@@ -1104,7 +1103,7 @@ export function ArticlePracticeView({
 
                 {essayEvaluation && (
                   <div
-                    className="mt-5 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4"
+                    className="app-panel mt-5 p-4"
                     data-testid="article-writing-evaluation"
                   >
                     <p className={labelClass}>Writing feedback</p>

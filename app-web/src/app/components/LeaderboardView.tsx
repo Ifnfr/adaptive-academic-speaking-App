@@ -75,13 +75,11 @@ export function LeaderboardView({
     };
   }, [period, propIsSignedIn, getToken]);
 
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const card = "app-panel brand-grid";
   const cardHeader =
-    "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
+    "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
   const cardBody = "p-6";
-  const buttonSecondary =
-    "rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-4 py-2 text-sm font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50";
+  const buttonSecondary = "app-button app-button-secondary";
 
   const periods: { value: LeaderboardPeriod; label: string }[] = [
     { value: "daily", label: "Daily" },
@@ -118,9 +116,9 @@ export function LeaderboardView({
                 setLoading(true);
                 setError(null);
               }}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none ${
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] ${
                 period === p.value
-                  ? "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-semibold"
+                  ? "bg-[var(--brand-accent-fill)] text-[var(--brand-accent-fill-ink)] font-semibold"
                   : "text-[var(--brand-ink-soft)] hover:bg-[var(--brand-surface-2)] hover:text-[var(--brand-ink)]"
               }`}
             >
@@ -140,8 +138,8 @@ export function LeaderboardView({
         )}
 
         {!loading && error && (
-          <div className="rounded-xl border border-[var(--brand-coral)]/30 bg-[var(--brand-coral-soft)] p-6 text-center" id="leaderboard-error">
-            <p className="text-sm font-semibold text-[var(--brand-coral)]">Service Unavailable</p>
+          <div className="app-message app-message-error p-6 text-center" id="leaderboard-error">
+            <p className="text-sm font-semibold">Service Unavailable</p>
             <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">{error}</p>
             <button
               type="button"
@@ -161,7 +159,7 @@ export function LeaderboardView({
           <div className="flex flex-col gap-6" id="leaderboard-ready">
             {/* Signed-out Notice */}
             {!isSignedIn && (
-              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-center" id="leaderboard-signed-out">
+              <div className="app-message app-message-info p-4 text-center" id="leaderboard-signed-out">
                 <p className="text-sm text-[var(--brand-ink-soft)]">
                   You are currently signed out. Sign in to track your level, badges, and compete with other learners.
                 </p>
@@ -170,7 +168,7 @@ export function LeaderboardView({
 
             {/* Signed-in Opt-in Required / Private State Notice */}
             {isSignedIn && data.currentUser.visibility === "private" && (
-              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5" id="leaderboard-private-notice">
+              <div className="app-panel-muted p-5" id="leaderboard-private-notice">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex-1">
                     <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
@@ -195,7 +193,7 @@ export function LeaderboardView({
 
             {/* Sync divergence warning */}
             {isSignedIn && period === "all-time" && xpProfile && data.currentUser.periodXp < xpProfile.totalXp && (
-              <div className="rounded-xl border border-[var(--brand-gold)]/30 bg-[var(--brand-gold-soft)] p-4" id="leaderboard-sync-warning">
+              <div className="app-message app-message-warning p-4" id="leaderboard-sync-warning">
                 <p className="text-xs text-[var(--brand-ink)]">
                   ⚠️ Some of your local achievements (local: {xpProfile.totalXp} XP) are still syncing to the cloud. The leaderboard will update shortly once backup completes.
                 </p>
@@ -204,7 +202,7 @@ export function LeaderboardView({
 
             {/* Current User Card (only if signed in) */}
             {isSignedIn && (
-              <div className="rounded-xl border-l-4 border-l-[var(--brand-teal)] border-y border-r border-y-[var(--brand-border)] border-r-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4" id="leaderboard-current-user-card">
+              <div className="app-panel-muted border-l-4 border-l-[var(--brand-teal)] p-4" id="leaderboard-current-user-card">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
                   Your Current Standings
                 </p>
@@ -251,7 +249,7 @@ export function LeaderboardView({
             {data.leaderboard.length >= 3 && (
               <div className="grid grid-cols-3 items-end gap-3 py-6" id="leaderboard-podium">
                 {/* 2nd place */}
-                <div className="flex flex-col items-center rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-center">
+                <div className="app-panel-muted flex flex-col items-center p-4 text-center">
                   <span className="text-xs font-bold text-[var(--brand-muted)]">2nd</span>
                   <div className="my-2 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-surface)] border border-[var(--brand-border-strong)] text-xs font-bold">
                     {data.leaderboard[1].initials}
@@ -265,7 +263,7 @@ export function LeaderboardView({
                 </div>
 
                 {/* 1st place */}
-                <div className="flex flex-col items-center rounded-xl border-2 border-[var(--brand-teal)] bg-[var(--brand-surface-2)] p-5 text-center shadow-md transform -translate-y-2">
+                <div className="app-panel-muted flex -translate-y-2 transform flex-col items-center border-2 border-[var(--brand-teal)] p-5 text-center shadow-md">
                   <span className="text-xs font-bold text-[var(--brand-teal-ink)]">🥇 1st</span>
                   <div className="my-2 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-teal-soft)] border-2 border-[var(--brand-teal)] text-sm font-bold text-[var(--brand-teal-ink)]">
                     {data.leaderboard[0].initials}
@@ -279,7 +277,7 @@ export function LeaderboardView({
                 </div>
 
                 {/* 3rd place */}
-                <div className="flex flex-col items-center rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 text-center">
+                <div className="app-panel-muted flex flex-col items-center p-4 text-center">
                   <span className="text-xs font-bold text-[var(--brand-muted)]">3rd</span>
                   <div className="my-2 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-surface)] border border-[var(--brand-border-strong)] text-xs font-bold">
                     {data.leaderboard[2].initials}
@@ -296,7 +294,7 @@ export function LeaderboardView({
 
             {/* Empty State */}
             {data.leaderboard.length === 0 && (
-              <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-8 text-center" id="leaderboard-empty">
+              <div className="app-message app-message-info border-dashed p-8 text-center" id="leaderboard-empty">
                 <p className="text-sm text-[var(--brand-ink-soft)]">
                   {isSignedIn
                     ? "No leaderboard activity for this period yet. Complete an eligible practice session to appear here."

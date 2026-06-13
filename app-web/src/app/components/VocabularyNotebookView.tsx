@@ -117,12 +117,12 @@ function correctionStatusLabel(status: VocabSentenceCorrection["status"]): strin
 
 function correctionStatusClass(status: VocabSentenceCorrection["status"]): string {
   if (status === "natural" || status === "understandable") {
-    return "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]";
+    return "app-status app-status-success";
   }
   if (status === "awkward") {
-    return "bg-[var(--brand-gold-soft)] text-[var(--brand-gold-ink)]";
+    return "app-status app-status-warning";
   }
-  return "bg-[var(--brand-coral-soft)] text-[var(--brand-ink)]";
+  return "app-status app-status-error";
 }
 
 function formatDate(value: string | null): string {
@@ -204,19 +204,15 @@ export function VocabularyNotebookView({
     return t("vocab.paused");
   }
 
-  const card =
-    "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
+  const card = "app-panel brand-grid";
   const cardHeader =
-    "rounded-t-2xl border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
+    "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
   const cardBody = "p-6";
   const labelClass =
-    "mb-2 block text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]";
-  const inputClass =
-    "w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]";
-  const buttonPrimary =
-    "rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] disabled:cursor-not-allowed disabled:bg-[var(--brand-border-strong)] disabled:text-[var(--brand-muted)]";
-  const buttonSecondary =
-    "rounded-lg border border-[var(--brand-border-strong)] bg-[var(--brand-surface)] px-4 py-2 text-sm font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-surface-2)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] disabled:cursor-not-allowed disabled:opacity-50";
+    "app-label mb-2 block";
+  const inputClass = "app-field";
+  const buttonPrimary = "app-button app-button-primary";
+  const buttonSecondary = "app-button app-button-secondary";
   const selectedItem =
     items.find((item) => item.id === selectedItemId) ?? items[0] ?? null;
   const recentItems = sortByCreatedAtDesc(items).slice(0, 5);
@@ -250,12 +246,12 @@ export function VocabularyNotebookView({
         {message && (
           <p
             role="status"
-            className={`rounded-lg border px-4 py-3 text-sm ${
+            className={`app-message ${
               message.tone === "success"
-                ? "border-[var(--brand-teal)]/30 bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]"
+                ? "app-message-success"
                 : message.tone === "error"
-                  ? "border-[var(--brand-coral)]/30 bg-[var(--brand-coral-soft)] text-[var(--brand-ink)]"
-                  : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink-soft)]"
+                  ? "app-message-error"
+                  : "app-message-info"
             }`}
           >
             {message.text}
@@ -422,7 +418,7 @@ function RecentVocabularyHome({
         onAddItem={onAddItem}
       />
 
-      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+      <div className="app-panel-muted p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
@@ -452,7 +448,7 @@ function RecentVocabularyHome({
         </div>
 
         {recentItems.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)] p-6 text-sm text-[var(--brand-ink-soft)]">
+          <p className="app-message app-message-info mt-4 border-dashed p-6">
             {t("vocab.noVocabYet")}
           </p>
         ) : (
@@ -460,7 +456,7 @@ function RecentVocabularyHome({
             {recentItems.map((item) => (
               <li
                 key={item.id}
-                className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4"
+                className="app-panel p-4"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-base font-semibold text-[var(--brand-ink)]">
@@ -524,7 +520,7 @@ function AddVocabularyForm({
   onAddItem: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+    <div className="app-panel-muted p-5">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
           {t("vocab.addWord")}
@@ -790,7 +786,7 @@ function VocabularyManageCard({
           <button
             type="button"
             onClick={() => onDeleteItem(item.id)}
-            className="rounded-lg border border-[var(--brand-coral)]/40 bg-[var(--brand-surface)] px-4 py-2 text-sm font-medium text-[var(--brand-ink)] transition-colors hover:bg-[var(--brand-coral-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-coral)]"
+            className="app-button app-button-danger"
           >
             Delete
           </button>
@@ -826,7 +822,7 @@ function SentencePracticePanel({
   onCheckSentence: (itemId: string, sentenceId: string) => void;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5">
+    <div className="app-panel-muted p-5">
       <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
         Sentence practice
       </h3>
@@ -875,7 +871,7 @@ function SentencePracticePanel({
           />
         </div>
       ) : (
-        <p className="mt-4 rounded-lg border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface)] p-5 text-sm text-[var(--brand-ink-soft)]">
+        <p className="app-message app-message-info mt-4 border-dashed p-5">
           Add vocabulary first, then practice one sentence at a time.
         </p>
       )}
@@ -1154,9 +1150,9 @@ function SavedSentences({
                 </button>
                 {sentence.correction && (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${correctionStatusClass(
+                    className={correctionStatusClass(
                       sentence.correction.status,
-                    )}`}
+                    )}
                   >
                     {correctionStatusLabel(sentence.correction.status)}
                   </span>
@@ -1183,7 +1179,7 @@ function SavedSentenceCorrection({
   return (
     <>
       {correctionError?.sentenceId === sentence.id && (
-        <p className="mt-3 rounded-lg border border-[var(--brand-coral)]/30 bg-[var(--brand-coral-soft)] px-3 py-2 text-xs text-[var(--brand-ink)]">
+      <p className="app-message app-message-error mt-3 px-3 py-2 text-xs">
           {correctionError.text}
         </p>
       )}
@@ -1191,9 +1187,9 @@ function SavedSentenceCorrection({
       {sentence.correction && (
         <div className="mt-3 space-y-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3 text-xs text-[var(--brand-ink-soft)]">
           <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${correctionStatusClass(
+            className={correctionStatusClass(
               sentence.correction.status,
-            )}`}
+            )}
           >
             {correctionStatusLabel(sentence.correction.status)}
           </span>
@@ -1251,7 +1247,7 @@ function SavedSentenceCorrection({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+    <div className="app-panel-muted p-4">
       <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-muted)]">
         {label}
       </p>
@@ -1273,7 +1269,7 @@ function Metadata({ label, value }: { label: string; value: string }) {
 
 function Pill({ children }: { children: string }) {
   return (
-    <span className="rounded-full bg-[var(--brand-teal-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--brand-teal-ink)]">
+    <span className="app-status app-status-info">
       {children}
     </span>
   );
@@ -1294,8 +1290,7 @@ function SelectField<T extends string>({
   getLabel: (value: T) => string;
   onChange: (value: T) => void;
 }) {
-  const inputClass =
-    "w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-3 py-2 text-sm text-[var(--brand-ink)] focus:border-[var(--brand-teal)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-teal)]";
+  const inputClass = "app-field";
   return (
     <div>
       <label

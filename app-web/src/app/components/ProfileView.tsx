@@ -21,9 +21,8 @@ export type ProfileViewProps = {
   sessions?: { date: string; mode: string }[];
 };
 
-// UI card design patterns matching fonetik's style
 const card =
-  "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid overflow-hidden";
+  "app-panel brand-grid overflow-hidden";
 const cardHeader =
   "border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-4";
 const cardBody = "p-6";
@@ -109,7 +108,7 @@ export function ProfileView({
               />
             ) : (
               <div
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--brand-teal-ink)] text-2xl font-bold text-white shadow-sm"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--brand-accent-fill)] text-2xl font-bold text-[var(--brand-accent-fill-ink)] shadow-sm"
                 aria-label="Avatar initials"
                 data-testid="profile-avatar-fallback"
               >
@@ -182,7 +181,7 @@ export function ProfileView({
                   </p>
                 </div>
               ) : (
-                <p className="text-sm font-medium text-green-600 font-mono">
+                <p className="font-mono text-sm font-medium text-[var(--brand-success-ink)]">
                   {t("game.maxReached")} 🎉
                 </p>
               )}
@@ -304,7 +303,7 @@ export function ProfileView({
           </div>
           <div className={cardBody}>
             {sessions.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 text-sm text-[var(--brand-ink-soft)] text-center">
+              <p className="app-message app-message-info border-dashed p-5 text-center text-sm">
                 Complete at least one practice session to view stats.
               </p>
             ) : (
@@ -347,14 +346,14 @@ export function ProfileView({
               {earnedBadgeLabels.slice(0, 5).map((label, idx) => (
                 <span
                   key={idx}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[var(--brand-gold)]/10 border border-[var(--brand-gold)]/30 px-3 py-1 text-xs font-semibold text-[var(--brand-gold)] font-mono"
+                  className="app-status app-status-warning font-mono"
                   data-testid={`earned-badge-tag-${idx}`}
                 >
                   🏆 {label}
                 </span>
               ))}
               {earnedBadgeLabels.length > 5 && (
-                <span className="inline-flex items-center rounded-full bg-[var(--brand-border)] px-3 py-1 text-xs font-medium text-[var(--brand-ink-soft)] font-mono">
+                <span className="app-status font-mono">
                   +{earnedBadgeLabels.length - 5} more
                 </span>
               )}
@@ -376,10 +375,10 @@ export function ProfileView({
               <span className="text-sm text-[var(--brand-ink-soft)]">Leaderboard Status:</span>
               <span
                 className={[
-                  "text-xs font-bold px-2.5 py-1 rounded-full font-mono border",
+                  "app-status font-mono font-bold",
                   isLeaderboardOptedIn
-                    ? "bg-green-50 border-green-200 text-green-700"
-                    : "bg-gray-50 border-gray-200 text-gray-700",
+                    ? "app-status-success"
+                    : "",
                 ].join(" ")}
                 data-testid="leaderboard-visibility-status"
               >
@@ -387,7 +386,7 @@ export function ProfileView({
               </span>
             </div>
 
-            <div className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
+            <div className="app-message app-message-info border-dashed p-4">
               <p className="text-xs text-[var(--brand-ink-soft)] leading-relaxed">
                 <span className="font-semibold text-[var(--brand-teal-ink)]">Privacy Reassurance:</span> We strictly safeguard your learning data. Under no circumstances will the system publish, share, or render transcripts, retry transcripts, vocabulary sentence histories, AI corrections, article URLs, weaknesses, retry tasks, CSV summaries, or private learning notes.
               </p>
