@@ -3,10 +3,11 @@ import {
   writeXpProfileToCloud,
   writeXpEventsToCloud,
   writeBadgesToCloud,
+  loadGamificationFromCloud,
 } from "../src/app/lib/storage/gamification-cloud-runtime";
 import type { XpProfile, XpEvent, Badge } from "../src/app/lib/gamification";
 import type { SessionCloudAuthState } from "../src/app/lib/storage/session-cloud-runtime";
-import type { FonetikSupabaseClient } from "../src/app/lib/supabase";
+import type { FonetikSupabaseClient, CreateBrowserSupabaseClientOptions } from "../src/app/lib/supabase";
 
 const testProfile: XpProfile = {
   version: 1,
@@ -189,5 +190,102 @@ test.describe("Gamification Cloud Runtime operations", () => {
     });
 
     expect(result).toEqual({ status: "failed", reason: "write-failed" });
+  });
+});
+
+test.describe("Gamification Cloud Runtime read operations", () => {
+  test("loads gamification data from Supabase successfully", async () => {
+    let loadProfileCalls = 0;
+    let loadEventsCalls = 0;
+    let loadBadgesCalls = 0;
+    let createClientOptions: CreateBrowserSupabaseClientOptions | null = null;
+    const dummyClient = { marker: "supabase-client" } as unknown as FonetikSupabaseClient;
+
+    const result = await loadGamificationFromCloud({
+      auth: signedInAuth,
+      isConfigured: () => true,
+      createClient: (options) => {
+        createClientOptions = options;
+        return dummyClient;
+      },
+      loadXpProfile: async (ownerId, client) => {
+        expect(ownerId).toBe("user_clerk_123");
+        expect(client).toBe(dummyClient);
+        loadProfileCalls++;
+        return testProfile;
+      },
+      loadXpEvents: async (ownerId, client) => {
+        expect(ownerId).toBe("user_clerk_123");
+        expect(client).toBe(dummyClient);
+        loadEventsCalls++;
+        return [testEvent];
+      },
+      loadBadges: async (ownerId, client) => {
+        expect(ownerId).toBe("user_clerk_123");
+        expect(client).toBe(dummyClient);
+        loadBadgesCalls++;
+        return [testBadge];
+      },
+    });
+
+    expect(result).toEqual({
+      status: "loaded",
+      profile: testProfile,
+      events: [testEvent],
+      badges: [testBadge],
+    });
+    expect(loadProfileCalls).toBe(1);
+    expect(loadEventsCalls).toBe(1);
+    expect(loadBadgesCalls).toBe(1);
+
+    const token = await (createClientOptions as CreateBrowserSupabaseClientOptions | null)?.accessToken?.();
+    expect(token).toBe("clerk-token");
+  });
+
+  test("skips loading when signed out", async () => {
+    const result = await loadGamificationFromCloud({
+      auth: { isLoaded: true, isSignedIn: false, userId: null, getToken: null },
+      isConfigured: () => true,
+      createClient: () => {
+        throw new Error("client should not be created");
+      },
+    });
+
+    expect(result).toEqual({ status: "skipped", reason: "signed-out" });
+  });
+
+  test("returns failed status safely when a load fails", async () => {
+    const dummyClient = { marker: "supabase-client" } as unknown as FonetikSupabaseClient;
+
+    const result = await loadGamificationFromCloud({
+      auth: signedInAuth,
+      isConfigured: () => true,
+      createClient: () => dummyClient,
+      loadXpProfile: async () => {
+        throw new Error("load profile failed");
+      },
+    });
+
+    expect(result).toEqual({ status: "failed", reason: "read-failed" });
+  });
+
+  test("uses the correct Supabase JWT template token provider in writes", async () => {
+    let createClientOptions: CreateBrowserSupabaseClientOptions | null = null;
+    const dummyClient = { marker: "supabase-client" } as unknown as FonetikSupabaseClient;
+
+    const result = await writeXpProfileToCloud({
+      auth: signedInAuth,
+      profile: testProfile,
+      isConfigured: () => true,
+      createClient: (options) => {
+        createClientOptions = options;
+        return dummyClient;
+      },
+      upsertProfile: async () => {},
+    });
+
+    expect(result).toEqual({ status: "saved" });
+    const token = await (createClientOptions as CreateBrowserSupabaseClientOptions | null)?.accessToken?.();
+    expect(token).toBe("clerk-token");
   });
 });

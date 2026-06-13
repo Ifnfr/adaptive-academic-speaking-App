@@ -96,6 +96,7 @@ import {
   writeXpProfileToCloud,
   writeXpEventsToCloud,
   writeBadgesToCloud,
+  loadGamificationFromCloud,
 } from "./lib/storage/gamification-cloud-runtime";
 import {
   isSupabaseConfigured,
@@ -490,6 +491,7 @@ export default function Home() {
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
   const sessionHistoryCloudLoadKeyRef = useRef<string | null>(null);
   const vocabularyCloudLoadKeyRef = useRef<string | null>(null);
+  const gamificationCloudLoadKeyRef = useRef<string | null>(null);
   const commonplacePodchatRestoreRef = useRef(false);
   const suppressCloudWritesRef = useRef(false);
   const bootstrappedUserRef = useRef<string | null>(null);
@@ -552,6 +554,8 @@ export default function Home() {
   const [sessionHistorySaveError, setSessionHistorySaveError] =
     useState<string | null>(null);
   const [vocabCloudError, setVocabCloudError] =
+    useState<string | null>(null);
+  const [gamificationCloudError, setGamificationCloudError] =
     useState<string | null>(null);
 
   // --- Global Theme Mode Application ---
@@ -794,12 +798,34 @@ export default function Home() {
 
   useEffect(() => {
     if (!gamificationReady) return;
+    const auth = sessionCloudAuthRef.current;
+
+    if (auth.isLoaded && auth.isSignedIn) {
+      if (suppressCloudWritesRef.current) return;
+      void writeXpProfileToCloud({
+        auth,
+        profile: xpProfile,
+      }).then((result) => {
+        if (result.status === "saved") {
+          return;
+        }
+        if (result.status === "skipped") {
+          storage.saveXpProfile(xpProfile);
+          setGamificationCloudError(
+            "Progress data is using local fallback because cloud progress is unavailable.",
+          );
+          return;
+        }
+        if (result.status === "failed") {
+          setGamificationCloudError(
+            "Progress updated, but cloud save failed. Please check your connection.",
+          );
+        }
+      });
+      return;
+    }
+
     storage.saveXpProfile(xpProfile);
-    if (suppressCloudWritesRef.current) return;
-    void writeXpProfileToCloud({
-      auth: sessionCloudAuthRef.current,
-      profile: xpProfile,
-    });
   }, [gamificationReady, xpProfile]);
 
   const cloudSnapshotLocalKey = useMemo(
@@ -918,6 +944,46 @@ export default function Home() {
       if (result.status === "failed") {
         setVocabCloudError(
           "Could not load cloud vocabulary notebook. Local fallback remains available.",
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudAuthState]);
+
+  useEffect(() => {
+    if (!cloudAuthState.isLoaded) return;
+
+    if (!cloudAuthState.isSignedIn || !cloudAuthState.userId) {
+      gamificationCloudLoadKeyRef.current = null;
+      window.setTimeout(() => {
+        setXpProfile(storage.loadXpProfile());
+        setXpEvents(storage.loadXpEvents());
+        setBadges(storage.loadBadges());
+        setGamificationCloudError(null);
+      }, 0);
+      return;
+    }
+
+    const loadKey = `cloud:${cloudAuthState.userId}`;
+    if (gamificationCloudLoadKeyRef.current === loadKey) return;
+    gamificationCloudLoadKeyRef.current = loadKey;
+
+    let cancelled = false;
+    void loadGamificationFromCloud({ auth: cloudAuthState }).then((result) => {
+      if (cancelled) return;
+      if (result.status === "loaded") {
+        setXpProfile(result.profile);
+        setXpEvents(result.events);
+        setBadges(result.badges);
+        setGamificationCloudError(null);
+        return;
+      }
+      if (result.status === "failed") {
+        setGamificationCloudError(
+          "Could not load cloud progress data. Local fallback remains available.",
         );
       }
     });
@@ -1775,12 +1841,35 @@ export default function Home() {
     }
 
     if (nextBadges.length !== badges.length) {
+      const auth = sessionCloudAuthRef.current;
       setBadges(nextBadges);
+
+      if (auth.isLoaded && auth.isSignedIn) {
+        setGamificationCloudError(null);
+        void writeBadgesToCloud({
+          auth,
+          badges: nextBadges,
+        }).then((result) => {
+          if (result.status === "saved") {
+            return;
+          }
+          if (result.status === "skipped") {
+            storage.saveBadges(nextBadges);
+            setGamificationCloudError(
+              "Progress data is using local fallback because cloud progress is unavailable.",
+            );
+            return;
+          }
+          if (result.status === "failed") {
+            setGamificationCloudError(
+              "Badge unlocked, but cloud save failed. Please check your connection.",
+            );
+          }
+        });
+        return;
+      }
+
       storage.saveBadges(nextBadges);
-      void writeBadgesToCloud({
-        auth: sessionCloudAuthRef.current,
-        badges: nextBadges,
-      });
     }
   };
 
@@ -1801,13 +1890,41 @@ export default function Home() {
       const awarded = awardXpEvent(xpProfile, xpEvents, candidate);
       setXpProfile(awarded.profile);
       setXpEvents(awarded.events);
+
+      const auth = sessionCloudAuthRef.current;
+      if (auth.isLoaded && auth.isSignedIn) {
+        setGamificationCloudError(null);
+        void writeXpEventsToCloud({
+          auth,
+          previous: prevEvents,
+          next: awarded.events,
+        }).then((result) => {
+          if (result.status === "saved") {
+            return;
+          }
+          if (result.status === "skipped") {
+            storage.saveXpEvents(awarded.events);
+            storage.saveXpProfile(awarded.profile);
+            setGamificationCloudError(
+              "Progress data is using local fallback because cloud progress is unavailable.",
+            );
+            return;
+          }
+          if (result.status === "failed") {
+            setGamificationCloudError(
+              "Progress updated, but cloud save failed. Please check your connection.",
+            );
+          }
+        });
+
+        if (awarded.result.allowed) {
+          updateBadges(type, awarded.profile);
+        }
+        return awarded.result;
+      }
+
       storage.saveXpProfile(awarded.profile);
       storage.saveXpEvents(awarded.events);
-      void writeXpEventsToCloud({
-        auth: sessionCloudAuthRef.current,
-        previous: prevEvents,
-        next: awarded.events,
-      });
 
       if (awarded.result.allowed) {
         updateBadges(type, awarded.profile);
@@ -2312,6 +2429,11 @@ export default function Home() {
           {sessionHistorySaveError && (
             <p className="app-message app-message-warning">
               {sessionHistorySaveError}
+            </p>
+          )}
+          {gamificationCloudError && (
+            <p className="app-message app-message-warning">
+              {gamificationCloudError}
             </p>
           )}
 

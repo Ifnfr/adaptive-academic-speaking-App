@@ -3,6 +3,8 @@
 import {
   createBrowserSupabaseClient,
   isSupabaseConfigured,
+  getSupabaseAccessToken,
+  createSupabaseAccessTokenProvider,
   type CreateBrowserSupabaseClientOptions,
   type FonetikSupabaseClient,
 } from "../supabase";
@@ -10,6 +12,9 @@ import {
   upsertXpProfileRow,
   upsertXpEventRows,
   upsertBadgeRows,
+  loadSupabaseXpProfile,
+  loadSupabaseXpEvents,
+  loadSupabaseBadges,
 } from "./supabase-gamification-adapter";
 import type { XpProfile, XpEvent, Badge } from "../gamification";
 import type { SessionCloudAuthState, SessionCloudWriteResult } from "./session-cloud-runtime";
@@ -69,17 +74,11 @@ async function getSupabaseClient(
     return null;
   }
   try {
-    const token = await auth.getToken();
+    const token = await getSupabaseAccessToken(auth.getToken);
     if (!token) return null;
 
     return createClient({
-      accessToken: async () => {
-        try {
-          return (await auth.getToken?.()) ?? token;
-        } catch {
-          return token;
-        }
-      },
+      accessToken: createSupabaseAccessTokenProvider(auth.getToken, token),
     });
   } catch {
     return null;
@@ -163,5 +162,89 @@ export async function writeBadgesToCloud({
     return { status: "saved" };
   } catch {
     return { status: "failed", reason: "write-failed" };
+  }
+}
+
+export type GamificationCloudReadResult =
+  | {
+      status: "skipped";
+      reason:
+        | "auth-loading"
+        | "signed-out"
+        | "missing-user"
+        | "supabase-not-configured"
+        | "missing-token"
+        | "missing-client";
+    }
+  | {
+      status: "loaded";
+      profile: XpProfile;
+      events: XpEvent[];
+      badges: Badge[];
+    }
+  | { status: "failed"; reason: "read-failed" };
+
+export type LoadGamificationFromCloudOptions = {
+  auth: SessionCloudAuthState;
+  isConfigured?: () => boolean;
+  createClient?: (
+    options: CreateBrowserSupabaseClientOptions,
+  ) => FonetikSupabaseClient | null;
+  loadXpProfile?: (
+    ownerId: string,
+    supabaseClient: FonetikSupabaseClient,
+  ) => Promise<XpProfile>;
+  loadXpEvents?: (
+    ownerId: string,
+    supabaseClient: FonetikSupabaseClient,
+  ) => Promise<XpEvent[]>;
+  loadBadges?: (
+    ownerId: string,
+    supabaseClient: FonetikSupabaseClient,
+  ) => Promise<Badge[]>;
+};
+
+export async function loadGamificationFromCloud({
+  auth,
+  isConfigured = isSupabaseConfigured,
+  createClient = createBrowserSupabaseClient,
+  loadXpProfile = loadSupabaseXpProfile,
+  loadXpEvents = loadSupabaseXpEvents,
+  loadBadges = loadSupabaseBadges,
+}: LoadGamificationFromCloudOptions): Promise<GamificationCloudReadResult> {
+  if (!auth.isLoaded) {
+    return { status: "skipped", reason: "auth-loading" };
+  }
+
+  if (!auth.isSignedIn) {
+    return { status: "skipped", reason: "signed-out" };
+  }
+
+  if (!auth.userId) {
+    return { status: "skipped", reason: "missing-user" };
+  }
+
+  if (!auth.getToken) {
+    return { status: "skipped", reason: "missing-token" };
+  }
+
+  if (!isConfigured()) {
+    return { status: "skipped", reason: "supabase-not-configured" };
+  }
+
+  const client = await getSupabaseClient(auth, isConfigured, createClient);
+  if (!client) {
+    return { status: "skipped", reason: "missing-client" };
+  }
+
+  try {
+    const [profile, events, badges] = await Promise.all([
+      loadXpProfile(auth.userId, client),
+      loadXpEvents(auth.userId, client),
+      loadBadges(auth.userId, client),
+    ]);
+    return { status: "loaded", profile, events, badges };
+  } catch {
+    return { status: "failed", reason: "read-failed" };
   }
 }
