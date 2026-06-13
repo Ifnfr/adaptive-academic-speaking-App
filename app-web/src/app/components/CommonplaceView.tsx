@@ -2058,6 +2058,7 @@ export function CommonplaceView({
                 <CommonplaceMapCanvasFoundation
                   map={selectedMap}
                   canvasColor={effectiveCanvasColor}
+                  cardTheme={cardTheme}
                   noteContext={mapNoteContext}
                   onBack={handleMapCanvasBack}
                   backLabel={

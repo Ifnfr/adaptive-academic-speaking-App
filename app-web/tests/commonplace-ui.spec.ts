@@ -1222,6 +1222,79 @@ async function gotoApp(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 }
 
+async function installMockProfileTheme(
+  page: Page,
+  {
+    canvasColor,
+    cardColor,
+  }: {
+    canvasColor: string;
+    cardColor: string;
+  },
+) {
+  await page.addInitScript(
+    ({
+      canvasColor: profileCanvasColor,
+      cardColor: profileCardColor,
+      ownerId,
+    }) => {
+      const testWindow = window as typeof window & {
+        __MOCK_AUTH__?: {
+          isSignedIn: boolean;
+          userId: string;
+          email?: string;
+          displayName?: string;
+        };
+        __MOCK_PROFILE_ADAPTER__?: {
+          loadProfile: () => Promise<unknown>;
+          updateProfile: (
+            userId: string,
+            patch: Record<string, unknown>,
+          ) => Promise<void>;
+        };
+        __COMMONPLACE_PROFILE_THEME_LOADED__?: boolean;
+      };
+      const profile = {
+        ownerId,
+        email: "commonplace-theme@example.com",
+        displayName: "Commonplace Theme Tester",
+        learnerLevel: "Intermediate",
+        preferredProvider: "Claude",
+        preferredMode: "Fluency Sprint",
+        avatarUrl: null,
+        bio: "Checking Commonplace node themes.",
+        publicProfileEnabled: false,
+        leaderboardOptIn: false,
+        preferredAppLanguage: "en",
+        feedbackLanguage: "en",
+        targetLanguage: "en",
+        commonplaceCanvasColor: profileCanvasColor,
+        commonplaceCardColor: profileCardColor,
+        appearanceMode: "system",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      testWindow.__MOCK_AUTH__ = {
+        isSignedIn: true,
+        userId: ownerId,
+        email: "commonplace-theme@example.com",
+        displayName: "Commonplace Theme Tester",
+      };
+      testWindow.__MOCK_PROFILE_ADAPTER__ = {
+        async loadProfile() {
+          testWindow.__COMMONPLACE_PROFILE_THEME_LOADED__ = true;
+          return profile;
+        },
+        async updateProfile(_userId: string, patch: Record<string, unknown>) {
+          Object.assign(profile, patch, { updatedAt: new Date().toISOString() });
+        },
+      };
+    },
+    { canvasColor, cardColor, ownerId: TEST_OWNER_ID },
+  );
+}
+
 async function openCommonplace(page: Page) {
   const mobileToggle = page.getByTestId("mobile-nav-toggle");
   const mobileToggleByName = page.getByRole("button", {
@@ -2354,7 +2427,7 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await page.getByRole("button", { name: "Confirm delete" }).click();
     await expect(page.getByText("Institutions Map")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "← Library" }).click();
+    await page.getByRole("button", { name: /Library/ }).click();
     await expect(page.getByTestId("commonplace-library-grid")).toBeVisible();
   });
 
@@ -2471,6 +2544,88 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     expect(
       contrastRatio(inventoryTextContrast.text, inventoryTextContrast.background),
     ).toBeGreaterThan(4.5);
+  });
+
+  test("canvas note nodes use the selected Commonplace card theme in Sub and Main maps", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await installMockProfileTheme(page, {
+      canvasColor: "forest",
+      cardColor: "terracotta",
+    });
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await gotoApp(page);
+    await page.waitForFunction(
+      () =>
+        (window as typeof window & {
+          __COMMONPLACE_PROFILE_THEME_LOADED__?: boolean;
+        }).__COMMONPLACE_PROFILE_THEME_LOADED__ === true,
+    );
+    await openCommonplace(page);
+
+    const firstCard = page
+      .getByTestId("commonplace-library-grid")
+      .getByRole("button", { name: /Institutions and Growth/i });
+    await expect(firstCard).toHaveCSS("background-color", "rgb(154, 52, 18)");
+    const libraryCardBackground = await firstCard.evaluate(
+      (card) => window.getComputedStyle(card).backgroundColor,
+    );
+
+    await firstCard.click();
+    await page.getByTestId("commonplace-note-mind-map-btn").click();
+    await page.getByLabel("New Sub Mind Map title").fill("Theme Match Sub Map");
+    await page.getByRole("button", { name: "+ New Sub Mind Map" }).click();
+    await page.getByRole("button", { name: /Theme Match Sub Map/i }).click();
+
+    const subMapCanvas = page.getByTestId("commonplace-map-canvas");
+    await expect(subMapCanvas).toHaveAttribute("data-canvas-theme", "forest");
+    await expect(subMapCanvas).toHaveCSS("background-color", "rgb(31, 46, 29)");
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 180, 210);
+
+    const subMapNoteNode = page.getByTestId("commonplace-map-note-node").first();
+    await expect(subMapNoteNode).toHaveCSS("background-color", libraryCardBackground);
+    const subMapNodeStyles = await subMapNoteNode.evaluate((node) => {
+      const tag = node.querySelector(".commonplace-card-tag");
+      const handle = node.querySelector(".react-flow__handle");
+      const nodeStyles = window.getComputedStyle(node);
+      const tagStyles = window.getComputedStyle(tag ?? node);
+      const handleStyles = window.getComputedStyle(handle ?? node);
+      return {
+        text: nodeStyles.color,
+        background: nodeStyles.backgroundColor,
+        tagText: tagStyles.color,
+        tagBackground: tagStyles.backgroundColor,
+        handleBackground: handleStyles.backgroundColor,
+        handleOpacity: handleStyles.opacity,
+      };
+    });
+    expect(contrastRatio(subMapNodeStyles.text, subMapNodeStyles.background)).toBeGreaterThan(4.5);
+    expect(
+      contrastRatio(subMapNodeStyles.tagText, subMapNodeStyles.tagBackground),
+    ).toBeGreaterThan(4.5);
+    expect(subMapNodeStyles.handleBackground).not.toBe("rgba(0, 0, 0, 0)");
+    expect(Number(subMapNodeStyles.handleOpacity)).toBeGreaterThan(0.8);
+
+    await page.getByRole("button", { name: /Sub Mind Maps/ }).click();
+    await page.getByRole("button", { name: /Detail Note/ }).click();
+    await page.getByRole("button", { name: /Library/ }).click();
+    await page.getByTestId("commonplace-main-maps-btn").click();
+    await page
+      .locator("article")
+      .filter({ hasText: "Comparative Politics Map" })
+      .getByRole("button", { name: "Open" })
+      .click();
+    await expect(
+      page.locator("h2").filter({ hasText: "Comparative Politics Map" }),
+    ).toBeVisible();
+    await dragSidebarNoteToCanvas(page, "Institutions and Growth", 210, 230);
+
+    const mainMapNoteNode = page.getByTestId("commonplace-map-note-node").first();
+    await expect(mainMapNoteNode).toHaveCSS("background-color", libraryCardBackground);
+    const mainMapCanvas = page.getByTestId("commonplace-map-canvas");
+    await expect(mainMapCanvas).toHaveAttribute("data-canvas-theme", "forest");
+    await expect(mainMapCanvas).toHaveCSS("background-color", "rgb(31, 46, 29)");
   });
 
   test("Inventory stays map-scoped and confirms dirty map switching", async ({

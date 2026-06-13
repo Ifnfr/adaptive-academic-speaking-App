@@ -44,6 +44,7 @@ import type {
 } from "../lib/storage/supabase-commonplace-mindmap-adapter";
 import {
   getCommonplaceCanvasTheme,
+  type CommonplaceCardTheme,
   type CommonplaceThemeColorId,
 } from "../lib/commonplace-theme";
 import {
@@ -116,6 +117,7 @@ type EdgeEditState = PositionedPanel & {
 type CommonplaceMapCanvasFoundationProps = {
   map: CommonplaceMindMapSummary;
   canvasColor?: CommonplaceThemeColorId | null;
+  cardTheme: CommonplaceCardTheme;
   noteContext: MapNoteContext | null;
   onBack: () => void;
   backLabel?: string;
@@ -594,6 +596,7 @@ function EdgeTypeChoiceButtons({
 export function CommonplaceMapCanvasFoundation({
   map,
   canvasColor,
+  cardTheme,
   noteContext,
   onBack,
   backLabel,
@@ -714,6 +717,7 @@ export function CommonplaceMapCanvasFoundation({
           node.type === "noteNode"
             ? {
                 ...(node.data as CommonplaceNoteNodeData),
+                cardTheme,
                 connectionRole: connectionSourceNodeId
                   ? node.id === connectionSourceNodeId
                     ? "source"
@@ -731,7 +735,7 @@ export function CommonplaceMapCanvasFoundation({
                 }
               : node.data,
       })),
-    [connectionSourceNodeId, nodes],
+    [cardTheme, connectionSourceNodeId, nodes],
   );
   const connectionPreview =
     connectionSourcePoint && connectionPointer
