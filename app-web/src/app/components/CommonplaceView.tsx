@@ -286,11 +286,7 @@ type CommonplaceViewProps = {
   commonplaceCardColor?: CommonplaceThemeColorId | null;
   onDiscussInPodchat?: (context: {
     source: "commonplace";
-    shortcode: string;
-    title?: string;
-    sourceBook?: string;
-    insight: string;
-    tags: string[];
+    noteId: string;
   }) => void;
   onDiscussMapInPodchat?: (context: {
     source: "commonplace-map";
@@ -1823,11 +1819,7 @@ export function CommonplaceView({
 
     const context = {
       source: "commonplace",
-      shortcode: selectedNote.shortcode,
-      title: selectedNote.title ?? undefined,
-      sourceBook: selectedNote.sourceBook || undefined,
-      insight: selectedNote.insight,
-      tags: selectedNote.tags,
+      noteId: selectedNote.id,
     } as const;
 
     try {

@@ -61,7 +61,7 @@ import { AuthStatus } from "./components/AuthStatus";
 import { PodchatView } from "./components/PodchatView";
 import type {
   PodchatArticleContext,
-  PodchatCommonplaceContext,
+  PodchatCommonplaceContextRef,
   PodchatCommonplaceMapContextRef,
 } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
@@ -406,12 +406,73 @@ const FONETIK_RETURN_VIEWS = new Set<SidebarView>([
   "profile",
 ]);
 
+const COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY =
+  "fonetik:commonplace-podchat-context";
+
+type StoredCommonplacePodchatContext =
+  | PodchatCommonplaceContextRef
+  | PodchatCommonplaceMapContextRef;
+
 function normalizeFonetikReturnView(value: string | null): SidebarView {
   if (!value) return FONETIK_FALLBACK_VIEW;
   if (value === "commonplace") return FONETIK_FALLBACK_VIEW;
   return FONETIK_RETURN_VIEWS.has(value as SidebarView)
     ? (value as SidebarView)
     : FONETIK_FALLBACK_VIEW;
+}
+
+function readStoredCommonplacePodchatContext():
+  | StoredCommonplacePodchatContext
+  | null {
+  try {
+    const raw = window.sessionStorage.getItem(
+      COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY,
+    );
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      window.sessionStorage.removeItem(COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY);
+      return null;
+    }
+    const record = parsed as Record<string, unknown>;
+    if (record.source === "commonplace" && typeof record.noteId === "string") {
+      const noteId = record.noteId.trim();
+      if (!noteId) {
+        window.sessionStorage.removeItem(COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY);
+        return null;
+      }
+      const compact = { source: "commonplace" as const, noteId };
+      window.sessionStorage.setItem(
+        COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY,
+        JSON.stringify(compact),
+      );
+      return compact;
+    }
+    if (
+      record.source === "commonplace-map" &&
+      (record.mapType === "sub" || record.mapType === "main") &&
+      typeof record.mapId === "string" &&
+      record.mapId.trim()
+    ) {
+      return {
+        source: "commonplace-map",
+        mapType: record.mapType,
+        mapId: record.mapId.trim(),
+      };
+    }
+    window.sessionStorage.removeItem(COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredCommonplacePodchatContext(): void {
+  try {
+    window.sessionStorage.removeItem(COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY);
+  } catch {
+    // Session storage is optional; direct state handoff remains primary.
+  }
 }
 
 export default function Home() {
@@ -425,6 +486,7 @@ export default function Home() {
     useState<CloudSnapshotRuntimeResult | null>(null);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
   const sessionHistoryCloudLoadKeyRef = useRef<string | null>(null);
+  const commonplacePodchatRestoreRef = useRef(false);
   const suppressCloudWritesRef = useRef(false);
   const bootstrappedUserRef = useRef<string | null>(null);
   const [clerkUser, setClerkUser] = useState<ClerkUserType>(null);
@@ -641,7 +703,7 @@ export default function Home() {
   const [pendingArticleContext, setPendingArticleContext] =
     useState<PodchatArticleContext | null>(null);
   const [pendingCommonplaceContext, setPendingCommonplaceContext] =
-    useState<PodchatCommonplaceContext | null>(null);
+    useState<PodchatCommonplaceContextRef | null>(null);
   const [pendingCommonplaceMapContextRef, setPendingCommonplaceMapContextRef] =
     useState<PodchatCommonplaceMapContextRef | null>(null);
 
@@ -1157,6 +1219,38 @@ export default function Home() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    if (commonplacePodchatRestoreRef.current) return;
+    commonplacePodchatRestoreRef.current = true;
+    const storedContext = readStoredCommonplacePodchatContext();
+    if (!storedContext) return;
+
+    const timer = window.setTimeout(() => {
+      if (storedContext.source === "commonplace") {
+        setPendingCommonplaceContext(storedContext);
+        setPendingCommonplaceMapContextRef(null);
+        setPendingArticleContext(null);
+        setTarget("Commonplace note discussion");
+        setMode("Fluency Sprint");
+        setView("active");
+        return;
+      }
+
+      setPendingCommonplaceMapContextRef(storedContext);
+      setPendingCommonplaceContext(null);
+      setPendingArticleContext(null);
+      setTarget(
+        storedContext.mapType === "main"
+          ? "Commonplace Main Map discussion"
+          : "Commonplace Sub Mind Map discussion",
+      );
+      setMode("Fluency Sprint");
+      setView("active");
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const previousSession = sessions[0] ?? null;
   // Lightweight day-streak derived from session.date strings. No new storage.
@@ -1702,14 +1796,12 @@ export default function Home() {
   };
 
   const handleDiscussCommonplaceInPodchat = (
-    context: PodchatCommonplaceContext,
+    context: PodchatCommonplaceContextRef,
   ) => {
     setPendingCommonplaceContext(context);
     setPendingArticleContext(null);
     setPendingCommonplaceMapContextRef(null);
-    setTarget(
-      `Commonplace note ${context.shortcode}: ${context.insight.slice(0, 180)}`,
-    );
+    setTarget("Commonplace note discussion");
     setMode("Fluency Sprint");
     setView("active");
   };
@@ -2169,9 +2261,15 @@ export default function Home() {
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
               commonplaceContext={pendingCommonplaceContext}
-              onClearCommonplaceContext={() => setPendingCommonplaceContext(null)}
+              onClearCommonplaceContext={() => {
+                setPendingCommonplaceContext(null);
+                clearStoredCommonplacePodchatContext();
+              }}
               commonplaceMapContextRef={pendingCommonplaceMapContextRef}
-              onClearCommonplaceMapContext={() => setPendingCommonplaceMapContextRef(null)}
+              onClearCommonplaceMapContext={() => {
+                setPendingCommonplaceMapContextRef(null);
+                clearStoredCommonplacePodchatContext();
+              }}
               ttsProvider={ttsProvider}
               elevenLabsModelId={elevenLabsModel}
             />

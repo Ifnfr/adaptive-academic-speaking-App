@@ -1216,6 +1216,51 @@ async function gotoApp(page: Page) {
       return;
     }
 
+    if (url.pathname === "/api/commonplace/notes/context") {
+      const noteId = url.searchParams.get("noteId");
+      const context = await page.evaluate((nId) => {
+        const testWindow = window as typeof window & {
+          __COMMONPLACE_TEST_NOTES__?: Array<{
+            id: string;
+            shortcode: string;
+            title: string | null;
+            sourceBook: string;
+            insight: string;
+            tags: string[];
+          }>;
+        };
+        const note = testWindow.__COMMONPLACE_TEST_NOTES__?.find(
+          (candidate) => candidate.id === nId,
+        );
+        if (!note) return null;
+        return {
+          source: "commonplace",
+          noteId: note.id,
+          shortcode: note.shortcode,
+          title: note.title ?? undefined,
+          sourceBook: note.sourceBook || undefined,
+          insight: note.insight.slice(0, 1200),
+          tags: note.tags.slice(0, 8),
+        };
+      }, noteId);
+
+      if (!context) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "note_not_found" }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ context }),
+      });
+      return;
+    }
+
     await route.continue();
   });
 
@@ -3316,6 +3361,14 @@ test.describe("Commonplace Phase 1B form and detail", () => {
   });
 
   test("Diskusi di Podchat passes only compact Commonplace context", async ({ page }) => {
+    const providerRequests: string[] = [];
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.startsWith("/api/podchat/")) {
+        providerRequests.push(pathname);
+      }
+    });
+
     await gotoApp(page);
     await page.getByRole("button", { name: "Commonplace" }).click();
 
@@ -3327,12 +3380,21 @@ test.describe("Commonplace Phase 1B form and detail", () => {
 
     await expect(page.getByTestId("podchat-commonplace-context-card")).toBeVisible();
     await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText("#wn1");
+    await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText(
+      "Inclusive institutions create stronger incentives for growth.",
+    );
+    expect(providerRequests).toEqual([]);
 
     const storedContext = await page.evaluate(() =>
       window.sessionStorage.getItem("fonetik:commonplace-podchat-context"),
     );
     expect(storedContext).toContain('"source":"commonplace"');
-    expect(storedContext).toContain('"shortcode":"#wn1"');
+    expect(storedContext).toContain('"noteId":"note-1"');
+    expect(storedContext).not.toContain("shortcode");
+    expect(storedContext).not.toContain("title");
+    expect(storedContext).not.toContain("insight");
+    expect(storedContext).not.toContain("tags");
+    expect(storedContext).not.toContain("sourceBook");
     expect(storedContext).not.toMatch(forbiddenCommonplaceContextFieldPattern);
     expect(storedContext).not.toContain("quote");
   });

@@ -194,8 +194,14 @@ export type PodchatArticleContext = {
   sourceDomain?: string;
 };
 
-export type PodchatCommonplaceContext = {
+export type PodchatCommonplaceContextRef = {
   source: "commonplace";
+  noteId: string;
+};
+
+type PodchatCommonplaceDiscussionContext = {
+  source: "commonplace";
+  noteId: string;
   shortcode: string;
   title?: string;
   sourceBook?: string;
@@ -250,7 +256,7 @@ export interface PodchatViewProps {
   onSessionHistoryRecord?: (record: StoredSessionRecord) => void;
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
-  commonplaceContext?: PodchatCommonplaceContext | null;
+  commonplaceContext?: PodchatCommonplaceContextRef | null;
   onClearCommonplaceContext?: () => void;
   commonplaceMapContextRef?: PodchatCommonplaceMapContextRef | null;
   onClearCommonplaceMapContext?: () => void;
@@ -298,6 +304,12 @@ export function PodchatView({
   const [commonplaceMapContextLoading, setCommonplaceMapContextLoading] =
     useState(false);
   const [commonplaceMapContextError, setCommonplaceMapContextError] =
+    useState<string | null>(null);
+  const [commonplaceNoteContext, setCommonplaceNoteContext] =
+    useState<PodchatCommonplaceDiscussionContext | null>(null);
+  const [commonplaceNoteContextLoading, setCommonplaceNoteContextLoading] =
+    useState(false);
+  const [commonplaceNoteContextError, setCommonplaceNoteContextError] =
     useState<string | null>(null);
 
   // TTS audio playback states and refs
@@ -400,18 +412,74 @@ export function PodchatView({
     "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)] hover:bg-[var(--brand-surface)]";
 
   const commonplaceLabel =
-    commonplaceContext?.title?.trim() ||
-    commonplaceContext?.sourceBook?.trim() ||
+    commonplaceNoteContext?.title?.trim() ||
+    commonplaceNoteContext?.sourceBook?.trim() ||
     "your Commonplace note";
 
-  const commonplaceOpener = commonplaceContext
-    ? `Today, we'll discuss your Commonplace note ${commonplaceContext.shortcode} from ${commonplaceLabel}. Explain the idea in your own words.`
+  const commonplaceOpener = commonplaceNoteContext
+    ? `Today, we'll discuss your Commonplace note ${commonplaceNoteContext.shortcode} from ${commonplaceLabel}. Explain the idea in your own words.`
     : null;
   const commonplaceMapOpener = commonplaceMapContext
     ? commonplaceMapContext.mapType === "main"
       ? `Today, we'll discuss your Main Map "${commonplaceMapContext.mapTitle}". It has ${commonplaceMapContext.counts.nodes} visual node${commonplaceMapContext.counts.nodes !== 1 ? "s" : ""} and ${commonplaceMapContext.counts.edges} connection${commonplaceMapContext.counts.edges !== 1 ? "s" : ""}. Start by describing what the overall map represents.`
       : `Today, we'll discuss your Sub Mind Map "${commonplaceMapContext.mapTitle}". It includes ${commonplaceMapContext.counts.nodes} visual note${commonplaceMapContext.counts.nodes !== 1 ? "s" : ""} and ${commonplaceMapContext.counts.edges} connection${commonplaceMapContext.counts.edges !== 1 ? "s" : ""}. Start by explaining the strongest relationship you see.`
     : null;
+
+  useEffect(() => {
+    if (!commonplaceContext) {
+      setTimeout(() => {
+        setCommonplaceNoteContext(null);
+        setCommonplaceNoteContextLoading(false);
+        setCommonplaceNoteContextError(null);
+      }, 0);
+      return;
+    }
+
+    let isCurrent = true;
+    const loadContext = async () => {
+      setCommonplaceNoteContext(null);
+      setCommonplaceNoteContextLoading(true);
+      setCommonplaceNoteContextError(null);
+      try {
+        const params = new URLSearchParams({
+          noteId: commonplaceContext.noteId,
+        });
+        const response = await fetch(`/api/commonplace/notes/context?${params}`, {
+          method: "GET",
+          credentials: "same-origin",
+        });
+        const data = (await response.json().catch(() => null)) as
+          | {
+              context?: PodchatCommonplaceDiscussionContext;
+              error?: string;
+            }
+          | null;
+        if (!isCurrent) return;
+        if (response.ok && data?.context?.source === "commonplace") {
+          setCommonplaceNoteContext(data.context);
+          return;
+        }
+        setCommonplaceNoteContextError(
+          data?.error === "auth_required"
+            ? "Sign in again to discuss this note."
+            : "Could not load this note discussion context.",
+        );
+      } catch {
+        if (isCurrent) {
+          setCommonplaceNoteContextError(
+            "Could not load this note discussion context.",
+          );
+        }
+      } finally {
+        if (isCurrent) setCommonplaceNoteContextLoading(false);
+      }
+    };
+
+    void loadContext();
+    return () => {
+      isCurrent = false;
+    };
+  }, [commonplaceContext]);
 
   useEffect(() => {
     if (!commonplaceMapContextRef) {
@@ -835,7 +903,7 @@ export function PodchatView({
       remainingSeconds: remaining,
       turns: currentTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
       ...(articleContext ? { articleContext } : {}),
-      ...(commonplaceContext ? { commonplaceContext } : {}),
+      ...(commonplaceNoteContext ? { commonplaceContext: commonplaceNoteContext } : {}),
     };
   }
 
@@ -1112,6 +1180,10 @@ export function PodchatView({
     }
 
     if (commonplaceContext) {
+      const canStartNotePodchat =
+        Boolean(commonplaceNoteContext) &&
+        !commonplaceNoteContextLoading &&
+        !commonplaceNoteContextError;
       return (
         <section className={card} data-testid="podchat-setup">
           <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
@@ -1130,52 +1202,71 @@ export function PodchatView({
               className={contextPanel}
               data-testid="podchat-commonplace-context-card"
             >
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
-                  Commonplace context
-                </span>
-                <span className="text-sm font-semibold text-[var(--brand-teal)] block mt-1">
-                  {commonplaceContext.shortcode}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
-                  Source
-                </span>
-                <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">
-                  {commonplaceLabel}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
-                  Insight
-                </span>
-                <p className="text-sm text-[var(--brand-ink-soft)] mt-1 whitespace-pre-wrap">
-                  {commonplaceContext.insight}
+              {commonplaceNoteContextLoading && (
+                <p className="text-sm text-[var(--brand-ink-soft)]">
+                  Loading note context...
                 </p>
-              </div>
-              {commonplaceContext.tags.length > 0 && (
-                <div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
-                    Tags
-                  </span>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {commonplaceContext.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="app-status app-status-info"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
+              )}
+              {commonplaceNoteContextError && (
+                <p
+                  role="alert"
+                  className="app-message app-message-error"
+                >
+                  {commonplaceNoteContextError}
+                </p>
+              )}
+              {commonplaceNoteContext && (
+                <>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                      Commonplace context
+                    </span>
+                    <span className="text-sm font-semibold text-[var(--brand-teal)] block mt-1">
+                      {commonplaceNoteContext.shortcode}
+                    </span>
                   </div>
-                </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                      Source
+                    </span>
+                    <span className="text-sm font-medium text-[var(--brand-ink)] block mt-1">
+                      {commonplaceLabel}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                      Insight
+                    </span>
+                    <p className="text-sm text-[var(--brand-ink-soft)] mt-1 whitespace-pre-wrap">
+                      {commonplaceNoteContext.insight}
+                    </p>
+                  </div>
+                  {commonplaceNoteContext.tags.length > 0 && (
+                    <div>
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)] block">
+                        Tags
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {commonplaceNoteContext.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="app-status app-status-info"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            <p className="app-message app-message-info">
-              {commonplaceOpener}
-            </p>
+            {commonplaceOpener && (
+              <p className="app-message app-message-info">
+                {commonplaceOpener}
+              </p>
+            )}
 
             <fieldset>
               <legend className={labelClass}>Difficulty / Duration</legend>
@@ -1220,6 +1311,7 @@ export function PodchatView({
                 type="button"
                 onClick={startPodchat}
                 className={buttonPrimary}
+                disabled={!canStartNotePodchat}
               >
                 Start a Podchat
               </button>
