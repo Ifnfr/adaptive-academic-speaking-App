@@ -35,6 +35,7 @@ import {
   createXpEvent,
   getLocalDateString,
   getSpeakerLevelProgress,
+  xpEventTypeForPodchatDifficulty,
   type Badge,
   type XpEvent,
   type XpEventType,
@@ -63,6 +64,7 @@ import type {
   PodchatArticleContext,
   PodchatCommonplaceContextRef,
   PodchatCommonplaceMapContextRef,
+  PodchatEvaluatedSessionXpContext,
 } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
 import { CommonplaceView } from "./components/CommonplaceView";
@@ -210,12 +212,15 @@ const BADGE_DEFINITIONS: Record<string, BadgeDefinition> = {
 };
 
 const BADGE_BY_EVENT: Partial<Record<XpEventType, string>> = {
+  podchat_beginner_evaluated: "first_session",
+  podchat_intermediate_evaluated: "first_session",
+  podchat_advanced_evaluated: "first_session",
+  podchat_expert_evaluated: "first_session",
+  podchat_retry_completed: "first_retry",
+  weekly_review_completed: "first_weekly_review",
   normal_session_completed: "first_session",
   retry_completed: "first_retry",
   diagnostic_completed: "first_diagnostic",
-  weekly_review_completed: "first_weekly_review",
-  mental_model_completed: "first_mental_model",
-  level_up_applied: "first_level_up",
 };
 
 const MAX_STORED_SESSIONS = 20;
@@ -230,27 +235,36 @@ function stableTextKey(text: string): string {
   return hash.toString(36);
 }
 
-function normalizeArticlePracticeSourceUrl(value: string): string {
-  const trimmed = value.trim();
+function getLocalWeekKey(date = new Date()): string {
+  const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = localDate.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  localDate.setDate(localDate.getDate() + mondayOffset);
+  return `week-${getLocalDateString(localDate)}`;
+}
 
-  if (!trimmed) {
-    return "";
-  }
+function hasVocabularyCompletenessBonus(input: {
+  example?: string;
+  collocations?: ReadonlyArray<string>;
+}): boolean {
+  return Boolean(
+    input.example?.trim() ||
+      input.collocations?.some((entry) => entry.trim().length > 0),
+  );
+}
 
-  try {
-    const parsed = new URL(trimmed);
-    parsed.protocol = parsed.protocol.toLowerCase();
-    parsed.hostname = parsed.hostname.toLowerCase();
-    parsed.hash = "";
-
-    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
-      parsed.pathname = parsed.pathname.slice(0, -1);
-    }
-
-    return parsed.toString();
-  } catch {
-    return trimmed.toLowerCase();
-  }
+function hasCommonplaceCompletenessBonus(input: {
+  sourceBook?: string;
+  title?: string;
+  insight?: string;
+  tags?: ReadonlyArray<string>;
+}): boolean {
+  return Boolean(
+    input.sourceBook?.trim() &&
+      input.title?.trim() &&
+      input.insight?.trim() &&
+      input.tags?.some((entry) => entry.trim().length > 0),
+  );
 }
 
 function buildArticleSpeakingTarget(result: ArticlePracticeResult): string {
@@ -1472,6 +1486,12 @@ export default function Home() {
     });
     const nextItems = [item, ...vocabularyItems];
     persistVocabulary(nextItems);
+    awardMeaningfulGamificationEvent(
+      "article_vocab_saved",
+      `article-vocab-${item.id}`,
+      "article",
+      "Saved useful vocabulary from an article.",
+    );
   };
 
   const handleAddVocabularyItem = () => {
@@ -1498,6 +1518,23 @@ export default function Home() {
     });
     const nextItems = [item, ...vocabularyItems];
     persistVocabulary(nextItems);
+    const completenessBonus = hasVocabularyCompletenessBonus(item)
+      ? [
+          {
+            type: "vocab_completeness_bonus" as const,
+            sourceId: `vocab-completeness-${item.id}`,
+            sourceKind: "vocabulary" as const,
+            reason: "Added useful example or collocation details to a vocabulary item.",
+          },
+        ]
+      : [];
+    awardMeaningfulGamificationEvent(
+      "vocab_item_added",
+      `vocab-item-${item.id}`,
+      "vocabulary",
+      "Added a vocabulary item with a word and meaning.",
+      completenessBonus,
+    );
     setSelectedVocabItemId(item.id);
     setVocabSentenceDraft("");
     setVocabFormWord("");
@@ -1622,7 +1659,7 @@ export default function Home() {
     const savedSentence = result.item?.userSentences.at(-1);
     if (result.item && savedSentence) {
       setVocabPracticeAcceptedSentenceId(savedSentence.id);
-      awardGamificationEvent(
+      awardMeaningfulGamificationEvent(
         "vocab_sentence_submitted",
         `${result.item.id}-${savedSentence.id}`,
         "vocabulary",
@@ -1658,7 +1695,7 @@ export default function Home() {
 
       if (completedFullRecallQueue) {
         const localDate = getLocalDateString();
-        const awardResult = awardGamificationEvent(
+        const awardResult = awardMeaningfulGamificationEvent(
           "vocab_recall_session_completed",
           `vocab-recall-${localDate}-${stableTextKey(
             vocabPracticeQueueIds.join("|"),
@@ -1713,7 +1750,7 @@ export default function Home() {
       setVocabMessage({ tone: "success", text: result.reason });
       const savedSentence = result.item?.userSentences.at(-1);
       if (result.item && savedSentence) {
-        awardGamificationEvent(
+        awardMeaningfulGamificationEvent(
           "vocab_sentence_submitted",
           `${result.item.id}-${savedSentence.id}`,
           "vocabulary",
@@ -1809,6 +1846,12 @@ export default function Home() {
         },
       );
       persistVocabulary(nextItems);
+      awardMeaningfulGamificationEvent(
+        "vocab_correction_saved",
+        `${item.id}-${sentence.id}`,
+        "vocabulary",
+        "Saved correction feedback for a vocabulary practice sentence.",
+      );
       setVocabMessage({
         tone: "success",
         text: "Usage checked. Use the feedback to improve your next attempt.",
@@ -1828,13 +1871,15 @@ export default function Home() {
   };
 
   const updateBadges = (
-    eventType: XpEventType | null,
+    eventTypes: ReadonlyArray<XpEventType>,
     profile: XpProfile,
   ) => {
     let nextBadges = [...badges];
-    const eventBadgeId = eventType ? BADGE_BY_EVENT[eventType] : undefined;
-    if (eventBadgeId) {
-      nextBadges = withEarnedBadge(nextBadges, eventBadgeId);
+    for (const eventType of eventTypes) {
+      const eventBadgeId = BADGE_BY_EVENT[eventType];
+      if (eventBadgeId) {
+        nextBadges = withEarnedBadge(nextBadges, eventBadgeId);
+      }
     }
     if (getSpeakerLevelProgress(profile.totalXp).currentLevel.level >= 5) {
       nextBadges = withEarnedBadge(nextBadges, "speaker_level_5");
@@ -1873,23 +1918,57 @@ export default function Home() {
     }
   };
 
-  const awardGamificationEvent = (
+  type GamificationAwardInput = {
     type: XpEventType,
     sourceId: string,
     sourceKind: XpEvent["sourceKind"],
     reason: string,
-  ): { allowed: boolean; reason: string; xpToAward: number } | null => {
+  };
+
+  const commitGamificationAwardInputs = (
+    inputs: ReadonlyArray<GamificationAwardInput>,
+    options: { includeDailyActivityAfterAllowed?: boolean } = {},
+  ): Array<{ allowed: boolean; reason: string; xpToAward: number; type: XpEventType }> | null => {
+    if (inputs.length === 0) return [];
+
     try {
-      const candidate = createXpEvent({
-        type,
-        sourceId,
-        sourceKind,
-        reason,
-      });
       const prevEvents = xpEvents;
-      const awarded = awardXpEvent(xpProfile, xpEvents, candidate);
-      setXpProfile(awarded.profile);
-      setXpEvents(awarded.events);
+      let nextProfile = xpProfile;
+      let nextEvents = xpEvents;
+      const results: Array<{
+        allowed: boolean;
+        reason: string;
+        xpToAward: number;
+        type: XpEventType;
+      }> = [];
+
+      for (const input of inputs) {
+        const candidate = createXpEvent(input);
+        const awarded = awardXpEvent(nextProfile, nextEvents, candidate);
+        nextProfile = awarded.profile;
+        nextEvents = awarded.events;
+        results.push({ ...awarded.result, type: input.type });
+      }
+
+      if (
+        options.includeDailyActivityAfterAllowed &&
+        results.some((result) => result.allowed)
+      ) {
+        const localDate = getLocalDateString();
+        const candidate = createXpEvent({
+          type: "daily_meaningful_activity",
+          sourceId: `daily-activity-${localDate}`,
+          sourceKind: "daily-activity",
+          reason: "Completed the first meaningful learning activity of the day.",
+        });
+        const awarded = awardXpEvent(nextProfile, nextEvents, candidate);
+        nextProfile = awarded.profile;
+        nextEvents = awarded.events;
+        results.push({ ...awarded.result, type: "daily_meaningful_activity" });
+      }
+
+      setXpProfile(nextProfile);
+      setXpEvents(nextEvents);
 
       const auth = sessionCloudAuthRef.current;
       if (auth.isLoaded && auth.isSignedIn) {
@@ -1897,14 +1976,14 @@ export default function Home() {
         void writeXpEventsToCloud({
           auth,
           previous: prevEvents,
-          next: awarded.events,
+          next: nextEvents,
         }).then((result) => {
           if (result.status === "saved") {
             return;
           }
           if (result.status === "skipped") {
-            storage.saveXpEvents(awarded.events);
-            storage.saveXpProfile(awarded.profile);
+            storage.saveXpEvents(nextEvents);
+            storage.saveXpProfile(nextProfile);
             setGamificationCloudError(
               "Progress data is using local fallback because cloud progress is unavailable.",
             );
@@ -1917,47 +1996,59 @@ export default function Home() {
           }
         });
 
-        if (awarded.result.allowed) {
-          updateBadges(type, awarded.profile);
+        const awardedTypes = results
+          .filter((result) => result.allowed)
+          .map((result) => result.type);
+        if (awardedTypes.length > 0) {
+          updateBadges(awardedTypes, nextProfile);
         }
-        return awarded.result;
+        return results;
       }
 
-      storage.saveXpProfile(awarded.profile);
-      storage.saveXpEvents(awarded.events);
+      storage.saveXpProfile(nextProfile);
+      storage.saveXpEvents(nextEvents);
 
-      if (awarded.result.allowed) {
-        updateBadges(type, awarded.profile);
+      const awardedTypes = results
+        .filter((result) => result.allowed)
+        .map((result) => result.type);
+      if (awardedTypes.length > 0) {
+        updateBadges(awardedTypes, nextProfile);
       }
-      return awarded.result;
+      return results;
     } catch {
       // Gamification is optional; it should never block the practice flow.
       return null;
     }
   };
 
+  const awardMeaningfulGamificationEvent = (
+    type: XpEventType,
+    sourceId: string,
+    sourceKind: XpEvent["sourceKind"],
+    reason: string,
+    bonusEvents: ReadonlyArray<GamificationAwardInput> = [],
+  ): { allowed: boolean; reason: string; xpToAward: number } | null => {
+    const results = commitGamificationAwardInputs(
+      [{ type, sourceId, sourceKind, reason }, ...bonusEvents],
+      { includeDailyActivityAfterAllowed: true },
+    );
+    return results?.[0] ?? null;
+  };
+
   const handleApplyLevelUp = () => {
     if (levelUpCheck.status !== "Ready" || !levelUpCheck.nextLevel) return;
-    const oldLevel = level;
-    const nextLevel = levelUpCheck.nextLevel;
     setLevel(levelUpCheck.nextLevel);
     setTarget(
       `Start ${levelUpCheck.nextLevel} practice with clear structure and steady evidence.`,
     );
     setView("active");
-    awardGamificationEvent(
-      "level_up_applied",
-      `${oldLevel}-to-${nextLevel}-${getLocalDateString()}`,
-      "level-up",
-      "Applied a ready Level-Up Check recommendation.",
-    );
   };
 
   const handleClaimXp = () => {
     const claimed = claimXp(xpProfile, getLocalDateString());
     setXpProfile(claimed.profile);
     storage.saveXpProfile(claimed.profile);
-    updateBadges(null, claimed.profile);
+    updateBadges([], claimed.profile);
   };
 
   const handlePracticeArticleSpeakingTask = (result: ArticlePracticeResult) => {
@@ -2002,6 +2093,60 @@ export default function Home() {
     );
     setMode("Fluency Sprint");
     setView("active");
+  };
+
+  const handleCommonplaceNoteCreatedForXp = (input: {
+    noteId: string;
+    sourceBook: string;
+    title: string;
+    insight: string;
+    tags: readonly string[];
+  }) => {
+    const completenessBonus = hasCommonplaceCompletenessBonus(input)
+      ? [
+          {
+            type: "commonplace_note_completeness_bonus" as const,
+            sourceId: `commonplace-note-completeness-${input.noteId}`,
+            sourceKind: "commonplace" as const,
+            reason: "Created a Commonplace note with tags and complete source details.",
+          },
+        ]
+      : [];
+
+    awardMeaningfulGamificationEvent(
+      "commonplace_note_created",
+      `commonplace-note-${input.noteId}`,
+      "commonplace",
+      "Created a meaningful Commonplace note with source, title, and insight.",
+      completenessBonus,
+    );
+  };
+
+  const handleCommonplaceMapNoteAddedForXp = (input: {
+    mapId: string;
+    mapType: "sub" | "main";
+    nodeId: string;
+    noteId: string;
+  }) => {
+    awardMeaningfulGamificationEvent(
+      "commonplace_map_note_added",
+      `commonplace-${input.mapType}-map-note-${input.mapId}-${input.nodeId}-${input.noteId}`,
+      "commonplace",
+      "Added a note to a saved Commonplace map.",
+    );
+  };
+
+  const handleCommonplaceMapEdgeCreatedForXp = (input: {
+    mapId: string;
+    mapType: "sub" | "main";
+    edgeId: string;
+  }) => {
+    awardMeaningfulGamificationEvent(
+      "commonplace_map_edge_created",
+      `commonplace-${input.mapType}-map-edge-${input.mapId}-${input.edgeId}`,
+      "commonplace",
+      "Created a meaningful saved Commonplace map connection.",
+    );
   };
 
   const handleRunWeeklyReview = async () => {
@@ -2050,12 +2195,14 @@ export default function Home() {
       }
 
       setWeeklyReviewResult(result);
-      awardGamificationEvent(
-        "weekly_review_completed",
-        `weekly-review-${getLocalDateString()}`,
-        "weekly-review",
-        "Generated a weekly review.",
-      );
+      if (result.warnings.length === 0) {
+        awardMeaningfulGamificationEvent(
+          "weekly_review_completed",
+          `weekly-review-${getLocalWeekKey()}`,
+          "weekly-review",
+          "Completed a weekly review with sufficient learning memory.",
+        );
+      }
     } catch (err) {
       const message =
         err instanceof Error
@@ -2122,12 +2269,6 @@ export default function Home() {
       }
 
       setMentalModelResult(result);
-      awardGamificationEvent(
-        "mental_model_completed",
-        `mental-model-${getLocalDateString()}-${level}-${mode}-${stableTextKey(focus)}`,
-        "mental-model",
-        "Generated a mental model session.",
-      );
     } catch (err) {
       const message =
         err instanceof Error
@@ -2231,28 +2372,6 @@ export default function Home() {
       }
 
       setArticlePracticeResult(result);
-
-      // Award XP for successful article practice generation.
-      // sourceId is deterministic: normalized URL or markdown hash + local date only.
-      try {
-        const sourceKey =
-          inputMode === "url"
-            ? stableTextKey(normalizeArticlePracticeSourceUrl(url))
-            : stableTextKey(markdown);
-        const articleSourceId = [
-          "article",
-          getLocalDateString(),
-          sourceKey,
-        ].join("-");
-        awardGamificationEvent(
-          "article_practice_completed",
-          articleSourceId,
-          "article-practice",
-          "Generated article practice from a valid URL.",
-        );
-      } catch {
-        // XP is optional; never block the result from rendering.
-      }
     } catch (err) {
       const message =
         err instanceof Error
@@ -2262,6 +2381,15 @@ export default function Home() {
     } finally {
       setArticlePracticeLoading(false);
     }
+  };
+
+  const handleArticleEssayEvaluationComplete = (essayResultKey: string) => {
+    awardMeaningfulGamificationEvent(
+      "article_essay_evaluated",
+      `article-essay-${stableTextKey(essayResultKey)}`,
+      "article",
+      "Completed an article essay evaluation.",
+    );
   };
 
   const handleCopyLastCsv = async () => {
@@ -2313,6 +2441,34 @@ export default function Home() {
 
     updateSessions([sessionRecord, ...sessionsCache]);
   }, []);
+
+  const handlePodchatEvaluatedSessionForXp = (
+    context: PodchatEvaluatedSessionXpContext,
+  ) => {
+    const eventType = xpEventTypeForPodchatDifficulty(context.difficulty);
+    const hasContextBonus =
+      context.hasArticleContext || context.hasCommonplaceContext;
+    const bonusEvents = hasContextBonus
+      ? [
+          {
+            type: "podchat_context_bonus" as const,
+            sourceId: `podchat-context-${context.sessionId}`,
+            sourceKind: "session" as const,
+            reason: context.hasArticleContext
+              ? "Completed an evaluated article-based Podchat session."
+              : "Completed an evaluated Commonplace-based Podchat session.",
+          },
+        ]
+      : [];
+
+    awardMeaningfulGamificationEvent(
+      eventType,
+      `podchat-session-${context.sessionId}`,
+      "session",
+      `Completed an evaluated ${context.difficulty} Podchat session.`,
+      bonusEvents,
+    );
+  };
 
   const sidebarProps: SidebarProps = {
     view,
@@ -2446,6 +2602,7 @@ export default function Home() {
               sessionProvider={aiProvider}
               todayTarget={target}
               onSessionHistoryRecord={handleSessionHistoryRecord}
+              onEvaluatedSessionForXp={handlePodchatEvaluatedSessionForXp}
               articleContext={pendingArticleContext}
               onClearArticleContext={() => setPendingArticleContext(null)}
               commonplaceContext={pendingCommonplaceContext}
@@ -2533,6 +2690,9 @@ export default function Home() {
               commonplaceCardColor={ownerProfile?.commonplaceCardColor}
               onDiscussInPodchat={handleDiscussCommonplaceInPodchat}
               onDiscussMapInPodchat={handleDiscussCommonplaceMapInPodchat}
+              onCommonplaceNoteCreatedForXp={handleCommonplaceNoteCreatedForXp}
+              onCommonplaceMapNoteAddedForXp={handleCommonplaceMapNoteAddedForXp}
+              onCommonplaceMapEdgeCreatedForXp={handleCommonplaceMapEdgeCreatedForXp}
             />
           )}
 
@@ -2626,6 +2786,7 @@ export default function Home() {
               onGenerateArticlePractice={handleGenerateArticlePractice}
               onPracticeSpeakingTask={handlePracticeArticleSpeakingTask}
               onSaveVocabularyCandidate={handleSaveArticleVocabularyCandidate}
+              onEssayEvaluationComplete={handleArticleEssayEvaluationComplete}
             />
           )}
 

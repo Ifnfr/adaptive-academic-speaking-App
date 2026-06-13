@@ -171,6 +171,42 @@ test.describe("Leaderboard Aggregation Core", () => {
     expect(alice.periodXp).toBe(80); // Stays 80
   });
 
+  test("accepts XP-2 event types in period aggregation", () => {
+    const snapshot = buildLeaderboardSnapshot({
+      period: "daily",
+      currentDateStr: "2026-05-29",
+      profiles: mockProfiles,
+      events: [
+        {
+          ownerId: "user_1",
+          type: "podchat_intermediate_evaluated",
+          xp: 50,
+          localDate: "2026-05-29",
+          sourceId: "podchat-session-1",
+        },
+        {
+          ownerId: "user_1",
+          type: "podchat_context_bonus",
+          xp: 15,
+          localDate: "2026-05-29",
+          sourceId: "podchat-context-1",
+        },
+        {
+          ownerId: "user_2",
+          type: "commonplace_map_edge_created",
+          xp: 10,
+          localDate: "2026-05-29",
+          sourceId: "edge-1",
+        },
+      ],
+    });
+
+    const alice = snapshot.leaderboard.find((u) => u.initials === "AS")!;
+    const bob = snapshot.leaderboard.find((u) => u.initials === "BJ")!;
+    expect(alice.periodXp).toBe(65);
+    expect(bob.periodXp).toBe(10);
+  });
+
   test("ranks users using standard competition ranking (1, 2, 2, 4...)", () => {
     // Modify Bob's events so Bob has 80 XP, matching Alice
     const eventsWithTie = [

@@ -32,15 +32,31 @@ export type XpProfile = {
 };
 
 export type XpEventType =
+  | "podchat_beginner_evaluated"
+  | "podchat_intermediate_evaluated"
+  | "podchat_advanced_evaluated"
+  | "podchat_expert_evaluated"
+  | "podchat_context_bonus"
+  | "podchat_retry_completed"
+  | "article_essay_evaluated"
+  | "article_vocab_saved"
+  | "vocab_item_added"
+  | "vocab_completeness_bonus"
+  | "vocab_sentence_submitted"
+  | "vocab_correction_saved"
+  | "vocab_recall_session_completed"
+  | "commonplace_note_created"
+  | "commonplace_note_completeness_bonus"
+  | "commonplace_map_note_added"
+  | "commonplace_map_edge_created"
+  | "weekly_review_completed"
+  | "daily_meaningful_activity"
   | "normal_session_completed"
   | "retry_completed"
   | "diagnostic_completed"
-  | "weekly_review_completed"
   | "mental_model_completed"
   | "level_up_applied"
   | "article_practice_completed"
-  | "vocab_sentence_submitted"
-  | "vocab_recall_session_completed"
   | "vocab_reused";
 
 type XpEventSourceKind =
@@ -51,7 +67,10 @@ type XpEventSourceKind =
   | "mental-model"
   | "level-up"
   | "article-practice"
-  | "vocabulary";
+  | "article"
+  | "vocabulary"
+  | "commonplace"
+  | "daily-activity";
 
 export type XpEvent = {
   version: StorageVersion;
@@ -125,19 +144,35 @@ export const SPEAKER_LEVELS: readonly SpeakerLevelDefinition[] = [
 export const XP_RULES: Readonly<
   Record<XpEventType, { xp: number; dailyCap: number }>
 > = {
+  podchat_beginner_evaluated: { xp: 30, dailyCap: 10 },
+  podchat_intermediate_evaluated: { xp: 50, dailyCap: 10 },
+  podchat_advanced_evaluated: { xp: 75, dailyCap: 10 },
+  podchat_expert_evaluated: { xp: 100, dailyCap: 10 },
+  podchat_context_bonus: { xp: 15, dailyCap: 10 },
+  podchat_retry_completed: { xp: 20, dailyCap: 3 },
+  article_essay_evaluated: { xp: 60, dailyCap: 5 },
+  article_vocab_saved: { xp: 10, dailyCap: 5 },
+  vocab_item_added: { xp: 10, dailyCap: 10 },
+  vocab_completeness_bonus: { xp: 5, dailyCap: 5 },
+  vocab_sentence_submitted: { xp: 15, dailyCap: 10 },
+  vocab_correction_saved: { xp: 20, dailyCap: 5 },
+  vocab_recall_session_completed: { xp: 40, dailyCap: 2 },
+  commonplace_note_created: { xp: 15, dailyCap: 8 },
+  commonplace_note_completeness_bonus: { xp: 5, dailyCap: 8 },
+  commonplace_map_note_added: { xp: 5, dailyCap: 10 },
+  commonplace_map_edge_created: { xp: 10, dailyCap: 10 },
+  weekly_review_completed: { xp: 80, dailyCap: 1 },
+  daily_meaningful_activity: { xp: 20, dailyCap: 1 },
   normal_session_completed: { xp: 40, dailyCap: 3 },
   retry_completed: { xp: 15, dailyCap: 3 },
   diagnostic_completed: { xp: 30, dailyCap: 1 },
-  weekly_review_completed: { xp: 35, dailyCap: 1 },
   mental_model_completed: { xp: 10, dailyCap: 2 },
   level_up_applied: { xp: 25, dailyCap: 1 },
   article_practice_completed: { xp: 25, dailyCap: 3 },
-  vocab_sentence_submitted: { xp: 5, dailyCap: 10 },
-  vocab_recall_session_completed: { xp: 20, dailyCap: 2 },
   vocab_reused: { xp: 10, dailyCap: 5 },
 } as const;
 
-export const DAILY_XP_CAP = 150;
+export const DAILY_XP_CAP = 220;
 
 const STORAGE_VERSION: StorageVersion = 1;
 const EVENT_TYPES = Object.keys(XP_RULES) as XpEventType[];
@@ -149,8 +184,26 @@ const EVENT_SOURCE_KINDS: readonly XpEventSourceKind[] = [
   "mental-model",
   "level-up",
   "article-practice",
+  "article",
   "vocabulary",
+  "commonplace",
+  "daily-activity",
 ];
+
+export type PodchatXpDifficulty =
+  | "Beginner"
+  | "Intermediate"
+  | "Advanced"
+  | "Expert";
+
+export function xpEventTypeForPodchatDifficulty(
+  difficulty: PodchatXpDifficulty,
+): XpEventType {
+  if (difficulty === "Beginner") return "podchat_beginner_evaluated";
+  if (difficulty === "Advanced") return "podchat_advanced_evaluated";
+  if (difficulty === "Expert") return "podchat_expert_evaluated";
+  return "podchat_intermediate_evaluated";
+}
 
 export function getLocalDateString(date = new Date()): LocalDateString {
   const year = date.getFullYear();

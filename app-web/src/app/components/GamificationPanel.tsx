@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 import type { SpeakerLevelProgress, XpProfile, XpEvent } from "../lib/gamification";
-import { getLocalDateString } from "../lib/gamification";
+import { XP_RULES, getLocalDateString } from "../lib/gamification";
 import { loadProgress } from "../lib/learning-path/progress";
 import { XpClaimCard } from "./XpClaimCard";
 import type { SidebarView } from "./Sidebar";
@@ -83,14 +83,22 @@ export function GamificationPanel({
   const todayStr = getLocalDateString();
   const eventsToday = xpEvents ? xpEvents.filter((e) => e.localDate === todayStr) : [];
 
-  const normalSessionCompletedToday = eventsToday.some(
-    (e) => e.type === "normal_session_completed"
+  const podchatCompletedToday = eventsToday.some(
+    (e) =>
+      e.type === "podchat_beginner_evaluated" ||
+      e.type === "podchat_intermediate_evaluated" ||
+      e.type === "podchat_advanced_evaluated" ||
+      e.type === "podchat_expert_evaluated" ||
+      e.type === "normal_session_completed"
   );
   const vocabRecallCompletedToday = eventsToday.some(
     (e) => e.type === "vocab_recall_session_completed"
   );
   const articleCompletedToday = eventsToday.some(
-    (e) => e.type === "article_practice_completed"
+    (e) =>
+      e.type === "article_essay_evaluated" ||
+      e.type === "podchat_context_bonus" ||
+      e.type === "article_practice_completed"
   );
   const weeklyReviewCompletedToday = eventsToday.some(
     (e) => e.type === "weekly_review_completed"
@@ -109,8 +117,8 @@ export function GamificationPanel({
       id: "speaking",
       title: t("progress.quests.speaking.title"),
       desc: t("progress.quests.speaking.desc"),
-      status: normalSessionCompletedToday ? "completed" : "available",
-      xpHint: "+40 XP",
+      status: podchatCompletedToday ? "completed" : "available",
+      xpHint: `+${XP_RULES.podchat_intermediate_evaluated.xp} XP`,
       view: "active",
     },
     {
@@ -118,7 +126,7 @@ export function GamificationPanel({
       title: t("progress.quests.vocab.title"),
       desc: t("progress.quests.vocab.desc"),
       status: vocabRecallCompletedToday ? "completed" : "available",
-      xpHint: "+20 XP",
+      xpHint: `+${XP_RULES.vocab_recall_session_completed.xp} XP`,
       view: "vocabulary",
     },
     {
@@ -126,7 +134,7 @@ export function GamificationPanel({
       title: t("progress.quests.article.title"),
       desc: t("progress.quests.article.desc"),
       status: articleCompletedToday ? "completed" : "available",
-      xpHint: "+25 XP",
+      xpHint: `+${XP_RULES.article_essay_evaluated.xp} XP`,
       view: "article-practice",
     },
     {
@@ -138,7 +146,7 @@ export function GamificationPanel({
         : sessionsCount < 4
         ? "locked"
         : "available",
-      xpHint: "+35 XP",
+      xpHint: `+${XP_RULES.weekly_review_completed.xp} XP`,
       view: "weekly-review",
     },
     {

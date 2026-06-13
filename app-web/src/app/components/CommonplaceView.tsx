@@ -293,6 +293,24 @@ type CommonplaceViewProps = {
     mapType: "sub" | "main";
     mapId: string;
   }) => void;
+  onCommonplaceNoteCreatedForXp?: (input: {
+    noteId: string;
+    sourceBook: string;
+    title: string;
+    insight: string;
+    tags: readonly string[];
+  }) => void;
+  onCommonplaceMapNoteAddedForXp?: (input: {
+    mapId: string;
+    mapType: CommonplaceMindMapType;
+    nodeId: string;
+    noteId: string;
+  }) => void;
+  onCommonplaceMapEdgeCreatedForXp?: (input: {
+    mapId: string;
+    mapType: CommonplaceMindMapType;
+    edgeId: string;
+  }) => void;
 };
 
 const emptyForm: CommonplaceFormState = {
@@ -1095,6 +1113,9 @@ export function CommonplaceView({
   commonplaceCardColor,
   onDiscussInPodchat,
   onDiscussMapInPodchat,
+  onCommonplaceNoteCreatedForXp,
+  onCommonplaceMapNoteAddedForXp,
+  onCommonplaceMapEdgeCreatedForXp,
 }: CommonplaceViewProps) {
   const [mode, setMode] = useState<CommonplaceMode>("library");
   const [notes, setNotes] = useState<CommonplaceNote[]>([]);
@@ -1654,6 +1675,22 @@ export function CommonplaceView({
     [effectiveOwnerId, storage, testStorage],
   );
 
+  const loadSelectedMapCanvasNodes = useCallback(async () => {
+    if (!selectedMap) {
+      return { ok: true as const, nodes: [] };
+    }
+
+    return loadMapCanvasNodes(selectedMap);
+  }, [loadMapCanvasNodes, selectedMap]);
+
+  const loadSelectedMapCanvasEdges = useCallback(async () => {
+    if (!selectedMap) {
+      return { ok: true as const, edges: [] };
+    }
+
+    return loadMapCanvasEdges(selectedMap);
+  }, [loadMapCanvasEdges, selectedMap]);
+
   const openDetail = async (noteId: string) => {
     if (!storage || !effectiveOwnerId) return;
 
@@ -1788,6 +1825,13 @@ export function CommonplaceView({
       setSelectedNote(result.note);
       setMode("detail");
     } else {
+      onCommonplaceNoteCreatedForXp?.({
+        noteId: result.note.id,
+        sourceBook: result.note.sourceBook,
+        title: result.note.title ?? "",
+        insight: result.note.insight,
+        tags: result.note.tags,
+      });
       setSelectedNote(null);
       setMode("library");
     }
@@ -2063,23 +2107,34 @@ export function CommonplaceView({
                   onOpenInventoryMap={openMapFromInventory}
                   subMaps={subMaps}
                   isSubMapLoading={isMapLoading}
-                  loadNodes={() => loadMapCanvasNodes(selectedMap)}
-                  loadEdges={() => loadMapCanvasEdges(selectedMap)}
+                  loadNodes={loadSelectedMapCanvasNodes}
+                  loadEdges={loadSelectedMapCanvasEdges}
                   saveNodePositions={(updates) =>
                     saveMapCanvasNodePositions(selectedMap, updates)
                   }
                   createNoteNode={(noteId, position) =>
                     createMapCanvasNoteNode(selectedMap, noteId, position).then(
-                      (result) =>
-                        result.ok
-                          ? result
-                          : {
-                              ok: false as const,
-                              error:
-                                result.error === "commonplace_conflict"
-                                  ? "unsupported"
-                                  : "failed",
-                            },
+                      (result) => {
+                        if (result.ok) {
+                          if (selectedMap.type === "sub") {
+                            onCommonplaceMapNoteAddedForXp?.({
+                              mapId: selectedMap.id,
+                              mapType: selectedMap.type,
+                              nodeId: result.node.id,
+                              noteId,
+                            });
+                          }
+                          return result;
+                        }
+
+                        return {
+                          ok: false as const,
+                          error:
+                            result.error === "commonplace_conflict"
+                              ? "unsupported"
+                              : "failed",
+                        };
+                      },
                     )
                   }
                   createClusterNode={(subMindmapId, position) =>
@@ -2100,7 +2155,18 @@ export function CommonplaceView({
                     )
                   }
                   onOpenSubMap={openSubMapFromCluster}
-                  createEdge={(input) => createMapCanvasEdge(selectedMap, input)}
+                  createEdge={(input) =>
+                    createMapCanvasEdge(selectedMap, input).then((result) => {
+                      if (result.ok) {
+                        onCommonplaceMapEdgeCreatedForXp?.({
+                          mapId: selectedMap.id,
+                          mapType: selectedMap.type,
+                          edgeId: result.edge.id,
+                        });
+                      }
+                      return result;
+                    })
+                  }
                   updateEdge={(input) => updateMapCanvasEdge(selectedMap, input)}
                   deleteEdge={(edgeId) => deleteMapCanvasEdge(selectedMap, edgeId)}
                   deleteNode={(nodeId) => deleteMapCanvasNode(selectedMap, nodeId)}

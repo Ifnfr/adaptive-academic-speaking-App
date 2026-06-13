@@ -1,6 +1,26 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Progress & Quest UI Clarity Tests", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+  });
+
   test("sidebar navigation, headers, quest list presence and layout", async ({ page }) => {
     // Log console errors from the page
     page.on("console", (msg) => {

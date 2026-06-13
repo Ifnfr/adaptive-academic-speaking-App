@@ -8,7 +8,7 @@ type PodchatPhase =
   | "speaking"
   | "evaluation";
 type PodchatTopic = "Economics" | "Technology";
-type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
+export type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
 type PodchatStatus = "host_turn" | "user_turn" | "submitting" | "complete";
 type PodchatSpeaker = "host" | "learner";
 type RecordingState = "idle" | "recording" | "transcribing" | "ready";
@@ -248,12 +248,20 @@ type PodchatCommonplaceMapDiscussionContext = {
   }>;
 };
 
+export type PodchatEvaluatedSessionXpContext = {
+  sessionId: string;
+  difficulty: PodchatDifficulty;
+  hasArticleContext: boolean;
+  hasCommonplaceContext: boolean;
+};
+
 export interface PodchatViewProps {
   sessionLevel?: string;
   sessionMode?: string;
   sessionProvider?: string;
   todayTarget?: string;
   onSessionHistoryRecord?: (record: StoredSessionRecord) => void;
+  onEvaluatedSessionForXp?: (context: PodchatEvaluatedSessionXpContext) => void;
   articleContext?: PodchatArticleContext | null;
   onClearArticleContext?: () => void;
   commonplaceContext?: PodchatCommonplaceContextRef | null;
@@ -270,6 +278,7 @@ export function PodchatView({
   sessionProvider = "Claude",
   todayTarget = "",
   onSessionHistoryRecord,
+  onEvaluatedSessionForXp,
   articleContext,
   onClearArticleContext,
   commonplaceContext,
@@ -880,9 +889,17 @@ export function PodchatView({
       }
       const data = await response.json();
       setEvalData(data);
-      onSessionHistoryRecord?.(
-        buildSessionHistoryRecord(finalTurns, data as PodchatEvaluateResponse),
+      const sessionRecord = buildSessionHistoryRecord(
+        finalTurns,
+        data as PodchatEvaluateResponse,
       );
+      onSessionHistoryRecord?.(sessionRecord);
+      onEvaluatedSessionForXp?.({
+        sessionId: sessionRecord.id,
+        difficulty,
+        hasArticleContext: Boolean(articleContext),
+        hasCommonplaceContext: Boolean(commonplaceNoteContext || commonplaceMapContext),
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setEvalError(msg || "An error occurred during evaluation.");

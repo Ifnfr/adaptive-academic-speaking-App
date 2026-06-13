@@ -98,6 +98,7 @@ type ArticlePracticeViewProps = {
     meaning: string;
     whyUseful: string;
   }) => void;
+  onEssayEvaluationComplete?: (essayResultKey: string) => void;
 };
 
 function SummaryCell({
@@ -269,6 +270,7 @@ export function ArticlePracticeView({
   onGenerateArticlePractice,
   onPracticeSpeakingTask,
   onSaveVocabularyCandidate,
+  onEssayEvaluationComplete,
 }: ArticlePracticeViewProps) {
   const [showHelp, setShowHelp] = useState(false);
   const [showMarkdownPrompt, setShowMarkdownPrompt] = useState(false);
@@ -484,6 +486,7 @@ export function ArticlePracticeView({
         resultKey: essayResultKey,
         value: data as ArticleEssayEvaluation,
       });
+      onEssayEvaluationComplete?.(essayResultKey);
     } catch {
       setEssayEvaluationErrorState({
         resultKey: essayResultKey,

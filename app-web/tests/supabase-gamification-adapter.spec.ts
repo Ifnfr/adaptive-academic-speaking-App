@@ -144,6 +144,44 @@ test.describe("Supabase gamification mappers", () => {
     });
   });
 
+  test("maps XP-2 event types to and from Supabase rows", () => {
+    const xp2Event: XpEvent = {
+      version: 1,
+      id: "xp-commonplace-edge",
+      type: "commonplace_map_edge_created",
+      xp: 10,
+      localDate: "2026-06-13",
+      createdAt: "2026-06-13T01:00:00Z",
+      sourceId: "commonplace-sub-map-edge-map-1-edge-1",
+      sourceKind: "commonplace",
+      reason: "Created a meaningful saved Commonplace map connection.",
+    };
+    const insert = mapStoredEventToSupabaseInsert("user_123", xp2Event);
+
+    expect(insert).toMatchObject({
+      owner_id: "user_123",
+      type: "commonplace_map_edge_created",
+      xp: 10,
+      source_id: "commonplace-sub-map-edge-map-1-edge-1",
+      source_kind: "commonplace",
+    });
+
+    expect(
+      mapSupabaseRowToStoredEvent({
+        id: "db-event",
+        owner_id: "user_123",
+        client_id: xp2Event.id,
+        type: xp2Event.type,
+        xp: xp2Event.xp,
+        local_date: xp2Event.localDate,
+        source_id: xp2Event.sourceId,
+        source_kind: xp2Event.sourceKind,
+        reason: xp2Event.reason,
+        created_at: xp2Event.createdAt,
+      }),
+    ).toEqual(xp2Event);
+  });
+
   test("maps Badge to Supabase insert structure", () => {
     const insert = mapStoredBadgeToSupabaseInsert("user_123", testBadge);
 
