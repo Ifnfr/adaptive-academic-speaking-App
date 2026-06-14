@@ -14,8 +14,12 @@ const MAX_TURNS = 16;
 const MAX_TURN_TEXT_LENGTH = 1200;
 const MAX_TRANSCRIPT_LENGTH = 8000;
 
-type PodchatTopic = "Economics" | "Technology";
-type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
+import {
+  TOPICS,
+  DIFFICULTIES,
+  type PodchatTopic,
+  type PodchatDifficulty,
+} from "../../../lib/podchat";
 type PodchatSpeaker = "host" | "learner";
 
 type PodchatTurn = {
@@ -212,23 +216,19 @@ function validateRequest(body: unknown): ValidationResult {
   }
 
   const b = body as Record<string, unknown>;
-  const topic = b.topic;
-  if (topic !== "Economics" && topic !== "Technology") {
+  const topic = b.topic as string;
+  if (!TOPICS.includes(topic as PodchatTopic)) {
     return {
       valid: false,
-      error: "Invalid topic. Must be Economics or Technology.",
+      error: "Invalid topic.",
     };
   }
 
-  const difficulty = b.difficulty;
-  if (
-    difficulty !== "Beginner" &&
-    difficulty !== "Intermediate" &&
-    difficulty !== "Advanced"
-  ) {
+  const difficulty = b.difficulty as string;
+  if (!DIFFICULTIES.includes(difficulty as PodchatDifficulty)) {
     return {
       valid: false,
-      error: "Invalid difficulty. Must be Beginner, Intermediate, or Advanced.",
+      error: "Invalid difficulty.",
     };
   }
 
@@ -305,8 +305,8 @@ function validateRequest(body: unknown): ValidationResult {
   return {
     valid: true,
     request: {
-      topic,
-      difficulty,
+      topic: topic as PodchatTopic,
+      difficulty: difficulty as PodchatDifficulty,
       turns: normalizedTurns,
       articleContext,
     },
@@ -862,25 +862,36 @@ export async function POST(request: Request) {
           ? rawBody.elapsedSeconds
           : undefined;
 
-        const saveResult = await savePodchatMemory(
-          {
-            ownerId,
-            provider,
-            topic: validatedReq.topic,
-            difficulty: validatedReq.difficulty,
-            articleContext: validatedReq.articleContext,
-            durationSeconds,
-            elapsedSeconds,
-            turns: validatedReq.turns,
-            evaluation: evaluationResponse,
-          },
-          dbClient,
-        );
+        const isSupportedTopic = validatedReq.topic === "Economics" || validatedReq.topic === "Technology";
+        const isSupportedDifficulty = ["Beginner", "Intermediate", "Advanced"].includes(validatedReq.difficulty);
 
-        if (saveResult.ok) {
-          memorySaved = true;
+        if (!isSupportedTopic || !isSupportedDifficulty) {
+          memorySaved = false;
+          const topicMsg = !isSupportedTopic ? `topic "${validatedReq.topic}"` : "";
+          const diffMsg = !isSupportedDifficulty ? `difficulty "${validatedReq.difficulty}"` : "";
+          const reasonParts = [topicMsg, diffMsg].filter(Boolean).join(" and ");
+          console.log(`Database save bypassed: ${reasonParts} is not supported by current database constraints.`);
         } else {
-          console.error(`savePodchatMemory failed: ${saveResult.error}`);
+          const saveResult = await savePodchatMemory(
+            {
+              ownerId,
+              provider,
+              topic: validatedReq.topic as "Economics" | "Technology",
+              difficulty: validatedReq.difficulty as "Beginner" | "Intermediate" | "Advanced",
+              articleContext: validatedReq.articleContext,
+              durationSeconds,
+              elapsedSeconds,
+              turns: validatedReq.turns,
+              evaluation: evaluationResponse,
+            },
+            dbClient,
+          );
+
+          if (saveResult.ok) {
+            memorySaved = true;
+          } else {
+            console.error(`savePodchatMemory failed: ${saveResult.error}`);
+          }
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -889,9 +900,23 @@ export async function POST(request: Request) {
     }
   }
 
+  const isSupportedTopic = validatedReq.topic === "Economics" || validatedReq.topic === "Technology";
+  const isSupportedDifficulty = ["Beginner", "Intermediate", "Advanced"].includes(validatedReq.difficulty);
+  const bypassed = !isSupportedTopic || !isSupportedDifficulty;
+  let bypassReason = "";
+  if (bypassed) {
+    const topicMsg = !isSupportedTopic ? `topic: "${validatedReq.topic}"` : "";
+    const diffMsg = !isSupportedDifficulty ? `difficulty: "${validatedReq.difficulty}"` : "";
+    const reasonParts = [topicMsg, diffMsg].filter(Boolean).join(" and ");
+    bypassReason = `Database constraints only support Economics/Technology topics and Beginner/Intermediate/Advanced difficulties. Saving was bypassed for ${reasonParts}.`;
+  }
+
   const finalResponse = {
     ...evaluationResponse,
-    memory: { saved: memorySaved },
+    memory: { 
+      saved: memorySaved,
+      ...(bypassed ? { bypassed: true, reason: bypassReason } : {})
+    },
   };
 
   return NextResponse.json(finalResponse);

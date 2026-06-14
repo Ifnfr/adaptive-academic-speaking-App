@@ -1,5 +1,4 @@
-type PodchatTopic = "Economics" | "Technology";
-type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
+import type { PodchatTopic, PodchatDifficulty } from "../../../lib/podchat";
 type PodchatSpeaker = "host" | "learner";
 
 type PodchatTurn = {

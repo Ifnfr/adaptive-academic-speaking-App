@@ -3,12 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StoredSessionRecord } from "../lib/storage/types";
 
+import {
+  DIFFICULTY_DURATION,
+  TOPICS,
+  DIFFICULTIES,
+  DIFFICULTY_LABEL,
+  type PodchatTopic,
+  type PodchatDifficulty,
+} from "../lib/podchat";
+import { getPodchatOpener } from "../lib/podchatOpener";
+
 type PodchatPhase =
   | "setup"
   | "speaking"
   | "evaluation";
-type PodchatTopic = "Economics" | "Technology";
-export type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
 type PodchatStatus = "host_turn" | "user_turn" | "submitting" | "complete";
 type PodchatSpeaker = "host" | "learner";
 type RecordingState = "idle" | "recording" | "transcribing" | "ready";
@@ -74,43 +82,6 @@ type ProviderErrorResponse = {
   };
 };
 
-const TOPICS: readonly PodchatTopic[] = ["Economics", "Technology"];
-const DIFFICULTIES: readonly PodchatDifficulty[] = [
-  "Beginner",
-  "Intermediate",
-  "Advanced",
-];
-
-/** Duration-based session limits — replaces the old max-turn model. */
-const DIFFICULTY_DURATION: Record<PodchatDifficulty, number> = {
-  Beginner: 180,    // 3 minutes
-  Intermediate: 300, // 5 minutes
-  Advanced: 420,    // 7 minutes
-};
-
-const DIFFICULTY_LABEL: Record<PodchatDifficulty, string> = {
-  Beginner: "3-minute session",
-  Intermediate: "5-minute session",
-  Advanced: "7-minute session",
-};
-
-const ASPECT_FEEDBACK_LABELS: Array<{
-  key: keyof PodchatAspectFeedback;
-  label: string;
-}> = [
-  { key: "sentenceStructure", label: "Sentence Structure" },
-  { key: "grammar", label: "Grammar" },
-  { key: "coherence", label: "Coherence" },
-  { key: "topicRelevance", label: "Topic Relevance / Substance" },
-];
-
-const HOST_OPENERS: Record<PodchatTopic, string> = {
-  Economics:
-    "Welcome to Podchat. Let's discuss how everyday prices influence the choices people make. What example from daily life would you like to start with?",
-  Technology:
-    "Welcome to Podchat. Let's explore how technology changes the way people study and work. Which technology trend feels most important to you right now?",
-};
-
 const LEARNER_REPLIES: Record<PodchatTopic, readonly string[]> = {
   Economics: [
     "I think prices affect daily decisions because people compare what they want with what they can afford.",
@@ -130,7 +101,35 @@ const LEARNER_REPLIES: Record<PodchatTopic, readonly string[]> = {
     "In the next few years, I think AI tools will become normal assistants for writing, speaking, and research.",
     "Overall, technology is most useful when people use it intentionally rather than depending on it completely.",
   ],
+  "Philosophy & Ethics": [
+    "I believe ethical frameworks are essential for guiding new technologies.",
+  ],
+  "Science & Discovery": [
+    "Scientific research is crucial for solving global challenges like climate change.",
+  ],
+  "Education & Learning": [
+    "Education systems should focus more on critical thinking rather than memorization.",
+  ],
+  "Society & Culture": [
+    "Cultural exchange helps build understanding and reduces prejudice between communities.",
+  ],
+  "Global Issues & Environment": [
+    "International cooperation is the only way to effectively address environmental problems.",
+  ],
+  "Daily Life & Casual Conversation": [
+    "I've been trying to balance my work and personal life more effectively recently.",
+  ],
 };
+
+const ASPECT_FEEDBACK_LABELS: Array<{
+  key: keyof PodchatAspectFeedback;
+  label: string;
+}> = [
+  { key: "sentenceStructure", label: "Sentence Structure" },
+  { key: "grammar", label: "Grammar" },
+  { key: "coherence", label: "Coherence" },
+  { key: "topicRelevance", label: "Topic Relevance / Substance" },
+];
 
 function speakerLabel(speaker: PodchatSpeaker): string {
   return speaker === "host" ? "AI host" : "Learner";
@@ -714,7 +713,7 @@ export function PodchatView({
     const opener: PodchatTurn = {
       id: "podchat-turn-1",
       speaker: "host",
-      text: commonplaceMapOpener ?? commonplaceOpener ?? HOST_OPENERS[topic],
+      text: commonplaceMapOpener ?? commonplaceOpener ?? getPodchatOpener(topic, difficulty),
     };
     setTurns([opener]);
     setSubmittedUserTurns(0);

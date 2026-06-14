@@ -60,7 +60,7 @@ import {
 } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
-import { PodchatView } from "./components/PodchatView";
+import { ActiveSessionShell } from "./components/ActiveSessionShell";
 import type {
   PodchatArticleContext,
   PodchatCommonplaceContextRef,
@@ -2513,7 +2513,7 @@ export default function Home() {
 
           {/* ===================== Active Session view ===================== */}
           {view === "active" && (
-            <PodchatView
+            <ActiveSessionShell
               key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : pendingCommonplaceMapContextRef ? "commonplace-map" : "generic"}`}
               sessionLevel={level}
               sessionMode={mode}

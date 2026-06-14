@@ -232,6 +232,45 @@ test.describe("Podchat Phase 1 connected UI", () => {
   test("setup selected topic and difficulty use strong readable accent styling", async ({ page }) => {
     await page.goto("/");
 
+    // Assert Mode Selector is visible and defaults to Podchat
+    const podchatModeBtn = page.getByRole("button", { name: "Podchat", exact: true });
+    const patternDrillModeBtn = page.getByRole("button", { name: "Pattern Drill (Prototype)" });
+    await expect(podchatModeBtn).toBeVisible();
+    await expect(patternDrillModeBtn).toBeVisible();
+    await expect(podchatModeBtn).toHaveAttribute("aria-pressed", "true");
+
+    // Verify all 8 topics are rendered
+    const topics = [
+      "Economics",
+      "Technology",
+      "Philosophy & Ethics",
+      "Science & Discovery",
+      "Education & Learning",
+      "Society & Culture",
+      "Global Issues & Environment",
+      "Daily Life & Casual Conversation"
+    ];
+    for (const t of topics) {
+      await expect(page.getByRole("radio", { name: t, exact: true })).toBeVisible();
+    }
+
+    // Verify Expert difficulty
+    const expertDifficulty = page.getByRole("radio", { name: /Expert/ });
+    await expect(expertDifficulty).toBeVisible();
+    await expect(page.getByText("15-minute session")).toBeVisible();
+
+    // Verify Advanced duration is now 10-minute session
+    const advancedDifficulty = page.getByRole("radio", { name: /Advanced/ });
+    await expect(advancedDifficulty).toBeVisible();
+    await expect(page.getByText("10-minute session")).toBeVisible();
+
+    // Toggle Pattern Drill Mode
+    await patternDrillModeBtn.click();
+    await expect(patternDrillModeBtn).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Latest Weakness Check & Brief")).toBeVisible();
+
+    // Switch back
+    await podchatModeBtn.click();
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
 
     const selectedTopic = page.getByRole("radio", { name: "Technology" });

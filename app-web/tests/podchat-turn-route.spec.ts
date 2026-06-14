@@ -186,7 +186,7 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(data.error).toContain("durationSeconds");
   });
 
-  test("Advanced difficulty with correct durationSeconds (420) passes schema", async () => {
+  test("Advanced difficulty with correct durationSeconds (600) passes schema", async () => {
     const capture: { body?: Record<string, unknown> } = {};
     mockClaudeResponse(200, JSON.stringify({
       hostText: "A trade-off worth exploring.",
@@ -195,9 +195,9 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
 
     const response = await POST(buildRequest({
       difficulty: "Advanced",
-      durationSeconds: 420,
+      durationSeconds: 600,
       elapsedSeconds: 100,
-      remainingSeconds: 320,
+      remainingSeconds: 500,
     }));
     expect(response.status).toBe(200);
   });
@@ -253,7 +253,7 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
   });
 
   test("invalid difficulty rejects with 400", async () => {
-    const response = await POST(buildRequest({ difficulty: "Expert" }));
+    const response = await POST(buildRequest({ difficulty: "invalid" }));
     expect(response.status).toBe(400);
     const data = (await response.json()) as { error: string };
     expect(data.error).toContain("difficulty");
@@ -807,5 +807,32 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(response.status).toBe(400);
     const data = (await response.json()) as { error: string };
     expect(data.error).toContain("keyPoints");
+  });
+
+  test("accepts all 8 topics", async () => {
+    const topics = [
+      "Economics",
+      "Technology",
+      "Philosophy & Ethics",
+      "Science & Discovery",
+      "Education & Learning",
+      "Society & Culture",
+      "Global Issues & Environment",
+      "Daily Life & Casual Conversation"
+    ];
+    for (const topic of topics) {
+      const response = await POST(buildRequest({ topic }));
+      expect([200, 401, 502, 503]).toContain(response.status);
+    }
+  });
+
+  test("accepts Expert difficulty with 900 seconds duration", async () => {
+    const response = await POST(buildRequest({
+      difficulty: "Expert",
+      durationSeconds: 900,
+      elapsedSeconds: 30,
+      remainingSeconds: 870,
+    }));
+    expect([200, 401, 502, 503]).toContain(response.status);
   });
 });

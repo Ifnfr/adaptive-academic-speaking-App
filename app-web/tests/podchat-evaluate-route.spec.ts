@@ -240,7 +240,7 @@ test.describe("Podchat Evaluate Route", () => {
   });
 
   test("invalid difficulty rejects with 400", async () => {
-    const response = await POST(buildRequest({ difficulty: "Expert" }));
+    const response = await POST(buildRequest({ difficulty: "invalid" }));
     expect(response.status).toBe(400);
   });
 
@@ -838,5 +838,30 @@ test.describe("Podchat Evaluate Route", () => {
     const response = await POST(buildRequest({ topic: "Culture" }));
     expect(response.status).toBe(400);
     expect(clientWasCreated).toBe(false);
+  });
+
+  test("accepts all 8 topics", async () => {
+    testHooks.resolveCurrentUserId = async () => null; // skip auth for simple check
+    const topics = [
+      "Economics",
+      "Technology",
+      "Philosophy & Ethics",
+      "Science & Discovery",
+      "Education & Learning",
+      "Society & Culture",
+      "Global Issues & Environment",
+      "Daily Life & Casual Conversation"
+    ];
+    for (const topic of topics) {
+      const response = await POST(buildRequest({ topic }));
+      // We expect 200, 401 (unauthorized), 502 (if provider error), or 503 (if key missing), but validation should pass
+      expect([200, 401, 502, 503]).toContain(response.status);
+    }
+  });
+
+  test("accepts Expert difficulty", async () => {
+    testHooks.resolveCurrentUserId = async () => null;
+    const response = await POST(buildRequest({ difficulty: "Expert" }));
+    expect([200, 401, 502, 503]).toContain(response.status);
   });
 });

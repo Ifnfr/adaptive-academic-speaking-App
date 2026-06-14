@@ -6,14 +6,13 @@ import {
 
 export const runtime = "nodejs";
 
-const DIFFICULTY_DURATION: Record<string, number> = {
-  Beginner: 180,
-  Intermediate: 300,
-  Advanced: 420,
-};
-
-type PodchatTopic = "Economics" | "Technology";
-type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced";
+import {
+  DIFFICULTY_DURATION,
+  TOPICS,
+  DIFFICULTIES,
+  type PodchatTopic,
+  type PodchatDifficulty,
+} from "../../../lib/podchat";
 type PodchatSpeaker = "host" | "learner";
 type PodchatTurn = {
   speaker: PodchatSpeaker;
@@ -229,24 +228,20 @@ function validateRequest(
   }
   const b = body as Record<string, unknown>;
 
-  const topic = b.topic;
-  if (topic !== "Economics" && topic !== "Technology") {
-    return { valid: false, error: "Invalid topic. Must be Economics or Technology." };
+  const topic = b.topic as string;
+  if (!TOPICS.includes(topic as PodchatTopic)) {
+    return { valid: false, error: "Invalid topic." };
   }
-  const validTopic: PodchatTopic = topic;
+  const validTopic: PodchatTopic = topic as PodchatTopic;
 
-  const difficulty = b.difficulty;
-  if (
-    difficulty !== "Beginner" &&
-    difficulty !== "Intermediate" &&
-    difficulty !== "Advanced"
-  ) {
+  const difficulty = b.difficulty as string;
+  if (!DIFFICULTIES.includes(difficulty as PodchatDifficulty)) {
     return {
       valid: false,
-      error: "Invalid difficulty. Must be Beginner, Intermediate, or Advanced.",
+      error: "Invalid difficulty.",
     };
   }
-  const validDifficulty: PodchatDifficulty = difficulty;
+  const validDifficulty: PodchatDifficulty = difficulty as PodchatDifficulty;
 
   const expectedDuration = DIFFICULTY_DURATION[validDifficulty];
 
