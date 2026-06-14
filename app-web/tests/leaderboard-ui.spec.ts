@@ -147,6 +147,25 @@ const mockSignedOutEmptyResponse = {
 // ---------- E2E UI Tests ----------
 
 test.describe("Leaderboard UI Shell", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+  });
 
   test("Sidebar shows Leaderboard navigation button", async ({ page }) => {
     // Intercept API call to prevent failure
