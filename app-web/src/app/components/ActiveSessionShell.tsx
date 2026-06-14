@@ -8,7 +8,7 @@ export function ActiveSessionShell(props: PodchatViewProps) {
   const [mode, setMode] = useState<ActiveSessionMode>("podchat");
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {/* Mode Selector Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-xl font-semibold tracking-tight text-[var(--brand-ink)]">
@@ -47,7 +47,7 @@ export function ActiveSessionShell(props: PodchatViewProps) {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 min-h-0 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm overflow-hidden flex flex-col">
+      <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm flex flex-col">
         {mode === "podchat" ? (
           <PodchatView {...props} />
         ) : (
