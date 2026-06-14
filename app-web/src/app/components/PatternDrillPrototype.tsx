@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type WeaknessDetails = {
   title: string;
@@ -18,13 +18,33 @@ type FetchState = {
   reason?: string;
 };
 
+type PatternBriefResponse = {
+  briefId: string;
+  title: string;
+  focus: string;
+  qualityCriteria: string[];
+  responsePattern: { name: string; steps: string[] };
+  miniExample: string;
+  commonMistakes: string[];
+  drillEntryConfig: unknown; // kept in state for future handoff, never rendered
+};
+
+type BriefState =
+  | { status: "idle" }
+  | { status: "generating" }
+  | { status: "generated"; brief: PatternBriefResponse }
+  | { status: "error" };
+
 type PatternDrillPrototypeProps = {
   onExit: () => void;
 };
 
 export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
   const [state, setState] = useState<FetchState>({ status: "loading" });
+  const [briefState, setBriefState] = useState<BriefState>({ status: "idle" });
+  const briefAbortRef = useRef<AbortController | null>(null);
 
+  // Fetch latest weakness on mount
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -61,6 +81,58 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
     };
   }, []);
 
+  // Abort any in-flight brief request on unmount
+  useEffect(() => {
+    return () => {
+      briefAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Derived: button enabled only when weakness is found and not already generating
+  const canGenerate =
+    state.status === "found" && !!state.weakness && briefState.status !== "generating";
+
+  async function handleGenerateBrief() {
+    if (!canGenerate) return;
+
+    // Abort any previous in-flight request
+    briefAbortRef.current?.abort();
+    const controller = new AbortController();
+    briefAbortRef.current = controller;
+
+    setBriefState({ status: "generating" });
+
+    try {
+      const res = await fetch("/api/pattern-brief/generate", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          level: "intermediate",
+          mode: "structured_response",
+          source: "latest_weakness",
+        }),
+      });
+
+      if (!res.ok) {
+        setBriefState({ status: "error" });
+        return;
+      }
+
+      const data = (await res.json()) as PatternBriefResponse;
+      setBriefState({ status: "generated", brief: data });
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") {
+        // Stale request — ignore silently
+        return;
+      }
+      setBriefState({ status: "error" });
+    }
+  }
+
   const getConfidenceLabel = (confidence: number) => {
     if (confidence >= 0.8) return `High (${confidence.toFixed(2)})`;
     if (confidence >= 0.65) return `Medium (${confidence.toFixed(2)})`;
@@ -75,6 +147,18 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
       return isoString;
     }
   };
+
+  // Derive disabled reason for non-found states
+  function getDisabledReason(): string | null {
+    if (state.status === "loading") return "Loading your weakness data…";
+    if (state.status === "empty") return "No weakness data yet. Complete an evaluated Podchat session first.";
+    if (state.status === "insufficient") return "More specific repeated feedback is needed before generating a brief.";
+    if (state.status === "error") return "Weakness data could not be loaded.";
+    if (briefState.status === "generating") return null; // button disabled via canGenerate, no extra copy needed
+    return null;
+  }
+
+  const disabledReason = getDisabledReason();
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-6 lg:p-8 space-y-8 bg-[var(--brand-surface)] text-[var(--brand-ink)]">
@@ -94,7 +178,7 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
         </button>
       </div>
 
-      {/* Weakness Check / Brief */}
+      {/* Weakness Check & Brief */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-teal-soft)] text-xs font-bold text-[var(--brand-teal-ink)]">
@@ -104,8 +188,6 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
         </div>
 
         <div
-          role="region"
-          aria-live="polite"
           className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3"
         >
           {state.status === "loading" && (
@@ -132,6 +214,7 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
             </p>
           )}
 
+          {/* Weakness details — stays visible even after brief is generated */}
           {state.status === "found" && state.weakness && (
             <div className="space-y-4" data-testid="weakness-found">
               <div>
@@ -179,35 +262,128 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
                   <p className="text-sm">{state.weakness.practiceFocus}</p>
                 </div>
               )}
+            </div>
+          )}
 
-              <div className="rounded border border-dashed border-[var(--brand-border)] p-3 bg-[var(--brand-bg)]/50">
-                <p className="text-xs font-semibold text-[var(--brand-ink-soft)] uppercase tracking-wider">
-                  Pattern Brief Preview
+          {/* Generate button */}
+          <div className="pt-2" role="region" aria-live="polite">
+            <button
+              type="button"
+              data-testid="generate-brief-btn"
+              onClick={handleGenerateBrief}
+              disabled={!canGenerate}
+              aria-disabled={!canGenerate}
+              className={`app-button px-4 py-2 text-sm ${!canGenerate ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {briefState.status === "generating" ? "Building your pattern brief…" : "Generate Pattern Brief"}
+            </button>
+
+            {/* Disabled reason explanation */}
+            {!canGenerate && disabledReason && (
+              <p className="text-xs text-[var(--brand-muted)] mt-2" data-testid="generate-disabled-reason">
+                {disabledReason}
+              </p>
+            )}
+
+            {/* Error state — safe copy only, retry available */}
+            {briefState.status === "error" && (
+              <p className="text-sm text-[var(--brand-danger)] mt-2" data-testid="brief-error">
+                Unable to generate. Please try again.
+              </p>
+            )}
+          </div>
+
+          {/* Generated Brief — sections in required order */}
+          {briefState.status === "generated" && (
+            <div
+              className="space-y-5 border-t border-[var(--brand-border)] pt-5 mt-4"
+              data-testid="brief-generated"
+              aria-label="Generated Pattern Brief"
+            >
+              <div>
+                <h5 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-teal-ink)] mb-1">
+                  {briefState.brief.title}
+                </h5>
+                <p className="text-xs text-[var(--brand-muted)]">{briefState.brief.focus}</p>
+              </div>
+
+              {/* 1. Quality Criteria */}
+              <div data-testid="brief-quality-criteria">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
+                  Quality Criteria
                 </p>
-                <p className="text-sm text-[var(--brand-muted)] mt-1">
-                  Pattern Brief is not generated yet. Finish your speaking analysis to view the full practice brief.
+                <ul className="list-disc pl-5 space-y-1">
+                  {briefState.brief.qualityCriteria.map((criterion, idx) => (
+                    <li key={idx} className="text-sm">
+                      {criterion}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* 2. Response Pattern */}
+              <div data-testid="brief-response-pattern">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
+                  Response Pattern
+                </p>
+                <p className="text-sm font-medium mb-2">{briefState.brief.responsePattern.name}</p>
+                <ol className="list-decimal pl-5 space-y-1">
+                  {briefState.brief.responsePattern.steps.map((step, idx) => (
+                    <li key={idx} className="text-sm font-mono text-[var(--brand-teal-ink)]">
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* 3. Mini Example */}
+              <div data-testid="brief-mini-example">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
+                  Mini Example
+                </p>
+                <div className="rounded bg-[var(--brand-bg)] p-3 border border-[var(--brand-border)] space-y-2">
+                  <p className="text-sm">{briefState.brief.miniExample}</p>
+                  <p className="text-xs italic text-[var(--brand-muted)]" data-testid="mini-example-warning">
+                    Illustration only — do not memorize or copy.
+                  </p>
+                </div>
+              </div>
+
+              {/* 4. Common Mistakes */}
+              <div data-testid="brief-common-mistakes">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
+                  Common Mistakes to Avoid
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  {briefState.brief.commonMistakes.map((mistake, idx) => (
+                    <li key={idx} className="text-sm">
+                      {mistake}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* 5. Start Drill placeholder */}
+              <div data-testid="brief-start-drill">
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="app-button px-4 py-2 text-sm opacity-50 cursor-not-allowed"
+                  data-testid="start-drill-btn"
+                >
+                  Start Drill
+                </button>
+                <p className="text-xs text-[var(--brand-muted)] mt-2">
+                  Drill Mode will be available in a future update.
                 </p>
               </div>
             </div>
           )}
-
-          <div className="pt-2">
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              className="app-button px-4 py-2 text-sm opacity-50 cursor-not-allowed"
-            >
-              Generate Pattern Brief
-            </button>
-            <p className="text-xs text-[var(--brand-muted)] mt-2">
-              Pattern Brief generation is not active in this milestone.
-            </p>
-          </div>
         </div>
       </section>
 
-      {/* Spoken Check & Drill Mode */}
+      {/* Drill Mode — placeholder */}
       <section className="space-y-4 opacity-50 pointer-events-none">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-border)] text-xs font-bold text-[var(--brand-ink-soft)]">

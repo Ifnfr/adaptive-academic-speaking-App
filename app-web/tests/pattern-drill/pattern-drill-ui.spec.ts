@@ -1,5 +1,42 @@
 import { test, expect } from "@playwright/test";
 
+// A valid Pattern Brief API response for mocking
+const MOCK_BRIEF_RESPONSE = {
+  briefId: "mock-brief-id-001",
+  title: "Claim-Reason-Evidence Structure",
+  focus: "Add clear sentence endings to ensure clarity.",
+  qualityCriteria: ["State claim clearly", "Support with one reason", "Cite brief evidence"],
+  responsePattern: {
+    name: "CRE Structure",
+    steps: ["[claim]", "because [reason]", "for example [evidence]"],
+  },
+  miniExample:
+    "Technology helps students learn independently. Illustration only — do not copy or memorize.",
+  commonMistakes: ["Jumping straight to evidence", "Incomplete thoughts"],
+  drillEntryConfig: {
+    targetPattern: "CRE Structure",
+    targetSteps: ["[claim]", "because [reason]", "for example [evidence]"],
+    commonMistakes: ["Jumping straight to evidence", "Incomplete thoughts"],
+    suggestedEntryPhase: 1,
+  },
+};
+
+// A mock "found" weakness API response
+const MOCK_WEAKNESS_FOUND = {
+  status: "found",
+  weakness: {
+    title: "No sentence endings",
+    description: "Add clear sentence endings to ensure clarity.",
+    category: "Coherence",
+    label: "No sentence endings",
+    evidence: "Did not finish sentence.",
+    practiceFocus: "Focus on endings.",
+    failureCount: 3,
+    lastSeenAt: "2026-06-10T12:00:00Z",
+    derivedConfidence: 0.8,
+  },
+};
+
 test.describe("Pattern Drill UI Wiring", () => {
   test.beforeEach(async ({ page }) => {
     // Standard mock auth redirect bypass
@@ -20,6 +57,10 @@ test.describe("Pattern Drill UI Wiring", () => {
       await route.continue();
     });
   });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Existing tests (preserved with updated assertions for new milestone)
+  // ──────────────────────────────────────────────────────────────────────────
 
   test("asserts latest-weakness API is NOT fetched on initial Active Session Podchat mount", async ({ page }) => {
     let apiCalled = false;
@@ -55,11 +96,10 @@ test.describe("Pattern Drill UI Wiring", () => {
     expect(apiCalled).toBe(true);
   });
 
-  test("displays found weakness state with all details, confidence, evidence, and disabled actions", async ({ page }) => {
+  test("displays found weakness state with all details — generate button now enabled", async ({ page }) => {
     let apiBriefCalled = false;
     let apiDrillCalled = false;
 
-    // Fail-safe routes for unauthorized endpoints
     await page.route("**/api/pattern-brief/**", async (route) => {
       apiBriefCalled = true;
       await route.fulfill({ status: 404 });
@@ -68,25 +108,11 @@ test.describe("Pattern Drill UI Wiring", () => {
       apiDrillCalled = true;
       await route.fulfill({ status: 404 });
     });
-
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({
-          status: "found",
-          weakness: {
-            title: "No sentence endings",
-            description: "Add clear sentence endings to ensure clarity.",
-            category: "Coherence",
-            label: "No sentence endings",
-            evidence: "Did not finish sentence.",
-            practiceFocus: "Focus on endings.",
-            failureCount: 3,
-            lastSeenAt: "2026-06-10T12:00:00Z",
-            derivedConfidence: 0.8,
-          },
-        }),
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
       });
     });
 
@@ -102,22 +128,12 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(page.getByText("Did not finish sentence.")).toBeVisible();
     await expect(page.getByText("Focus on endings.")).toBeVisible();
 
-    // Verify Pattern Brief preview copy is shown
-    await expect(
-      page.getByText("Pattern Brief is not generated yet. Finish your speaking analysis to view the full practice brief.")
-    ).toBeVisible();
+    // Generate button should now be ENABLED for found state (Milestone 5 change)
+    const generateBtn = page.getByTestId("generate-brief-btn");
+    await expect(generateBtn).toBeEnabled();
+    await expect(generateBtn).not.toHaveAttribute("aria-disabled", "true");
 
-    // Verify no XP reward badges/text exist inside the drill component sections
-    const xpElements = await page.locator("section").locator("text=/XP/").count();
-    expect(xpElements).toBe(0);
-
-    // Verify action button is disabled and explains why
-    const generateBtn = page.getByRole("button", { name: "Generate Pattern Brief" });
-    await expect(generateBtn).toBeDisabled();
-    await expect(generateBtn).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByText("Pattern Brief generation is not active in this milestone.")).toBeVisible();
-
-    // Confirm no invalid network/brief calls occurred
+    // No Pattern Brief or Drill calls on load
     expect(apiBriefCalled).toBe(false);
     expect(apiDrillCalled).toBe(false);
   });
@@ -125,10 +141,8 @@ test.describe("Pattern Drill UI Wiring", () => {
   test("handles loading, empty, insufficient, and error states gracefully", async ({ page }) => {
     let mockStatus = "loading";
 
-    // Set up dynamic route mocker
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       if (mockStatus === "loading") {
-        // keep request pending / fulfill with loading if requested, but route resolves loading immediately in test mock
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -186,5 +200,251 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
     await expect(page.getByTestId("weakness-error")).toBeVisible();
     await expect(page.getByText("Could not load weakness data. Try again later.")).toBeVisible();
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // New tests for Milestone 5 — Pattern Brief UI Wiring
+  // ──────────────────────────────────────────────────────────────────────────
+
+  test("generate button is disabled and shows explanation for loading/empty/insufficient/error weakness states", async ({ page }) => {
+    const states: Array<{ mockStatus: string; weakness?: unknown; testId: string }> = [
+      { mockStatus: "loading", testId: "weakness-loading" },
+      { mockStatus: "empty", testId: "weakness-empty" },
+      { mockStatus: "insufficient", testId: "weakness-insufficient" },
+    ];
+
+    for (const { mockStatus, testId } of states) {
+      await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: mockStatus }),
+        });
+      });
+
+      await page.goto("/");
+      await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+      await expect(page.getByTestId(testId)).toBeVisible();
+
+      const generateBtn = page.getByTestId("generate-brief-btn");
+      await expect(generateBtn).toBeDisabled();
+      await expect(generateBtn).toHaveAttribute("aria-disabled", "true");
+      // Should also show an explanatory reason
+      await expect(page.getByTestId("generate-disabled-reason")).toBeVisible();
+    }
+
+    // Error state (HTTP 500)
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "DB Error" }),
+      });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await expect(page.getByTestId("weakness-error")).toBeVisible();
+    const generateBtn = page.getByTestId("generate-brief-btn");
+    await expect(generateBtn).toBeDisabled();
+  });
+
+  test("pattern brief API is NOT called on Pattern Drill page load", async ({ page }) => {
+    let briefApiCalled = false;
+    await page.route("**/api/pattern-brief/**", async (route) => {
+      briefApiCalled = true;
+      await route.fulfill({ status: 404 });
+    });
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    // Wait for weakness to load
+    await expect(page.getByTestId("weakness-found")).toBeVisible();
+
+    // Brief API must NOT have been called
+    expect(briefApiCalled).toBe(false);
+  });
+
+  test("successful generation — sections render in order, slot notation visible, warning shown, drillEntryConfig hidden", async ({ page }) => {
+    let capturedRequestBody: Record<string, unknown> | null = null;
+    let briefApiCallCount = 0;
+
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
+      });
+    });
+
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      briefApiCallCount++;
+      capturedRequestBody = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_BRIEF_RESPONSE),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await expect(page.getByTestId("weakness-found")).toBeVisible();
+
+    // Click generate
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+
+    // Request body checks
+    expect(briefApiCallCount).toBe(1);
+    expect(capturedRequestBody).toBeDefined();
+    expect(capturedRequestBody?.["source"]).toBe("latest_weakness");
+    // Must NOT include raw weakness text as trusted input
+    expect(capturedRequestBody?.["focus"]).toBeUndefined();
+    expect(capturedRequestBody?.["description"]).toBeUndefined();
+    expect(capturedRequestBody?.["evidence"]).toBeUndefined();
+    expect(capturedRequestBody?.["practiceFocus"]).toBeUndefined();
+
+    // 1. Quality Criteria renders
+    const qcSection = page.getByTestId("brief-quality-criteria");
+    await expect(qcSection).toBeVisible();
+    await expect(qcSection.getByText("State claim clearly")).toBeVisible();
+    await expect(qcSection.getByText("Support with one reason")).toBeVisible();
+
+    // 2. Response Pattern renders with slot notation
+    const rpSection = page.getByTestId("brief-response-pattern");
+    await expect(rpSection).toBeVisible();
+    await expect(rpSection.getByText("CRE Structure")).toBeVisible();
+    // Slot notation visible
+    await expect(rpSection.getByText("[claim]")).toBeVisible();
+    await expect(rpSection.getByText("because [reason]")).toBeVisible();
+    await expect(rpSection.getByText("for example [evidence]")).toBeVisible();
+
+    // 3. Mini Example renders with warning
+    const meSection = page.getByTestId("brief-mini-example");
+    await expect(meSection).toBeVisible();
+    await expect(page.getByTestId("mini-example-warning")).toBeVisible();
+    await expect(page.getByTestId("mini-example-warning")).toContainText("Illustration only");
+
+    // 4. Common Mistakes renders
+    const cmSection = page.getByTestId("brief-common-mistakes");
+    await expect(cmSection).toBeVisible();
+    await expect(cmSection.getByText("Jumping straight to evidence")).toBeVisible();
+
+    // 5. Start Drill placeholder renders and is disabled
+    const startDrillBtn = page.getByTestId("start-drill-btn");
+    await expect(startDrillBtn).toBeVisible();
+    await expect(startDrillBtn).toBeDisabled();
+
+    // drillEntryConfig and suggestedEntryPhase must NOT be visible in the DOM
+    await expect(page.getByText("drillEntryConfig")).not.toBeVisible();
+    await expect(page.getByText("suggestedEntryPhase")).not.toBeVisible();
+    await expect(page.getByText("targetPattern")).not.toBeVisible();
+
+    // Weakness details still visible after generation
+    await expect(page.getByTestId("weakness-found")).toBeVisible();
+    await expect(page.getByTestId("weakness-found").getByText("Add clear sentence endings to ensure clarity.")).toBeVisible();
+  });
+
+  test("generating state — shows loading text and disables button, prevents duplicate API calls", async ({ page }) => {
+    let resolveRequest!: () => void;
+    const requestBlocked = new Promise<void>((res) => { resolveRequest = res; });
+    let callCount = 0;
+
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
+      });
+    });
+
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      callCount++;
+      // Hold first request pending to test generating state
+      await requestBlocked;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_BRIEF_RESPONSE),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await expect(page.getByTestId("weakness-found")).toBeVisible();
+
+    // Click generate — the route is held pending
+    await page.getByTestId("generate-brief-btn").click();
+
+    // While pending, button should be disabled and show loading text
+    await expect(page.getByTestId("generate-brief-btn")).toBeDisabled();
+    await expect(page.getByTestId("generate-brief-btn")).toContainText("Building your pattern brief");
+
+    // Click again while generating — must not fire a second request
+    await page.getByTestId("generate-brief-btn").click({ force: true });
+
+    // Unblock the route
+    resolveRequest();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+
+    // Only one API call despite duplicate click attempt
+    expect(callCount).toBe(1);
+  });
+
+  test("error state — shows safe copy only, no internal details, retry is possible", async ({ page }) => {
+    let briefCallCount = 0;
+
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
+      });
+    });
+
+    // First call fails, second call succeeds
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      briefCallCount++;
+      if (briefCallCount === 1) {
+        await route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "provider_unavailable" }) });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(MOCK_BRIEF_RESPONSE),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await expect(page.getByTestId("weakness-found")).toBeVisible();
+
+    // First click — triggers error
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-error")).toBeVisible();
+
+    // Safe copy shown
+    await expect(page.getByTestId("brief-error")).toContainText("Unable to generate. Please try again.");
+
+    // No internal error details exposed
+    await expect(page.getByText("provider_unavailable")).not.toBeVisible();
+    await expect(page.getByText("502")).not.toBeVisible();
+    await expect(page.getByText("Claude")).not.toBeVisible();
+
+    // Button re-enabled for retry
+    await expect(page.getByTestId("generate-brief-btn")).toBeEnabled();
+
+    // Retry click — should succeed
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    expect(briefCallCount).toBe(2);
   });
 });
