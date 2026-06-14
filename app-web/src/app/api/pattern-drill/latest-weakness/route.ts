@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { selectLatestWeakness } from "../../../lib/pattern-drill/weaknessSelector";
+import { getLatestWeaknessForUser } from "../../../lib/pattern-drill/latestWeaknessServer";
 
 export const runtime = "nodejs";
 
@@ -62,22 +62,7 @@ export async function GET() {
   }
 
   try {
-    const { data: rows, error } = await supabaseClient
-      .from("learner_error_patterns")
-      .select("id, owner_id, source_kind, source_id, category, label, evidence, correction, practice_focus, created_at")
-      .eq("owner_id", ownerId)
-      .eq("source_kind", "podchat")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (error) {
-      return NextResponse.json(
-        { error: "latest_weakness_fetch_failed" },
-        { status: 502, headers }
-      );
-    }
-
-    const selectorResult = selectLatestWeakness(rows, { ownerId });
+    const selectorResult = await getLatestWeaknessForUser(ownerId, supabaseClient);
 
     if (selectorResult.weakness) {
       const { ...safeWeakness } = selectorResult.weakness;
