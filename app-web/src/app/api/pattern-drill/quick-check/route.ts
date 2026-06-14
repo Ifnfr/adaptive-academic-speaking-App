@@ -1,0 +1,198 @@
+import { NextResponse } from "next/server";
+
+export const runtime = "nodejs";
+
+export const testHooks = {
+  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
+  callClaude: null as ((apiKey: string, systemPrompt: string, userPrompt: string) => Promise<string>) | null,
+};
+
+async function resolveCurrentUserId(): Promise<string | null> {
+  if (testHooks.resolveCurrentUserId) {
+    return testHooks.resolveCurrentUserId();
+  }
+
+  try {
+    const { auth } = await import("@clerk/nextjs/server");
+    const session = await auth();
+    return session?.userId || null;
+  } catch {
+    return null;
+  }
+}
+
+async function callClaude(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  if (testHooks.callClaude) {
+    return testHooks.callClaude(apiKey, systemPrompt, userPrompt);
+  }
+
+  const model = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 64,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Claude API error ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  return data.content?.find((c) => c.type === "text")?.text ?? "";
+}
+
+function cleanJsonResponse(text: string): string {
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  return cleaned.trim();
+}
+
+export async function POST(request: Request) {
+  const headers = { "Cache-Control": "no-store" };
+
+  const ownerId = await resolveCurrentUserId();
+  if (!ownerId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401, headers });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Reject unexpected fields
+  const allowedKeys = ["briefId", "responsePattern", "commonMistakes", "transcript"];
+  const bodyKeys = Object.keys(body as Record<string, unknown>);
+  if (bodyKeys.some((k) => !allowedKeys.includes(k))) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  const { briefId, responsePattern, commonMistakes, transcript } = body as {
+    briefId?: unknown;
+    responsePattern?: unknown;
+    commonMistakes?: unknown;
+    transcript?: unknown;
+  };
+
+  // Validate briefId
+  if (typeof briefId !== "string" || briefId.trim().length === 0) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Validate responsePattern
+  if (
+    typeof responsePattern !== "object" ||
+    responsePattern === null ||
+    typeof (responsePattern as Record<string, unknown>).name !== "string" ||
+    ((responsePattern as Record<string, unknown>).name as string).trim().length === 0 ||
+    !Array.isArray((responsePattern as Record<string, unknown>).steps)
+  ) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  const rp = responsePattern as { name: string; steps: unknown[] };
+  if (rp.steps.length < 2 || rp.steps.length > 5 || rp.steps.some((s) => typeof s !== "string" || (s as string).trim().length === 0)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Validate commonMistakes
+  if (!Array.isArray(commonMistakes) || commonMistakes.length > 3 || commonMistakes.some((m) => typeof m !== "string")) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Validate transcript
+  if (transcript === undefined || transcript === null || transcript === "") {
+    return NextResponse.json({ error: "transcript_required" }, { status: 400, headers });
+  }
+  if (typeof transcript !== "string") {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+  const trimmedTranscript = transcript.trim();
+  if (trimmedTranscript.length === 0) {
+    return NextResponse.json({ error: "transcript_required" }, { status: 400, headers });
+  }
+  if (trimmedTranscript.length > 500) {
+    return NextResponse.json({ error: "transcript_too_long" }, { status: 400, headers });
+  }
+
+  const apiKey = process.env.CLAUDE_API_KEY || (testHooks.callClaude ? "__test__" : "");
+  if (!apiKey) {
+    return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+  }
+
+  const patternName = rp.name;
+  const patternSteps = (rp.steps as string[]).join(", ");
+  const mistakesList = (commonMistakes as string[]).length > 0
+    ? (commonMistakes as string[]).join("; ")
+    : "none specified";
+
+  const systemPrompt = `You are an expert language learning evaluator. Your task is to determine whether a learner's spoken sentence demonstrates a specific response pattern. Return ONLY a JSON object with a single field "result" that is either "detected" or "not_detected_or_partial". No explanation, no score, no grammar correction — just the JSON.
+
+Rules:
+- "detected": the sentence clearly follows the pattern structure, using the key slot types in roughly the correct order
+- "not_detected_or_partial": the sentence is missing key slots, uses the pattern incorrectly, or does not attempt the pattern
+
+Return format (strict): {"result":"detected"} or {"result":"not_detected_or_partial"}`;
+
+  const userPrompt = `Pattern name: ${patternName}
+Pattern steps: ${patternSteps}
+Common mistakes to watch for: ${mistakesList}
+
+Learner sentence: "${trimmedTranscript}"
+
+Does this sentence demonstrate the pattern? Return only JSON.`;
+
+  try {
+    const text = await callClaude(apiKey, systemPrompt, userPrompt);
+    const cleanedText = cleanJsonResponse(text);
+
+    let parsed: { result?: unknown };
+    try {
+      parsed = JSON.parse(cleanedText) as { result?: unknown };
+    } catch {
+      console.error("Quick check JSON parse error");
+      return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
+    }
+
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      (parsed.result !== "detected" && parsed.result !== "not_detected_or_partial")
+    ) {
+      console.error("Quick check invalid provider result:", parsed);
+      return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
+    }
+
+    const result = parsed.result as "detected" | "not_detected_or_partial";
+    const entryPhase: 1 | 3 = result === "detected" ? 3 : 1;
+
+    return NextResponse.json({ result, entryPhase }, { headers });
+  } catch (err: unknown) {
+    console.error("Quick check Claude call error:", err);
+    return NextResponse.json({ error: "provider_unavailable" }, { status: 502, headers });
+  }
+}
