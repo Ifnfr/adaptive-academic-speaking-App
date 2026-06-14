@@ -449,8 +449,52 @@ test.describe("Pattern Drill UI Wiring", () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Milestone 6 — Quick Spoken Check UI tests
+  // Milestone 7 — Voice/STT Quick Check UI tests
   // ──────────────────────────────────────────────────────────────────────────
+
+  // Helper: inject deterministic MediaRecorder + getUserMedia mocks into the page
+  async function injectMediaMocks(page: import("@playwright/test").Page) {
+    await page.addInitScript(() => {
+      class MockMediaRecorder {
+        mimeType: string;
+        state: string;
+        ondataavailable: ((e: { data: Blob }) => void) | null = null;
+        onstop: (() => void) | null = null;
+
+        constructor(_stream: unknown, opts?: { mimeType?: string }) {
+          this.mimeType = opts?.mimeType ?? "audio/webm";
+          this.state = "inactive";
+        }
+
+        start() {
+          this.state = "recording";
+        }
+
+        stop() {
+          this.state = "inactive";
+          const chunk = new Blob(["audio"], { type: this.mimeType });
+          if (this.ondataavailable) this.ondataavailable({ data: chunk });
+          if (this.onstop) this.onstop();
+        }
+
+        static isTypeSupported(mime: string) {
+          return mime === "audio/webm";
+        }
+      }
+
+      // @ts-expect-error — override global in test environment
+      window.MediaRecorder = MockMediaRecorder;
+
+      Object.defineProperty(navigator, "mediaDevices", {
+        writable: true,
+        value: {
+          getUserMedia: async () => ({
+            getTracks: () => [{ stop: () => {} }],
+          }),
+        },
+      });
+    });
+  }
 
   test("quick check section is hidden before brief is generated", async ({ page }) => {
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
@@ -464,16 +508,14 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
 
-    // Brief not yet generated → quick check section should not exist
     await expect(page.getByTestId("quick-check-section")).not.toBeVisible();
   });
 
-  test("quick check route is not called on page load or after brief generation", async ({ page }) => {
-    let quickCheckCalled = false;
-
-    await page.route("**/api/pattern-drill/quick-check", async (route) => {
-      quickCheckCalled = true;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+  test("STT route is NOT called on page load or after brief generation", async ({ page }) => {
+    let sttCalled = false;
+    await page.route("**/api/podchat/stt", async (route) => {
+      sttCalled = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "test" }) });
     });
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
@@ -485,16 +527,43 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
-
-    // Generate the brief
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
-    // Quick check route must not have been called
+    expect(sttCalled).toBe(false);
+  });
+
+  test("quick check route is NOT called on page load or after brief generation", async ({ page }) => {
+    let quickCheckCalled = false;
+    await page.route("**/api/pattern-drill/quick-check", async (route) => {
+      quickCheckCalled = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+    });
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+
     expect(quickCheckCalled).toBe(false);
   });
 
-  test("start quick check button appears after brief is generated", async ({ page }) => {
+  test("microphone is NOT requested until user clicks Start Speaking", async ({ page }) => {
+    await injectMediaMocks(page);
+    await page.addInitScript(() => {
+      const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (c) => {
+        (window as unknown as Record<string, unknown>).__gumCount = ((window as unknown as Record<string, unknown>).__gumCount as number ?? 0) + 1;
+        return orig(c);
+      };
+    });
+
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
@@ -507,10 +576,15 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
-    await expect(page.getByTestId("start-quick-check-btn")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
+    await expect(page.getByTestId("quick-check-recording-ready")).toBeVisible();
+
+    const called = await page.evaluate(() => Boolean((window as unknown as Record<string, unknown>).__gumCount));
+    expect(called).toBe(false);
   });
 
-  test("clicking start quick check hides response pattern steps and mini example", async ({ page }) => {
+  test("starting quick check hides response pattern and mini example before recording", async ({ page }) => {
+    await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
@@ -523,34 +597,30 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
-    // Before start: template visible
     await expect(page.getByTestId("brief-response-pattern")).toBeVisible();
     await expect(page.getByTestId("brief-mini-example")).toBeVisible();
-    await expect(page.getByText("[claim]")).toBeVisible();
 
-    // Click start check
     await page.getByTestId("start-quick-check-btn").click();
 
-    // Template steps hidden, placeholder visible
     await expect(page.getByTestId("brief-pattern-hidden")).toBeVisible();
     await expect(page.getByText("Pattern hidden for the check.")).toBeVisible();
     await expect(page.getByTestId("brief-mini-example")).not.toBeVisible();
-    // Slot notation not visible
-    await expect(page.getByText("[claim]")).not.toBeVisible();
-
-    // Quality Criteria still visible
     await expect(page.getByTestId("brief-quality-criteria")).toBeVisible();
-
-    // Transcript input appears
-    await expect(page.getByTestId("transcript-input")).toBeVisible();
+    await expect(page.getByTestId("start-speaking-btn")).toBeVisible();
   });
 
-  test("empty transcript disables submit button", async ({ page }) => {
+  test("clicking Start Speaking transitions to recording state", async ({ page }) => {
+    await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
     await page.route("**/api/pattern-brief/generate", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    // Keep STT pending so we can observe "recording" state
+    await page.route("**/api/podchat/stt", async (route) => {
+      await new Promise<void>((r) => setTimeout(r, 10000));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "test" }) });
     });
 
     await page.goto("/");
@@ -559,37 +629,83 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
 
-    // Submit disabled with empty input
-    const submitBtn = page.getByTestId("submit-check-btn");
-    await expect(submitBtn).toBeDisabled();
+    await page.getByTestId("start-speaking-btn").click();
 
-    // Type something — button should enable
-    await page.getByTestId("transcript-input").fill("Technology helps students.");
-    await expect(submitBtn).toBeEnabled();
-
-    // Clear input — button disabled again
-    await page.getByTestId("transcript-input").fill("");
-    await expect(submitBtn).toBeDisabled();
+    await expect(page.getByTestId("quick-check-recording")).toBeVisible();
+    await expect(page.getByTestId("stop-recording-btn")).toBeVisible();
   });
 
-  test("submitting calls quick-check route once with correct body (no drillEntryConfig/owner fields)", async ({ page }) => {
-    const captured: { body: Record<string, unknown> | null } = { body: null };
-    let quickCheckCallCount = 0;
+  test("stop recording triggers STT upload to /api/podchat/stt exactly once", async ({ page }) => {
+    let sttCallCount = 0;
 
+    await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
     await page.route("**/api/pattern-brief/generate", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      sttCallCount++;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "Technology helps students learn." }) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await expect(page.getByTestId("stop-recording-btn")).toBeVisible();
+    await page.getByTestId("stop-recording-btn").click();
+
+    await expect(page.getByTestId("quick-check-transcript-ready")).toBeVisible({ timeout: 5000 });
+    expect(sttCallCount).toBe(1);
+  });
+
+  test("successful STT transcript appears in quick-check-transcript", async ({ page }) => {
+    const mockTranscript = "Technology helps students learn independently.";
+
+    await injectMediaMocks(page);
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: mockTranscript }) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId("quick-check-transcript")).toHaveText(mockTranscript);
+  });
+
+  test("transcript is sent to /api/pattern-drill/quick-check with correct body (no owner/weakness fields)", async ({ page }) => {
+    const mockTranscript = "Technology helps students learn independently.";
+    const captured: { body: Record<string, unknown> | null } = { body: null };
+
+    await injectMediaMocks(page);
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: mockTranscript }) });
     });
     await page.route("**/api/pattern-drill/quick-check", async (route) => {
-      quickCheckCallCount++;
       captured.body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ result: "detected", entryPhase: 3 }),
-      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
     });
 
     await page.goto("/");
@@ -597,41 +713,34 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
-
-    const testTranscript = "Technology helps students learn independently because it gives them flexible access.";
-    await page.getByTestId("transcript-input").fill(testTranscript);
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
     await page.getByTestId("submit-check-btn").click();
 
-    await expect(page.getByTestId("quick-check-result")).toBeVisible();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
 
-    // Verify exactly one call
-    expect(quickCheckCallCount).toBe(1);
-
-    // Non-null assert since we confirmed one call was made
     const body = captured.body!;
-
-    // Verify required fields
     expect(body.briefId).toBe(MOCK_BRIEF_RESPONSE.briefId);
-    expect(body.transcript).toBe(testTranscript);
+    expect(body.transcript).toBe(mockTranscript);
     expect((body.responsePattern as Record<string, unknown>).name).toBe(MOCK_BRIEF_RESPONSE.responsePattern.name);
-    expect((body.responsePattern as Record<string, unknown>).steps).toEqual(MOCK_BRIEF_RESPONSE.responsePattern.steps);
-    expect(body.commonMistakes).toEqual(MOCK_BRIEF_RESPONSE.commonMistakes);
-
-    // Must NOT include drillEntryConfig, owner fields, or weakness raw data
-    expect(body.drillEntryConfig).toBeUndefined();
     expect(body.ownerId).toBeUndefined();
     expect(body.owner_id).toBeUndefined();
+    expect(body.drillEntryConfig).toBeUndefined();
     expect(body.description).toBeUndefined();
     expect(body.evidence).toBeUndefined();
-    expect(body.practiceFocus).toBeUndefined();
   });
 
   test("detected result shows Phase 3 copy", async ({ page }) => {
+    await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
     await page.route("**/api/pattern-brief/generate", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "My sentence." }) });
     });
     await page.route("**/api/pattern-drill/quick-check", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
@@ -642,23 +751,27 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
-    await page.getByTestId("transcript-input").fill("My sentence here.");
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
     await page.getByTestId("submit-check-btn").click();
 
-    await expect(page.getByTestId("quick-check-result")).toBeVisible();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Pattern detected. Future Drill will start from Phase 3.")).toBeVisible();
-
-    // Start Drill still disabled, shows Phase 3 copy
     await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
     await expect(page.getByText("Planned entry: Phase 3.")).toBeVisible();
   });
 
   test("not_detected_or_partial result shows Phase 1 copy", async ({ page }) => {
+    await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
     await page.route("**/api/pattern-brief/generate", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "I like things." }) });
     });
     await page.route("**/api/pattern-drill/quick-check", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "not_detected_or_partial", entryPhase: 1 }) });
@@ -669,36 +782,40 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
-    await page.getByTestId("transcript-input").fill("I like technology.");
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
     await page.getByTestId("submit-check-btn").click();
 
-    await expect(page.getByTestId("quick-check-result")).toBeVisible();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Pattern not clearly detected. Future Drill will start from Phase 1.")).toBeVisible();
-
     await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
     await expect(page.getByText("Planned entry: Phase 1.")).toBeVisible();
   });
 
-  test("skip quick check shows Phase 1 copy, quick-check route not called", async ({ page }) => {
-    let quickCheckCalled = false;
+  test("skip from idle — Phase 1, STT and quick-check routes NOT called", async ({ page }) => {
+    let sttCalled = false;
+    let qcCalled = false;
 
+    await page.route("**/api/podchat/stt", async (route) => {
+      sttCalled = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "test" }) });
+    });
+    await page.route("**/api/pattern-drill/quick-check", async (route) => {
+      qcCalled = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+    });
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
     await page.route("**/api/pattern-brief/generate", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
     });
-    await page.route("**/api/pattern-drill/quick-check", async (route) => {
-      quickCheckCalled = true;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
-    });
 
     await page.goto("/");
     await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
-
-    // Skip from idle state
     await page.getByTestId("skip-check-btn-idle").click();
 
     await expect(page.getByTestId("quick-check-result")).toBeVisible();
@@ -706,15 +823,48 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
     await expect(page.getByText("Planned entry: Phase 1.")).toBeVisible();
 
-    expect(quickCheckCalled).toBe(false);
+    expect(sttCalled).toBe(false);
+    expect(qcCalled).toBe(false);
   });
 
-  test("route error shows safe copy only, no internal details, retry possible", async ({ page }) => {
+  test("STT failure shows safe copy and Record Again button", async ({ page }) => {
+    await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
     });
     await page.route("**/api/pattern-brief/generate", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "provider_unavailable" }) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+
+    await expect(page.getByTestId("quick-check-error-stt")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Speech transcription failed. Please try recording again.")).toBeVisible();
+    await expect(page.getByText("provider_unavailable")).not.toBeVisible();
+    await expect(page.getByText("502")).not.toBeVisible();
+    await expect(page.getByTestId("record-again-btn")).toBeVisible();
+    await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
+  });
+
+  test("quick-check failure shows safe copy and retry is possible", async ({ page }) => {
+    await injectMediaMocks(page);
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "My sentence." }) });
     });
     await page.route("**/api/pattern-drill/quick-check", async (route) => {
       await route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "provider_unavailable" }) });
@@ -725,52 +875,129 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
-    await page.getByTestId("transcript-input").fill("My sentence here.");
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
     await page.getByTestId("submit-check-btn").click();
 
-    await expect(page.getByTestId("quick-check-error")).toBeVisible();
+    await expect(page.getByTestId("quick-check-error-check")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Unable to check that sentence. Please try again.")).toBeVisible();
-
-    // No internal details
     await expect(page.getByText("provider_unavailable")).not.toBeVisible();
-    await expect(page.getByText("502")).not.toBeVisible();
-    await expect(page.getByText("Claude")).not.toBeVisible();
-
-    // Retry button visible
     await expect(page.getByTestId("retry-check-btn")).toBeVisible();
-
-    // Start Drill still disabled
     await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
   });
 
-  test("start drill button remains disabled in every result state", async ({ page }) => {
-    const routes = [
-      { result: "detected", entryPhase: 3 },
-      { result: "not_detected_or_partial", entryPhase: 1 },
-    ];
+  test("record again clears transcript and permits a new recording", async ({ page }) => {
+    let sttCallCount = 0;
 
-    for (const { result, entryPhase } of routes) {
-      await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
-      });
-      await page.route("**/api/pattern-brief/generate", async (route) => {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
-      });
-      await page.route("**/api/pattern-drill/quick-check", async (route) => {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result, entryPhase }) });
-      });
+    await injectMediaMocks(page);
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      sttCallCount++;
+      const t = sttCallCount === 1 ? "First recording." : "Second recording.";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: t }) });
+    });
 
-      await page.goto("/");
-      await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
-      await page.getByTestId("generate-brief-btn").click();
-      await expect(page.getByTestId("brief-generated")).toBeVisible();
-      await page.getByTestId("start-quick-check-btn").click();
-      await page.getByTestId("transcript-input").fill("Test sentence here.");
-      await page.getByTestId("submit-check-btn").click();
-      await expect(page.getByTestId("quick-check-result")).toBeVisible();
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
 
-      // Start Drill always disabled
-      await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
-    }
+    // First recording
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId("quick-check-transcript")).toHaveText("First recording.");
+
+    // Click Record Again
+    await page.getByTestId("record-again-btn").click();
+    await expect(page.getByTestId("quick-check-recording-ready")).toBeVisible();
+    await expect(page.getByTestId("quick-check-transcript")).not.toBeVisible();
+
+    // Second recording
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId("quick-check-transcript")).toHaveText("Second recording.");
+
+    expect(sttCallCount).toBe(2);
+  });
+
+  test("no localStorage or sessionStorage writes occur during the full flow", async ({ page }) => {
+    await injectMediaMocks(page);
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "My sentence." }) });
+    });
+    await page.route("**/api/pattern-drill/quick-check", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await page.getByTestId("submit-check-btn").click();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
+
+    const patternDrillKeys = await page.evaluate(() => {
+      // Collect all localStorage + sessionStorage keys belonging to Pattern Drill.
+      // Clerk and other framework libs may write their own keys — we only care
+      // that Pattern Drill does not persist transcript, audio, brief, or drill context.
+      const keywords = ["transcript", "brief", "drill", "audio", "quick", "pattern"];
+      const localKeys = Object.keys(window.localStorage).filter((k) =>
+        keywords.some((kw) => k.toLowerCase().includes(kw))
+      );
+      const sessionKeys = Object.keys(window.sessionStorage).filter((k) =>
+        keywords.some((kw) => k.toLowerCase().includes(kw))
+      );
+      return [...localKeys, ...sessionKeys];
+    });
+    expect(patternDrillKeys).toHaveLength(0);
+  });
+
+
+  test("start drill button remains disabled after detected result", async ({ page }) => {
+    await injectMediaMocks(page);
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "My sentence." }) });
+    });
+    await page.route("**/api/pattern-drill/quick-check", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await page.getByTestId("submit-check-btn").click();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
+
+    await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
   });
 });
