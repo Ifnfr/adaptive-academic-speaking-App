@@ -1,12 +1,17 @@
 import { expect, test } from "@playwright/test";
 import {
+  BADGE_DEFINITIONS,
   DAILY_XP_CAP,
+  SPEAKER_LEVELS,
   XP_RULES,
   awardXpEvent,
   createDefaultXpProfile,
   createXpEvent,
+  deriveUnlockedBadges,
+  getSpeakerLevelProgress,
   normalizeXpEvents,
   xpEventTypeForPodchatDifficulty,
+  type Badge,
   type XpEvent,
 } from "../src/app/lib/gamification";
 
@@ -14,6 +19,7 @@ function makeEvent(
   type: keyof typeof XP_RULES,
   sourceId: string,
   localDate = "2026-06-13",
+  reason: string = type,
 ): XpEvent {
   return createXpEvent({
     type,
@@ -30,7 +36,18 @@ function makeEvent(
               : "session",
     localDate,
     createdAt: `${localDate}T01:00:00.000Z`,
+    reason,
   });
+}
+
+function badgeIds(badges: ReadonlyArray<Badge>): string[] {
+  return badges.map((badge) => badge.id);
+}
+
+function localDateFromUtcOffset(startDate: string, offsetDays: number): string {
+  const date = new Date(`${startDate}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
 }
 
 test.describe("XP-2 gamification reward rules", () => {
@@ -149,5 +166,213 @@ test.describe("XP-2 gamification reward rules", () => {
       type: "normal_session_completed",
       xp: 40,
     });
+  });
+});
+
+test.describe("XP-3 level progression", () => {
+  test("uses the approved 10-level thresholds while keeping level names", () => {
+    expect(SPEAKER_LEVELS.map((level) => level.requiredXp)).toEqual([
+      0, 100, 250, 500, 900, 1500, 2500, 4000, 6500, 10000,
+    ]);
+    expect(SPEAKER_LEVELS.map((level) => level.name)).toEqual([
+      "New Speaker",
+      "Practicing Speaker",
+      "Developing Speaker",
+      "Structured Speaker",
+      "Consistent Speaker",
+      "Clear Communicator",
+      "Analytical Speaker",
+      "Confident Speaker",
+      "Advanced Communicator",
+      "Academic Speaker",
+    ]);
+  });
+
+  test("calculates next-level progress and max-level behavior", () => {
+    expect(getSpeakerLevelProgress(99)).toMatchObject({
+      currentLevel: { level: 1, name: "New Speaker", requiredXp: 0 },
+      nextLevel: { level: 2, requiredXp: 100 },
+      xpIntoLevel: 99,
+      xpNeededForNext: 1,
+    });
+    expect(getSpeakerLevelProgress(100)).toMatchObject({
+      currentLevel: { level: 2, name: "Practicing Speaker", requiredXp: 100 },
+      nextLevel: { level: 3, requiredXp: 250 },
+      xpIntoLevel: 0,
+      xpNeededForNext: 150,
+    });
+    expect(getSpeakerLevelProgress(10000)).toMatchObject({
+      currentLevel: { level: 10, name: "Academic Speaker", requiredXp: 10000 },
+      nextLevel: null,
+      xpNeededForNext: 0,
+      progressRatio: 1,
+    });
+  });
+});
+
+test.describe("XP-3 badge criteria", () => {
+  const earnedAt = "2026-06-13T02:00:00.000Z";
+  const profile = { ...createDefaultXpProfile("2026-06-13"), totalXp: 10000 };
+
+  test("defines the approved XP-3 badge IDs", () => {
+    expect(Object.keys(BADGE_DEFINITIONS)).toEqual([
+      "first_voice",
+      "consistent_speaker_i",
+      "consistent_speaker_ii",
+      "consistent_speaker_iii",
+      "advanced_voice",
+      "research_speaker",
+      "vocabulary_builder_i",
+      "vocabulary_builder_ii",
+      "vocabulary_builder_iii",
+      "sentence_refiner",
+      "recall_runner",
+      "first_commonplace",
+      "map_thinker",
+      "connector",
+      "synthesis_builder",
+      "three_day_rhythm",
+      "seven_day_rhythm",
+      "monthly_practice_habit",
+      "first_weekly_reflector",
+      "reflective_learner",
+      "monthly_reviewer",
+      "academic_speaker",
+      "resilient_learner",
+      "connected_thinker",
+    ]);
+  });
+
+  test("unlocks speaking, consistency, weekly, and mastery badges from XP events", () => {
+    const activeDays = Array.from({ length: 30 }, (_, index) =>
+      makeEvent(
+        "daily_meaningful_activity",
+        `daily-${index}`,
+        localDateFromUtcOffset("2026-05-15", index),
+      ),
+    );
+    const events = [
+      makeEvent("podchat_beginner_evaluated", "session-first"),
+      ...Array.from({ length: 10 }, (_, index) =>
+        makeEvent("podchat_advanced_evaluated", `advanced-${index}`),
+      ),
+      ...Array.from({ length: 5 }, (_, index) =>
+        makeEvent("podchat_context_bonus", `context-${index}`),
+      ),
+      ...Array.from({ length: 5 }, (_, index) =>
+        makeEvent(
+          "podchat_context_bonus",
+          `commonplace-context-${index}`,
+          "2026-06-13",
+          "Completed an evaluated Commonplace-based Podchat session.",
+        ),
+      ),
+      ...Array.from({ length: 20 }, (_, index) =>
+        makeEvent("podchat_retry_completed", `retry-${index}`),
+      ),
+      ...Array.from({ length: 8 }, (_, index) =>
+        makeEvent("weekly_review_completed", `weekly-${index}`),
+      ),
+      ...activeDays,
+    ];
+
+    const badges = deriveUnlockedBadges({
+      existingBadges: [],
+      events,
+      profile,
+      today: "2026-06-13",
+      earnedAt,
+    });
+
+    expect(badgeIds(badges)).toEqual(
+      expect.arrayContaining([
+        "first_voice",
+        "consistent_speaker_i",
+        "consistent_speaker_ii",
+        "consistent_speaker_iii",
+        "advanced_voice",
+        "research_speaker",
+        "three_day_rhythm",
+        "seven_day_rhythm",
+        "monthly_practice_habit",
+        "first_weekly_reflector",
+        "reflective_learner",
+        "monthly_reviewer",
+        "academic_speaker",
+        "resilient_learner",
+        "connected_thinker",
+      ]),
+    );
+    expect(badges.every((badge) => badge.earnedAt === earnedAt)).toBe(true);
+  });
+
+  test("unlocks vocabulary and Commonplace badges from meaningful saved actions", () => {
+    const events = [
+      ...Array.from({ length: 60 }, (_, index) =>
+        makeEvent("vocab_item_added", `vocab-${index}`),
+      ),
+      ...Array.from({ length: 40 }, (_, index) =>
+        makeEvent("article_vocab_saved", `article-vocab-${index}`),
+      ),
+      ...Array.from({ length: 25 }, (_, index) =>
+        makeEvent("vocab_correction_saved", `correction-${index}`),
+      ),
+      ...Array.from({ length: 10 }, (_, index) =>
+        makeEvent("vocab_recall_session_completed", `recall-${index}`),
+      ),
+      makeEvent("commonplace_note_created", "note-1"),
+      makeEvent("commonplace_map_note_added", "commonplace-sub-map-note-map1-node1-note1"),
+      makeEvent("commonplace_map_note_added", "commonplace-sub-map-note-map1-node2-note2"),
+      makeEvent("commonplace_map_note_added", "commonplace-main-map-note-main1-node1-note1"),
+      makeEvent("commonplace_map_note_added", "commonplace-main-map-note-main1-node2-note2"),
+      ...Array.from({ length: 25 }, (_, index) =>
+        makeEvent("commonplace_map_edge_created", `commonplace-main-map-edge-main1-edge${index}`),
+      ),
+    ];
+
+    const badges = deriveUnlockedBadges({
+      existingBadges: [],
+      events,
+      profile: createDefaultXpProfile("2026-06-13"),
+      today: "2026-06-13",
+      earnedAt,
+    });
+
+    expect(badgeIds(badges)).toEqual(
+      expect.arrayContaining([
+        "vocabulary_builder_i",
+        "vocabulary_builder_ii",
+        "vocabulary_builder_iii",
+        "sentence_refiner",
+        "recall_runner",
+        "first_commonplace",
+        "map_thinker",
+        "connector",
+        "synthesis_builder",
+      ]),
+    );
+  });
+
+  test("dedupes type/source counts and preserves existing legacy badges", () => {
+    const legacyBadge: Badge = {
+      version: 1,
+      id: "first_session",
+      label: "First Session",
+      description: "Completed first speaking session.",
+      status: "earned",
+      earnedAt: "2026-06-01T01:00:00.000Z",
+    };
+    const duplicate = makeEvent("podchat_beginner_evaluated", "session-1");
+    const badges = deriveUnlockedBadges({
+      existingBadges: [legacyBadge],
+      events: [duplicate, { ...duplicate, id: "duplicate-event" }],
+      profile: createDefaultXpProfile("2026-06-13"),
+      today: "2026-06-13",
+      earnedAt,
+    });
+
+    expect(badges).toContainEqual(legacyBadge);
+    expect(badgeIds(badges).filter((id) => id === "first_voice")).toHaveLength(1);
+    expect(badgeIds(badges)).not.toContain("first_mental_model");
   });
 });

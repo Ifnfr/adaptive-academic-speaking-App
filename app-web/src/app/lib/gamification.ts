@@ -95,6 +95,20 @@ export type Badge = {
   earnedAt: ISODateTimeString | null;
 };
 
+export type BadgeDefinition = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+export type DeriveUnlockedBadgesInput = {
+  existingBadges: ReadonlyArray<Badge>;
+  events: ReadonlyArray<XpEvent>;
+  profile: XpProfile;
+  today?: LocalDateString;
+  earnedAt?: ISODateTimeString;
+};
+
 export type SpeakerLevelProgress = {
   currentLevel: SpeakerLevelDefinition;
   nextLevel: SpeakerLevelDefinition | null;
@@ -130,16 +144,139 @@ export const BADGES_STORAGE_KEY = "adaptive-speaking-app:badges";
 
 export const SPEAKER_LEVELS: readonly SpeakerLevelDefinition[] = [
   { level: 1, name: "New Speaker", requiredXp: 0 },
-  { level: 2, name: "Practicing Speaker", requiredXp: 120 },
-  { level: 3, name: "Developing Speaker", requiredXp: 300 },
-  { level: 4, name: "Structured Speaker", requiredXp: 650 },
-  { level: 5, name: "Consistent Speaker", requiredXp: 1200 },
-  { level: 6, name: "Clear Communicator", requiredXp: 2200 },
-  { level: 7, name: "Analytical Speaker", requiredXp: 4000 },
-  { level: 8, name: "Confident Speaker", requiredXp: 7000 },
-  { level: 9, name: "Advanced Communicator", requiredXp: 12000 },
-  { level: 10, name: "Academic Speaker", requiredXp: 20000 },
+  { level: 2, name: "Practicing Speaker", requiredXp: 100 },
+  { level: 3, name: "Developing Speaker", requiredXp: 250 },
+  { level: 4, name: "Structured Speaker", requiredXp: 500 },
+  { level: 5, name: "Consistent Speaker", requiredXp: 900 },
+  { level: 6, name: "Clear Communicator", requiredXp: 1500 },
+  { level: 7, name: "Analytical Speaker", requiredXp: 2500 },
+  { level: 8, name: "Confident Speaker", requiredXp: 4000 },
+  { level: 9, name: "Advanced Communicator", requiredXp: 6500 },
+  { level: 10, name: "Academic Speaker", requiredXp: 10000 },
 ] as const;
+
+export const BADGE_DEFINITIONS: Readonly<Record<string, BadgeDefinition>> = {
+  first_voice: {
+    id: "first_voice",
+    label: "First Voice",
+    description: "Completed your first evaluated Podchat session.",
+  },
+  consistent_speaker_i: {
+    id: "consistent_speaker_i",
+    label: "Consistent Speaker I",
+    description: "Completed meaningful learning activities on 3 active days.",
+  },
+  consistent_speaker_ii: {
+    id: "consistent_speaker_ii",
+    label: "Consistent Speaker II",
+    description: "Completed meaningful learning activities on 7 active days.",
+  },
+  consistent_speaker_iii: {
+    id: "consistent_speaker_iii",
+    label: "Consistent Speaker III",
+    description: "Completed meaningful learning activities on 30 active days.",
+  },
+  advanced_voice: {
+    id: "advanced_voice",
+    label: "Advanced Voice",
+    description: "Completed 10 Advanced or Expert evaluated Podchat sessions.",
+  },
+  research_speaker: {
+    id: "research_speaker",
+    label: "Research Speaker",
+    description: "Completed 5 evaluated Podchats with article or Commonplace context.",
+  },
+  vocabulary_builder_i: {
+    id: "vocabulary_builder_i",
+    label: "Vocabulary Builder I",
+    description: "Saved 10 meaningful vocabulary items.",
+  },
+  vocabulary_builder_ii: {
+    id: "vocabulary_builder_ii",
+    label: "Vocabulary Builder II",
+    description: "Saved 50 meaningful vocabulary items.",
+  },
+  vocabulary_builder_iii: {
+    id: "vocabulary_builder_iii",
+    label: "Vocabulary Builder III",
+    description: "Saved 100 meaningful vocabulary items.",
+  },
+  sentence_refiner: {
+    id: "sentence_refiner",
+    label: "Sentence Refiner",
+    description: "Saved 25 vocabulary sentence corrections or revisions.",
+  },
+  recall_runner: {
+    id: "recall_runner",
+    label: "Recall Runner",
+    description: "Completed 10 five-card vocabulary recall sessions.",
+  },
+  first_commonplace: {
+    id: "first_commonplace",
+    label: "First Commonplace",
+    description: "Created your first meaningful Commonplace note.",
+  },
+  map_thinker: {
+    id: "map_thinker",
+    label: "Map Thinker",
+    description: "Saved at least 2 notes in a Sub Mind Map.",
+  },
+  connector: {
+    id: "connector",
+    label: "Connector",
+    description: "Created 25 meaningful saved Commonplace map connections.",
+  },
+  synthesis_builder: {
+    id: "synthesis_builder",
+    label: "Synthesis Builder",
+    description: "Built a Main Map with multiple saved notes or mixed map activity.",
+  },
+  three_day_rhythm: {
+    id: "three_day_rhythm",
+    label: "Three-Day Rhythm",
+    description: "Completed meaningful learning activities on 3 active days.",
+  },
+  seven_day_rhythm: {
+    id: "seven_day_rhythm",
+    label: "Seven-Day Rhythm",
+    description: "Completed meaningful learning activities on 7 active days.",
+  },
+  monthly_practice_habit: {
+    id: "monthly_practice_habit",
+    label: "Monthly Practice Habit",
+    description: "Completed meaningful learning activities on 20 days within 30 days.",
+  },
+  first_weekly_reflector: {
+    id: "first_weekly_reflector",
+    label: "First Weekly Reflector",
+    description: "Completed your first full Weekly Review.",
+  },
+  reflective_learner: {
+    id: "reflective_learner",
+    label: "Reflective Learner",
+    description: "Completed 4 full Weekly Reviews.",
+  },
+  monthly_reviewer: {
+    id: "monthly_reviewer",
+    label: "Monthly Reviewer",
+    description: "Completed 8 full Weekly Reviews.",
+  },
+  academic_speaker: {
+    id: "academic_speaker",
+    label: "Academic Speaker",
+    description: "Reached Speaker Level 10.",
+  },
+  resilient_learner: {
+    id: "resilient_learner",
+    label: "Resilient Learner",
+    description: "Completed 20 retry or improvement events.",
+  },
+  connected_thinker: {
+    id: "connected_thinker",
+    label: "Connected Thinker",
+    description: "Completed 5 Commonplace discussions through evaluated Podchat sessions.",
+  },
+} as const;
 
 export const XP_RULES: Readonly<
   Record<XpEventType, { xp: number; dailyCap: number }>
@@ -341,6 +478,59 @@ export function getSpeakerLevelProgress(
     xpNeededForNext,
     progressRatio,
   };
+}
+
+export function deriveUnlockedBadges({
+  existingBadges,
+  events,
+  profile,
+  today = getLocalDateString(),
+  earnedAt = new Date().toISOString(),
+}: DeriveUnlockedBadgesInput): Badge[] {
+  const normalizedBadges = normalizeBadges(existingBadges);
+  const normalizedEvents = dedupeXpEvents(normalizeXpEvents(events));
+  const earnedIds = new Set(
+    normalizedBadges
+      .filter((badge) => badge.status === "earned")
+      .map((badge) => badge.id),
+  );
+  const nextBadges = [...normalizedBadges];
+
+  const counts = buildBadgeEventCounts(normalizedEvents, today);
+  const criteria: Record<string, boolean> = {
+    first_voice: counts.evaluatedPodchats >= 1,
+    consistent_speaker_i: counts.activeDays >= 3,
+    consistent_speaker_ii: counts.activeDays >= 7,
+    consistent_speaker_iii: counts.activeDays >= 30,
+    advanced_voice: counts.advancedPodchats >= 10,
+    research_speaker: counts.contextPodchats >= 5,
+    vocabulary_builder_i: counts.savedVocabulary >= 10,
+    vocabulary_builder_ii: counts.savedVocabulary >= 50,
+    vocabulary_builder_iii: counts.savedVocabulary >= 100,
+    sentence_refiner: counts.vocabularyCorrections >= 25,
+    recall_runner: counts.recallSessions >= 10,
+    first_commonplace: counts.commonplaceNotes >= 1,
+    map_thinker: counts.hasSubMapWithTwoNotes,
+    connector: counts.commonplaceEdges >= 25,
+    synthesis_builder: counts.hasMainMapSynthesis,
+    three_day_rhythm: counts.activeDays >= 3,
+    seven_day_rhythm: counts.activeDays >= 7,
+    monthly_practice_habit: counts.activeDaysInLastThirty >= 20,
+    first_weekly_reflector: counts.weeklyReviews >= 1,
+    reflective_learner: counts.weeklyReviews >= 4,
+    monthly_reviewer: counts.weeklyReviews >= 8,
+    academic_speaker: getSpeakerLevelProgress(profile.totalXp).currentLevel.level >= 10,
+    resilient_learner: counts.retryEvents >= 20,
+    connected_thinker: counts.commonplaceContextPodchats >= 5,
+  };
+
+  for (const definition of Object.values(BADGE_DEFINITIONS)) {
+    if (!criteria[definition.id] || earnedIds.has(definition.id)) continue;
+    nextBadges.push(createEarnedBadge(definition, earnedAt));
+    earnedIds.add(definition.id);
+  }
+
+  return nextBadges;
 }
 
 export function rolloverXpProfile(
@@ -651,6 +841,180 @@ function normalizeBadges(value: unknown): Badge[] {
   }
 
   return badges;
+}
+
+function createEarnedBadge(
+  definition: BadgeDefinition,
+  earnedAt: ISODateTimeString,
+): Badge {
+  return {
+    version: STORAGE_VERSION,
+    id: definition.id,
+    label: definition.label,
+    description: definition.description,
+    status: "earned",
+    earnedAt: isISODateTimeString(earnedAt) ? earnedAt : new Date().toISOString(),
+  };
+}
+
+function dedupeXpEvents(events: ReadonlyArray<XpEvent>): XpEvent[] {
+  const seen = new Set<string>();
+  const deduped: XpEvent[] = [];
+  for (const event of events) {
+    const key = `${event.type}:${event.sourceId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(event);
+  }
+  return deduped;
+}
+
+function buildBadgeEventCounts(
+  events: ReadonlyArray<XpEvent>,
+  today: LocalDateString,
+): {
+  evaluatedPodchats: number;
+  advancedPodchats: number;
+  contextPodchats: number;
+  commonplaceContextPodchats: number;
+  retryEvents: number;
+  savedVocabulary: number;
+  vocabularyCorrections: number;
+  recallSessions: number;
+  commonplaceNotes: number;
+  commonplaceEdges: number;
+  weeklyReviews: number;
+  activeDays: number;
+  activeDaysInLastThirty: number;
+  hasSubMapWithTwoNotes: boolean;
+  hasMainMapSynthesis: boolean;
+} {
+  const activeDates = new Set<string>();
+  const subMapNotes = new Map<string, number>();
+  const mainMapNotes = new Map<string, number>();
+  const mainMapEdges = new Map<string, number>();
+
+  let evaluatedPodchats = 0;
+  let advancedPodchats = 0;
+  let contextPodchats = 0;
+  let commonplaceContextPodchats = 0;
+  let retryEvents = 0;
+  let savedVocabulary = 0;
+  let vocabularyCorrections = 0;
+  let recallSessions = 0;
+  let commonplaceNotes = 0;
+  let commonplaceEdges = 0;
+  let weeklyReviews = 0;
+
+  for (const event of events) {
+    if (isEvaluatedPodchatEvent(event.type)) evaluatedPodchats += 1;
+    if (
+      event.type === "podchat_advanced_evaluated" ||
+      event.type === "podchat_expert_evaluated"
+    ) {
+      advancedPodchats += 1;
+    }
+    if (event.type === "podchat_context_bonus") {
+      contextPodchats += 1;
+      if (isCommonplaceContextEvent(event)) commonplaceContextPodchats += 1;
+    }
+    if (event.type === "podchat_retry_completed" || event.type === "retry_completed") {
+      retryEvents += 1;
+    }
+    if (event.type === "vocab_item_added" || event.type === "article_vocab_saved") {
+      savedVocabulary += 1;
+    }
+    if (event.type === "vocab_correction_saved") vocabularyCorrections += 1;
+    if (event.type === "vocab_recall_session_completed") recallSessions += 1;
+    if (event.type === "commonplace_note_created") commonplaceNotes += 1;
+    if (event.type === "commonplace_map_edge_created") {
+      commonplaceEdges += 1;
+      const mainMapKey = parseCommonplaceMapKey(event.sourceId, "main", "edge");
+      if (mainMapKey) {
+        mainMapEdges.set(mainMapKey, (mainMapEdges.get(mainMapKey) ?? 0) + 1);
+      }
+    }
+    if (event.type === "weekly_review_completed") weeklyReviews += 1;
+    if (event.type === "daily_meaningful_activity") activeDates.add(event.localDate);
+    if (event.type === "commonplace_map_note_added") {
+      const subMapKey = parseCommonplaceMapKey(event.sourceId, "sub", "note");
+      if (subMapKey) {
+        subMapNotes.set(subMapKey, (subMapNotes.get(subMapKey) ?? 0) + 1);
+      }
+      const mainMapKey = parseCommonplaceMapKey(event.sourceId, "main", "note");
+      if (mainMapKey) {
+        mainMapNotes.set(mainMapKey, (mainMapNotes.get(mainMapKey) ?? 0) + 1);
+      }
+    }
+  }
+
+  return {
+    evaluatedPodchats,
+    advancedPodchats,
+    contextPodchats,
+    commonplaceContextPodchats,
+    retryEvents,
+    savedVocabulary,
+    vocabularyCorrections,
+    recallSessions,
+    commonplaceNotes,
+    commonplaceEdges,
+    weeklyReviews,
+    activeDays: activeDates.size,
+    activeDaysInLastThirty: countDatesInLastThirtyDays(activeDates, today),
+    hasSubMapWithTwoNotes: Array.from(subMapNotes.values()).some(
+      (count) => count >= 2,
+    ),
+    hasMainMapSynthesis: Array.from(mainMapNotes.entries()).some(
+      ([mapKey, noteCount]) =>
+        noteCount >= 2 || (noteCount >= 1 && (mainMapEdges.get(mapKey) ?? 0) >= 1),
+    ),
+  };
+}
+
+function isEvaluatedPodchatEvent(type: XpEventType): boolean {
+  return (
+    type === "podchat_beginner_evaluated" ||
+    type === "podchat_intermediate_evaluated" ||
+    type === "podchat_advanced_evaluated" ||
+    type === "podchat_expert_evaluated" ||
+    type === "normal_session_completed"
+  );
+}
+
+function isCommonplaceContextEvent(event: XpEvent): boolean {
+  const sourceId = event.sourceId.toLowerCase();
+  const reason = event.reason.toLowerCase();
+  return sourceId.includes("commonplace") || reason.includes("commonplace");
+}
+
+function parseCommonplaceMapKey(
+  sourceId: string,
+  mapType: "sub" | "main",
+  itemType: "note" | "edge",
+): string | null {
+  const prefix = `commonplace-${mapType}-map-${itemType}-`;
+  if (!sourceId.startsWith(prefix)) return null;
+  const rest = sourceId.slice(prefix.length);
+  const firstSegment = rest.split("-")[0]?.trim();
+  return firstSegment || mapType;
+}
+
+function countDatesInLastThirtyDays(
+  activeDates: ReadonlySet<string>,
+  today: LocalDateString,
+): number {
+  const todayTime = new Date(`${today}T00:00:00`).getTime();
+  if (Number.isNaN(todayTime)) return 0;
+  const windowStart = todayTime - 29 * 24 * 60 * 60 * 1000;
+  let count = 0;
+  for (const activeDate of activeDates) {
+    const activeTime = new Date(`${activeDate}T00:00:00`).getTime();
+    if (!Number.isNaN(activeTime) && activeTime >= windowStart && activeTime <= todayTime) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function normalizeNonNegativeInteger(value: unknown): number {

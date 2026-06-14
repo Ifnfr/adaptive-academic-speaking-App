@@ -33,6 +33,7 @@ import {
   claimXp,
   createDefaultXpProfile,
   createXpEvent,
+  deriveUnlockedBadges,
   getLocalDateString,
   getSpeakerLevelProgress,
   xpEventTypeForPodchatDifficulty,
@@ -167,62 +168,6 @@ type SessionRecord = {
   csv: string;
 };
 
-type BadgeDefinition = {
-  id: string;
-  label: string;
-  description: string;
-};
-
-const BADGE_DEFINITIONS: Record<string, BadgeDefinition> = {
-  first_session: {
-    id: "first_session",
-    label: "First Session",
-    description: "Completed your first normal speaking session.",
-  },
-  first_retry: {
-    id: "first_retry",
-    label: "First Retry",
-    description: "Completed your first retry attempt.",
-  },
-  first_diagnostic: {
-    id: "first_diagnostic",
-    label: "First Diagnostic",
-    description: "Completed your first diagnostic assessment.",
-  },
-  first_weekly_review: {
-    id: "first_weekly_review",
-    label: "First Weekly Review",
-    description: "Generated your first weekly review.",
-  },
-  first_mental_model: {
-    id: "first_mental_model",
-    label: "First Mental Model",
-    description: "Generated your first mental model session.",
-  },
-  first_level_up: {
-    id: "first_level_up",
-    label: "First Level-Up",
-    description: "Applied your first level-up recommendation.",
-  },
-  speaker_level_5: {
-    id: "speaker_level_5",
-    label: "Structured Speaker",
-    description: "Reached Speaker Level 5.",
-  },
-};
-
-const BADGE_BY_EVENT: Partial<Record<XpEventType, string>> = {
-  podchat_beginner_evaluated: "first_session",
-  podchat_intermediate_evaluated: "first_session",
-  podchat_advanced_evaluated: "first_session",
-  podchat_expert_evaluated: "first_session",
-  podchat_retry_completed: "first_retry",
-  weekly_review_completed: "first_weekly_review",
-  normal_session_completed: "first_session",
-  retry_completed: "first_retry",
-  diagnostic_completed: "first_diagnostic",
-};
-
 const MAX_STORED_SESSIONS = 20;
 const CLOUD_WRITE_SUPPRESSION_RELEASE_MS = 100;
 
@@ -283,28 +228,6 @@ function buildArticleSpeakingTarget(result: ArticlePracticeResult): string {
     }`,
     `Open the original article if you need to reread it: ${result.sourceUrl}`,
   ].join("\n");
-}
-
-function createEarnedBadge(definition: BadgeDefinition): Badge {
-  return {
-    version: 1,
-    id: definition.id,
-    label: definition.label,
-    description: definition.description,
-    status: "earned",
-    earnedAt: new Date().toISOString(),
-  };
-}
-
-function withEarnedBadge(
-  badges: ReadonlyArray<Badge>,
-  badgeId: string,
-): Badge[] {
-  const definition = BADGE_DEFINITIONS[badgeId];
-  if (!definition || badges.some((badge) => badge.id === badgeId)) {
-    return [...badges];
-  }
-  return [...badges, createEarnedBadge(definition)];
 }
 
 // Session load/save delegated to the storage adapter boundary.
@@ -1870,20 +1793,13 @@ export default function Home() {
     }
   };
 
-  const updateBadges = (
-    eventTypes: ReadonlyArray<XpEventType>,
-    profile: XpProfile,
-  ) => {
-    let nextBadges = [...badges];
-    for (const eventType of eventTypes) {
-      const eventBadgeId = BADGE_BY_EVENT[eventType];
-      if (eventBadgeId) {
-        nextBadges = withEarnedBadge(nextBadges, eventBadgeId);
-      }
-    }
-    if (getSpeakerLevelProgress(profile.totalXp).currentLevel.level >= 5) {
-      nextBadges = withEarnedBadge(nextBadges, "speaker_level_5");
-    }
+  const updateBadges = (profile: XpProfile, events: ReadonlyArray<XpEvent>) => {
+    const nextBadges = deriveUnlockedBadges({
+      existingBadges: badges,
+      events,
+      profile,
+      today: getLocalDateString(),
+    });
 
     if (nextBadges.length !== badges.length) {
       const auth = sessionCloudAuthRef.current;
@@ -2000,7 +1916,7 @@ export default function Home() {
           .filter((result) => result.allowed)
           .map((result) => result.type);
         if (awardedTypes.length > 0) {
-          updateBadges(awardedTypes, nextProfile);
+          updateBadges(nextProfile, nextEvents);
         }
         return results;
       }
@@ -2012,7 +1928,7 @@ export default function Home() {
         .filter((result) => result.allowed)
         .map((result) => result.type);
       if (awardedTypes.length > 0) {
-        updateBadges(awardedTypes, nextProfile);
+        updateBadges(nextProfile, nextEvents);
       }
       return results;
     } catch {
@@ -2048,7 +1964,7 @@ export default function Home() {
     const claimed = claimXp(xpProfile, getLocalDateString());
     setXpProfile(claimed.profile);
     storage.saveXpProfile(claimed.profile);
-    updateBadges([], claimed.profile);
+    updateBadges(claimed.profile, xpEvents);
   };
 
   const handlePracticeArticleSpeakingTask = (result: ArticlePracticeResult) => {
@@ -2452,7 +2368,9 @@ export default function Home() {
       ? [
           {
             type: "podchat_context_bonus" as const,
-            sourceId: `podchat-context-${context.sessionId}`,
+            sourceId: context.hasArticleContext
+              ? `podchat-context-article-${context.sessionId}`
+              : `podchat-context-commonplace-${context.sessionId}`,
             sourceKind: "session" as const,
             reason: context.hasArticleContext
               ? "Completed an evaluated article-based Podchat session."

@@ -195,6 +195,41 @@ test.describe("Supabase gamification mappers", () => {
     });
   });
 
+  test("maps XP-3 badge IDs through the generic Supabase badge shape", () => {
+    const xp3Badge: Badge = {
+      version: 1,
+      id: "first_voice",
+      label: "First Voice",
+      description: "Completed your first evaluated Podchat session.",
+      status: "earned",
+      earnedAt: "2026-06-13T01:00:00Z",
+    };
+
+    const insert = mapStoredBadgeToSupabaseInsert("user_123", xp3Badge);
+
+    expect(insert).toEqual({
+      owner_id: "user_123",
+      badge_id: "first_voice",
+      label: "First Voice",
+      description: "Completed your first evaluated Podchat session.",
+      status: "earned",
+      earned_at: "2026-06-13T01:00:00Z",
+    });
+    expect(
+      mapSupabaseRowToStoredBadge({
+        id: "db-badge-xp3",
+        owner_id: "user_123",
+        badge_id: "first_voice",
+        label: "First Voice",
+        description: "Completed your first evaluated Podchat session.",
+        status: "earned",
+        earned_at: "2026-06-13T01:00:00Z",
+        created_at: "2026-06-13T01:00:00Z",
+        updated_at: "2026-06-13T01:00:00Z",
+      }),
+    ).toEqual(xp3Badge);
+  });
+
   test("maps Supabase rows back to stored objects", () => {
     const rowProfile: SupabaseXpProfileRow = {
       owner_id: "user_123",

@@ -251,8 +251,8 @@ test.describe("Leaderboard Aggregation Core", () => {
       avatarUrl: null,
       initials: "BJ",
       level: {
-        number: 1, // default calculation
-        name: "New Speaker",
+        number: 2,
+        name: "Practicing Speaker",
       },
     });
   });
