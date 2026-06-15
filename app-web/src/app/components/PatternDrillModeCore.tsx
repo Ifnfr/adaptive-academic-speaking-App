@@ -54,7 +54,8 @@ export type PatternDrillSessionSummary = {
   } | null;
   phase3PressureAccuracy: null;
   pressureFailRate: null;
-  saved: false;
+  saved: boolean;
+  sessionId?: string;
 };
 
 export type SummaryState =
@@ -168,6 +169,7 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
   // Milestone 9 Summary States
   const [attempts, setAttempts] = useState<Phase2Attempt[]>([]);
   const [summaryState, setSummaryState] = useState<SummaryState>({ status: "idle" });
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
 
   // Request abort refs
   const abortRef = useRef<AbortController | null>(null);
@@ -190,6 +192,7 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
 
     async function generateSummary() {
       setSummaryState({ status: "summarizing" });
+      setSaveStatus("saving");
 
       try {
         const res = await fetch("/api/pattern-drill/evaluate-session", {
@@ -228,11 +231,13 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
         const data = (await res.json()) as PatternDrillSessionSummary;
         if (active) {
           setSummaryState({ status: "ready", summary: data });
+          setSaveStatus(data.saved ? "saved" : "failed");
         }
       } catch (err) {
         if (active && (err as Error)?.name !== "AbortError") {
           const fallback = computeFallbackSummary(context, baselineAnswers, attempts);
           setSummaryState({ status: "failed", fallbackSummary: fallback });
+          setSaveStatus("failed");
         }
       }
     }
@@ -408,9 +413,23 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
               <span className="text-sm font-semibold">Persistence Status</span>
               <span
                 data-testid="summary-save-status"
-                className="text-xs uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-yellow-100 text-yellow-800"
+                className={`text-xs uppercase tracking-wider font-semibold px-2 py-0.5 rounded ${
+                  saveStatus === "saving"
+                    ? "bg-blue-100 text-blue-800"
+                    : saveStatus === "saved"
+                    ? "bg-green-100 text-green-800"
+                    : saveStatus === "failed"
+                    ? "bg-red-100 text-red-800"
+                    : "bg-yellow-100 text-yellow-800"
+                }`}
               >
-                Not saved yet
+                {saveStatus === "saving"
+                  ? "Saving summary..."
+                  : saveStatus === "saved"
+                  ? "Saved to your practice history."
+                  : saveStatus === "failed"
+                  ? "Summary available, but saving failed."
+                  : "Not saved yet"}
               </span>
             </div>
 

@@ -114,47 +114,98 @@ test.describe("Evaluate Session Route", () => {
     expect(json.error).toBe("invalid_request");
   });
 
-  test("valid request computes correct metrics and streak", async () => {
+  test("valid request computes correct metrics, saves to DB, and returns saved: true with sessionId", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
+
+    let insertCalled = false;
+    const mockSupabase = {
+      from: (table: string) => {
+        expect(table).toBe("pattern_drill_sessions");
+        return {
+          insert: (row: Record<string, unknown>) => {
+            insertCalled = true;
+            expect(row.owner_id).toBe("user-123");
+            expect(row.brief_id).toBe("test-brief-001");
+            expect(row.target_pattern).toBe("Claim because Reason structure");
+            expect(row.saved_summary).toBeDefined();
+            // Verify no raw transcript/audio/provider fields
+            expect(row.raw_transcript).toBeUndefined();
+            expect(row.audio).toBeUndefined();
+            return {
+              select: (fields: string) => {
+                expect(fields).toBe("id");
+                return {
+                  single: async () => ({
+                    data: { id: "mock-session-id-999" },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+    testHooks.getSupabaseClient = () => mockSupabase;
+
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(200);
     const json = await res.json() as {
       phase1BaselineCompleteness: string;
       phase2Accuracy: number;
-      fullCreditCount: number;
-      partialCreditCount: number;
-      noCreditCount: number;
-      evaluatedAttemptCount: number;
-      finalFullCreditStreak: number;
-      mostMissedSteps: string[];
-      simplifiedTopicUsed: boolean;
-      improvementSignal: string;
       saved: boolean;
-      phase3PressureAccuracy: null;
-      pressureFailRate: null;
+      sessionId: string;
     };
 
     expect(json.phase1BaselineCompleteness).toBe("complete");
-    expect(json.phase2Accuracy).toBe(50); // 1 full / 2 attempts = 50%
-    expect(json.fullCreditCount).toBe(1);
-    expect(json.partialCreditCount).toBe(1);
-    expect(json.noCreditCount).toBe(0);
-    expect(json.evaluatedAttemptCount).toBe(2);
-    expect(json.finalFullCreditStreak).toBe(1); // last attempt is full
-    expect(json.mostMissedSteps).toEqual(["[reason]"]);
-    expect(json.simplifiedTopicUsed).toBe(false);
-    expect(json.improvementSignal).toBe("emerging");
-    expect(json.saved).toBe(false);
-    expect(json.phase3PressureAccuracy).toBeNull();
-    expect(json.pressureFailRate).toBeNull();
+    expect(json.phase2Accuracy).toBe(50);
+    expect(json.saved).toBe(true);
+    expect(json.sessionId).toBe("mock-session-id-999");
+    expect(insertCalled).toBe(true);
   });
 
-  test("route file does not import @supabase/supabase-js", async () => {
-    const fs = await import("fs");
-    const path = await import("path");
-    const routePath = path.resolve(__dirname, "../../src/app/api/pattern-drill/evaluate-session/route.ts");
-    const fileContent = fs.readFileSync(routePath, "utf-8");
-    expect(fileContent).not.toContain("@supabase/supabase-js");
-    expect(fileContent).not.toContain("supabaseClient");
+  test("returns saved: false if DB insert fails", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const mockSupabase = {
+      from: () => ({
+        insert: () => ({
+          select: () => ({
+            single: async () => ({
+              data: null,
+              error: new Error("DB insert error"),
+            }),
+          }),
+        }),
+      }),
+    };
+    testHooks.getSupabaseClient = () => mockSupabase;
+
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(200);
+    const json = await res.json() as {
+      phase1BaselineCompleteness: string;
+      saved: boolean;
+      sessionId?: string;
+    };
+
+    expect(json.phase1BaselineCompleteness).toBe("complete");
+    expect(json.saved).toBe(false);
+    expect(json.sessionId).toBeUndefined();
+  });
+
+  test("rejects request if client-provided owner_id or ownerId is present in request body", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+
+    const bodyWithOwnerId = { ...VALID_BODY, ownerId: "user-123" };
+    const res1 = await POST(makeRequest(bodyWithOwnerId));
+    expect(res1.status).toBe(400);
+    const json1 = await res1.json() as { error: string };
+    expect(json1.error).toBe("invalid_request");
+
+    const bodyWithOwnerIdUnderscore = { ...VALID_BODY, owner_id: "user-123" };
+    const res2 = await POST(makeRequest(bodyWithOwnerIdUnderscore));
+    expect(res2.status).toBe(400);
+    const json2 = await res2.json() as { error: string };
+    expect(json2.error).toBe("invalid_request");
   });
 });

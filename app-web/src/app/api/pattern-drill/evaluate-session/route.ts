@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { savePatternDrillSession } from "../../../lib/storage/supabase-pattern-drill-adapter";
 
 export const runtime = "nodejs";
 
 export const testHooks = {
   resolveCurrentUserId: null as (() => Promise<string | null>) | null,
+  getSupabaseClient: null as (() => unknown) | null,
 };
 
 async function resolveCurrentUserId(): Promise<string | null> {
@@ -15,6 +18,28 @@ async function resolveCurrentUserId(): Promise<string | null> {
     const { auth } = await import("@clerk/nextjs/server");
     const session = await auth();
     return session?.userId || null;
+  } catch {
+    return null;
+  }
+}
+
+function getSupabaseClient() {
+  if (testHooks.getSupabaseClient) {
+    return testHooks.getSupabaseClient() as ReturnType<typeof createClient> | null;
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+
+  try {
+    return createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
   } catch {
     return null;
   }
@@ -36,6 +61,11 @@ export async function POST(request: Request) {
   }
 
   if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Reject unexpected or client-provided owner fields explicitly before any DB write attempt
+  if ("ownerId" in (body as object) || "owner_id" in (body as object)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
   }
 
@@ -230,6 +260,54 @@ export async function POST(request: Request) {
   const phase1BaselineCompleteness: "complete" | "partial" | "missing" =
     p1.completedPromptCount >= 2 ? "complete" : p1.completedPromptCount > 0 ? "partial" : "missing";
 
+  // Try to save the session to the database
+  let saved = false;
+  let sessionId: string | undefined = undefined;
+
+  const supabaseClient = getSupabaseClient();
+  if (supabaseClient) {
+    try {
+      const saveResult = await savePatternDrillSession(
+        {
+          ownerId,
+          briefId,
+          targetPattern,
+          targetSteps,
+          commonMistakes,
+          quickCheckStatus: qcStatus,
+          entryPhase: qcStatus === "detected" ? 3 : 1,
+          phase1BaselineCompleteness,
+          phase1CompletedPromptCount: p1.completedPromptCount,
+          phase2Accuracy,
+          fullCreditCount,
+          partialCreditCount,
+          noCreditCount,
+          evaluatedAttemptCount,
+          finalFullCreditStreak,
+          mostMissedSteps,
+          simplifiedTopicUsed,
+          improvementSignal,
+          nextSessionRecommendation,
+          weaknessUpdate,
+          phase3PressureAccuracy: null,
+          pressureFailRate: null,
+        },
+        supabaseClient
+      );
+
+      if (saveResult.ok && saveResult.sessionId) {
+        saved = true;
+        sessionId = saveResult.sessionId;
+      } else {
+        console.error("Pattern drill session persistence failed:", saveResult.error);
+      }
+    } catch (saveErr) {
+      console.error("Unexpected error saving pattern drill session:", saveErr);
+    }
+  } else {
+    console.error("Supabase client unavailable for pattern drill session persistence.");
+  }
+
   return NextResponse.json(
     {
       phase1BaselineCompleteness,
@@ -246,7 +324,8 @@ export async function POST(request: Request) {
       weaknessUpdate,
       phase3PressureAccuracy: null,
       pressureFailRate: null,
-      saved: false,
+      saved,
+      ...(sessionId ? { sessionId } : {}),
     },
     { headers }
   );
