@@ -26,6 +26,43 @@ type DrillTurnResponse = {
   shortFeedback: string;
 };
 
+export type Phase2Attempt = {
+  topic: string;
+  credit: "full" | "partial" | "none";
+  missingSteps: string[];
+  usedSteps: string[];
+  attemptNumber: 1 | 2 | 3;
+  simplifiedTopicUsed: boolean;
+};
+
+export type PatternDrillSessionSummary = {
+  phase1BaselineCompleteness: "complete" | "partial" | "missing";
+  phase2Accuracy: number;
+  fullCreditCount: number;
+  partialCreditCount: number;
+  noCreditCount: number;
+  evaluatedAttemptCount: number;
+  finalFullCreditStreak: number;
+  mostMissedSteps: string[];
+  simplifiedTopicUsed: boolean;
+  improvementSignal: "strong" | "emerging" | "needs_more_repetition";
+  nextSessionRecommendation: string;
+  weaknessUpdate: {
+    category: "pattern_drill";
+    label: string;
+    practiceFocus: string;
+  } | null;
+  phase3PressureAccuracy: null;
+  pressureFailRate: null;
+  saved: false;
+};
+
+export type SummaryState =
+  | { status: "idle" }
+  | { status: "summarizing" }
+  | { status: "ready"; summary: PatternDrillSessionSummary }
+  | { status: "failed"; fallbackSummary: PatternDrillSessionSummary };
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const P1_PROMPTS = [
@@ -43,6 +80,75 @@ const SIMPLIFIED_TOPICS = [
   "Discuss why people like to travel.",
 ];
 
+// ─── Fallback Helper ─────────────────────────────────────────────────────────
+
+function computeFallbackSummary(
+  context: DrillModeContext,
+  baselineAnswers: Array<{ prompt: string; transcript: string }>,
+  attempts: Phase2Attempt[]
+): PatternDrillSessionSummary {
+  const fullCreditCount = attempts.filter((a) => a.credit === "full").length;
+  const partialCreditCount = attempts.filter((a) => a.credit === "partial").length;
+  const noCreditCount = attempts.filter((a) => a.credit === "none").length;
+  const evaluatedAttemptCount = attempts.length;
+
+  const phase2Accuracy = evaluatedAttemptCount > 0
+    ? Math.round((fullCreditCount / evaluatedAttemptCount) * 100)
+    : 0;
+
+  // Final streak of full credits
+  let finalFullCreditStreak = 0;
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    if (attempts[i].credit === "full") {
+      finalFullCreditStreak++;
+    } else {
+      break;
+    }
+  }
+
+  // Most missed steps
+  const stepCounts: Record<string, number> = {};
+  attempts.forEach((a) => {
+    a.missingSteps.forEach((step) => {
+      stepCounts[step] = (stepCounts[step] || 0) + 1;
+    });
+  });
+  const mostMissedSteps = Object.entries(stepCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map((entry) => entry[0]);
+
+  const simplifiedTopicUsed = attempts.some((a) => a.simplifiedTopicUsed);
+
+  let improvementSignal: "strong" | "emerging" | "needs_more_repetition" = "needs_more_repetition";
+  if (phase2Accuracy >= 75) {
+    improvementSignal = "strong";
+  } else if (phase2Accuracy >= 50) {
+    improvementSignal = "emerging";
+  }
+
+  const nextSessionRecommendation = phase2Accuracy >= 75
+    ? "Pattern mastered. Ready for faster pacing or full context speaking in next Podchat."
+    : "Keep practicing. Focus on including all target slots in order.";
+
+  return {
+    phase1BaselineCompleteness: baselineAnswers.length >= 2 ? "complete" : baselineAnswers.length > 0 ? "partial" : "missing",
+    phase2Accuracy,
+    fullCreditCount,
+    partialCreditCount,
+    noCreditCount,
+    evaluatedAttemptCount,
+    finalFullCreditStreak,
+    mostMissedSteps,
+    simplifiedTopicUsed,
+    improvementSignal,
+    nextSessionRecommendation,
+    weaknessUpdate: null,
+    phase3PressureAccuracy: null,
+    pressureFailRate: null,
+    saved: false,
+  };
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCoreProps) {
@@ -59,14 +165,86 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
-  // Request abort ref
+  // Milestone 9 Summary States
+  const [attempts, setAttempts] = useState<Phase2Attempt[]>([]);
+  const [summaryState, setSummaryState] = useState<SummaryState>({ status: "idle" });
+
+  // Request abort refs
   const abortRef = useRef<AbortController | null>(null);
+  const summaryAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      summaryAbortRef.current?.abort();
     };
   }, []);
+
+  // Summary generation useEffect on completion
+  useEffect(() => {
+    if (!isComplete) return;
+
+    let active = true;
+    const controller = new AbortController();
+    summaryAbortRef.current = controller;
+
+    async function generateSummary() {
+      setSummaryState({ status: "summarizing" });
+
+      try {
+        const res = await fetch("/api/pattern-drill/evaluate-session", {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            briefId: context.briefId,
+            targetPattern: context.targetPattern,
+            targetSteps: context.targetSteps,
+            commonMistakes: context.commonMistakes,
+            quickCheck: {
+              status: context.quickCheck.status,
+            },
+            phase1: {
+              baselineAnswerCount: baselineAnswers.length,
+              completedPromptCount: baselineAnswers.length,
+            },
+            phase2: {
+              attempts: attempts.map((a) => ({
+                topic: a.topic,
+                credit: a.credit,
+                missingSteps: a.missingSteps,
+                usedSteps: a.usedSteps,
+                attemptNumber: a.attemptNumber,
+                simplifiedTopicUsed: a.simplifiedTopicUsed,
+              })),
+            },
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Summary API failed with status ${res.status}`);
+        }
+
+        const data = (await res.json()) as PatternDrillSessionSummary;
+        if (active) {
+          setSummaryState({ status: "ready", summary: data });
+        }
+      } catch (err) {
+        if (active && (err as Error)?.name !== "AbortError") {
+          const fallback = computeFallbackSummary(context, baselineAnswers, attempts);
+          setSummaryState({ status: "failed", fallbackSummary: fallback });
+        }
+      }
+    }
+
+    generateSummary();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComplete]);
 
   const currentTopic = simplifiedActive
     ? SIMPLIFIED_TOPICS[p2TopicIndex]
@@ -138,6 +316,17 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
       setIsEvaluating(false);
       setLastResult(data);
 
+      // Milestone 9: Accumulate attempt metadata
+      const newAttempt: Phase2Attempt = {
+        topic: currentTopic,
+        credit: data.credit,
+        missingSteps: data.missingSteps,
+        usedSteps: data.usedSteps,
+        attemptNumber,
+        simplifiedTopicUsed: simplifiedActive,
+      };
+      setAttempts((prev) => [...prev, newAttempt]);
+
       if (data.credit === "full") {
         // Full credit! The user can click Next to advance.
       } else if (data.credit === "partial") {
@@ -178,8 +367,17 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
   // ── Render completion screen ─────────────────────────────────────────────
 
   if (isComplete) {
+    const isSummarizing = summaryState.status === "summarizing" || summaryState.status === "idle";
+    const isFailed = summaryState.status === "failed";
+    const summary = summaryState.status === "ready"
+      ? summaryState.summary
+      : summaryState.status === "failed"
+        ? summaryState.fallbackSummary
+        : null;
+
     return (
       <div className="flex flex-col h-full overflow-y-auto p-6 lg:p-8 space-y-8 bg-[var(--brand-surface)] text-[var(--brand-ink)]">
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--brand-border)] pb-4">
           <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]">Drill Session Complete</h3>
           <button
@@ -192,29 +390,179 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
           </button>
         </div>
 
-        <div className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-6">
-          <p className="text-sm text-[var(--brand-ink)]">
-            Congratulations! You have completed the structured repetition drill session.
-          </p>
+        {/* Summarizing State */}
+        {isSummarizing && (
+          <div className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 flex flex-col items-center justify-center space-y-4">
+            <span className="animate-spin h-6 w-6 border-2 border-[var(--brand-teal)] border-t-transparent rounded-full" />
+            <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="summary-summarizing">
+              Analyzing session and generating summary...
+            </p>
+          </div>
+        )}
 
-          <div className="space-y-4">
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)]">
-              Your Cold Recall Answers (Phase 1)
-            </h4>
-            <div className="space-y-3">
-              {baselineAnswers.map((ans, idx) => (
-                <div key={idx} className="rounded bg-[var(--brand-bg)] border border-[var(--brand-border)] p-3 space-y-1">
-                  <p className="text-xs font-mono text-[var(--brand-muted)]">{ans.prompt}</p>
-                  <p className="text-sm">{ans.transcript}</p>
+        {/* Summary Ready / Fallback */}
+        {summary && (
+          <div className="ml-8 space-y-6">
+            {/* Persistence Indicator */}
+            <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex justify-between items-center">
+              <span className="text-sm font-semibold">Persistence Status</span>
+              <span
+                data-testid="summary-save-status"
+                className="text-xs uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-yellow-100 text-yellow-800"
+              >
+                Not saved yet
+              </span>
+            </div>
+
+            {/* API Failure notice */}
+            {isFailed && (
+              <div
+                data-testid="summary-failed-notice"
+                className="rounded-lg border border-[var(--brand-danger)] bg-[var(--brand-danger)] bg-opacity-10 p-3 text-sm text-[var(--brand-danger)]"
+              >
+                Summary is available locally, but final summary generation failed.
+              </div>
+            )}
+
+            {/* Dashboard grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: Accuracy & Streak */}
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3">
+                <h4 className="text-xs uppercase tracking-wider font-semibold text-[var(--brand-muted)]">
+                  Performance Accuracy
+                </h4>
+                <div>
+                  <span className="text-3xl font-bold" data-testid="summary-accuracy">
+                    {summary.phase2Accuracy}%
+                  </span>
+                  <span className="text-xs text-[var(--brand-muted)] ml-2">Phase 2</span>
                 </div>
-              ))}
+                <div className="text-xs text-[var(--brand-ink-soft)] pt-2 border-t border-[var(--brand-border)]">
+                  Final Full Credit Streak: <strong data-testid="summary-streak">{summary.finalFullCreditStreak}</strong>
+                </div>
+              </div>
+
+              {/* Card 2: Attempts breakdown */}
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-2">
+                <h4 className="text-xs uppercase tracking-wider font-semibold text-[var(--brand-muted)]">
+                  Attempt Results
+                </h4>
+                <div className="grid grid-cols-3 gap-1 text-center pt-2">
+                  <div className="bg-green-50 rounded p-1 border border-green-100">
+                    <span className="block text-lg font-bold text-green-700" data-testid="summary-full-credit-count">
+                      {summary.fullCreditCount}
+                    </span>
+                    <span className="text-[10px] text-green-600">Full</span>
+                  </div>
+                  <div className="bg-blue-50 rounded p-1 border border-blue-100">
+                    <span className="block text-lg font-bold text-blue-700" data-testid="summary-partial-credit-count">
+                      {summary.partialCreditCount}
+                    </span>
+                    <span className="text-[10px] text-blue-600">Partial</span>
+                  </div>
+                  <div className="bg-red-50 rounded p-1 border border-red-100">
+                    <span className="block text-lg font-bold text-red-700" data-testid="summary-no-credit-count">
+                      {summary.noCreditCount}
+                    </span>
+                    <span className="text-[10px] text-red-600">No</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-[var(--brand-muted)] text-center pt-1">
+                  Evaluated attempts: {summary.evaluatedAttemptCount}
+                </div>
+              </div>
+
+              {/* Card 3: Qualitative Signal */}
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3">
+                <h4 className="text-xs uppercase tracking-wider font-semibold text-[var(--brand-muted)]">
+                  Improvement Signal
+                </h4>
+                <div
+                  data-testid="summary-improvement-signal"
+                  className={`text-sm font-semibold capitalize px-2 py-1 rounded inline-block ${
+                    summary.improvementSignal === "strong" ? "bg-green-100 text-green-800" :
+                    summary.improvementSignal === "emerging" ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800"
+                  }`}
+                >
+                  {summary.improvementSignal.replace(/_/g, " ")}
+                </div>
+                <p className="text-xs text-[var(--brand-ink-soft)]">{summary.nextSessionRecommendation}</p>
+              </div>
+            </div>
+
+            {/* Missing steps details */}
+            <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 space-y-3">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)]">
+                Key Missing Steps
+              </h4>
+              {summary.mostMissedSteps.length > 0 ? (
+                <ul className="list-disc pl-5 text-sm space-y-1" data-testid="summary-missed-steps">
+                  {summary.mostMissedSteps.map((step, idx) => (
+                    <li key={idx} className="font-mono text-[var(--brand-teal-ink)]">
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-[var(--brand-muted)] italic" data-testid="summary-missed-steps">None</p>
+              )}
+            </div>
+
+            {/* Simplification banner */}
+            {summary.simplifiedTopicUsed && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-800">
+                Topic simplification was used during the drill to help align with pattern targets.
+              </div>
+            )}
+
+            {/* Weakness recommendation (if available) */}
+            {summary.weaknessUpdate && (
+              <div className="rounded-xl border border-dotted border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-2">
+                <span className="text-xs font-mono uppercase tracking-wider text-[var(--brand-muted)]">
+                  Recommended Focus for Next Time
+                </span>
+                <p className="text-sm font-semibold">{summary.weaknessUpdate.label}</p>
+                <p className="text-xs text-[var(--brand-ink-soft)]">{summary.weaknessUpdate.practiceFocus}</p>
+              </div>
+            )}
+
+            {/* Baseline recall responses */}
+            <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 space-y-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)]">
+                Baseline Answers (Phase 1 Recall)
+              </h4>
+              <div className="space-y-3">
+                {baselineAnswers.map((ans, idx) => (
+                  <div key={idx} className="rounded bg-[var(--brand-bg)] border border-[var(--brand-border)] p-3 space-y-1">
+                    <p className="text-xs font-mono text-[var(--brand-muted)]">{ans.prompt}</p>
+                    <p className="text-sm">{ans.transcript}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Deferred Phase 3 details */}
+            <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 space-y-2">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)]">
+                Phase 3 (Pressure Test) Metrics
+              </h4>
+              <div className="grid grid-cols-2 gap-4 text-center pt-2">
+                <div className="rounded bg-[var(--brand-bg)] border border-[var(--brand-border)] p-2">
+                  <span className="block text-lg font-bold text-[var(--brand-muted)]" data-testid="summary-pressure-accuracy">
+                    not available yet
+                  </span>
+                  <span className="text-[10px] text-[var(--brand-muted)]">Pressure Accuracy</span>
+                </div>
+                <div className="rounded bg-[var(--brand-bg)] border border-[var(--brand-border)] p-2">
+                  <span className="block text-lg font-bold text-[var(--brand-muted)]" data-testid="summary-pressure-fail-rate">
+                    not available yet
+                  </span>
+                  <span className="text-[10px] text-[var(--brand-muted)]">Pressure Fail Rate</span>
+                </div>
+              </div>
             </div>
           </div>
-
-          <div className="rounded border border-dashed border-[var(--brand-border)] p-3 text-xs text-[var(--brand-muted)]">
-            Completion persistence is coming later. Your results are stored in local session memory for now.
-          </div>
-        </div>
+        )}
       </div>
     );
   }

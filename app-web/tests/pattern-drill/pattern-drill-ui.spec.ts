@@ -1173,4 +1173,144 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(page.getByTestId("drill-transcript-input")).toHaveValue("");
     expect(callIndex).toBe(3);
   });
+
+  test("summary API is called once after completed Phase 2 and renders metrics", async ({ page }) => {
+    let evalSessionCallCount = 0;
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/pattern-drill/drill-turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          credit: "full",
+          missingSteps: [],
+          usedSteps: ["[claim]", "because", "[reason]"],
+          shortFeedback: "Good.",
+        }),
+      });
+    });
+    await page.route("**/api/pattern-drill/evaluate-session", async (route) => {
+      evalSessionCallCount++;
+      const req = route.request().postDataJSON();
+      expect(req.phase2.attempts).toHaveLength(2);
+      expect(req.phase2.attempts[0].credit).toBe("full");
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          phase1BaselineCompleteness: "complete",
+          phase2Accuracy: 100,
+          fullCreditCount: 2,
+          partialCreditCount: 0,
+          noCreditCount: 0,
+          evaluatedAttemptCount: 2,
+          finalFullCreditStreak: 2,
+          mostMissedSteps: [],
+          simplifiedTopicUsed: false,
+          improvementSignal: "strong",
+          nextSessionRecommendation: "Awesome!",
+          weaknessUpdate: null,
+          phase3PressureAccuracy: null,
+          pressureFailRate: null,
+          saved: false,
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    expect(evalSessionCallCount).toBe(0);
+
+    // Phase 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 1");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("Answer 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    expect(evalSessionCallCount).toBe(0);
+
+    // Phase 2 Topic 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 3");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    expect(evalSessionCallCount).toBe(0);
+
+    // Phase 2 Topic 2
+    await page.getByTestId("drill-transcript-input").fill("Answer 4");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Now complete, should trigger evaluation summary API call once
+    await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
+    await expect(page.getByTestId("summary-save-status")).toContainText("Not saved yet");
+    await expect(page.getByTestId("summary-streak")).toContainText("2");
+    await expect(page.getByTestId("summary-pressure-accuracy")).toContainText("not available yet");
+    await expect(page.getByTestId("summary-pressure-fail-rate")).toContainText("not available yet");
+    expect(evalSessionCallCount).toBe(1);
+  });
+
+  test("summary API failure triggers local fallback summary and error banner", async ({ page }) => {
+    let evalSessionCalled = false;
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/pattern-drill/drill-turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          credit: "full",
+          missingSteps: [],
+          usedSteps: ["[claim]", "because", "[reason]"],
+          shortFeedback: "Good.",
+        }),
+      });
+    });
+    await page.route("**/api/pattern-drill/evaluate-session", async (route) => {
+      evalSessionCalled = true;
+      await route.fulfill({ status: 500 }); // simulate server failure
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    // Phase 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 1");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("Answer 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Phase 2 Topic 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 3");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Phase 2 Topic 2
+    await page.getByTestId("drill-transcript-input").fill("Answer 4");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Verify error banner is visible and local fallback summary metrics are rendered
+    await expect(page.getByTestId("summary-failed-notice")).toBeVisible();
+    await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
+    await expect(page.getByTestId("summary-save-status")).toContainText("Not saved yet");
+    expect(evalSessionCalled).toBe(true);
+  });
 });
