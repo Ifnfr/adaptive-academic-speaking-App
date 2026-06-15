@@ -124,13 +124,26 @@ test.describe("Pattern Quick Check Route", () => {
 
   test("missing CLAUDE_API_KEY returns 503 provider_not_configured", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
+    const originalProvider = process.env.AI_EXECUTION_PROVIDER;
+    const originalKey = process.env.CLAUDE_API_KEY;
+    process.env.AI_EXECUTION_PROVIDER = "claude";
+    delete process.env.CLAUDE_API_KEY;
     // callClaude is null (not set) — the route will check process.env.CLAUDE_API_KEY
     // which is not set in the test environment, so it returns 503
     testHooks.callClaude = null;
-    const res = await POST(makeRequest(VALID_BODY));
-    expect(res.status).toBe(503);
-    const json = await res.json();
-    expect(json.error).toBe("provider_not_configured");
+    try {
+      const res = await POST(makeRequest(VALID_BODY));
+      expect(res.status).toBe(503);
+      const json = await res.json();
+      expect(json.error).toBe("provider_not_configured");
+    } finally {
+      process.env.CLAUDE_API_KEY = originalKey;
+      if (originalProvider === undefined) {
+        delete process.env.AI_EXECUTION_PROVIDER;
+      } else {
+        process.env.AI_EXECUTION_PROVIDER = originalProvider;
+      }
+    }
   });
 
   test("valid 'detected' provider response returns { result: 'detected', entryPhase: 3 }", async () => {

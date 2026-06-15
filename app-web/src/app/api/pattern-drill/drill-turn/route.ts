@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveProvider, callRoleProvider, ProviderConfigError } from "../_lib/roleProviders";
 
 export const runtime = "nodejs";
 
@@ -21,38 +22,7 @@ async function resolveCurrentUserId(): Promise<string | null> {
   }
 }
 
-async function callDeepSeek(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  if (testHooks.callDeepSeek) {
-    return testHooks.callDeepSeek(apiKey, systemPrompt, userPrompt);
-  }
 
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`DeepSeek API error ${res.status}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content ?? "";
-}
 
 function cleanJsonResponse(text: string): string {
   let cleaned = text.trim();
@@ -194,9 +164,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "transcript_too_long" }, { status: 400, headers });
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY || (testHooks.callDeepSeek ? "__test__" : "");
-  if (!apiKey) {
-    return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+  let apiKey: string;
+  if (testHooks.callDeepSeek) {
+    apiKey = "__test__";
+  } else {
+    try {
+      const providerConfig = resolveProvider("execution");
+      apiKey = providerConfig.apiKey;
+    } catch (err) {
+      if (err instanceof ProviderConfigError) {
+        return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+      }
+      throw err;
+    }
   }
 
   const systemPrompt = `You are a strict language learning assistant evaluating spoken turns in a Contrastive Repetition drill.
@@ -229,7 +209,12 @@ Previous Credit: ${previousCredit || "none"}
 Evaluate the learner transcript against the pattern and topic.`;
 
   try {
-    const text = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+    let text: string;
+    if (testHooks.callDeepSeek) {
+      text = await testHooks.callDeepSeek(apiKey, systemPrompt, userPrompt);
+    } else {
+      text = await callRoleProvider("execution", systemPrompt, userPrompt);
+    }
     const cleanedText = cleanJsonResponse(text);
 
     interface DeepSeekResponseParsed {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getLatestWeaknessForUser } from "../../../lib/pattern-drill/latestWeaknessServer";
+import { resolveProvider, callRoleProvider, ProviderConfigError } from "../../pattern-drill/_lib/roleProviders";
 
 export const runtime = "nodejs";
 
@@ -46,36 +47,7 @@ function getSupabaseClient() {
   }
 }
 
-async function callClaude(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  if (testHooks.callClaude) {
-    return testHooks.callClaude(apiKey, systemPrompt, userPrompt);
-  }
 
-  const model = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Claude API error ${res.status}`);
-  }
-
-  const data = (await res.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-  };
-  return data.content?.find((c) => c.type === "text")?.text ?? "";
-}
 
 function cleanJsonResponse(text: string): string {
   let cleaned = text.trim();
@@ -179,9 +151,15 @@ export async function POST(request: Request) {
     }
   }
 
-  const apiKey = process.env.CLAUDE_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+  let apiKey: string;
+  try {
+    const providerConfig = resolveProvider("planning");
+    apiKey = providerConfig.apiKey;
+  } catch (err) {
+    if (err instanceof ProviderConfigError) {
+      return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+    }
+    throw err;
   }
 
   const systemPrompt = `You are an AI language learning assistant specializing in pre-drill speech instruction for academic English. Your task is to generate a pre-drill briefing ("Pattern Brief") in JSON format based on the user's level, mode, and target speaking focus/weakness.
@@ -213,7 +191,12 @@ Mode: ${mode}
 Focus: ${validatedFocus}`;
 
   try {
-    const text = await callClaude(apiKey, systemPrompt, userPrompt);
+    let text: string;
+    if (testHooks.callClaude) {
+      text = await testHooks.callClaude(apiKey, systemPrompt, userPrompt);
+    } else {
+      text = await callRoleProvider("planning", systemPrompt, userPrompt);
+    }
     const cleanedText = cleanJsonResponse(text);
     interface PatternBriefParsed {
       title: string;

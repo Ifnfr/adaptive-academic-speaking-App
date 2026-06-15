@@ -60,7 +60,9 @@ test.describe("Pressure Turn API Route", () => {
 
   test("missing CLAUDE_API_KEY returns 503", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
+    const originalProvider = process.env.AI_EXECUTION_PROVIDER;
     const originalKey = process.env.CLAUDE_API_KEY;
+    process.env.AI_EXECUTION_PROVIDER = "claude";
     delete process.env.CLAUDE_API_KEY;
 
     try {
@@ -75,6 +77,11 @@ test.describe("Pressure Turn API Route", () => {
       await expect(response.json()).resolves.toEqual({ error: "provider_not_configured" });
     } finally {
       process.env.CLAUDE_API_KEY = originalKey;
+      if (originalProvider === undefined) {
+        delete process.env.AI_EXECUTION_PROVIDER;
+      } else {
+        process.env.AI_EXECUTION_PROVIDER = originalProvider;
+      }
     }
   });
 

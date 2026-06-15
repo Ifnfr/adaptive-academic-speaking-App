@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveProvider, callRoleProvider, ProviderConfigError } from "../_lib/roleProviders";
 
 export const runtime = "nodejs";
 
@@ -21,36 +22,7 @@ async function resolveCurrentUserId(): Promise<string | null> {
   }
 }
 
-async function callClaude(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
-  if (testHooks.callClaude) {
-    return testHooks.callClaude(apiKey, systemPrompt, userPrompt);
-  }
 
-  const model = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 256,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Claude API error ${res.status}`);
-  }
-
-  const data = (await res.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-  };
-  return data.content?.find((c) => c.type === "text")?.text ?? "";
-}
 
 function cleanJsonResponse(text: string): string {
   let cleaned = text.trim();
@@ -171,9 +143,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "transcript_too_long" }, { status: 400, headers });
   }
 
-  const apiKey = process.env.CLAUDE_API_KEY || (testHooks.callClaude ? "__test__" : "");
-  if (!apiKey) {
-    return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+  let apiKey: string;
+  if (testHooks.callClaude) {
+    apiKey = "__test__";
+  } else {
+    try {
+      const providerConfig = resolveProvider("execution");
+      apiKey = providerConfig.apiKey;
+    } catch (err) {
+      if (err instanceof ProviderConfigError) {
+        return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
+      }
+      throw err;
+    }
   }
 
   const systemPrompt = `You are a strict language learning assistant evaluating spoken turns in a text-based Pressure Test drill.
@@ -206,7 +188,12 @@ Round Index: ${roundIndex} (Seconds: ${roundSeconds})
 Evaluate the learner transcript against the pattern and topic.`;
 
   try {
-    const text = await callClaude(apiKey, systemPrompt, userPrompt);
+    let text: string;
+    if (testHooks.callClaude) {
+      text = await testHooks.callClaude(apiKey, systemPrompt, userPrompt);
+    } else {
+      text = await callRoleProvider("execution", systemPrompt, userPrompt);
+    }
     const cleanedText = cleanJsonResponse(text);
 
     interface ClaudeResponseParsed {
