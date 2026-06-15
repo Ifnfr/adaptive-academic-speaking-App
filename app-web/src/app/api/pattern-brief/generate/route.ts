@@ -173,7 +173,7 @@ The generated JSON must match the following schema exactly:
     "name": "Name of response structure",
     "steps": ["Step 1", "Step 2"] // 2 to 5 steps using slot notation, e.g. "[claim]"
   },
-  "miniExample": "Example sentence. Illustration only — do not copy or memorize.", // 1 to 2 sentences max, MUST contain "Illustration only" and ("do not copy" or "do not memorize")
+  "miniExample": "Example sentence. Illustration only — do not memorize or copy.", // 1 to 2 sentences max, MUST include the exact warning: "Illustration only — do not memorize or copy."
   "commonMistakes": ["Mistake 1", "Mistake 2"], // 1 to 3 short strings
   "drillEntryConfig": {
     "targetPattern": "Name of response structure", // Must match responsePattern.name
@@ -268,9 +268,8 @@ Focus: ${validatedFocus}`;
       return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
     }
     const sentences = parsed.miniExample.split(/[.!?]/).filter((s: string) => s.trim().length > 0);
-    const hasIllustrationWarning = parsed.miniExample.includes("Illustration only");
-    const hasDoNotCopy = parsed.miniExample.includes("do not copy") || parsed.miniExample.includes("do not memorize");
-    if (sentences.length < 1 || sentences.length > 2 || !hasIllustrationWarning || !hasDoNotCopy) {
+    const hasExactWarning = parsed.miniExample.includes("Illustration only — do not memorize or copy.");
+    if (sentences.length < 1 || sentences.length > 2 || !hasExactWarning) {
       console.error("Validation failed: miniExample checks", parsed.miniExample, sentences.length);
       return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
     }
