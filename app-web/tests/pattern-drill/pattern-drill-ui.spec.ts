@@ -1630,8 +1630,8 @@ test.describe("Pattern Drill UI Wiring", () => {
           improvementSignal: "strong",
           nextSessionRecommendation: "Awesome!",
           weaknessUpdate: null,
-          phase3PressureAccuracy: null,
-          pressureFailRate: null,
+          phase3PressureAccuracy: 100,
+          pressureFailRate: 0,
           saved: true,
         }),
       });
@@ -1675,8 +1675,8 @@ test.describe("Pattern Drill UI Wiring", () => {
     // Click Start Pressure Test
     await page.getByTestId("start-pressure-btn").click();
 
-    // Under-the-hood, evaluate-session (to save Phase 1/2) is triggered
-    expect(evalSessionCalls).toBe(1);
+    // Verify evaluate-session is NOT called yet
+    expect(evalSessionCalls).toBe(0);
 
     // Active Phase 3 Pressure Test
     await expect(page.getByText("Phase 3 — Pressure Test")).toBeVisible();
@@ -1693,15 +1693,23 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(page.getByText("Phase 3 — Pressure Summary")).toBeVisible();
     await page.getByRole("button", { name: "Continue" }).click();
 
-    // Final drill summary showing Phase 3 local results + saved Phase 1/2 metrics
-    await expect(page.getByText("Drill Session Complete")).toBeVisible();
+    // Final drill results screen (before save is triggered)
     await expect(page.getByText("Phase 3 — Pressure Test Results")).toBeVisible();
-    await expect(page.getByTestId("pressure-local-only-notice")).toContainText("This pressure result is local for now. Saved session metrics will be connected later.");
     await expect(page.getByTestId("pressure-accuracy-val")).toContainText("100%");
+    await expect(page.getByTestId("review-summary-btn")).toBeVisible();
+    await expect(page.getByTestId("finish-session-btn")).toBeVisible();
 
-    await expect(page.getByText("Phase 1 & 2 Saved Session Metrics")).toBeVisible();
+    // Clicking Review Summary transitions to final summary and triggers the save API call
+    await page.getByTestId("review-summary-btn").click();
+
+    // Final drill summary showing populated saved Phase 3 metrics
+    await expect(page.getByTestId("summary-accuracy")).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
-    await expect(page.getByTestId("summary-save-status")).toContainText("Saved to your practice history.");
+    await expect(page.getByTestId("summary-pressure-accuracy")).toContainText("100%");
+    await expect(page.getByTestId("summary-pressure-fail-rate")).toContainText("0%");
+    await expect(page.getByTestId("summary-pressure-timeouts")).toContainText("0");
+    await expect(page.getByTestId("summary-save-status")).toContainText("Pressure metrics saved to your drill history.");
+    expect(evalSessionCalls).toBe(1);
   });
 
   test("no localStorage or sessionStorage writes occur during Phase 3 pressure flow", async ({ page }) => {

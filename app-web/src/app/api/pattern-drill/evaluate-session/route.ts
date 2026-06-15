@@ -78,6 +78,7 @@ export async function POST(request: Request) {
     "quickCheck",
     "phase1",
     "phase2",
+    "phase3",
   ];
   const bodyKeys = Object.keys(body as Record<string, unknown>);
   if (bodyKeys.some((k) => !allowedKeys.includes(k))) {
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
     quickCheck,
     phase1,
     phase2,
+    phase3,
   } = body as {
     briefId?: unknown;
     targetPattern?: unknown;
@@ -100,6 +102,7 @@ export async function POST(request: Request) {
     quickCheck?: unknown;
     phase1?: unknown;
     phase2?: unknown;
+    phase3?: unknown;
   };
 
   // Validate basic strings & arrays
@@ -202,6 +205,81 @@ export async function POST(request: Request) {
     }
   }
 
+  if (phase3 !== undefined) {
+    if (
+      !phase3 ||
+      typeof phase3 !== "object" ||
+      typeof (phase3 as Record<string, unknown>).completedRoundCount !== "number" ||
+      typeof (phase3 as Record<string, unknown>).detectedCount !== "number" ||
+      typeof (phase3 as Record<string, unknown>).missedCount !== "number" ||
+      typeof (phase3 as Record<string, unknown>).timeoutCount !== "number" ||
+      typeof (phase3 as Record<string, unknown>).pressureAccuracy !== "number" ||
+      typeof (phase3 as Record<string, unknown>).pressureFailRate !== "number"
+    ) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+
+    const p3 = phase3 as {
+      completedRoundCount: number;
+      detectedCount: number;
+      missedCount: number;
+      timeoutCount: number;
+      pressureAccuracy: number;
+      pressureFailRate: number;
+    };
+
+    if (
+      !Number.isInteger(p3.completedRoundCount) ||
+      !Number.isInteger(p3.detectedCount) ||
+      !Number.isInteger(p3.missedCount) ||
+      !Number.isInteger(p3.timeoutCount) ||
+      !Number.isInteger(p3.pressureAccuracy) ||
+      !Number.isInteger(p3.pressureFailRate)
+    ) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+
+    if (
+      p3.completedRoundCount !== 4 ||
+      p3.detectedCount < 0 || p3.detectedCount > 4 ||
+      p3.missedCount < 0 || p3.missedCount > 4 ||
+      p3.timeoutCount < 0 || p3.timeoutCount > 4
+    ) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+
+    if (
+      p3.pressureAccuracy < 0 || p3.pressureAccuracy > 100 ||
+      p3.pressureFailRate < 0 || p3.pressureFailRate > 100
+    ) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+
+    if (p3.completedRoundCount !== p3.detectedCount + p3.missedCount + p3.timeoutCount) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+
+    const computedAccuracy = Math.round((p3.detectedCount / p3.completedRoundCount) * 100);
+    const computedFailRate = Math.round(((p3.missedCount + p3.timeoutCount) / p3.completedRoundCount) * 100);
+
+    if (p3.pressureAccuracy !== computedAccuracy || p3.pressureFailRate !== computedFailRate) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+
+    const p3Keys = Object.keys(p3);
+    const allowedP3Keys = [
+      "completedRoundCount",
+      "detectedCount",
+      "missedCount",
+      "timeoutCount",
+      "pressureAccuracy",
+      "pressureFailRate"
+    ];
+    if (p3Keys.some((k) => !allowedP3Keys.includes(k))) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+  }
+
   const attempts = p2Attempts as Attempt[];
 
   // Compute metrics
@@ -260,6 +338,19 @@ export async function POST(request: Request) {
   const phase1BaselineCompleteness: "complete" | "partial" | "missing" =
     p1.completedPromptCount >= 2 ? "complete" : p1.completedPromptCount > 0 ? "partial" : "missing";
 
+  let phase3PressureAccuracy: number | null = null;
+  let pressureFailRate: number | null = null;
+  if (phase3 !== undefined && phase3 !== null) {
+    const p3 = phase3 as {
+      completedRoundCount: number;
+      detectedCount: number;
+      missedCount: number;
+      timeoutCount: number;
+    };
+    phase3PressureAccuracy = Math.round((p3.detectedCount / p3.completedRoundCount) * 100);
+    pressureFailRate = Math.round(((p3.missedCount + p3.timeoutCount) / p3.completedRoundCount) * 100);
+  }
+
   // Try to save the session to the database
   let saved = false;
   let sessionId: string | undefined = undefined;
@@ -289,8 +380,8 @@ export async function POST(request: Request) {
           improvementSignal,
           nextSessionRecommendation,
           weaknessUpdate,
-          phase3PressureAccuracy: null,
-          pressureFailRate: null,
+          phase3PressureAccuracy,
+          pressureFailRate,
         },
         supabaseClient
       );
@@ -322,8 +413,8 @@ export async function POST(request: Request) {
       improvementSignal,
       nextSessionRecommendation,
       weaknessUpdate,
-      phase3PressureAccuracy: null,
-      pressureFailRate: null,
+      phase3PressureAccuracy,
+      pressureFailRate,
       saved,
       ...(sessionId ? { sessionId } : {}),
     },

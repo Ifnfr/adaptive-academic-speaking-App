@@ -208,4 +208,118 @@ test.describe("Evaluate Session Route", () => {
     const json2 = await res2.json() as { error: string };
     expect(json2.error).toBe("invalid_request");
   });
+
+  test("accepts optional valid phase3, recomputes metrics, and saves them to DB", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+
+    let savedRow: Record<string, unknown> | null = null;
+    const mockSupabase = {
+      from: (table: string) => {
+        expect(table).toBe("pattern_drill_sessions");
+        return {
+          insert: (row: Record<string, unknown>) => {
+            savedRow = row;
+            return {
+              select: (fields: string) => {
+                expect(fields).toBe("id");
+                return {
+                  single: async () => ({
+                    data: { id: "mock-session-id-phase3" },
+                    error: null,
+                  }),
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+    testHooks.getSupabaseClient = () => mockSupabase;
+
+    const body = {
+      ...VALID_BODY,
+      phase3: {
+        completedRoundCount: 4,
+        detectedCount: 3,
+        missedCount: 1,
+        timeoutCount: 0,
+        pressureAccuracy: 75,
+        pressureFailRate: 25,
+      },
+    };
+
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(200);
+    const json = await res.json() as {
+      phase3PressureAccuracy: number;
+      pressureFailRate: number;
+      saved: boolean;
+    };
+
+    expect(json.phase3PressureAccuracy).toBe(75);
+    expect(json.pressureFailRate).toBe(25);
+    expect(json.saved).toBe(true);
+
+    expect(savedRow).toBeDefined();
+    expect(savedRow!.phase3_pressure_accuracy).toBe(75);
+    expect(savedRow!.pressure_fail_rate).toBe(25);
+  });
+
+  test("rejects invalid completedRoundCount !== 4", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const body = {
+      ...VALID_BODY,
+      phase3: {
+        completedRoundCount: 3,
+        detectedCount: 2,
+        missedCount: 1,
+        timeoutCount: 0,
+        pressureAccuracy: 67,
+        pressureFailRate: 33,
+      },
+    };
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toBe("invalid_request");
+  });
+
+  test("rejects mismatched percentages compared to server recomputation", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const body = {
+      ...VALID_BODY,
+      phase3: {
+        completedRoundCount: 4,
+        detectedCount: 3,
+        missedCount: 1,
+        timeoutCount: 0,
+        pressureAccuracy: 80, // should be 75
+        pressureFailRate: 20, // should be 25
+      },
+    };
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toBe("invalid_request");
+  });
+
+  test("rejects raw transcript or other unallowed fields inside phase3", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const body = {
+      ...VALID_BODY,
+      phase3: {
+        completedRoundCount: 4,
+        detectedCount: 4,
+        missedCount: 0,
+        timeoutCount: 0,
+        pressureAccuracy: 100,
+        pressureFailRate: 0,
+        rawTranscript: "this is raw transcript that should be blocked",
+      },
+    };
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string };
+    expect(json.error).toBe("invalid_request");
+  });
 });
