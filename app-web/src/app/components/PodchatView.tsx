@@ -807,6 +807,11 @@ export function PodchatView({
 
         setRecordingState("transcribing");
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 10000);
+
         try {
           const formData = new FormData();
           formData.append("audio", audioBlob, `speech.${blobMimeType.split("/")[1] || "webm"}`);
@@ -814,7 +819,9 @@ export function PodchatView({
           const response = await fetch("/api/podchat/stt", {
             method: "POST",
             body: formData,
+            signal: controller.signal,
           });
+          clearTimeout(timeoutId);
 
           if (!response.ok) {
             const errJson = await response.json().catch(() => ({}));
@@ -829,7 +836,17 @@ export function PodchatView({
             throw new Error("Speech transcription failed. Please try again later.");
           }
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
+          clearTimeout(timeoutId);
+          let msg = "";
+          if (err instanceof Error) {
+            if (err.name === "AbortError") {
+              msg = "Speech transcription timed out. Please try recording again.";
+            } else {
+              msg = err.message;
+            }
+          } else {
+            msg = String(err);
+          }
           setTurnError(msg || "Transcription failed. Please try recording again.");
           setRecordingState("idle");
         }
