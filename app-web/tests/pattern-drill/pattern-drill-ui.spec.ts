@@ -758,8 +758,8 @@ test.describe("Pattern Drill UI Wiring", () => {
 
     await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Pattern detected. Future Drill will start from Phase 3.")).toBeVisible();
-    await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
-    await expect(page.getByText("Planned entry: Phase 3.")).toBeVisible();
+    await expect(page.getByTestId("start-drill-btn")).toBeEnabled();
+    await expect(page.getByText("Start the repetition drill (Phase 3).")).toBeVisible();
   });
 
   test("not_detected_or_partial result shows Phase 1 copy", async ({ page }) => {
@@ -789,8 +789,8 @@ test.describe("Pattern Drill UI Wiring", () => {
 
     await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Pattern not clearly detected. Future Drill will start from Phase 1.")).toBeVisible();
-    await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
-    await expect(page.getByText("Planned entry: Phase 1.")).toBeVisible();
+    await expect(page.getByTestId("start-drill-btn")).toBeEnabled();
+    await expect(page.getByText("Start the repetition drill (Phase 1).")).toBeVisible();
   });
 
   test("skip from idle — Phase 1, STT and quick-check routes NOT called", async ({ page }) => {
@@ -820,8 +820,8 @@ test.describe("Pattern Drill UI Wiring", () => {
 
     await expect(page.getByTestId("quick-check-result")).toBeVisible();
     await expect(page.getByText("Quick check skipped. Future Drill will start from Phase 1.")).toBeVisible();
-    await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
-    await expect(page.getByText("Planned entry: Phase 1.")).toBeVisible();
+    await expect(page.getByTestId("start-drill-btn")).toBeEnabled();
+    await expect(page.getByText("Start the repetition drill (Phase 1).")).toBeVisible();
 
     expect(sttCalled).toBe(false);
     expect(qcCalled).toBe(false);
@@ -972,7 +972,7 @@ test.describe("Pattern Drill UI Wiring", () => {
   });
 
 
-  test("start drill button remains disabled after detected result", async ({ page }) => {
+  test("start drill button is enabled after detected result and clicking it starts Phase 2 directly", async ({ page }) => {
     await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
@@ -998,6 +998,179 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("submit-check-btn").click();
     await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
 
-    await expect(page.getByTestId("start-drill-btn")).toBeDisabled();
+    const startBtn = page.getByTestId("start-drill-btn");
+    await expect(startBtn).toBeEnabled();
+    await startBtn.click();
+
+    // Directly in Phase 2
+    const phaseIndicator = page.getByTestId("phase-indicator");
+    await expect(phaseIndicator).toContainText("Phase 2");
+    await expect(page.getByTestId("phase3-deferred-notice")).toBeVisible();
+  });
+
+  test("skip quick check starts Phase 1 and progresses through exactly two prompts to Phase 2", async ({ page }) => {
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+
+    // Skip
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    // Phase 1 Cold Recall
+    await expect(page.getByTestId("phase-indicator")).toContainText("Phase 1 — Cold Recall");
+    await expect(page.getByTestId("drill-prompt-text")).toContainText("Online Education");
+
+    // Submit Prompt 1
+    await page.getByTestId("drill-transcript-input").fill("My response 1");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Prompt 2
+    await expect(page.getByTestId("drill-prompt-text")).toContainText("Renewable Energy");
+    await page.getByTestId("drill-transcript-input").fill("My response 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Transition to Phase 2
+    await expect(page.getByTestId("phase-indicator")).toContainText("Phase 2 — Contrastive Repetition");
+  });
+
+  test("Phase 2 collapsed disclosure and evaluation turn credits", async ({ page }) => {
+    let turnCount = 0;
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/pattern-drill/drill-turn", async (route) => {
+      turnCount++;
+      const req = route.request().postDataJSON();
+      expect(req.phase).toBe(2);
+      expect(req.attemptNumber).toBe(turnCount);
+
+      if (turnCount === 1) {
+        // First turn partial
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            credit: "partial",
+            missingSteps: ["[reason]"],
+            usedSteps: ["[claim]", "because"],
+            shortFeedback: "Missing slot: [reason].",
+          }),
+        });
+      } else {
+        // Second turn full
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            credit: "full",
+            missingSteps: [],
+            usedSteps: ["[claim]", "because", "[reason]"],
+            shortFeedback: "Good.",
+          }),
+        });
+      }
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    // Progress through Phase 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 1");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("Answer 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Phase 2
+    await expect(page.getByTestId("phase-indicator")).toContainText("Phase 2");
+
+    // Pattern Reference disclosure collapsed by default
+    await expect(page.getByTestId("pattern-ref-steps")).not.toBeVisible();
+    await page.getByTestId("toggle-pattern-ref-btn").click();
+    await expect(page.getByTestId("pattern-ref-steps")).toBeVisible();
+
+    // Turn 1: Partial Credit
+    await page.getByTestId("drill-transcript-input").fill("My attempt 1");
+    await page.getByTestId("drill-submit-btn").click();
+
+    await expect(page.getByTestId("drill-feedback-text")).toContainText("Missing slot: [reason].");
+    await expect(page.getByTestId("drill-retry-prompt")).toBeVisible();
+
+    // Turn 2: Full Credit
+    await page.getByTestId("drill-transcript-input").fill("My attempt 2 corrected");
+    await page.getByTestId("drill-submit-btn").click();
+
+    await expect(page.getByTestId("drill-feedback-text")).toContainText("Good.");
+    await page.getByTestId("drill-next-btn").click();
+  });
+
+  test("Phase 2 topic simplification after 3 No Credit failures", async ({ page }) => {
+    let callIndex = 0;
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/pattern-drill/drill-turn", async (route) => {
+      callIndex++;
+      const req = route.request().postDataJSON();
+      expect(req.attemptNumber).toBe(callIndex);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          credit: "none",
+          missingSteps: ["[claim]", "because", "[reason]"],
+          usedSteps: [],
+          shortFeedback: "You said nothing relevant.",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    // P1
+    await page.getByTestId("drill-transcript-input").fill("A");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("B");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Attempt 1 (No Credit)
+    await page.getByTestId("drill-transcript-input").fill("Attempt 1");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Attempt 2 (No Credit)
+    await page.getByTestId("drill-transcript-input").fill("Attempt 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Attempt 3 (No Credit) - triggers simplification
+    await page.getByTestId("drill-transcript-input").fill("Attempt 3");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Notice shown and topic simplified (input is cleared and ready for new turn on simplified topic)
+    await expect(page.getByTestId("simplified-notice")).toBeVisible();
+    await expect(page.getByTestId("drill-prompt-text")).toContainText("eating healthy");
+    await expect(page.getByTestId("drill-transcript-input")).toHaveValue("");
+    expect(callIndex).toBe(3);
   });
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { PatternDrillModeCore } from "./PatternDrillModeCore";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -105,9 +106,8 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
     entryPhase: 1,
     transcript: "",
   });
-  // Stored for future Drill handoff — never rendered in DOM
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_drillContext, setDrillContext] = useState<DrillModeContext | null>(null);
+  const [drillContext, setDrillContext] = useState<DrillModeContext | null>(null);
+  const [drillActive, setDrillActive] = useState<boolean>(false);
 
   // Recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -439,6 +439,10 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
   const disabledReason = getDisabledReason();
 
   // ── Render ───────────────────────────────────────────────────────────────
+
+  if (drillActive && drillContext) {
+    return <PatternDrillModeCore context={drillContext} onExit={onExit} />;
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-6 lg:p-8 space-y-8 bg-[var(--brand-surface)] text-[var(--brand-ink)]">
@@ -972,21 +976,22 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
               </div>
               {/* ── /Quick Spoken Check ────────────────────────────────── */}
 
-              {/* Start Drill placeholder — always disabled */}
+              {/* Start Drill button */}
               <div data-testid="brief-start-drill">
                 <button
                   type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="app-button px-4 py-2 text-sm opacity-50 cursor-not-allowed"
+                  disabled={!isCheckTerminal}
+                  aria-disabled={!isCheckTerminal}
+                  onClick={() => setDrillActive(true)}
+                  className={`app-button px-4 py-2 text-sm ${!isCheckTerminal ? "opacity-50 cursor-not-allowed" : ""}`}
                   data-testid="start-drill-btn"
                 >
                   Start Drill
                 </button>
                 <p className="text-xs text-[var(--brand-muted)] mt-2">
-                  {displayEntryPhase
-                    ? `Drill Mode will be available in a future update. Planned entry: Phase ${displayEntryPhase}.`
-                    : "Drill Mode will be available in a future update."}
+                  {!isCheckTerminal
+                    ? "Complete or skip the quick check to start the drill."
+                    : `Start the repetition drill (Phase ${displayEntryPhase}).`}
                 </p>
               </div>
             </div>
