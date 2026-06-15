@@ -297,10 +297,10 @@ test.describe("Pattern Brief Generate Route", () => {
   test("missing illustration warnings or bad sentence counts in miniExample returns 502", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
 
-    // 1. Missing warnings entirely
+    // 1. Missing warnings
     const badResp1 = {
       ...validClaudeResponse,
-      miniExample: "I think technology is good."
+      miniExample: "I think technology is good." // missing "Illustration only" and "do not copy/memorize"
     };
     testHooks.callClaude = async () => JSON.stringify(badResp1);
 
@@ -314,35 +314,21 @@ test.describe("Pattern Brief Generate Route", () => {
     const response1 = await POST(req1);
     expect(response1.status).toBe(502);
 
-    // 2. Loose warning format (missing "do not memorize")
+    // 2. Too many sentences (3 sentences)
     const badResp2 = {
       ...validClaudeResponse,
-      miniExample: "Exercise is good. Illustration only — do not copy."
+      miniExample: "Sentence one. Sentence two. Sentence three. Illustration only — do not copy."
     };
     testHooks.callClaude = async () => JSON.stringify(badResp2);
 
-    const response2 = await POST(buildRequest({
+    const req2 = buildRequest({
       level: "beginner",
       mode: "fluency_sprint",
       source: "manual",
       focus: "Hedging phrases",
-    }));
+    });
+    const response2 = await POST(req2);
     expect(response2.status).toBe(502);
-
-    // 3. Too many sentences (3 sentences)
-    const badResp3 = {
-      ...validClaudeResponse,
-      miniExample: "Sentence one. Sentence two. Sentence three. Illustration only — do not memorize or copy."
-    };
-    testHooks.callClaude = async () => JSON.stringify(badResp3);
-
-    const response3 = await POST(buildRequest({
-      level: "beginner",
-      mode: "fluency_sprint",
-      source: "manual",
-      focus: "Hedging phrases",
-    }));
-    expect(response3.status).toBe(502);
   });
 
   test("mismatched drillEntryConfig targetPattern/steps returns 502", async () => {
