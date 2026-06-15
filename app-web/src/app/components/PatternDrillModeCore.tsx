@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { PatternDrillPressureTest, type PressureAttempt } from "./PatternDrillPressureTest";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ function computeFallbackSummary(
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCoreProps) {
-  const [phase, setPhase] = useState<1 | 2>(context.entryPhase === 3 ? 2 : 1);
+  const [phase, setPhase] = useState<1 | 2 | 3>(context.entryPhase === 3 ? 3 : 1);
   const [p1PromptIndex, setP1PromptIndex] = useState<number>(0);
   const [p2TopicIndex, setP2TopicIndex] = useState<number>(0);
   const [attemptNumber, setAttemptNumber] = useState<1 | 2 | 3>(1);
@@ -166,6 +167,12 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
+  // Milestone 13 Phase 3 states
+  const [showChoiceScreen, setShowChoiceScreen] = useState<boolean>(false);
+  const [triggerP12Save, setTriggerP12Save] = useState<boolean>(false);
+  const [pressureAttempts, setPressureAttempts] = useState<PressureAttempt[]>([]);
+  const [isPressureComplete, setIsPressureComplete] = useState<boolean>(false);
+
   // Milestone 9 Summary States
   const [attempts, setAttempts] = useState<Phase2Attempt[]>([]);
   const [summaryState, setSummaryState] = useState<SummaryState>({ status: "idle" });
@@ -174,6 +181,7 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
   // Request abort refs
   const abortRef = useRef<AbortController | null>(null);
   const summaryAbortRef = useRef<AbortController | null>(null);
+  const hasCalledEvaluateRef = useRef<boolean>(false);
 
   useEffect(() => {
     return () => {
@@ -184,7 +192,10 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
 
   // Summary generation useEffect on completion
   useEffect(() => {
-    if (!isComplete) return;
+    if (context.entryPhase === 3) return;
+    if (!isComplete && !triggerP12Save) return;
+    if (hasCalledEvaluateRef.current) return;
+    hasCalledEvaluateRef.current = true;
 
     let active = true;
     const controller = new AbortController();
@@ -249,7 +260,7 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComplete]);
+  }, [isComplete, triggerP12Save]);
 
   const currentTopic = simplifiedActive
     ? SIMPLIFIED_TOPICS[p2TopicIndex]
@@ -365,9 +376,310 @@ export function PatternDrillModeCore({ context, onExit }: PatternDrillModeCorePr
     if (p2TopicIndex + 1 < PHASE2_TOPICS.length) {
       setP2TopicIndex((prev) => prev + 1);
     } else {
-      setIsComplete(true);
+      setShowChoiceScreen(true);
     }
   };
+
+  // ── Render Choice Screen ─────────────────────────────────────────────────
+  if (showChoiceScreen) {
+    return (
+      <div className="flex flex-col h-full overflow-y-auto p-6 lg:p-8 space-y-8 bg-[var(--brand-surface)] text-[var(--brand-ink)]">
+        <div className="flex items-center justify-between border-b border-[var(--brand-border)] pb-4">
+          <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]">Phase 2 Repetition Complete</h3>
+          <button type="button" onClick={onExit} className="app-button-ghost px-3 py-1.5 text-sm">
+            Exit
+          </button>
+        </div>
+
+        <div className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-6">
+          <div className="space-y-2">
+            <h4 className="text-base font-semibold">Choose Your Next Step</h4>
+            <p className="text-sm text-[var(--brand-ink-soft)]">
+              You have successfully completed the practice rounds. You can now choose to test your recall speed in the Pressure Test, or finish the session and save your metrics.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 pt-2">
+            <button
+              type="button"
+              data-testid="start-pressure-btn"
+              onClick={() => {
+                setTriggerP12Save(true);
+                setPhase(3);
+                setShowChoiceScreen(false);
+              }}
+              className="app-button px-5 py-3 text-sm font-semibold flex-1 min-h-[48px]"
+            >
+              Start Pressure Test
+            </button>
+            <button
+              type="button"
+              data-testid="finish-session-btn"
+              onClick={() => {
+                setIsComplete(true);
+                setShowChoiceScreen(false);
+              }}
+              className="app-button-ghost border border-[var(--brand-border)] px-5 py-3 text-sm font-semibold flex-1 min-h-[48px]"
+            >
+              Finish Session
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render Pressure Complete / Final Summary ─────────────────────────────
+  if (isPressureComplete) {
+    const isSavingP12 = summaryState.status === "summarizing" || summaryState.status === "idle";
+    const isFailedP12 = summaryState.status === "failed";
+    const summary = summaryState.status === "ready"
+      ? summaryState.summary
+      : summaryState.status === "failed"
+        ? summaryState.fallbackSummary
+        : null;
+
+    const pressureAccuracy = pressureAttempts.length > 0
+      ? Math.round(
+          (pressureAttempts.filter((a) => a.patternDetected).length / pressureAttempts.length) * 100
+        )
+      : 0;
+
+    return (
+      <div className="flex flex-col h-full overflow-y-auto p-6 lg:p-8 space-y-8 bg-[var(--brand-surface)] text-[var(--brand-ink)]">
+        <div className="flex items-center justify-between border-b border-[var(--brand-border)] pb-4">
+          <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]">Drill Session Complete</h3>
+          <button
+            type="button"
+            onClick={onExit}
+            data-testid="exit-drill-btn"
+            className="app-button px-4 py-2 text-sm"
+          >
+            Exit to Podchat
+          </button>
+        </div>
+
+        <div className="ml-8 space-y-6">
+          <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-6">
+            <h4 className="text-base font-semibold text-[var(--brand-teal-ink)]">Phase 3 — Pressure Test Results</h4>
+            <div
+              data-testid="pressure-local-only-notice"
+              className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-800"
+            >
+              This pressure result is local for now. Saved session metrics will be connected later.
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-center">
+                <span className="text-xs uppercase font-mono text-[var(--brand-muted)]">Pressure Accuracy</span>
+                <p className="text-3xl font-bold mt-1 text-[var(--brand-teal-ink)]" data-testid="pressure-accuracy-val">
+                  {pressureAccuracy}%
+                </p>
+              </div>
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-center">
+                <span className="text-xs uppercase font-mono text-[var(--brand-muted)]">Pattern Detected</span>
+                <p className="text-3xl font-bold mt-1 text-green-600" data-testid="pressure-detected-val">
+                  {pressureAttempts.filter((a) => a.patternDetected).length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 text-center">
+                <span className="text-xs uppercase font-mono text-[var(--brand-muted)]">Timeouts / Misses</span>
+                <p className="text-3xl font-bold mt-1 text-red-500" data-testid="pressure-missed-val">
+                  {pressureAttempts.filter((a) => a.timedOut || !a.patternDetected).length}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h5 className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">Round Attempts Log</h5>
+              <div className="space-y-3">
+                {pressureAttempts.map((attempt, idx) => (
+                  <div key={idx} className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-mono text-[var(--brand-muted)]">Round {attempt.roundIndex + 1} ({attempt.roundSeconds}s)</span>
+                      <span className={`font-semibold uppercase ${attempt.patternDetected ? "text-green-600" : "text-red-500"}`}>
+                        {attempt.timedOut ? "Timed Out" : attempt.patternDetected ? "Detected" : "Not Detected"}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold">{attempt.topic}</p>
+                    {attempt.transcript && (
+                      <p className="text-xs italic bg-[var(--brand-bg)] p-2 rounded border border-[var(--brand-border)]">
+                        &ldquo;{attempt.transcript}&rdquo;
+                      </p>
+                    )}
+                    {attempt.shortFeedback && (
+                      <p className="text-xs text-[var(--brand-ink-soft)] font-medium">
+                        Feedback: {attempt.shortFeedback}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {context.entryPhase !== 3 && (
+            <div className="space-y-6">
+              <hr className="border-[var(--brand-border)] my-8" />
+              <h4 className="text-base font-semibold text-[var(--brand-teal-ink)] pl-2">Phase 1 & 2 Saved Session Metrics</h4>
+              {isSavingP12 && (
+                <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 flex flex-col items-center justify-center space-y-4">
+                  <span className="animate-spin h-6 w-6 border-2 border-[var(--brand-teal)] border-t-transparent rounded-full" />
+                  <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="summary-summarizing">
+                    Analyzing session and generating summary...
+                  </p>
+                </div>
+              )}
+
+              {summary && (
+                <div className="space-y-6">
+                  <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 flex justify-between items-center">
+                    <span className="text-sm font-semibold">Persistence Status</span>
+                    <span
+                      data-testid="summary-save-status"
+                      className={`text-xs uppercase tracking-wider font-semibold px-2 py-0.5 rounded ${
+                        saveStatus === "saving"
+                          ? "bg-blue-100 text-blue-800"
+                          : saveStatus === "saved"
+                          ? "bg-green-100 text-green-800"
+                          : saveStatus === "failed"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}
+                    >
+                      {saveStatus === "saving"
+                        ? "Saving summary..."
+                        : saveStatus === "saved"
+                        ? "Saved to your practice history."
+                        : saveStatus === "failed"
+                        ? "Summary available, but saving failed."
+                        : "Not saved yet"}
+                    </span>
+                  </div>
+
+                  {isFailedP12 && (
+                    <div
+                      data-testid="summary-failed-notice"
+                      className="rounded-lg border border-[var(--brand-danger)] bg-[var(--brand-danger)] bg-opacity-10 p-3 text-sm text-[var(--brand-danger)]"
+                    >
+                      Summary is available locally, but final summary generation failed.
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3">
+                      <h4 className="text-xs uppercase tracking-wider font-semibold text-[var(--brand-muted)]">
+                        Performance Accuracy
+                      </h4>
+                      <div>
+                        <span className="text-3xl font-bold" data-testid="summary-accuracy">
+                          {summary.phase2Accuracy}%
+                        </span>
+                        <span className="text-xs text-[var(--brand-muted)] ml-2">Phase 2</span>
+                      </div>
+                      <div className="text-xs text-[var(--brand-ink-soft)] pt-2 border-t border-[var(--brand-border)]">
+                        Final Full Credit Streak: <strong data-testid="summary-streak">{summary.finalFullCreditStreak}</strong>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-2">
+                      <h4 className="text-xs uppercase tracking-wider font-semibold text-[var(--brand-muted)]">
+                        Attempt Results
+                      </h4>
+                      <div className="grid grid-cols-3 gap-1 text-center pt-2">
+                        <div className="bg-green-50 rounded p-1 border border-green-100">
+                          <span className="block text-lg font-bold text-green-700" data-testid="summary-full-credit-count">
+                            {summary.fullCreditCount}
+                          </span>
+                          <span className="text-[10px] text-green-600">Full</span>
+                        </div>
+                        <div className="bg-blue-50 rounded p-1 border border-blue-100">
+                          <span className="block text-lg font-bold text-blue-700" data-testid="summary-partial-credit-count">
+                            {summary.partialCreditCount}
+                          </span>
+                          <span className="text-[10px] text-blue-600">Partial</span>
+                        </div>
+                        <div className="bg-red-50 rounded p-1 border border-red-100">
+                          <span className="block text-lg font-bold text-red-700" data-testid="summary-no-credit-count">
+                            {summary.noCreditCount}
+                          </span>
+                          <span className="text-[10px] text-red-600">No</span>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-[var(--brand-muted)] text-center pt-1">
+                        Evaluated attempts: {summary.evaluatedAttemptCount}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3">
+                      <h4 className="text-xs uppercase tracking-wider font-semibold text-[var(--brand-muted)]">
+                        Improvement Signal
+                      </h4>
+                      <div
+                        data-testid="summary-improvement-signal"
+                        className={`text-sm font-semibold capitalize px-2 py-1 rounded inline-block ${
+                          summary.improvementSignal === "strong" ? "bg-green-100 text-green-800" :
+                          summary.improvementSignal === "emerging" ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {summary.improvementSignal.replace(/_/g, " ")}
+                      </div>
+                      <p className="text-xs text-[var(--brand-ink-soft)]">{summary.nextSessionRecommendation}</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 space-y-3">
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)]">
+                      Key Missing Steps
+                    </h4>
+                    {summary.mostMissedSteps.length > 0 ? (
+                      <ul className="list-disc pl-5 text-sm space-y-1" data-testid="summary-missed-steps">
+                        {summary.mostMissedSteps.map((step, idx) => (
+                          <li key={idx} className="font-mono text-[var(--brand-teal-ink)]">
+                            {step}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-[var(--brand-muted)] italic" data-testid="summary-missed-steps">None</p>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 space-y-4">
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)]">
+                      Baseline Answers (Phase 1 Recall)
+                    </h4>
+                    <div className="space-y-3">
+                      {baselineAnswers.map((ans, idx) => (
+                        <div key={idx} className="rounded bg-[var(--brand-bg)] border border-[var(--brand-border)] p-3 space-y-1">
+                          <p className="text-xs font-mono text-[var(--brand-muted)]">{ans.prompt}</p>
+                          <p className="text-sm">{ans.transcript}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render Pressure Active ───────────────────────────────────────────────
+  if (phase === 3 && !isPressureComplete) {
+    return (
+      <PatternDrillPressureTest
+        context={context}
+        onExit={onExit}
+        onComplete={(attempts) => {
+          setPressureAttempts(attempts);
+          setIsPressureComplete(true);
+        }}
+      />
+    );
+  }
 
   // ── Render completion screen ─────────────────────────────────────────────
 

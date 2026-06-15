@@ -972,7 +972,7 @@ test.describe("Pattern Drill UI Wiring", () => {
   });
 
 
-  test("start drill button is enabled after detected result and clicking it starts Phase 2 directly", async ({ page }) => {
+  test("start drill button is enabled after detected result and clicking it starts Phase 3 directly", async ({ page }) => {
     await injectMediaMocks(page);
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
@@ -1002,10 +1002,8 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(startBtn).toBeEnabled();
     await startBtn.click();
 
-    // Directly in Phase 2
-    const phaseIndicator = page.getByTestId("phase-indicator");
-    await expect(phaseIndicator).toContainText("Phase 2");
-    await expect(page.getByTestId("phase3-deferred-notice")).toBeVisible();
+    // Directly in Phase 3
+    await expect(page.getByText("Phase 3 — Pressure Test")).toBeVisible();
   });
 
   test("skip quick check starts Phase 1 and progresses through exactly two prompts to Phase 2", async ({ page }) => {
@@ -1252,6 +1250,9 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("drill-submit-btn").click();
     await page.getByTestId("drill-next-btn").click();
 
+    // Choice screen: click Finish Session
+    await page.getByTestId("finish-session-btn").click();
+
     // Now complete, should trigger evaluation summary API call once
     await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
     await expect(page.getByTestId("summary-save-status")).toContainText("Saved to your practice history.");
@@ -1328,6 +1329,9 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("drill-submit-btn").click();
     await page.getByTestId("drill-next-btn").click();
 
+    // Choice screen: click Finish Session
+    await page.getByTestId("finish-session-btn").click();
+
     // Now complete, should trigger evaluation summary API call once and show saving failed status
     await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
     await expect(page.getByTestId("summary-save-status")).toContainText("Summary available, but saving failed.");
@@ -1381,10 +1385,403 @@ test.describe("Pattern Drill UI Wiring", () => {
     await page.getByTestId("drill-submit-btn").click();
     await page.getByTestId("drill-next-btn").click();
 
+    // Choice screen: click Finish Session
+    await page.getByTestId("finish-session-btn").click();
+
     // Verify error banner is visible and local fallback summary metrics are rendered
     await expect(page.getByTestId("summary-failed-notice")).toBeVisible();
     await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
     await expect(page.getByTestId("summary-save-status")).toContainText("Summary available, but saving failed.");
     expect(evalSessionCalled).toBe(true);
+  });
+
+  test("direct Phase 3 does not call evaluate-session", async ({ page }) => {
+    let evalSessionCalled = false;
+    let pressureTurnCalls = 0;
+
+    await injectMediaMocks(page);
+
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
+      });
+    });
+
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...MOCK_BRIEF_RESPONSE,
+          drillEntryConfig: {
+            ...MOCK_BRIEF_RESPONSE.drillEntryConfig,
+            suggestedEntryPhase: 3,
+          }
+        }),
+      });
+    });
+
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "My sentence." }) });
+    });
+
+    await page.route("**/api/pattern-drill/quick-check", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+    });
+
+    await page.route("**/api/pattern-drill/evaluate-session", async (route) => {
+      evalSessionCalled = true;
+      await route.fulfill({ status: 500 });
+    });
+
+    await page.route("**/api/pattern-drill/pressure-turn", async (route) => {
+      pressureTurnCalls++;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          patternDetected: true,
+          usedSteps: ["[claim]", "because", "[reason]"],
+          missingSteps: [],
+          timedOut: false,
+          shortFeedback: "Excellent pattern use!"
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+
+    // Perform quick check spoken flow
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await page.getByTestId("submit-check-btn").click();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
+
+    // Start Drill should directly go to Phase 3 Pressure Test (since entryPhase is 3)
+    await page.getByTestId("start-drill-btn").click();
+
+    // It should render PatternDrillPressureTest intro
+    await expect(page.getByText("Phase 3 — Pressure Test")).toBeVisible();
+    await expect(page.getByText("Ready for Round 1 of 4")).toBeVisible();
+
+    // Run the rounds
+    for (let round = 1; round <= 4; round++) {
+      await page.getByTestId("start-pressure-round-btn").click();
+
+      // Pattern reference should be hidden during active attempt
+      await expect(page.getByTestId("pattern-ref-steps")).not.toBeVisible();
+
+      // Submit input
+      await page.getByTestId("drill-transcript-input").fill(`Attempt for round ${round}`);
+      await page.getByTestId("drill-submit-btn").click();
+
+      // Expect result
+      await expect(page.getByTestId("pressure-feedback-box")).toBeVisible();
+      await expect(page.getByTestId("pressure-feedback-box")).toContainText("Excellent pattern use!");
+
+      // Next
+      await page.getByTestId("pressure-next-btn").click();
+    }
+
+    // Now on Summary screen
+    await expect(page.getByText("Phase 3 — Pressure Summary")).toBeVisible();
+    await expect(page.getByTestId("pressure-local-only-notice")).toContainText("This pressure result is local for now. Saved session metrics will be connected later.");
+    await expect(page.getByTestId("pressure-accuracy-val")).toContainText("100%");
+
+    // Clicking Continue finishes drill
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Final drill summary
+    await expect(page.getByText("Drill Session Complete")).toBeVisible();
+    await expect(page.getByTestId("pressure-accuracy-val")).toContainText("100%");
+
+    // Verify evaluate-session was NOT called
+    expect(evalSessionCalled).toBe(false);
+    expect(pressureTurnCalls).toBe(4);
+  });
+
+  test("Phase 2 completion shows Start Pressure Test / Finish Session choice, and Finish Session saves using evaluate-session", async ({ page }) => {
+    let evalSessionCalls = 0;
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/pattern-drill/drill-turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          credit: "full",
+          missingSteps: [],
+          usedSteps: ["[claim]", "because", "[reason]"],
+          shortFeedback: "Good.",
+        }),
+      });
+    });
+    await page.route("**/api/pattern-drill/evaluate-session", async (route) => {
+      evalSessionCalls++;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          phase1BaselineCompleteness: "complete",
+          phase2Accuracy: 100,
+          fullCreditCount: 2,
+          partialCreditCount: 0,
+          noCreditCount: 0,
+          evaluatedAttemptCount: 2,
+          finalFullCreditStreak: 2,
+          mostMissedSteps: [],
+          simplifiedTopicUsed: false,
+          improvementSignal: "strong",
+          nextSessionRecommendation: "Awesome!",
+          weaknessUpdate: null,
+          phase3PressureAccuracy: null,
+          pressureFailRate: null,
+          saved: true,
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    // Phase 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 1");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("Answer 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Phase 2 Topic 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 3");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Phase 2 Topic 2
+    await page.getByTestId("drill-transcript-input").fill("Answer 4");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Choice screen should be visible
+    await expect(page.getByText("Choose Your Next Step")).toBeVisible();
+    await expect(page.getByTestId("start-pressure-btn")).toBeVisible();
+    await expect(page.getByTestId("finish-session-btn")).toBeVisible();
+
+    // Verify evaluate-session was NOT called yet
+    expect(evalSessionCalls).toBe(0);
+
+    // Click Finish Session
+    await page.getByTestId("finish-session-btn").click();
+
+    // Session Complete Summary Screen should show normal summary
+    await expect(page.getByText("Drill Session Complete")).toBeVisible();
+    await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
+    await expect(page.getByTestId("summary-save-status")).toContainText("Saved to your practice history.");
+    expect(evalSessionCalls).toBe(1);
+  });
+
+  test("Phase 3 complete after Phase 1/2 shows local pressure summary plus saved Phase 1/2 summary", async ({ page }) => {
+    let evalSessionCalls = 0;
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_WEAKNESS_FOUND) });
+    });
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_BRIEF_RESPONSE) });
+    });
+    await page.route("**/api/pattern-drill/drill-turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          credit: "full",
+          missingSteps: [],
+          usedSteps: ["[claim]", "because", "[reason]"],
+          shortFeedback: "Good.",
+        }),
+      });
+    });
+    await page.route("**/api/pattern-drill/evaluate-session", async (route) => {
+      evalSessionCalls++;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          phase1BaselineCompleteness: "complete",
+          phase2Accuracy: 100,
+          fullCreditCount: 2,
+          partialCreditCount: 0,
+          noCreditCount: 0,
+          evaluatedAttemptCount: 2,
+          finalFullCreditStreak: 2,
+          mostMissedSteps: [],
+          simplifiedTopicUsed: false,
+          improvementSignal: "strong",
+          nextSessionRecommendation: "Awesome!",
+          weaknessUpdate: null,
+          phase3PressureAccuracy: null,
+          pressureFailRate: null,
+          saved: true,
+        }),
+      });
+    });
+    await page.route("**/api/pattern-drill/pressure-turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          patternDetected: true,
+          usedSteps: ["[claim]", "because", "[reason]"],
+          missingSteps: [],
+          timedOut: false,
+          shortFeedback: "Excellent pattern use!"
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("skip-check-btn-idle").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    // Phase 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 1");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("Answer 2");
+    await page.getByTestId("drill-submit-btn").click();
+
+    // Phase 2 Topic 1
+    await page.getByTestId("drill-transcript-input").fill("Answer 3");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Phase 2 Topic 2
+    await page.getByTestId("drill-transcript-input").fill("Answer 4");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("drill-next-btn").click();
+
+    // Click Start Pressure Test
+    await page.getByTestId("start-pressure-btn").click();
+
+    // Under-the-hood, evaluate-session (to save Phase 1/2) is triggered
+    expect(evalSessionCalls).toBe(1);
+
+    // Active Phase 3 Pressure Test
+    await expect(page.getByText("Phase 3 — Pressure Test")).toBeVisible();
+
+    // Complete 4 rounds
+    for (let round = 1; round <= 4; round++) {
+      await page.getByTestId("start-pressure-round-btn").click();
+      await page.getByTestId("drill-transcript-input").fill(`Attempt round ${round}`);
+      await page.getByTestId("drill-submit-btn").click();
+      await page.getByTestId("pressure-next-btn").click();
+    }
+
+    // Now on Summary screen
+    await expect(page.getByText("Phase 3 — Pressure Summary")).toBeVisible();
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Final drill summary showing Phase 3 local results + saved Phase 1/2 metrics
+    await expect(page.getByText("Drill Session Complete")).toBeVisible();
+    await expect(page.getByText("Phase 3 — Pressure Test Results")).toBeVisible();
+    await expect(page.getByTestId("pressure-local-only-notice")).toContainText("This pressure result is local for now. Saved session metrics will be connected later.");
+    await expect(page.getByTestId("pressure-accuracy-val")).toContainText("100%");
+
+    await expect(page.getByText("Phase 1 & 2 Saved Session Metrics")).toBeVisible();
+    await expect(page.getByTestId("summary-accuracy")).toContainText("100%");
+    await expect(page.getByTestId("summary-save-status")).toContainText("Saved to your practice history.");
+  });
+
+  test("no localStorage or sessionStorage writes occur during Phase 3 pressure flow", async ({ page }) => {
+    await injectMediaMocks(page);
+
+    await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_WEAKNESS_FOUND),
+      });
+    });
+
+    await page.route("**/api/pattern-brief/generate", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...MOCK_BRIEF_RESPONSE,
+          drillEntryConfig: {
+            ...MOCK_BRIEF_RESPONSE.drillEntryConfig,
+            suggestedEntryPhase: 3,
+          }
+        }),
+      });
+    });
+
+    await page.route("**/api/podchat/stt", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ transcript: "My sentence." }) });
+    });
+
+    await page.route("**/api/pattern-drill/quick-check", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ result: "detected", entryPhase: 3 }) });
+    });
+
+    await page.route("**/api/pattern-drill/pressure-turn", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          patternDetected: true,
+          usedSteps: ["[claim]", "because", "[reason]"],
+          missingSteps: [],
+          timedOut: false,
+          shortFeedback: "Excellent pattern use!"
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByTestId("generate-brief-btn").click();
+    await expect(page.getByTestId("brief-generated")).toBeVisible();
+
+    // Perform quick check spoken flow
+    await page.getByTestId("start-quick-check-btn").click();
+    await page.getByTestId("start-speaking-btn").click();
+    await page.getByTestId("stop-recording-btn").click();
+    await expect(page.getByTestId("quick-check-transcript")).toBeVisible({ timeout: 5000 });
+    await page.getByTestId("submit-check-btn").click();
+    await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
+
+    await page.getByTestId("start-drill-btn").click();
+
+    // Round 1
+    await page.getByTestId("start-pressure-round-btn").click();
+    await page.getByTestId("drill-transcript-input").fill("Testing pressure storage");
+    await page.getByTestId("drill-submit-btn").click();
+    await page.getByTestId("pressure-next-btn").click();
+
+    const patternDrillKeys = await page.evaluate(() => {
+      const keywords = ["transcript", "brief", "drill", "audio", "quick", "pattern", "pressure"];
+      const localKeys = Object.keys(window.localStorage).filter((k) =>
+        keywords.some((kw) => k.toLowerCase().includes(kw))
+      );
+      const sessionKeys = Object.keys(window.sessionStorage).filter((k) =>
+        keywords.some((kw) => k.toLowerCase().includes(kw))
+      );
+      return [...localKeys, ...sessionKeys];
+    });
+    expect(patternDrillKeys).toHaveLength(0);
   });
 });
