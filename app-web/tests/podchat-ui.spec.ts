@@ -48,7 +48,6 @@ async function submitOnePodchatTurn(page: Page) {
   await page.getByTestId("podchat-start-recording").click();
   await page.getByTestId("podchat-stop-recording").click();
   await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
-  await page.getByTestId("podchat-submit-turn").click();
 }
 
 test.describe("Podchat Phase 1 connected UI", () => {
@@ -448,9 +447,6 @@ test.describe("Podchat Phase 1 connected UI", () => {
     const editableCount = await page.locator("textarea, input[type='text']").count();
     expect(editableCount).toBe(0);
 
-    // Submit Turn
-    await page.getByTestId("podchat-submit-turn").click();
-
     // Wait for text to render immediately (text-first)
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("This is a mocked host response. What is your next point?");
 
@@ -495,7 +491,6 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByTestId("podchat-start-recording").click();
     await page.getByTestId("podchat-stop-recording").click();
     await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
-    await page.getByTestId("podchat-submit-turn").click();
 
     await expect.poll(() => ttsPayloads.length).toBe(2);
 
@@ -573,7 +568,6 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByTestId("podchat-start-recording").click();
     await page.getByTestId("podchat-stop-recording").click();
     await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
-    await page.getByTestId("podchat-submit-turn").click();
     await page.getByRole("button", { name: "End Session" }).click();
 
     await expect(page.getByTestId("podchat-evaluation-success")).toBeVisible();
@@ -613,13 +607,12 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByTestId("podchat-start-recording").click();
     await page.getByTestId("podchat-stop-recording").click();
     await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
-    await page.getByTestId("podchat-submit-turn").click();
 
     // Confirm text is still rendered
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Immediate text here. Can you read this?");
 
     // Confirm quiet fallback warning is displayed
-    await expect(page.getByTestId("podchat-tts-error")).toContainText("Voice unavailable. Continuing with text.");
+    await expect(page.getByTestId("podchat-tts-error")).toContainText("Voice playback unavailable. Host text will still appear.");
 
     // Confirm we can still proceed to record another turn
     await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
@@ -646,7 +639,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByRole("button", { name: "Start a Podchat" }).click();
     await page.getByTestId("podchat-start-recording").click();
     await page.getByTestId("podchat-stop-recording").click();
-    await page.getByTestId("podchat-submit-turn").click();
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
 
     // Verify audio is playing
     await expect(page.getByTestId("podchat-status")).toContainText("Host speaking...");
@@ -696,7 +689,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByRole("button", { name: "Start a Podchat" }).click();
     await page.getByTestId("podchat-start-recording").click();
     await page.getByTestId("podchat-stop-recording").click();
-    await page.getByTestId("podchat-submit-turn").click();
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
 
     await expect(page.getByTestId("podchat-turn-error")).toContainText("Provider turn error simulated.");
     await expect(page.getByRole("button", { name: "Retry Turn" })).toBeVisible();
@@ -813,7 +806,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     // Confirm safe non-blocking error message
     await expect(page.getByTestId("podchat-turn-error")).toContainText(
-      "Microphone access was denied. Please allow microphone access and try again."
+      "Microphone unavailable. Please check permission and try again."
     );
 
     // Recording state resets to idle and we can retry
@@ -880,8 +873,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
       )
       .toBe(1);
 
-    // Submit Turn to have at least one learner turn
-    await page.getByTestId("podchat-submit-turn").click();
+    // Wait for the STT to complete and turn to be auto-submitted
+    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
 
     // Start recording again (active media stream)
     await page.getByTestId("podchat-start-recording").click();
@@ -937,5 +930,131 @@ test.describe("Podchat Phase 1 connected UI", () => {
     const storageKeys = await page.evaluate(() => JSON.stringify(Object.keys(localStorage)));
     expect(storageKeys).not.toContain("audio");
     expect(storageKeys).not.toContain("blob:");
+  });
+
+  test("Timer does not count down while recordingState is idle before first recording", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await expect(page.getByTestId("podchat-time-left")).toContainText("Time left: 05:00");
+    await page.waitForTimeout(1500);
+    await expect(page.getByTestId("podchat-time-left")).toContainText("Time left: 05:00");
+  });
+
+  test("Timer pauses after STT failure/timeout and resumes when user records again", async ({ page }) => {
+    await page.route("**/api/podchat/stt", async (route: Route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Speech transcription failed. Please record again." })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.waitForTimeout(1100);
+    await page.getByTestId("podchat-stop-recording").click();
+    await expect(page.getByTestId("podchat-turn-error")).toContainText("Speech transcription failed. Please record again.");
+
+    const timeVal = await page.getByTestId("podchat-time-left").textContent();
+    await page.waitForTimeout(1500);
+    const timeVal2 = await page.getByTestId("podchat-time-left").textContent();
+    expect(timeVal).toBe(timeVal2);
+  });
+
+  test("Timer does not drain while microphone is unavailable", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>).__PODCHAT_MIC_DENY__ = true;
+    });
+
+    await page.getByTestId("podchat-start-recording").click();
+    await expect(page.getByTestId("podchat-turn-error")).toContainText("Microphone unavailable.");
+    await page.waitForTimeout(1500);
+    await expect(page.getByTestId("podchat-time-left")).toContainText("Time left: 05:00");
+  });
+
+  test("Learner transcript bubble shows loading indicator and updates on success/failure", async ({ page }) => {
+    let turnResolver: (() => void) | null = null;
+    const turnPromise = new Promise<void>((resolve) => {
+      turnResolver = resolve;
+    });
+
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await turnPromise;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          hostText: "This is a response.",
+          followUpQuestion: "Next question?"
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+
+    await expect(page.getByTestId("podchat-locked-transcript")).toContainText("I think technology changes learning");
+    await expect(page.getByTestId("podchat-submitting-indicator")).toBeVisible();
+
+    if (turnResolver) {
+      (turnResolver as () => void)();
+    }
+    await expect(page.getByTestId("podchat-submitting-indicator")).not.toBeVisible();
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("This is a response. Next question?");
+  });
+
+  test("Turn route failure keeps learner transcript visible and shows error without fallback replies", async ({ page }) => {
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Turn API Error" })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+
+    await expect(page.getByTestId("podchat-locked-transcript")).toContainText("I think technology changes learning");
+    await expect(page.getByTestId("podchat-turn-error")).toBeVisible();
+
+    const textareas = await page.locator("textarea").count();
+    expect(textareas).toBe(0);
+  });
+
+  test("TTS route failure does not block session progression or show text Fallback input", async ({ page }) => {
+    await page.route("**/api/podchat/turn", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ hostText: "Success text.", followUpQuestion: "Progressing?" })
+      });
+    });
+
+    await page.route("**/api/podchat/tts", async (route: Route) => {
+      await route.fulfill({
+        status: 500,
+        body: "TTS Failed"
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await page.getByTestId("podchat-start-recording").click();
+    await page.getByTestId("podchat-stop-recording").click();
+
+    await expect(page.getByTestId("podchat-tts-error")).toContainText("Voice playback unavailable. Host text will still appear.");
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Success text. Progressing?");
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+
+    const textareas = await page.locator("textarea").count();
+    expect(textareas).toBe(0);
   });
 });

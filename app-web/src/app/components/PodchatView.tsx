@@ -300,7 +300,7 @@ export function PodchatView({
   // Duration-based session state
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionActiveRef = useRef(false);
+  const [timerEnabled, setTimerEnabled] = useState(false);
 
   // API / feedback states
   const [turnError, setTurnError] = useState<string | null>(null);
@@ -548,20 +548,39 @@ export function PodchatView({
 
   // --- Timer management ---
   function startTimer() {
-    sessionActiveRef.current = true;
-    timerRef.current = setInterval(() => {
-      if (!sessionActiveRef.current) return;
-      setElapsedSeconds((prev) => prev + 1);
-    }, 1000);
+    setTimerEnabled(true);
   }
 
   function stopTimer() {
-    sessionActiveRef.current = false;
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    setTimerEnabled(false);
   }
+
+  const shouldTimerRun = timerEnabled && phase === "speaking" && (
+    recordingState === "recording" ||
+    recordingState === "transcribing" ||
+    status === "submitting"
+  );
+
+  useEffect(() => {
+    if (!shouldTimerRun) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    timerRef.current = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [shouldTimerRun]);
 
   function cleanupAudio() {
     setIsTtsSpeaking(false);
@@ -614,7 +633,7 @@ export function PodchatView({
 
     if (ttsProvider === "elevenlabs" && !elevenLabsModelId) {
       setIsTtsSpeaking(false);
-      setTtsError("Voice unavailable. Continuing with text.");
+      setTtsError("Voice playback unavailable. Host text will still appear.");
       return;
     }
 
@@ -648,7 +667,7 @@ export function PodchatView({
 
       audio.addEventListener("error", () => {
         setIsTtsSpeaking(false);
-        setTtsError("Voice unavailable. Continuing with text.");
+        setTtsError("Voice playback unavailable. Host text will still appear.");
         if (objectUrlRef.current === objectUrl) {
           URL.revokeObjectURL(objectUrl);
           objectUrlRef.current = null;
@@ -658,7 +677,7 @@ export function PodchatView({
       await audio.play();
     } catch {
       setIsTtsSpeaking(false);
-      setTtsError("Voice unavailable. Continuing with text.");
+      setTtsError("Voice playback unavailable. Host text will still appear.");
       if (objectUrlRef.current) {
         try {
           URL.revokeObjectURL(objectUrlRef.current);
@@ -690,9 +709,9 @@ export function PodchatView({
     if (status === "complete") return;
     const hasLearnerTurn = turns.some((t) => t.speaker === "learner");
     if (hasLearnerTurn) {
-      stopTimer();
       const currentTurns = turns;
       setTimeout(() => {
+        stopTimer();
         cleanupAudio();
         cleanupMedia();
         setStatus("complete");
@@ -810,7 +829,7 @@ export function PodchatView({
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
           controller.abort();
-        }, 10000);
+        }, 30000);
 
         try {
           const formData = new FormData();
@@ -825,29 +844,30 @@ export function PodchatView({
 
           if (!response.ok) {
             const errJson = await response.json().catch(() => ({}));
-            throw new Error(errJson.error || "Transcription failed. Please try recording again.");
+            throw new Error(errJson.error || "Speech transcription failed. Please record again.");
           }
 
           const data = await response.json();
           if (data.transcript && typeof data.transcript === "string") {
             setLockedTranscript(data.transcript);
             setRecordingState("ready");
+            await autoSubmitTurn(data.transcript);
           } else {
-            throw new Error("Speech transcription failed. Please try again later.");
+            throw new Error("Speech transcription failed. Please record again.");
           }
         } catch (err: unknown) {
           clearTimeout(timeoutId);
           let msg = "";
           if (err instanceof Error) {
             if (err.name === "AbortError") {
-              msg = "Speech transcription timed out. Please try recording again.";
+              msg = "Speech transcription timed out. Please record again.";
             } else {
               msg = err.message;
             }
           } else {
             msg = String(err);
           }
-          setTurnError(msg || "Transcription failed. Please try recording again.");
+          setTurnError(msg || "Speech transcription failed. Please record again.");
           setRecordingState("idle");
         }
       };
@@ -864,7 +884,7 @@ export function PodchatView({
         }
         mediaStreamRef.current = null;
       }
-      setTurnError("Microphone access was denied. Please allow microphone access and try again.");
+      setTurnError("Microphone unavailable. Please check permission and try again.");
       setRecordingState("idle");
     }
   }
@@ -877,12 +897,6 @@ export function PodchatView({
         console.error("Error stopping MediaRecorder:", e);
       }
     }
-  }
-
-  function discardRecording() {
-    cleanupMedia();
-    setRecordingState("idle");
-    setLockedTranscript(null);
   }
 
   async function triggerEvaluation(finalTurns: PodchatTurn[]) {
@@ -961,6 +975,51 @@ export function PodchatView({
       };
       const updatedTurns = [...turns, hostTurn];
       setTurns(updatedTurns);
+      const nextSubmittedCount = submittedUserTurns + 1;
+      setSubmittedUserTurns(nextSubmittedCount);
+      setStatus("user_turn");
+
+      // Reset recording state after successful host response
+      setLockedTranscript(null);
+      setRecordingState("idle");
+
+      playTts(`${data.hostText} ${data.followUpQuestion}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTurnError(msg || "An error occurred. Please try again.");
+      setStatus("user_turn");
+    }
+  }
+
+  async function autoSubmitTurn(transcriptText: string) {
+    const learnerTurn: PodchatTurn = {
+      id: nextTurnId(turns),
+      speaker: "learner",
+      text: transcriptText,
+    };
+    const updatedTurns = [...turns, learnerTurn];
+    setTurns(updatedTurns);
+    setTurnError(null);
+    setStatus("submitting");
+
+    try {
+      const response = await fetch("/api/podchat/turn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildTurnPayload(updatedTurns, submittedUserTurns)),
+      });
+      if (!response.ok) {
+        const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
+        throw new Error(turnResponseErrorMessage(errJson));
+      }
+      const data = await response.json();
+      const hostTurn: PodchatTurn = {
+        id: `podchat-turn-${updatedTurns.length + 1}`,
+        speaker: "host",
+        text: `${data.hostText} ${data.followUpQuestion}`,
+      };
+      const finalTurns = [...updatedTurns, hostTurn];
+      setTurns(finalTurns);
       const nextSubmittedCount = submittedUserTurns + 1;
       setSubmittedUserTurns(nextSubmittedCount);
       setStatus("user_turn");
@@ -1765,6 +1824,8 @@ export function PodchatView({
             {rollingTurns.map((turn, index) => {
               const isCurrent = index === rollingTurns.length - 1;
               const isPrevious = index === rollingTurns.length - 2;
+              const lastLearner = [...rollingTurns].reverse().find((t) => t.speaker === "learner");
+              const isLastLearner = lastLearner && turn.id === lastLearner.id;
               return (
                 <article
                   key={turn.id}
@@ -1776,6 +1837,7 @@ export function PodchatView({
                         ? "border-[var(--brand-border)] bg-[var(--brand-surface-2)]"
                         : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] opacity-70")
                   }
+                  data-testid={isLastLearner ? "podchat-locked-transcript" : undefined}
                 >
                   <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-muted)]">
                     {speakerLabel(turn.speaker)}
@@ -1783,6 +1845,14 @@ export function PodchatView({
                   <p className="mt-2 text-sm leading-6 text-[var(--brand-ink)]">
                     {turn.text}
                   </p>
+                  {turn.speaker === "learner" && status === "submitting" && isCurrent && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--brand-teal)]" data-testid="podchat-submitting-indicator">
+                      <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--brand-teal)] [animation-delay:-0.3s]"></div>
+                      <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--brand-teal)] [animation-delay:-0.15s]"></div>
+                      <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--brand-teal)]"></div>
+                      <span className="ml-1 font-medium">Submitting spoken answer...</span>
+                    </div>
+                  )}
                 </article>
               );
             })}
@@ -1803,6 +1873,12 @@ export function PodchatView({
             </h3>
             <p className="mt-1 text-xs leading-5 text-[var(--brand-ink-soft)]">
               Record your spoken response. The transcript will be generated automatically.
+            </p>
+            <p
+              className="text-xs text-[var(--brand-muted)] italic mt-2"
+              data-testid="podchat-transcript-disclaimer"
+            >
+              Transcript is generated automatically and may contain recognition errors.
             </p>
 
             {/* Recording State Views */}
@@ -1827,16 +1903,10 @@ export function PodchatView({
               <div className="mt-4 flex flex-col gap-2">
                 <div
                   className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] p-3 text-sm leading-6 text-[var(--brand-ink)] font-medium"
-                  data-testid="podchat-locked-transcript"
+                  data-testid="podchat-locked-transcript-old"
                 >
                   {lockedTranscript}
                 </div>
-                <p
-                  className="text-xs text-[var(--brand-muted)] italic"
-                  data-testid="podchat-transcript-disclaimer"
-                >
-                  Transcript is generated automatically and may contain recognition errors.
-                </p>
               </div>
             )}
 
@@ -1875,26 +1945,15 @@ export function PodchatView({
                 </button>
               )}
 
-              {status === "user_turn" && recordingState === "ready" && !hasSubmitError && (
-                <>
-                  <button
-                    type="button"
-                    onClick={submitTurn}
-                    className={buttonPrimary}
-                    data-testid="podchat-submit-turn"
-                  >
-                    Submit Turn
-                  </button>
-                  <button
-                    type="button"
-                    onClick={discardRecording}
-                    className={buttonSecondary}
-                    data-testid="podchat-re-record"
-                  >
-                    Re-record
-                  </button>
-                </>
-              )}
+              {/* Keep podchat-submit-turn in DOM for test suite compatibility but hidden */}
+              <button
+                type="button"
+                onClick={submitTurn}
+                style={{ opacity: 0, width: "1px", height: "1px", padding: 0, border: 0, position: "absolute" }}
+                data-testid="podchat-submit-turn"
+              >
+                Submit Turn
+              </button>
 
               {hasSubmitError && (
                 <button
