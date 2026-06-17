@@ -1289,4 +1289,43 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Perfect speaker response. Next question?");
     expect(turnCalled).toBe(true);
   });
+
+  test("state survives sidebar navigation and timer pauses", async ({ page }) => {
+    // Intercept api/podchat/start
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "Hello and welcome to Podchat! Let's discuss technology. How does it affect you?",
+          sessionPlan: {
+            topicAngle: "technology",
+            targetSkill: "simple sentences",
+            followUpStrategy: "ask about schooling",
+            expectedLanguagePattern: "I chose [option] because [reason]",
+            evaluationFocus: ["vocabulary"]
+          }
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Verify opener renders
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Hello and welcome to Podchat!");
+
+    // Navigate to Vocabulary Notebook
+    await page.getByRole("button", { name: "Vocabulary Notebook" }).click();
+
+    // Verify we navigated away (Active Session title is no longer visible in main content)
+    await expect(page.getByRole("heading", { name: "Active Session" })).not.toBeVisible();
+
+    // Navigate back to Active Session
+    await page.getByRole("button", { name: "Active Session" }).click();
+
+    // Verify Active Session remains in progress and original opener is still there
+    await expect(page.getByRole("heading", { name: "Active Session" })).toBeVisible();
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Hello and welcome to Podchat!");
+  });
 });

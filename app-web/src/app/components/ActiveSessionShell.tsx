@@ -4,8 +4,9 @@ import { PatternDrillPrototype } from "./PatternDrillPrototype";
 
 type ActiveSessionMode = "podchat" | "patternDrill";
 
-export function ActiveSessionShell(props: PodchatViewProps) {
+export function ActiveSessionShell(props: PodchatViewProps & { isActiveView?: boolean }) {
   const [mode, setMode] = useState<ActiveSessionMode>("podchat");
+  const { isActiveView = true, ...podchatProps } = props;
 
   return (
     <div className="flex flex-col gap-4">
@@ -49,7 +50,7 @@ export function ActiveSessionShell(props: PodchatViewProps) {
       {/* Content Area */}
       <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm flex flex-col">
         {mode === "podchat" ? (
-          <PodchatView {...props} />
+          <PodchatView {...podchatProps} isActiveView={isActiveView} />
         ) : (
           <PatternDrillPrototype onExit={() => setMode("podchat")} />
         )}

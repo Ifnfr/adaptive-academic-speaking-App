@@ -2512,7 +2512,10 @@ export default function Home() {
           )}
 
           {/* ===================== Active Session view ===================== */}
-          {view === "active" && (
+          <div
+            className={view === "active" ? "block" : "hidden"}
+            aria-hidden={view !== "active"}
+          >
             <ActiveSessionShell
               key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : pendingCommonplaceMapContextRef ? "commonplace-map" : "generic"}`}
               sessionLevel={level}
@@ -2535,8 +2538,9 @@ export default function Home() {
               }}
               ttsProvider={ttsProvider}
               elevenLabsModelId={elevenLabsModel}
+              isActiveView={view === "active"}
             />
-          )}
+          </div>
 
           {/* ===================== Vocabulary Notebook view ===================== */}
           {view === "vocabulary" && (

@@ -269,6 +269,7 @@ export interface PodchatViewProps {
   onClearCommonplaceMapContext?: () => void;
   ttsProvider?: "polly" | "elevenlabs";
   elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
+  isActiveView?: boolean;
 }
 
 export function PodchatView({
@@ -286,6 +287,7 @@ export function PodchatView({
   onClearCommonplaceMapContext,
   ttsProvider = "polly",
   elevenLabsModelId = "",
+  isActiveView = true,
 }: PodchatViewProps) {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
@@ -564,7 +566,7 @@ export function PodchatView({
     setTimerEnabled(false);
   }
 
-  const shouldTimerRun = timerEnabled && phase === "speaking" && (
+  const shouldTimerRun = isActiveView && timerEnabled && phase === "speaking" && (
     recordingState === "recording" ||
     recordingState === "transcribing" ||
     status === "submitting"
@@ -590,6 +592,19 @@ export function PodchatView({
       }
     };
   }, [shouldTimerRun]);
+
+  // Handle cleanup when navigating away (isActiveView changes to false)
+  useEffect(() => {
+    if (!isActiveView) {
+      cleanupAudio();
+      cleanupMedia();
+      if (recordingState === "recording" || recordingState === "transcribing") {
+        setTimeout(() => {
+          setRecordingState("idle");
+        }, 0);
+      }
+    }
+  }, [isActiveView, recordingState]);
 
   function cleanupAudio() {
     setIsTtsSpeaking(false);
