@@ -226,6 +226,21 @@ test.describe("Podchat Phase 1 connected UI", () => {
       });
     });
 
+    // Default mock for Podchat start endpoint
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "Welcome to Podchat! Let's discuss technology. How do you think technology changes learning?",
+          sessionPlan: {
+            topicAngle: "how tech impacts learning",
+            targetSkill: "providing reasons/examples",
+            followUpStrategy: "ask about details or downsides"
+          }
+        })
+      });
+    });
   });
 
   test("setup selected topic and difficulty use strong readable accent styling", async ({ page }) => {
@@ -411,11 +426,14 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByRole("button", { name: "Start a Podchat" }).click();
     await expect(page.getByTestId("podchat-speaking")).toBeVisible();
 
-    // 3. Confirm no TTS is called for setup opener text
-    expect(ttsPayloads.length).toBe(0);
-
-    // Verify Start Recording button is initially visible
+    // Wait for opener loading state to disappear and recording button to become visible
     await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+
+    // 3. Confirm TTS is called for the generated opener text (length should be 1)
+    await expect.poll(() => ttsPayloads.length).toBe(1);
+    expect(ttsPayloads[0]).toMatchObject({
+      text: "Welcome to Podchat! Let's discuss technology. How do you think technology changes learning?"
+    });
 
     // Verify microphone was not requested on setup or initial speaking screen
     let micRequested = await page.evaluate(
@@ -451,8 +469,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("This is a mocked host response. What is your next point?");
 
     // Check TTS payload and invocation
-    await expect.poll(() => ttsPayloads.length).toBe(1);
-    expect(ttsPayloads[0]).toMatchObject({
+    await expect.poll(() => ttsPayloads.length).toBe(2);
+    expect(ttsPayloads[1]).toMatchObject({
       text: "This is a mocked host response. What is your next point?"
     });
 
@@ -469,7 +487,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     // Confirm audio playback was attempted
     const playCalls = await page.evaluate(() => (window as unknown as { __AUDIO_PLAY_CALLED__: string[] }).__AUDIO_PLAY_CALLED__);
-    expect(playCalls.length).toBe(1);
+    expect(playCalls.length).toBe(2);
     expect(playCalls[0]).toContain("blob:");
 
     // Confirm UI shows host speaking status
@@ -492,7 +510,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByTestId("podchat-stop-recording").click();
     await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
 
-    await expect.poll(() => ttsPayloads.length).toBe(2);
+    await expect.poll(() => ttsPayloads.length).toBe(3);
 
     // 6. Starting evaluation does NOT trigger TTS
     await page.getByRole("button", { name: "End Session" }).click();
@@ -514,7 +532,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(page.getByText("Excellent", { exact: true })).toBeVisible();
 
     // TTS should not be called again
-    expect(ttsPayloads.length).toBe(2);
+    expect(ttsPayloads.length).toBe(3);
 
     // 7. Verify no privacy leaks
     const storageSnapshot = await page.evaluate(() => JSON.stringify(localStorage));
@@ -697,7 +715,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.getByRole("button", { name: "Retry Turn" }).click();
     await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Turn recovered. Are we good?");
     const playCalls = await page.evaluate(() => (window as unknown as { __AUDIO_PLAY_CALLED__: string[] }).__AUDIO_PLAY_CALLED__);
-    expect(playCalls.length).toBe(1);
+    expect(playCalls.length).toBe(2);
   });
 
   test("turn provider unauthorized category shows safe API key message", async ({ page }) => {
@@ -1056,5 +1074,133 @@ test.describe("Podchat Phase 1 connected UI", () => {
 
     const textareas = await page.locator("textarea").count();
     expect(textareas).toBe(0);
+  });
+
+  test("Starting Podchat shows Preparing your speaking session loading indicator", async ({ page }) => {
+    let resolveStart: (() => void) | null = null;
+    const startPromise = new Promise<void>((resolve) => { resolveStart = resolve; });
+
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      await startPromise;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "This is a custom generated opener?",
+          sessionPlan: { topicAngle: "angle", targetSkill: "skill", followUpStrategy: "strategy" }
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Verify loading screen is visible
+    await expect(page.getByTestId("podchat-loading-opener")).toBeVisible();
+    await expect(page.getByTestId("podchat-loading-opener")).toContainText("Preparing your speaking session...");
+
+    if (resolveStart) (resolveStart as () => void)();
+    await expect(page.getByTestId("podchat-loading-opener")).not.toBeVisible();
+  });
+
+  test("api/podchat/start is called exactly once per session start", async ({ page }) => {
+    let callCount = 0;
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      callCount++;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "Exactly once opener question?",
+          sessionPlan: { topicAngle: "angle", targetSkill: "skill", followUpStrategy: "strategy" }
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+    expect(callCount).toBe(1);
+  });
+
+  test("Generated opener appears as first AI host message and timer does not run before preparation resolves", async ({ page }) => {
+    let resolveStart: (() => void) | null = null;
+    const startPromise = new Promise<void>((resolve) => { resolveStart = resolve; });
+
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      await startPromise;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "First host message question?",
+          sessionPlan: { topicAngle: "angle", targetSkill: "skill", followUpStrategy: "strategy" }
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Check time left did not start ticking / is not draining (timer does not count down while loading)
+    const initialTimeText = await page.getByTestId("podchat-time-left").textContent();
+    await page.waitForTimeout(2000);
+    const afterTimeText = await page.getByTestId("podchat-time-left").textContent();
+    expect(initialTimeText).toBe(afterTimeText);
+
+    if (resolveStart) (resolveStart as () => void)();
+
+    // Opener should appear
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("First host message question?");
+  });
+
+  test("Recording controls are unavailable until opener is ready", async ({ page }) => {
+    let resolveStart: (() => void) | null = null;
+    const startPromise = new Promise<void>((resolve) => { resolveStart = resolve; });
+
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      await startPromise;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "Ready question?",
+          sessionPlan: { topicAngle: "angle", targetSkill: "skill", followUpStrategy: "strategy" }
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Record button must not be visible/active during loading
+    await expect(page.getByTestId("podchat-start-recording")).not.toBeVisible();
+
+    if (resolveStart) (resolveStart as () => void)();
+
+    // Becomes visible when ready
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
+  });
+
+  test("If api/podchat/start fails, deterministic fallback opener is shown without leaking provider details", async ({ page }) => {
+    await page.route("**/api/podchat/start", async (route: Route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Provider request failed. Please try again later.",
+          providerError: { provider: "deepseek", category: "invalid_provider_response", status: 502 }
+        })
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+
+    // Deterministic fallback should render (e.g. from getPodchatOpener)
+    await expect(page.getByTestId("podchat-rolling-transcript")).toContainText("Welcome to Podchat.");
+    // No error or provider leak should be visible to the user as main experience (we warn in console/fallback safely)
+    await expect(page.getByTestId("podchat-turn-error")).not.toBeVisible();
+    await expect(page.getByTestId("podchat-start-recording")).toBeVisible();
   });
 });

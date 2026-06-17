@@ -293,6 +293,15 @@ export function PodchatView({
     useState<PodchatDifficulty>("Intermediate");
   const [status, setStatus] = useState<PodchatStatus>("host_turn");
   const [turns, setTurns] = useState<PodchatTurn[]>([]);
+  const [openerLoading, setOpenerLoading] = useState(false);
+  const [sessionPlan, setSessionPlan] = useState<{ topicAngle: string; targetSkill: string; followUpStrategy: string } | null>(null);
+
+  useEffect(() => {
+    if (sessionPlan) {
+      console.log("AI Session Plan angle:", sessionPlan.topicAngle, "skill:", sessionPlan.targetSkill);
+    }
+  }, [sessionPlan]);
+
   const [submittedUserTurns, setSubmittedUserTurns] = useState(0);
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [lockedTranscript, setLockedTranscript] = useState<string | null>(null);
@@ -726,25 +735,86 @@ export function PodchatView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTimeExpired, phase, status]);
 
-  function startPodchat() {
+  async function startPodchat() {
     cleanupAudio();
     cleanupMedia();
-    const opener: PodchatTurn = {
-      id: "podchat-turn-1",
-      speaker: "host",
-      text: commonplaceMapOpener ?? commonplaceOpener ?? getPodchatOpener(topic, difficulty),
-    };
-    setTurns([opener]);
     setSubmittedUserTurns(0);
     setElapsedSeconds(0);
-    setStatus("user_turn");
-    setPhase("speaking");
     setTurnError(null);
     setEvalError(null);
     setEvalData(null);
     setRecordingState("idle");
     setLockedTranscript(null);
-    startTimer();
+    setSessionPlan(null);
+
+    const fallbackText = commonplaceMapOpener ?? commonplaceOpener ?? getPodchatOpener(topic, difficulty);
+    const usePredefined = Boolean(commonplaceMapOpener || commonplaceOpener);
+
+    if (usePredefined) {
+      const opener: PodchatTurn = {
+        id: "podchat-turn-1",
+        speaker: "host",
+        text: fallbackText,
+      };
+      setTurns([opener]);
+      setStatus("user_turn");
+      setPhase("speaking");
+      startTimer();
+      playTts(fallbackText);
+    } else {
+      const dummyOpener: PodchatTurn = {
+        id: "podchat-turn-1",
+        speaker: "host",
+        text: "Preparing your speaking session...",
+      };
+      setTurns([dummyOpener]);
+      setStatus("host_turn");
+      setPhase("speaking");
+      setOpenerLoading(true);
+
+      try {
+        const res = await fetch("/api/podchat/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ topic, difficulty }),
+        });
+
+        if (!res.ok) {
+          const errText = await res.json().catch(() => ({}));
+          throw new Error(errText.error || "Failed to generate opener.");
+        }
+
+        const data = await res.json();
+        if (data.opener && typeof data.opener === "string" && data.sessionPlan) {
+          const finalOpener: PodchatTurn = {
+            id: "podchat-turn-1",
+            speaker: "host",
+            text: data.opener,
+          };
+          setTurns([finalOpener]);
+          setSessionPlan(data.sessionPlan);
+          setOpenerLoading(false);
+          setStatus("user_turn");
+          startTimer();
+          playTts(data.opener);
+        } else {
+          throw new Error("Invalid response format.");
+        }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn("Opener generation failed, falling back to static opener:", errMsg);
+        const finalOpener: PodchatTurn = {
+          id: "podchat-turn-1",
+          speaker: "host",
+          text: fallbackText,
+        };
+        setTurns([finalOpener]);
+        setOpenerLoading(false);
+        setStatus("user_turn");
+        startTimer();
+        playTts(fallbackText);
+      }
+    }
   }
 
   function resetPodchat() {
@@ -1865,6 +1935,13 @@ export function PodchatView({
                 <span className="text-xs text-[var(--brand-muted)]">Host is thinking...</span>
               </div>
             )}
+
+            {openerLoading && (
+              <div className="app-message app-message-info flex items-center gap-2" data-testid="podchat-loading-opener">
+                <div className="animate-spin rounded-full h-3 w-3 border-2 border-[var(--brand-teal)] border-t-transparent"></div>
+                <span className="text-xs text-[var(--brand-muted)] font-medium">Preparing your speaking session...</span>
+              </div>
+            )}
           </div>
 
           <div className="app-panel-muted mt-6 p-4">
@@ -1923,7 +2000,7 @@ export function PodchatView({
 
             {/* Action Buttons */}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              {status === "user_turn" && recordingState === "idle" && !hasSubmitError && (
+              {status === "user_turn" && recordingState === "idle" && !hasSubmitError && !openerLoading && (
                 <button
                   type="button"
                   onClick={startRecording}
