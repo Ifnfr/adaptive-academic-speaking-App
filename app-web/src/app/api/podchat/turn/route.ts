@@ -28,6 +28,13 @@ type PodchatTurnRequest = {
   remainingSeconds: number;
   turns: PodchatTurn[];
   articleContext?: PodchatArticleContext;
+  sessionPlan?: {
+    topicAngle: string;
+    targetSkill: string;
+    followUpStrategy: string;
+    expectedLanguagePattern: string;
+    evaluationFocus: string[];
+  };
 };
 
 type ProviderErrorCategory =
@@ -219,6 +226,44 @@ function validateArticleContext(
     },
   };
 }
+function validateSessionPlan(plan: unknown): { valid: true; value: { topicAngle: string; targetSkill: string; followUpStrategy: string; expectedLanguagePattern: string; evaluationFocus: string[] } } | { valid: false; error: string } {
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) {
+    return { valid: false, error: "sessionPlan must be an object." };
+  }
+  const p = plan as Record<string, unknown>;
+  const { topicAngle, targetSkill, followUpStrategy, expectedLanguagePattern, evaluationFocus } = p;
+  if (typeof topicAngle !== "string" || topicAngle.trim().length === 0 || topicAngle.length > 200) {
+    return { valid: false, error: "topicAngle is invalid." };
+  }
+  if (typeof targetSkill !== "string" || targetSkill.trim().length === 0 || targetSkill.length > 200) {
+    return { valid: false, error: "targetSkill is invalid." };
+  }
+  if (typeof followUpStrategy !== "string" || followUpStrategy.trim().length === 0 || followUpStrategy.length > 200) {
+    return { valid: false, error: "followUpStrategy is invalid." };
+  }
+  if (typeof expectedLanguagePattern !== "string" || expectedLanguagePattern.trim().length === 0 || expectedLanguagePattern.length > 200) {
+    return { valid: false, error: "expectedLanguagePattern is invalid." };
+  }
+  if (!Array.isArray(evaluationFocus) || evaluationFocus.length < 1 || evaluationFocus.length > 4) {
+    return { valid: false, error: "evaluationFocus must be an array of 1-4 strings." };
+  }
+  for (const item of evaluationFocus) {
+    if (typeof item !== "string" || item.trim().length === 0 || item.length > 150) {
+      return { valid: false, error: "Each evaluationFocus entry must be a non-empty string <=150 chars." };
+    }
+  }
+  return {
+    valid: true,
+    value: {
+      topicAngle: topicAngle.trim(),
+      targetSkill: targetSkill.trim(),
+      followUpStrategy: followUpStrategy.trim(),
+      expectedLanguagePattern: expectedLanguagePattern.trim(),
+      evaluationFocus: evaluationFocus.map((e) => String(e).trim()),
+    },
+  };
+}
+
 
 function validateRequest(
   body: unknown,
@@ -341,6 +386,21 @@ function validateRequest(
     articleContext = valResult.value;
   }
 
+  let sessionPlan: {
+    topicAngle: string;
+    targetSkill: string;
+    followUpStrategy: string;
+    expectedLanguagePattern: string;
+    evaluationFocus: string[];
+  } | undefined;
+  if (b.sessionPlan !== undefined) {
+    const planResult = validateSessionPlan(b.sessionPlan);
+    if (!planResult.valid) {
+      return { valid: false, error: "invalid_request" };
+    }
+    sessionPlan = planResult.value;
+  }
+
   return {
     valid: true,
     request: {
@@ -358,6 +418,7 @@ function validateRequest(
         };
       }),
       articleContext,
+      sessionPlan,
     },
   };
 }
@@ -366,6 +427,13 @@ function buildSystemPrompt(
   topic: string,
   difficulty: string,
   articleContext?: PodchatArticleContext,
+  sessionPlan?: {
+    topicAngle: string;
+    targetSkill: string;
+    followUpStrategy: string;
+    expectedLanguagePattern: string;
+    evaluationFocus: string[];
+  },
 ): string {
   let difficultyGuidance = "";
   if (difficulty === "Beginner") {
@@ -400,9 +468,24 @@ function buildSystemPrompt(
       .join("\n");
   }
 
+  let planGuidance = "";
+  if (sessionPlan) {
+    planGuidance = [
+      "SESSION PLAN GUIDANCE:",
+      `- Topic Angle: ${sessionPlan.topicAngle}`,
+      `- Target Skill: ${sessionPlan.targetSkill}`,
+      `- Follow-Up Strategy: ${sessionPlan.followUpStrategy}`,
+      `- Expected Language Pattern: ${sessionPlan.expectedLanguagePattern}`,
+      `- Evaluation Focus: ${sessionPlan.evaluationFocus.join(", ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   return [
     "You are a friendly British podcast host for a show called Podchat.",
     contextGuidance,
+    planGuidance,
     `The learner's speaking difficulty level is: ${difficulty}`,
     "",
     "ROLE & BEHAVIOR CONSTRAINTS:",
@@ -421,7 +504,7 @@ function buildSystemPrompt(
     "- The JSON object MUST have exactly these keys: \"hostText\", \"followUpQuestion\".",
     "- hostText: 1 to 3 short sentences of conversational host talk reacting to the learner. Must be <= 600 characters.",
     "- followUpQuestion: Exactly one follow-up question. Must contain exactly one question mark ('?') and be <= 240 characters.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function buildUserPrompt(req: PodchatTurnRequest): string {
@@ -718,6 +801,7 @@ export async function POST(request: Request) {
       validatedReq.topic,
       validatedReq.difficulty,
       validatedReq.articleContext,
+      validatedReq.sessionPlan,
     );
     const userPrompt = buildUserPrompt(validatedReq);
 
@@ -744,6 +828,7 @@ export async function POST(request: Request) {
       validatedReq.topic,
       validatedReq.difficulty,
       validatedReq.articleContext,
+      validatedReq.sessionPlan,
     );
     const userPrompt = buildUserPrompt(validatedReq);
 
@@ -771,6 +856,7 @@ export async function POST(request: Request) {
     validatedReq.topic,
     validatedReq.difficulty,
     validatedReq.articleContext,
+    validatedReq.sessionPlan,
   );
   const userPrompt = buildUserPrompt(validatedReq);
 

@@ -835,4 +835,43 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     }));
     expect([200, 401, 502, 503]).toContain(response.status);
   });
+
+  test("accepts valid sessionPlan in turn payload", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "That is a brilliant economic view.",
+      followUpQuestion: "Why did you choose that concept?"
+    }), capture);
+
+    const sessionPlan = {
+      topicAngle: "economic choices",
+      targetSkill: "expressing trade-offs",
+      followUpStrategy: "probe on alternatives",
+      expectedLanguagePattern: "I chose [X] because of [Y]",
+      evaluationFocus: ["vocabulary", "cohesion"]
+    };
+
+    const response = await POST(buildRequest({ sessionPlan }));
+    expect(response.status).toBe(200);
+
+    // Verify prompt injection contains the session plan details
+    expect(capture.body?.system).toContain("SESSION PLAN GUIDANCE:");
+    expect(capture.body?.system).toContain("Topic Angle: economic choices");
+    expect(capture.body?.system).toContain("Target Skill: expressing trade-offs");
+  });
+
+  test("rejects invalid sessionPlan with 400 invalid_request", async () => {
+    const sessionPlan = {
+      topicAngle: "", // Invalid empty string
+      targetSkill: "expressing trade-offs",
+      followUpStrategy: "probe on alternatives",
+      expectedLanguagePattern: "I chose [X] because of [Y]",
+      evaluationFocus: ["vocabulary", "cohesion"]
+    };
+
+    const response = await POST(buildRequest({ sessionPlan }));
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toBe("invalid_request");
+  });
 });

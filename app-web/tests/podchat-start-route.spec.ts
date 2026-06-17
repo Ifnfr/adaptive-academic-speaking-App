@@ -57,11 +57,13 @@ test.describe("POST /api/podchat/start Route Tests", () => {
 
   test("Valid request returns strict opener and sessionPlan", async () => {
     const mockJson = {
-      opener: "Welcome to Podchat! Let's discuss everyday prices. How do they affect your grocery choices?",
+      opener: "Hello and welcome to Podchat! Let's discuss everyday prices. How do they affect your grocery choices?",
       sessionPlan: {
         topicAngle: "everyday grocery choices",
         targetSkill: "providing simple examples",
-        followUpStrategy: "ask about price changes"
+        followUpStrategy: "ask about price changes",
+        expectedLanguagePattern: "I chose [option] because [reason], but I gave up [alternative].",
+        evaluationFocus: ["sentence structure", "vocabulary range"]
       }
     };
     mockDeepSeekResponse(200, JSON.stringify(mockJson));
@@ -172,5 +174,24 @@ test.describe("POST /api/podchat/start Route Tests", () => {
     const data = await response.json();
     expect(data.error).toBe("Provider request failed. Please try again later.");
     expect(data.providerError.provider).toBe("planning"); // abstracted category/role, not deepseek/auth keys
+  });
+
+  test("Opener starting with Welcome to Podchat is rejected with 502", async () => {
+    const mockJson = {
+      opener: "Welcome to Podchat! Let's discuss grocery choices. How do they affect your grocery choices?",
+      sessionPlan: {
+        topicAngle: "everyday grocery choices",
+        targetSkill: "providing simple examples",
+        followUpStrategy: "ask about price changes",
+        expectedLanguagePattern: "I chose [option] because [reason], but I gave up [alternative].",
+        evaluationFocus: ["sentence structure", "vocabulary range"]
+      }
+    };
+    mockDeepSeekResponse(200, JSON.stringify(mockJson));
+
+    const response = await POST(buildRequest({}));
+    expect(response.status).toBe(502);
+    const data = await response.json();
+    expect(data.error).toContain("Provider request failed");
   });
 });

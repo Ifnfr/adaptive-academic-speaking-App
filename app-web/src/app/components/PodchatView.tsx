@@ -294,7 +294,7 @@ export function PodchatView({
   const [status, setStatus] = useState<PodchatStatus>("host_turn");
   const [turns, setTurns] = useState<PodchatTurn[]>([]);
   const [openerLoading, setOpenerLoading] = useState(false);
-  const [sessionPlan, setSessionPlan] = useState<{ topicAngle: string; targetSkill: string; followUpStrategy: string } | null>(null);
+  const [sessionPlan, setSessionPlan] = useState<{ topicAngle: string; targetSkill: string; followUpStrategy: string; expectedLanguagePattern: string; evaluationFocus: string[] } | null>(null);
 
   useEffect(() => {
     if (sessionPlan) {
@@ -1035,6 +1035,7 @@ export function PodchatView({
       turns: currentTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
       ...(articleContext ? { articleContext } : {}),
       ...(commonplaceNoteContext ? { commonplaceContext: commonplaceNoteContext } : {}),
+      ...(sessionPlan ? { sessionPlan } : {}),
     };
   }
 

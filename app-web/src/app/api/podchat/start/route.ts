@@ -10,6 +10,8 @@ type PodchatStartResponse = {
     topicAngle: string;
     targetSkill: string;
     followUpStrategy: string;
+    expectedLanguagePattern: string;
+    evaluationFocus: string[];
   };
 };
 
@@ -54,6 +56,9 @@ function validateStartResponse(text: string): { valid: true; response: PodchatSt
     if (typeof opener !== "string" || opener.trim().length === 0) {
       return { valid: false, error: "opener is missing or empty." };
     }
+    if (opener.trim().toLowerCase().startsWith("welcome to podchat")) {
+      return { valid: false, error: "opener must not start with 'Welcome to Podchat'." };
+    }
     if (opener.length > 280) {
       return { valid: false, error: "opener is too long." };
     }
@@ -69,6 +74,8 @@ function validateStartResponse(text: string): { valid: true; response: PodchatSt
     const topicAngle = plan.topicAngle;
     const targetSkill = plan.targetSkill;
     const followUpStrategy = plan.followUpStrategy;
+    const expectedLanguagePattern = plan.expectedLanguagePattern;
+    const evaluationFocus = plan.evaluationFocus;
 
     if (typeof topicAngle !== "string" || topicAngle.trim().length === 0 || topicAngle.length > 200) {
       return { valid: false, error: "topicAngle is invalid." };
@@ -79,6 +86,17 @@ function validateStartResponse(text: string): { valid: true; response: PodchatSt
     if (typeof followUpStrategy !== "string" || followUpStrategy.trim().length === 0 || followUpStrategy.length > 200) {
       return { valid: false, error: "followUpStrategy is invalid." };
     }
+    if (typeof expectedLanguagePattern !== "string" || expectedLanguagePattern.trim().length === 0 || expectedLanguagePattern.length > 200) {
+      return { valid: false, error: "expectedLanguagePattern is invalid." };
+    }
+    if (!Array.isArray(evaluationFocus) || evaluationFocus.length < 1 || evaluationFocus.length > 4) {
+      return { valid: false, error: "evaluationFocus must be an array of 1-4 strings." };
+    }
+    for (const item of evaluationFocus) {
+      if (typeof item !== "string" || item.trim().length === 0 || item.length > 150) {
+        return { valid: false, error: "Each evaluationFocus entry must be a non-empty string <=150 chars." };
+      }
+    }
 
     return {
       valid: true,
@@ -88,6 +106,8 @@ function validateStartResponse(text: string): { valid: true; response: PodchatSt
           topicAngle: topicAngle.trim(),
           targetSkill: targetSkill.trim(),
           followUpStrategy: followUpStrategy.trim(),
+          expectedLanguagePattern: expectedLanguagePattern.trim(),
+          evaluationFocus: evaluationFocus.map((e: unknown) => String(e).trim()),
         }
       }
     };
