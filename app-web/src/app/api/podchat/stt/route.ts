@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkTranscriptQuality } from "../../../lib/podchat/transcriptQuality";
 
 export const runtime = "nodejs";
 
@@ -87,6 +88,9 @@ export async function POST(request: Request) {
   }
 
   try {
+    const durationMsStr = formData.get("durationMs");
+    const durationMs = durationMsStr ? Number(durationMsStr) : undefined;
+
     const arrayBuffer = await audio.arrayBuffer();
 
     const response = await fetch(
@@ -129,6 +133,21 @@ export async function POST(request: Request) {
     }
 
     const finalTranscript = trimmedTranscript.slice(0, 3000);
+
+    // Apply Quality Guard validation check
+    const metrics = checkTranscriptQuality(finalTranscript, durationMs);
+    if (metrics.isRejected) {
+      console.warn("STT quality guard rejected transcript. Metrics:", {
+        wordCount: metrics.wordCount,
+        uniqueRatio: metrics.uniqueRatio,
+        repeatedTokenRatio: metrics.repeatedTokenRatio,
+        reasonCode: metrics.reasonCode,
+      });
+      return NextResponse.json(
+        { error: "Speech transcript looked unreliable. Please record again.", reasonCode: metrics.reasonCode },
+        { status: 422 }
+      );
+    }
 
     return NextResponse.json(
       { transcript: finalTranscript },

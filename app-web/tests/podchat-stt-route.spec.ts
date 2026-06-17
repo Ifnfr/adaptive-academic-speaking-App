@@ -10,6 +10,7 @@ function buildSttRequest(options: {
   audio?: Blob;
   contentType?: string;
   useRawBody?: string;
+  durationMs?: number;
 }): Request {
   if (options.useRawBody !== undefined) {
     return new Request("http://localhost/api/podchat/stt", {
@@ -23,6 +24,9 @@ function buildSttRequest(options: {
   if (options.audio !== undefined) {
     // WebM type is standard. We pass the blob and standard filename.
     formData.append("audio", options.audio, "speech.webm");
+  }
+  if (options.durationMs !== undefined) {
+    formData.append("durationMs", String(options.durationMs));
   }
 
   return new Request("http://localhost/api/podchat/stt", {
@@ -397,5 +401,73 @@ test.describe("Podchat STT Route", () => {
     const reqPng = buildSttRequest({ audio: pngBlob });
     const resPng = await POST(reqPng);
     expect(resPng.status).toBe(400);
+  });
+
+  test("15. repeated-word transcript returns 422 and safe details without raw transcript", async () => {
+    process.env.DEEPGRAM_API_KEY = "key";
+    mockDeepgramResponse(200, {
+      results: {
+        channels: [{ alternatives: [{ transcript: "immigrants immigrants immigrants immigrants immigrants" }] }]
+      }
+    });
+
+    const audioBlob = new Blob([new Uint8Array([1])], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(422);
+    const data = await response.json();
+    expect(data.error).toBe("Speech transcript looked unreliable. Please record again.");
+    expect(data.reasonCode).toBe("repeated_words");
+    expect(JSON.stringify(data)).not.toContain("immigrants");
+  });
+
+  test("16. phrase-loop transcript returns 422", async () => {
+    process.env.DEEPGRAM_API_KEY = "key";
+    mockDeepgramResponse(200, {
+      results: {
+        channels: [{ alternatives: [{ transcript: "I think that I think that I think that" }] }]
+      }
+    });
+
+    const audioBlob = new Blob([new Uint8Array([1])], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(422);
+    const data = await response.json();
+    expect(data.reasonCode).toBe("ngram_loop");
+  });
+
+  test("17. normal transcript returns 200", async () => {
+    process.env.DEEPGRAM_API_KEY = "key";
+    mockDeepgramResponse(200, {
+      results: {
+        channels: [{ alternatives: [{ transcript: "Learning economics is very important for understanding daily transactions." }] }]
+      }
+    });
+
+    const audioBlob = new Blob([new Uint8Array([1])], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.transcript).toBe("Learning economics is very important for understanding daily transactions.");
+  });
+
+  test("18. impossible speed check rejects and returns 422 if durationMs is too short", async () => {
+    process.env.DEEPGRAM_API_KEY = "key";
+    // 15 words
+    mockDeepgramResponse(200, {
+      results: {
+        channels: [{ alternatives: [{ transcript: "this is a long sentence with many words that is impossible to say quickly" }] }]
+      }
+    });
+
+    const audioBlob = new Blob([new Uint8Array([1])], { type: "audio/webm" });
+    // Say 15 words in 1000ms (1 second) -> speed = 15 words/sec (> 6.5)
+    const response = await POST(buildSttRequest({ audio: audioBlob, durationMs: 1000 }));
+
+    expect(response.status).toBe(422);
+    const data = await response.json();
+    expect(data.reasonCode).toBe("impossible_speed");
   });
 });

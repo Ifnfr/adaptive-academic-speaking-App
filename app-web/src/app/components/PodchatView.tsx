@@ -847,6 +847,8 @@ export function PodchatView({
     setLockedTranscript(null);
     audioChunksRef.current = [];
 
+    const startTime = Date.now();
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -874,6 +876,8 @@ export function PodchatView({
       };
 
       recorder.onstop = async () => {
+        const durationMs = Date.now() - startTime;
+
         if (mediaStreamRef.current) {
           try {
             mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -904,6 +908,7 @@ export function PodchatView({
         try {
           const formData = new FormData();
           formData.append("audio", audioBlob, `speech.${blobMimeType.split("/")[1] || "webm"}`);
+          formData.append("durationMs", String(durationMs));
 
           const response = await fetch("/api/podchat/stt", {
             method: "POST",
@@ -919,6 +924,15 @@ export function PodchatView({
 
           const data = await response.json();
           if (data.transcript && typeof data.transcript === "string") {
+            const { checkTranscriptQuality } = await import("../lib/podchat/transcriptQuality");
+            const metrics = checkTranscriptQuality(data.transcript, durationMs);
+            if (metrics.isRejected) {
+              setLockedTranscript(null);
+              setRecordingState("idle");
+              setTurnError("Speech transcript looked unreliable. Please record again.");
+              return;
+            }
+
             setLockedTranscript(data.transcript);
             setRecordingState("ready");
             await autoSubmitTurn(data.transcript);
