@@ -580,4 +580,128 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(json.state).toBe("existing");
     expect(json.review.reviewId).toBe("weekly-review-1");
   });
+
+  test("GET existing review recomputes live progress from updated source data and does not write to database", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-18T10:00:00.000Z", duration_seconds: 900, elapsed_seconds: null },
+        ],
+      },
+    });
+
+    const handlers = buildHandlers({ supabase });
+    const response = await handlers.GET(getRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.state).toBe("existing");
+    // speaking_minutes target is 15. The sourceRow speaking_minutes is 15.
+    expect(json.review.missions[0].currentValue).toBe(15);
+    expect(json.review.missions[0].status).toBe("completed");
+
+    // Verify no insert queries were run
+    expect(supabase.calls.filter((c) => c.startsWith("insert:")).length).toBe(0);
+  });
+
+  test("POST existing review behaves like GET and recomputes progress without calling provider", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-18T10:00:00.000Z", duration_seconds: 420, elapsed_seconds: null },
+        ],
+      },
+    });
+
+    let providerCalled = false;
+    const handlers = buildHandlers({
+      supabase,
+      provider: async () => {
+        providerCalled = true;
+        return "{}";
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.state).toBe("existing");
+    // speaking_minutes currentValue = 7 minutes (420 / 60)
+    expect(json.review.missions[0].currentValue).toBe(7);
+    expect(json.review.missions[0].status).toBe("in_progress");
+    expect(providerCalled).toBe(false);
+  });
+
+  test("status derives correctly under different values and time boundaries", async () => {
+    // 1. Not started (currentValue = 0)
+    const supabaseNotStarted = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceRows: {},
+    });
+    const handlersNotStarted = createWeeklyMissionRouteHandlers({
+      resolveCurrentUserId: async () => "user-123",
+      getSupabaseClient: () => supabaseNotStarted.client,
+      now: () => new Date("2026-06-18T12:00:00.000Z"), // before weekEnd
+    });
+    const res1 = await handlersNotStarted.GET(getRequest());
+    const json1 = await res1.json();
+    expect(json1.review.missions[0].status).toBe("not_started");
+
+    // 2. In progress (0 < currentValue < targetValue)
+    const supabaseInProgress = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-18T10:00:00.000Z", duration_seconds: 300, elapsed_seconds: null },
+        ],
+      },
+    });
+    const handlersInProgress = createWeeklyMissionRouteHandlers({
+      resolveCurrentUserId: async () => "user-123",
+      getSupabaseClient: () => supabaseInProgress.client,
+      now: () => new Date("2026-06-18T12:00:00.000Z"), // before weekEnd
+    });
+    const res2 = await handlersInProgress.GET(getRequest());
+    const json2 = await res2.json();
+    expect(json2.review.missions[0].status).toBe("in_progress");
+
+    // 3. Completed (currentValue >= targetValue)
+    const supabaseCompleted = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-18T10:00:00.000Z", duration_seconds: 900, elapsed_seconds: null },
+        ],
+      },
+    });
+    const handlersCompleted = createWeeklyMissionRouteHandlers({
+      resolveCurrentUserId: async () => "user-123",
+      getSupabaseClient: () => supabaseCompleted.client,
+      now: () => new Date("2026-06-18T12:00:00.000Z"), // before weekEnd
+    });
+    const res3 = await handlersCompleted.GET(getRequest());
+    const json3 = await res3.json();
+    expect(json3.review.missions[0].status).toBe("completed");
+
+    // 4. Expired (now > weekEnd and currentValue < targetValue)
+    const supabaseExpired = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-18T10:00:00.000Z", duration_seconds: 300, elapsed_seconds: null },
+        ],
+      },
+    });
+    const handlersExpired = createWeeklyMissionRouteHandlers({
+      resolveCurrentUserId: async () => "user-123",
+      getSupabaseClient: () => supabaseExpired.client,
+      now: () => new Date("2026-06-25T12:00:00.000Z"), // after weekEnd (2026-06-21)
+    });
+    const res4 = await handlersExpired.GET(getRequest());
+    const json4 = await res4.json();
+    expect(json4.review.missions[0].status).toBe("expired");
+  });
 });

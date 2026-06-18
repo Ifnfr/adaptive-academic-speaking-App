@@ -447,4 +447,54 @@ test.describe("Supabase weekly mission review adapter", () => {
       expect(source).not.toContain(forbidden);
     }
   });
+
+  test("speaking_minutes calculation prefers elapsed_seconds over duration_seconds and floors sum", async () => {
+    const mock = createSnapshotClient({
+      podchat_sessions: {
+        data: [
+          { id: "pod-1", created_at: "2026-06-15T10:00:00.000Z", duration_seconds: 600, elapsed_seconds: 540 }, // prefers 540
+          { id: "pod-2", created_at: "2026-06-16T10:00:00.000Z", duration_seconds: 330, elapsed_seconds: null }, // prefers 330
+        ],
+        error: null,
+      },
+    });
+
+    const snapshot = await getWeeklyMissionSourceSnapshot(
+      { ownerId: "user_secret", weekStart: "2026-06-15", weekEnd: "2026-06-21" },
+      mock.client,
+    );
+
+    // 540 + 330 = 870 seconds. 870 / 60 = 14.5 -> floored to 14
+    expect(snapshot.speakingSeconds).toBe(870);
+    expect(snapshot.speakingMinutes).toBe(14);
+  });
+
+  test("daily_practice_days dedupes multiple activities on same UTC date", () => {
+    const activeDays = deriveWeeklyMissionActiveDays([
+      { created_at: "2026-06-15T02:00:00.000Z" },
+      { created_at: "2026-06-15T10:00:00.000Z" },
+      { checked_at: "2026-06-15T22:00:00.000Z" },
+      { created_at: "2026-06-17T01:00:00.000Z" },
+    ]);
+    expect(activeDays).toEqual(["2026-06-15", "2026-06-17"]);
+    expect(activeDays.length).toBe(2);
+  });
+
+  test("unsupported metrics default to currentValue = 0 without failing", () => {
+    const missions: WeeklyMission[] = [
+      { ...baseMission, missionId: "wm_reviewed", metricType: "vocabulary_reviewed", targetValue: 5 },
+      { ...baseMission, missionId: "wm_resolved", metricType: "weakness_resolution", targetValue: 2 },
+    ];
+
+    const result = calculateWeeklyMissionProgress({
+      missions,
+      sourceSnapshot: baseSnapshot,
+      now: new Date("2026-06-18T00:00:00.000Z"),
+    });
+
+    expect(result[0].currentValue).toBe(0);
+    expect(result[1].currentValue).toBe(0);
+    expect(result[0].status).toBe("not_started");
+    expect(result[1].status).toBe("not_started");
+  });
 });
