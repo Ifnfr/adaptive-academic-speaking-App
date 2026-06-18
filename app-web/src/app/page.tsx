@@ -2012,6 +2012,7 @@ export default function Home() {
     setPendingCommonplaceContext(null);
     setTarget(buildArticleSpeakingTarget(result));
     setMode("Reading-to-Speaking");
+    setActiveSessionPanel("podchat");
     setView("active");
   };
 
@@ -2023,6 +2024,7 @@ export default function Home() {
     setPendingCommonplaceMapContextRef(null);
     setTarget("Commonplace note discussion");
     setMode("Fluency Sprint");
+    setActiveSessionPanel("podchat");
     setView("active");
   };
 
@@ -2038,6 +2040,7 @@ export default function Home() {
         : "Commonplace Sub Mind Map discussion",
     );
     setMode("Fluency Sprint");
+    setActiveSessionPanel("podchat");
     setView("active");
   };
 
