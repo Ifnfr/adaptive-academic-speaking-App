@@ -277,7 +277,11 @@ function WeeklyMissionErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="app-message app-message-error" role="alert">
+    <div
+      className="rounded-lg border border-red-500/45 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-400/35 dark:bg-red-950/35 dark:text-red-100"
+      data-testid="weekly-mission-error"
+      role="alert"
+    >
       <p>{message}</p>
       <button
         type="button"

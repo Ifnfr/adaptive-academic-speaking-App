@@ -149,6 +149,7 @@ test.describe("Weekly Mission Dashboard UI", () => {
 
     await expect(page.getByRole("heading", { name: "Weekly Missions", exact: true })).toBeVisible();
     await expect(page.getByText("Weekly missions generated.")).toBeVisible();
+    await expect(page.getByText("Weekly missions are unavailable right now.")).toHaveCount(0);
     await expect(page.getByText("Starter plan")).toBeVisible();
     await expect(page.getByText("This is a starter mission plan.")).toBeVisible();
     await expect(page.getByText("0 / 1 sessions").first()).toBeVisible();
@@ -263,6 +264,20 @@ test.describe("Weekly Mission Dashboard UI", () => {
       "Weekly missions are unavailable right now. Please try again.",
     );
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    const errorCard = page.getByTestId("weekly-mission-error");
+    await expect(errorCard).toBeVisible();
+    await expect(errorCard).not.toHaveAttribute("data-commonplace-card-surface", /.*/);
+    await expect(errorCard).not.toHaveAttribute("data-commonplace-panel-surface", /.*/);
+    const errorColors = await errorCard.evaluate((element) => {
+      const styles = window.getComputedStyle(element);
+      return {
+        backgroundColor: styles.backgroundColor,
+        borderColor: styles.borderColor,
+        color: styles.color,
+      };
+    });
+    expect(errorColors.backgroundColor).not.toBe("rgb(76, 29, 16)");
+    expect(errorColors.borderColor).not.toBe("rgb(249, 115, 22)");
     await expectNoHorizontalOverflow(page);
   });
 });

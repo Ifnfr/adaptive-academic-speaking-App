@@ -48,6 +48,7 @@ function weeklyRow(overrides: Record<string, unknown> = {}) {
 function createMockSupabase(options: {
   cachedReview?: Record<string, unknown> | null;
   sourceRows?: TableRows;
+  sourceError?: Error | null;
   insertError?: Error | null;
   conflictReview?: Record<string, unknown> | null;
 } = {}) {
@@ -83,6 +84,9 @@ function createMockSupabase(options: {
         },
         lte(column: string, value: string) {
           calls.push(`lte:${table}:${column}:${value}`);
+          if (options.sourceError && table !== "weekly_mission_reviews") {
+            return Promise.resolve({ data: null, error: options.sourceError });
+          }
           return Promise.resolve({ data: sourceRows[table] ?? [], error: null });
         },
         maybeSingle() {
@@ -373,6 +377,49 @@ test.describe("Weekly Mission Review route handlers", () => {
     ]);
     expect(missionMetrics(json)).not.toContain("pattern_drill_sessions");
     expect(json.review.missions.every((mission: WeeklyMission) => mission.weaknessTarget === null)).toBe(true);
+  });
+
+  test("POST source snapshot failure still returns deterministic fallback missions", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: null,
+      sourceError: new Error("source table unavailable"),
+    });
+    const handlers = buildHandlers({
+      supabase,
+      provider: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.state).toBe("created");
+    expect(json.review.dataSufficiency).toBe("starter");
+    expect(missionMetrics(json).slice(0, 4)).toEqual([
+      "podchat_sessions",
+      "speaking_minutes",
+      "vocabulary_collected",
+      "daily_practice_days",
+    ]);
+    expect(json.review.missions).toHaveLength(5);
+  });
+
+  test("GET existing review returns cached review when live progress snapshot fails", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: weeklyRow(),
+      sourceError: new Error("source table unavailable"),
+    });
+    const handlers = buildHandlers({ supabase });
+
+    const response = await handlers.GET(getRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.state).toBe("existing");
+    expect(json.review.reviewId).toBe("weekly-review-1");
+    expect(json.review.missions[0].currentValue).toBe(0);
   });
 
   test("analytic invalid JSON falls back without planning", async () => {

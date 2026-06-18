@@ -20,6 +20,7 @@ import {
   getWeeklyMissionSourceSnapshot,
   saveWeeklyMissionReview,
   selectEnabledMissionMetrics,
+  type WeeklyMissionSourceSnapshot,
 } from "../../../lib/storage/supabase-weekly-mission-review-adapter";
 import type { FonetikSupabaseClient } from "../../../lib/supabase";
 
@@ -78,6 +79,22 @@ function readTimezone(value: unknown): string {
 
 function hasForbiddenOwnerParam(url: URL): boolean {
   return ["ownerId", "owner_id", "userId", "user_id"].some((key) => url.searchParams.has(key));
+}
+
+function emptyWeeklyMissionSourceSnapshot(): WeeklyMissionSourceSnapshot {
+  return {
+    podchatSessions: 0,
+    speakingSeconds: 0,
+    speakingMinutes: 0,
+    patternDrillSessions: 0,
+    vocabularyCollected: 0,
+    vocabularySentencesSubmitted: 0,
+    vocabularyCorrectionsSaved: 0,
+    articlePracticeCompleted: 0,
+    activeDays: [],
+    repeatedWeaknessCount: 0,
+    topWeaknesses: [],
+  };
 }
 
 function withProgress(review: WeeklyMissionReview, sourceSnapshot: Awaited<ReturnType<typeof getWeeklyMissionSourceSnapshot>>, now: Date): WeeklyMissionReview {
@@ -182,7 +199,7 @@ export function createWeeklyMissionRouteHandlers(deps: HandlerDeps = {}) {
       );
       return json({ state: "existing", review: withProgress(review, sourceSnapshot, now()) });
     } catch {
-      return json({ error: "weekly_mission_unavailable" }, 503);
+      return json({ state: "existing", review });
     }
   }
 
@@ -228,14 +245,14 @@ export function createWeeklyMissionRouteHandlers(deps: HandlerDeps = {}) {
       }
     }
 
-    let sourceSnapshot: Awaited<ReturnType<typeof getWeeklyMissionSourceSnapshot>>;
+    let sourceSnapshot: WeeklyMissionSourceSnapshot;
     try {
       sourceSnapshot = await getWeeklyMissionSourceSnapshot(
         { ownerId, weekStart: period.weekStart, weekEnd: period.weekEnd },
         supabaseClient,
       );
     } catch {
-      return json({ error: "weekly_mission_unavailable" }, 503);
+      sourceSnapshot = emptyWeeklyMissionSourceSnapshot();
     }
 
     const enabledMetricTypes = selectEnabledMissionMetrics();
