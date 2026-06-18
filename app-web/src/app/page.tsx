@@ -60,7 +60,10 @@ import {
 } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
 import { AuthStatus } from "./components/AuthStatus";
-import { ActiveSessionShell } from "./components/ActiveSessionShell";
+import {
+  ActiveSessionShell,
+  type ActiveSessionPanel,
+} from "./components/ActiveSessionShell";
 import type {
   PodchatArticleContext,
   PodchatCommonplaceContextRef,
@@ -126,6 +129,7 @@ import {
   type AppLanguage,
   type Translate,
 } from "./lib/i18n";
+import type { WeeklyMissionRouteTarget } from "./lib/weekly-review-missions";
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
 
@@ -1203,6 +1207,8 @@ export default function Home() {
   // sub-pages that reuse existing data.
   type View = SidebarView;
   const [view, setView] = useState<View>("active");
+  const [activeSessionPanel, setActiveSessionPanel] =
+    useState<ActiveSessionPanel>("podchat");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const mobileNavPanelRef = useRef<HTMLDivElement | null>(null);
   const handleCloseMobileNav = () => setIsMobileNavOpen(false);
@@ -1214,6 +1220,30 @@ export default function Home() {
     }
     setView(nextView);
     setIsMobileNavOpen(false);
+  };
+
+  const handleWeeklyMissionRouteSelect = (
+    routeTarget: WeeklyMissionRouteTarget,
+  ) => {
+    if (routeTarget === "podchat") {
+      setActiveSessionPanel("podchat");
+      handleSelectView("active");
+      return;
+    }
+    if (routeTarget === "pattern_drill") {
+      setActiveSessionPanel("patternDrill");
+      handleSelectView("active");
+      return;
+    }
+    if (routeTarget === "vocabulary") {
+      handleSelectView("vocabulary");
+      return;
+    }
+    if (routeTarget === "article_practice") {
+      handleSelectView("article-practice");
+      return;
+    }
+    handleSelectView("commonplace");
   };
 
   const handleBackFromCommonplace = () => {
@@ -2539,6 +2569,8 @@ export default function Home() {
               ttsProvider={ttsProvider}
               elevenLabsModelId={elevenLabsModel}
               isActiveView={view === "active"}
+              activePanel={activeSessionPanel}
+              onActivePanelChange={setActiveSessionPanel}
             />
           </div>
 
@@ -2673,6 +2705,7 @@ export default function Home() {
               weeklyReviewError={weeklyReviewError}
               appLanguage={appLanguage}
               onRunWeeklyReview={handleRunWeeklyReview}
+              onMissionRouteSelect={handleWeeklyMissionRouteSelect}
             />
           )}
 

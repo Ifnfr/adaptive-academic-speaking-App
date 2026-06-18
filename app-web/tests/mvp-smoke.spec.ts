@@ -243,42 +243,106 @@ test.describe("MVP Smoke Flows", () => {
     ).toHaveCount(0);
   });
 
-  test("A2. Weekly Review uses server memory instead of local session count", async ({
+  test("A2. Weekly Review uses server mission memory instead of local session count", async ({
     page,
   }) => {
     const requestBodies: Record<string, unknown>[] = [];
-    let weeklyReviewCalls = 0;
+    let legacyWeeklyReviewCalls = 0;
+    let weeklyMissionPostCalls = 0;
 
     await page.addInitScript(() => {
       localStorage.clear();
     });
 
     await page.route("**/api/weekly-review", async (route) => {
-      weeklyReviewCalls += 1;
-      requestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+      legacyWeeklyReviewCalls += 1;
+      await route.fulfill({ status: 500, json: { error: "legacy_route_should_not_be_used" } });
+    });
 
-      if (weeklyReviewCalls === 1) {
+    await page.route("**/api/weekly-review/mission", async (route) => {
+      if (route.request().method() === "POST") {
+        weeklyMissionPostCalls += 1;
+        requestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+
         await route.fulfill({
           json: {
-            summary:
-              "You completed 1 practice session this week. Keep practicing to unlock complete review insights.",
-            recurringWeakness:
-              "Not enough sessions to analyze recurring weaknesses.",
-            bestImprovement: "Not enough sessions to analyze improvements.",
-            scoreTrend: "Not enough sessions to track score trend.",
-            nextWeekFocus: "Practice consistency.",
-            recommendedPlan: [
-              "Day 1: Complete 1 new practice session.",
-              "Day 2: Review your past feedback points.",
-              "Day 3: Complete 1 new practice session.",
-              "Day 4: Focus on speaking/writing without pausing.",
-              "Day 5: Complete 1 new practice session.",
-              "Day 6: Focus on correct subject-verb agreement.",
-              "Day 7: Complete 1 new practice session.",
-            ],
-            warnings: [
-              "Weekly Review requires at least 4 completed practice sessions. You have completed only 1.",
-            ],
+            state: "created",
+            review: {
+              reviewId: "weekly-mission-1",
+              weekStart: "2026-06-15",
+              weekEnd: "2026-06-21",
+              timezone: "UTC",
+              generatedAt: "2026-06-18T12:00:00.000Z",
+              diagnosisSummary:
+                "Start this week with baseline practice across speaking and vocabulary.",
+              dataSufficiency: "starter",
+              missions: [
+                {
+                  missionId: "mission-podchat",
+                  title: "Complete a baseline Podchat",
+                  description: "Finish one evaluated Podchat session.",
+                  reason: "Start with a real speaking sample before diagnosing patterns.",
+                  weaknessTarget: null,
+                  metricType: "podchat_sessions",
+                  targetValue: 1,
+                  currentValue: 0,
+                  unit: "sessions",
+                  sourceFeatures: ["podchat"],
+                  status: "not_started",
+                  recommendedAction: {
+                    label: "Start Podchat",
+                    routeTarget: "podchat",
+                  },
+                  createdAt: "2026-06-18T12:00:00.000Z",
+                  weekStart: "2026-06-15",
+                  weekEnd: "2026-06-21",
+                },
+                {
+                  missionId: "mission-vocab",
+                  title: "Collect starter vocabulary",
+                  description: "Save five vocabulary items.",
+                  reason: "A starter word bank gives future reviews useful material.",
+                  weaknessTarget: null,
+                  metricType: "vocabulary_collected",
+                  targetValue: 5,
+                  currentValue: 2,
+                  unit: "items",
+                  sourceFeatures: ["vocabulary"],
+                  status: "in_progress",
+                  recommendedAction: {
+                    label: "Open Vocabulary",
+                    routeTarget: "vocabulary",
+                  },
+                  createdAt: "2026-06-18T12:00:00.000Z",
+                  weekStart: "2026-06-15",
+                  weekEnd: "2026-06-21",
+                },
+                {
+                  missionId: "mission-days",
+                  title: "Practice on two days",
+                  description: "Complete tracked activity on two UTC days.",
+                  reason: "Two practice days establish a measurable weekly rhythm.",
+                  weaknessTarget: null,
+                  metricType: "daily_practice_days",
+                  targetValue: 2,
+                  currentValue: 0,
+                  unit: "days",
+                  sourceFeatures: ["podchat", "vocabulary"],
+                  status: "not_started",
+                  recommendedAction: {
+                    label: "Practice Today",
+                    routeTarget: "podchat",
+                  },
+                  createdAt: "2026-06-18T12:00:00.000Z",
+                  weekStart: "2026-06-15",
+                  weekEnd: "2026-06-21",
+                },
+              ],
+              missionCount: 3,
+              status: "active",
+              nextReviewAvailableAt: "2026-06-22T00:00:00.000Z",
+              warnings: [],
+            },
           },
         });
         return;
@@ -286,24 +350,14 @@ test.describe("MVP Smoke Flows", () => {
 
       await route.fulfill({
         json: {
-          summary:
-            "You completed 2 speaking sessions and 2 writing sessions this week.",
-          recurringWeakness:
-            "Your most recurring issue is in grammar under verb agreement.",
-          bestImprovement:
-            "You showed steady engagement across practice formats.",
-          scoreTrend: "Score trends are stable across the week.",
-          nextWeekFocus: "Use subject-verb agreement in short answers.",
-          recommendedPlan: [
-            "Day 1: Review your weekly review summary.",
-            "Day 2: Practise verb agreement.",
-            "Day 3: Complete a new practice session.",
-            "Day 4: Do a short focus session.",
-            "Day 5: Review past corrections.",
-            "Day 6: Speak for 60 seconds.",
-            "Day 7: Complete a new session.",
-          ],
-          warnings: [],
+          state: "not_generated",
+          period: {
+            weekStart: "2026-06-15",
+            weekEnd: "2026-06-21",
+            timezone: "UTC",
+            nextReviewAvailableAt: "2026-06-22T00:00:00.000Z",
+          },
+          review: null,
         },
       });
     });
@@ -311,22 +365,21 @@ test.describe("MVP Smoke Flows", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "Weekly Review" }).click();
 
-    const runButton = page.getByRole("button", { name: "Run Weekly Review" });
-    await expect(page.getByText("Server memory")).toBeVisible();
+    const generateButton = page.getByRole("button", { name: "Generate Weekly Missions" });
+    await expect(
+      page.getByRole("heading", { name: "Generate the weekly mission plan" }),
+    ).toBeVisible();
     await expect(page.getByText(/0\/4 completed sessions/i)).toHaveCount(0);
-    await expect(runButton).toBeEnabled();
+    await expect(generateButton).toBeEnabled();
 
-    await runButton.click();
-    await expect(
-      page.getByText(/Weekly Review requires at least 4 completed practice sessions/i),
-    ).toBeVisible();
+    await generateButton.click();
+    await expect(page.getByRole("heading", { name: "Weekly Missions", exact: true })).toBeVisible();
+    await expect(page.getByText("Starter plan")).toBeVisible();
+    await expect(page.getByText("Complete a baseline Podchat")).toBeVisible();
+    await expect(page.getByText("0 / 1 sessions")).toBeVisible();
 
-    await runButton.click();
-    await expect(
-      page.getByText("You completed 2 speaking sessions and 2 writing sessions this week."),
-    ).toBeVisible();
-
-    expect(weeklyReviewCalls).toBe(2);
+    expect(legacyWeeklyReviewCalls).toBe(0);
+    expect(weeklyMissionPostCalls).toBe(1);
     for (const body of requestBodies) {
       expect(body).not.toHaveProperty("sessions");
       expect(body).not.toHaveProperty("provider");
@@ -1045,10 +1098,8 @@ test.describe("MVP Smoke Flows", () => {
     // Complete one recording/STT flow
     await page.getByTestId("podchat-start-recording").click();
     await page.getByTestId("podchat-stop-recording").click();
-    await expect(page.getByTestId("podchat-locked-transcript")).toBeVisible();
-    await page.getByTestId("podchat-submit-turn").click();
-
-    // Assert /api/podchat/turn payload
+    // Wait for the turn API call to complete (turnPayloads will have the payload)
+    await expect.poll(() => turnPayloads.length).toBe(1);
     expect(turnPayloads).toHaveLength(1);
     const turnPayload = turnPayloads[0] as Record<string, unknown>;
     expect(turnPayload).toHaveProperty("articleContext");

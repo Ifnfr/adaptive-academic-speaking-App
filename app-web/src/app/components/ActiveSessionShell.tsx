@@ -2,11 +2,29 @@ import { useState } from "react";
 import { PodchatView, type PodchatViewProps } from "./PodchatView";
 import { PatternDrillPrototype } from "./PatternDrillPrototype";
 
-type ActiveSessionMode = "podchat" | "patternDrill";
+export type ActiveSessionPanel = "podchat" | "patternDrill";
 
-export function ActiveSessionShell(props: PodchatViewProps & { isActiveView?: boolean }) {
-  const [mode, setMode] = useState<ActiveSessionMode>("podchat");
-  const { isActiveView = true, ...podchatProps } = props;
+export function ActiveSessionShell(
+  props: PodchatViewProps & {
+    activePanel?: ActiveSessionPanel;
+    isActiveView?: boolean;
+    onActivePanelChange?: (panel: ActiveSessionPanel) => void;
+  },
+) {
+  const [internalPanel, setInternalPanel] = useState<ActiveSessionPanel>("podchat");
+  const {
+    activePanel,
+    isActiveView = true,
+    onActivePanelChange,
+    ...podchatProps
+  } = props;
+  const panel = activePanel ?? internalPanel;
+  const setPanel = (nextPanel: ActiveSessionPanel) => {
+    if (activePanel === undefined) {
+      setInternalPanel(nextPanel);
+    }
+    onActivePanelChange?.(nextPanel);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -22,10 +40,10 @@ export function ActiveSessionShell(props: PodchatViewProps & { isActiveView?: bo
         >
           <button
             type="button"
-            aria-pressed={mode === "podchat"}
-            onClick={() => setMode("podchat")}
+            aria-pressed={panel === "podchat"}
+            onClick={() => setPanel("podchat")}
             className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-teal)] ${
-              mode === "podchat"
+              panel === "podchat"
                 ? "bg-[var(--brand-bg)] text-[var(--brand-ink)] shadow-sm ring-1 ring-black/5 dark:ring-white/10"
                 : "text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)]"
             }`}
@@ -34,10 +52,10 @@ export function ActiveSessionShell(props: PodchatViewProps & { isActiveView?: bo
           </button>
           <button
             type="button"
-            aria-pressed={mode === "patternDrill"}
-            onClick={() => setMode("patternDrill")}
+            aria-pressed={panel === "patternDrill"}
+            onClick={() => setPanel("patternDrill")}
             className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-teal)] ${
-              mode === "patternDrill"
+              panel === "patternDrill"
                 ? "bg-[var(--brand-bg)] text-[var(--brand-ink)] shadow-sm ring-1 ring-black/5 dark:ring-white/10"
                 : "text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)]"
             }`}
@@ -49,10 +67,10 @@ export function ActiveSessionShell(props: PodchatViewProps & { isActiveView?: bo
 
       {/* Content Area */}
       <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm flex flex-col">
-        {mode === "podchat" ? (
+        {panel === "podchat" ? (
           <PodchatView {...podchatProps} isActiveView={isActiveView} />
         ) : (
-          <PatternDrillPrototype onExit={() => setMode("podchat")} />
+          <PatternDrillPrototype onExit={() => setPanel("podchat")} />
         )}
       </div>
     </div>
