@@ -163,6 +163,52 @@ test.describe("Weekly Mission Dashboard UI", () => {
     expect(dashboardText).not.toContain("model");
   });
 
+  test("generation loading uses staged UX copy without provider details", async ({ page }) => {
+    let releasePost: () => void = () => {};
+    await page.route("**/api/weekly-review/mission", async (route) => {
+      if (route.request().method() === "POST") {
+        await new Promise<void>((resolve) => {
+          releasePost = resolve;
+        });
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ state: "created", review: review() }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          state: "not_generated",
+          period: {
+            weekStart: "2026-06-15",
+            weekEnd: "2026-06-21",
+            timezone: "UTC",
+            nextReviewAvailableAt: "2026-06-22T00:00:00.000Z",
+          },
+          review: null,
+        }),
+      });
+    });
+
+    await gotoMockApp(page);
+    await openWeeklyReview(page);
+    await page.getByRole("button", { name: "Generate Weekly Missions" }).click();
+
+    await expect(page.getByText("Analyzing your learning data...")).toBeVisible();
+    await expect(page.getByText("Finding your weekly focus...")).toBeVisible({ timeout: 2500 });
+    const dashboardText = await page.getByTestId("weekly-mission-dashboard").innerText();
+    expect(dashboardText).not.toContain("DeepSeek");
+    expect(dashboardText).not.toContain("provider");
+    expect(dashboardText).not.toContain("model");
+
+    releasePost();
+    await expect(page.getByRole("heading", { name: "Weekly Missions", exact: true })).toBeVisible();
+  });
+
   test("existing mission CTAs route to target app surfaces", async ({ page }) => {
     await page.route("**/api/weekly-review/mission", async (route) => {
       await route.fulfill({

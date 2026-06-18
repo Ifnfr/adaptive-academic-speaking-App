@@ -1,13 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   buildFallbackWeeklyMissionOutput,
+  buildWeeklyMissionAnalyticSystemPrompt,
+  buildWeeklyMissionAnalyticUserPrompt,
   buildWeeklyMissionAiInput,
-  buildWeeklyMissionSystemPrompt,
-  buildWeeklyMissionUserPrompt,
+  buildWeeklyMissionOutputFromPlanning,
+  buildWeeklyMissionPlanningSystemPrompt,
+  buildWeeklyMissionPlanningUserPrompt,
   classifySnapshotDataSufficiency,
   deriveWeeklyMissionReviewStatus,
   finalizeWeeklyMissions,
-  parseWeeklyMissionAiOutput,
+  parseWeeklyMissionAnalyticOutput,
+  parseWeeklyMissionPlanningOutput,
 } from "../../../lib/weekly-review-missions/generation";
 import { getWeeklyMissionPeriod, type WeeklyMissionReview } from "../../../lib/weekly-review-missions";
 import {
@@ -18,16 +22,23 @@ import {
   selectEnabledMissionMetrics,
 } from "../../../lib/storage/supabase-weekly-mission-review-adapter";
 import type { FonetikSupabaseClient } from "../../../lib/supabase";
-import { callRoleProvider } from "../../pattern-drill/_lib/roleProviders";
+
+type WeeklyMissionProviderPhase = "analytic" | "planning";
 
 type HandlerDeps = {
   resolveCurrentUserId?: () => Promise<string | null>;
   getSupabaseClient?: () => FonetikSupabaseClient | null;
-  callPlanningProvider?: (systemPrompt: string, userPrompt: string) => Promise<string>;
+  callWeeklyMissionProvider?: (
+    phase: WeeklyMissionProviderPhase,
+    systemPrompt: string,
+    userPrompt: string,
+  ) => Promise<string>;
+  providerTimeoutMs?: number;
   now?: () => Date;
 };
 
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
+const DEFAULT_DEEPSEEK_TIMEOUT_MS = 20_000;
 
 async function resolveCurrentUserId(): Promise<string | null> {
   try {
@@ -86,14 +97,63 @@ function withProgress(review: WeeklyMissionReview, sourceSnapshot: Awaited<Retur
   };
 }
 
-async function callDefaultPlanningProvider(systemPrompt: string, userPrompt: string): Promise<string> {
-  return callRoleProvider("planning", systemPrompt, userPrompt);
+async function callDefaultWeeklyMissionProvider(
+  _phase: WeeklyMissionProviderPhase,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error("weekly_mission_provider_unavailable");
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("weekly_mission_provider_unavailable");
+  }
+
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("weekly_mission_provider_unavailable");
+  return content;
+}
+
+async function withTimeout<T>(task: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("weekly_mission_provider_timeout")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export function createWeeklyMissionRouteHandlers(deps: HandlerDeps = {}) {
   const authResolver = deps.resolveCurrentUserId ?? resolveCurrentUserId;
   const clientResolver = deps.getSupabaseClient ?? getSupabaseClient;
-  const providerCaller = deps.callPlanningProvider ?? callDefaultPlanningProvider;
+  const providerCaller = deps.callWeeklyMissionProvider ?? callDefaultWeeklyMissionProvider;
+  const providerTimeoutMs = deps.providerTimeoutMs ?? DEFAULT_DEEPSEEK_TIMEOUT_MS;
   const now = deps.now ?? (() => new Date());
 
   async function GET(request: Request) {
@@ -193,15 +253,35 @@ export function createWeeklyMissionRouteHandlers(deps: HandlerDeps = {}) {
       sourceSnapshot,
     });
     let provider: string | null = null;
-    const systemPrompt = buildWeeklyMissionSystemPrompt();
-    const userPrompt = buildWeeklyMissionUserPrompt(aiInput);
 
     try {
-      const raw = await providerCaller(systemPrompt, userPrompt);
-      const parsedOutput = parseWeeklyMissionAiOutput(raw, enabledMetricTypes);
-      if (parsedOutput) {
-        output = parsedOutput;
-        provider = "planning";
+      const analyticRaw = await withTimeout(
+        providerCaller(
+          "analytic",
+          buildWeeklyMissionAnalyticSystemPrompt(),
+          buildWeeklyMissionAnalyticUserPrompt(aiInput),
+        ),
+        providerTimeoutMs,
+      );
+      const analyticOutput = parseWeeklyMissionAnalyticOutput(analyticRaw);
+      if (analyticOutput) {
+        const planningRaw = await withTimeout(
+          providerCaller(
+            "planning",
+            buildWeeklyMissionPlanningSystemPrompt(),
+            buildWeeklyMissionPlanningUserPrompt({ aiInput, analyticOutput }),
+          ),
+          providerTimeoutMs,
+        );
+        const planningOutput = parseWeeklyMissionPlanningOutput(planningRaw, enabledMetricTypes);
+        if (planningOutput) {
+          output = buildWeeklyMissionOutputFromPlanning({
+            analyticOutput,
+            planningOutput,
+            dataSufficiency: serverDataSufficiency,
+          });
+          provider = "deepseek";
+        }
       }
     } catch {
       output = buildFallbackWeeklyMissionOutput({

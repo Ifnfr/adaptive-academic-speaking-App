@@ -133,54 +133,68 @@ function createMockSupabase(options: {
 function buildHandlers(input: {
   ownerId?: string | null;
   supabase?: ReturnType<typeof createMockSupabase>;
-  provider?: (system: string, user: string) => Promise<string>;
+  provider?: (phase: "analytic" | "planning", system: string, user: string) => Promise<string>;
+  providerTimeoutMs?: number;
 }) {
   return createWeeklyMissionRouteHandlers({
     resolveCurrentUserId: async () => input.ownerId === undefined ? "user-123" : input.ownerId,
     getSupabaseClient: () => input.supabase?.client ?? null,
-    callPlanningProvider: input.provider ?? (async () => JSON.stringify(validAiOutput())),
+    callWeeklyMissionProvider: input.provider ?? (async (phase) =>
+      JSON.stringify(phase === "analytic" ? validAnalyticOutput() : validPlanningOutput())),
+    providerTimeoutMs: input.providerTimeoutMs,
     now: () => new Date("2026-06-18T12:00:00.000Z"),
   });
 }
 
-function validAiOutput(overrides: Record<string, unknown> = {}) {
+function validAnalyticOutput(overrides: Record<string, unknown> = {}) {
   return {
     diagnosisSummary: "You should balance speaking, vocabulary, and article practice this week.",
-    dataSufficiency: "partial",
-    topWeaknesses: [{ category: "Grammar", label: "Verb form", reason: "Repeated in feedback." }],
+    dataSufficiencyComment: "The server has enough signal for a partial plan.",
+    primaryWeaknesses: [{ category: "Grammar", label: "Verb form", reason: "Repeated in feedback." }],
+    learningPriority: "Balance speaking and vocabulary.",
+    recommendedMissionStrategy: "Use measurable practice across core surfaces.",
+    ...overrides,
+  };
+}
+
+function validPlanningOutput(overrides: Record<string, unknown> = {}) {
+  return {
     missions: [
       {
-        title: "Complete Podchat practice",
-        description: "Finish two evaluated Podchat sessions.",
+        missionIntent: "Add evaluated speaking samples.",
+        titleKey: "complete_podchat_sessions",
+        descriptionKey: "add_evaluated_speaking_samples",
         reason: "Repeated speaking practice builds fluency.",
         weaknessTarget: null,
         metricType: "podchat_sessions",
-        targetValue: 2,
+        proposedTargetValue: 2,
         unit: "sessions",
         sourceFeatures: ["podchat"],
-        recommendedAction: { label: "Start Podchat", routeTarget: "podchat" },
+        recommendedAction: { label: "AI label should be ignored", routeTarget: "podchat" },
       },
       {
-        title: "Speak for a focused block",
-        description: "Reach a meaningful speaking minute total.",
+        missionIntent: "Increase speaking volume.",
+        titleKey: "complete_speaking_minutes",
+        descriptionKey: "build_speaking_volume",
         reason: "More time creates better evidence.",
         weaknessTarget: null,
         metricType: "speaking_minutes",
-        targetValue: 999,
+        proposedTargetValue: 999,
         unit: "minutes",
         sourceFeatures: ["podchat"],
-        recommendedAction: { label: "Start Podchat", routeTarget: "podchat" },
+        recommendedAction: { label: "Use my custom label", routeTarget: "podchat" },
       },
       {
-        title: "Practice across days",
-        description: "Complete tracked practice on multiple days.",
+        missionIntent: "Space practice across the week.",
+        titleKey: "practice_on_distinct_days",
+        descriptionKey: "build_weekly_rhythm",
         reason: "Spacing practice improves retention.",
         weaknessTarget: null,
         metricType: "daily_practice_days",
-        targetValue: 3,
+        proposedTargetValue: 3,
         unit: "days",
         sourceFeatures: ["podchat", "vocabulary"],
-        recommendedAction: { label: "Practice Today", routeTarget: "podchat" },
+        recommendedAction: { label: "AI practice label", routeTarget: "podchat" },
       },
     ],
     ...overrides,
@@ -296,9 +310,13 @@ test.describe("Weekly Mission Review route handlers", () => {
         ],
       },
     });
+    const phases: string[] = [];
     const handlers = buildHandlers({
       supabase,
-      provider: async () => JSON.stringify(validAiOutput({ dataSufficiency: "strong" })),
+      provider: async (phase) => {
+        phases.push(phase);
+        return JSON.stringify(phase === "analytic" ? validAnalyticOutput() : validPlanningOutput());
+      },
     });
 
     const response = await handlers.POST(postRequest({ timezone: "Asia/Jakarta" }));
@@ -310,7 +328,12 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(json.review.timezone).toBe("Asia/Jakarta");
     const speakingMission = json.review.missions.find((mission: WeeklyMission) => mission.metricType === "speaking_minutes");
     expect(speakingMission.targetValue).toBe(180);
+    expect(speakingMission.title).toBe("Reach 180 speaking minutes");
+    expect(speakingMission.description).toBe("Reach 180 saved speaking minutes this week.");
     expect(speakingMission.currentValue).toBe(9);
+    expect(speakingMission.recommendedAction.label).toBe("Start Podchat");
+    expect(JSON.stringify(json.review.missions)).not.toContain("Use my custom label");
+    expect(phases).toEqual(["analytic", "planning"]);
 
     expect(supabase.insertedRows).toHaveLength(1);
     expect(supabase.insertedRows[0].owner_id).toBe("user-123");
@@ -350,6 +373,98 @@ test.describe("Weekly Mission Review route handlers", () => {
     ]);
     expect(missionMetrics(json)).not.toContain("pattern_drill_sessions");
     expect(json.review.missions.every((mission: WeeklyMission) => mission.weaknessTarget === null)).toBe(true);
+  });
+
+  test("analytic invalid JSON falls back without planning", async () => {
+    const supabase = createMockSupabase({ cachedReview: null });
+    const phases: string[] = [];
+    const handlers = buildHandlers({
+      supabase,
+      provider: async (phase) => {
+        phases.push(phase);
+        return "not-json";
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.review.dataSufficiency).toBe("starter");
+    expect(missionMetrics(json).slice(0, 4)).toEqual([
+      "podchat_sessions",
+      "speaking_minutes",
+      "vocabulary_collected",
+      "daily_practice_days",
+    ]);
+    expect(phases).toEqual(["analytic"]);
+  });
+
+  test("planning invalid JSON falls back after analytic succeeds", async () => {
+    const supabase = createMockSupabase({ cachedReview: null });
+    const phases: string[] = [];
+    const handlers = buildHandlers({
+      supabase,
+      provider: async (phase) => {
+        phases.push(phase);
+        return JSON.stringify(phase === "analytic" ? validAnalyticOutput() : { missions: "invalid" });
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.review.dataSufficiency).toBe("starter");
+    expect(json.review.missions).toHaveLength(5);
+    expect(phases).toEqual(["analytic", "planning"]);
+  });
+
+  test("analytic timeout falls back", async () => {
+    const supabase = createMockSupabase({ cachedReview: null });
+    const handlers = buildHandlers({
+      supabase,
+      providerTimeoutMs: 1,
+      provider: async () => new Promise<string>((resolve) => {
+        setTimeout(() => resolve(JSON.stringify(validAnalyticOutput())), 30);
+      }),
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.review.dataSufficiency).toBe("starter");
+    expect(missionMetrics(json).slice(0, 4)).toEqual([
+      "podchat_sessions",
+      "speaking_minutes",
+      "vocabulary_collected",
+      "daily_practice_days",
+    ]);
+  });
+
+  test("planning timeout falls back", async () => {
+    const supabase = createMockSupabase({ cachedReview: null });
+    const phases: string[] = [];
+    const handlers = buildHandlers({
+      supabase,
+      providerTimeoutMs: 1,
+      provider: async (phase) => {
+        phases.push(phase);
+        if (phase === "analytic") return JSON.stringify(validAnalyticOutput());
+        return new Promise<string>((resolve) => {
+          setTimeout(() => resolve(JSON.stringify(validPlanningOutput())), 30);
+        });
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.review.dataSufficiency).toBe("starter");
+    expect(json.review.missions).toHaveLength(5);
+    expect(phases).toEqual(["analytic", "planning"]);
   });
 
   test("partial fallback prioritizes speaking when speaking activity is low", async () => {
@@ -404,7 +519,7 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(response.status).toBe(200);
     expect(json.review.dataSufficiency).toBe("partial");
     expect(vocabularyMission).toBeTruthy();
-    expect(vocabularyMission?.title).toContain("vocabulary gap");
+    expect(vocabularyMission?.title).toBe("Collect 10 vocabulary items");
     expect(vocabularyMission?.reason).toContain("Vocabulary activity is low");
   });
 
@@ -461,43 +576,28 @@ test.describe("Weekly Mission Review route handlers", () => {
     const supabase = createMockSupabase({ cachedReview: null });
     const handlers = buildHandlers({
       supabase,
-      provider: async () => JSON.stringify(validAiOutput({
-        missions: [
-          {
-            title: "Review vocabulary",
-            description: "Unsupported for now.",
-            reason: "No durable review source yet.",
-            weaknessTarget: null,
-            metricType: "vocabulary_reviewed",
-            targetValue: 5,
-            unit: "reviews",
-            sourceFeatures: ["vocabulary"],
-            recommendedAction: { label: "Open Vocabulary", routeTarget: "vocabulary" },
-          },
-          {
-            title: "Only second",
-            description: "Too few valid missions.",
-            reason: "Invalid output.",
-            weaknessTarget: null,
-            metricType: "podchat_sessions",
-            targetValue: 1,
-            unit: "sessions",
-            sourceFeatures: ["podchat"],
-            recommendedAction: { label: "Start Podchat", routeTarget: "podchat" },
-          },
-          {
-            title: "Only third",
-            description: "Invalid set.",
-            reason: "Invalid output.",
-            weaknessTarget: null,
-            metricType: "daily_practice_days",
-            targetValue: 1,
-            unit: "days",
-            sourceFeatures: ["podchat"],
-            recommendedAction: { label: "Practice", routeTarget: "podchat" },
-          },
-        ],
-      })),
+      provider: async (phase) => JSON.stringify(
+        phase === "analytic"
+          ? validAnalyticOutput()
+          : validPlanningOutput({
+              missions: [
+                {
+                  missionIntent: "Unsupported review metric.",
+                  titleKey: "collect_vocabulary_items",
+                  descriptionKey: "build_active_vocabulary",
+                  reason: "No durable review source yet.",
+                  weaknessTarget: null,
+                  metricType: "vocabulary_reviewed",
+                  proposedTargetValue: 5,
+                  unit: "reviews",
+                  sourceFeatures: ["vocabulary"],
+                  recommendedAction: { label: "Open Vocabulary", routeTarget: "vocabulary" },
+                },
+                validPlanningOutput().missions[0],
+                validPlanningOutput().missions[2],
+              ],
+            }),
+      ),
     });
 
     const response = await handlers.POST(postRequest());
@@ -512,13 +612,17 @@ test.describe("Weekly Mission Review route handlers", () => {
     const supabase = createMockSupabase({ cachedReview: null });
     const handlers = buildHandlers({
       supabase,
-      provider: async () => JSON.stringify(validAiOutput({
-        missions: [
-          { ...validAiOutput().missions[0], currentValue: 999, status: "completed" },
-          validAiOutput().missions[1],
-          validAiOutput().missions[2],
-        ],
-      })),
+      provider: async (phase) => JSON.stringify(
+        phase === "analytic"
+          ? validAnalyticOutput()
+          : validPlanningOutput({
+              missions: [
+                { ...validPlanningOutput().missions[0], currentValue: 999, status: "completed" },
+                validPlanningOutput().missions[1],
+                validPlanningOutput().missions[2],
+              ],
+            }),
+      ),
     });
 
     const response = await handlers.POST(postRequest());
@@ -527,6 +631,35 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(response.status).toBe(200);
     expect(json.review.missions).toHaveLength(5);
     expect(json.review.missions.every((mission: WeeklyMission) => mission.currentValue !== 999)).toBe(true);
+  });
+
+  test("AI numeric mission reason is replaced while the mission plan remains usable", async () => {
+    const supabase = createMockSupabase({ cachedReview: null });
+    const handlers = buildHandlers({
+      supabase,
+      provider: async (phase) => JSON.stringify(
+        phase === "analytic"
+          ? validAnalyticOutput()
+          : validPlanningOutput({
+              missions: [
+                {
+                  ...validPlanningOutput().missions[0],
+                  reason: "Complete 2 sessions to reach the target.",
+                },
+                validPlanningOutput().missions[1],
+                validPlanningOutput().missions[2],
+              ],
+            }),
+      ),
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+    const podchatMission = json.review.missions.find((mission: WeeklyMission) => mission.metricType === "podchat_sessions");
+
+    expect(response.status).toBe(200);
+    expect(podchatMission?.title).toBe("Complete 2 Podchat sessions");
+    expect(podchatMission?.reason).toBe("Evaluated speaking sessions create reliable evidence for future feedback.");
   });
 
   test("provider input is bounded and excludes private/raw fields", async () => {
@@ -548,9 +681,9 @@ test.describe("Weekly Mission Review route handlers", () => {
     let capturedUserPrompt = "";
     const handlers = buildHandlers({
       supabase,
-      provider: async (_system, user) => {
-        capturedUserPrompt = user;
-        return JSON.stringify(validAiOutput());
+      provider: async (phase, _system, user) => {
+        capturedUserPrompt += `\n${phase}:${user}`;
+        return JSON.stringify(phase === "analytic" ? validAnalyticOutput() : validPlanningOutput());
       },
     });
 

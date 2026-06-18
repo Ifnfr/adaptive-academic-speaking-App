@@ -35,6 +35,12 @@ type WeeklyMissionPostResponse =
 
 const SAFE_ERROR_MESSAGE =
   "Weekly missions are unavailable right now. Please try again.";
+const STAGED_GENERATION_MESSAGES = [
+  "Analyzing your learning data...",
+  "Finding your weekly focus...",
+  "Planning your weekly missions...",
+  "Finalizing your mission board...",
+] as const;
 
 function isReviewResponse(
   value: WeeklyMissionGetResponse | WeeklyMissionPostResponse | null,
@@ -396,6 +402,7 @@ export function WeeklyMissionDashboard({
   onRouteTargetSelect,
 }: WeeklyMissionDashboardProps) {
   const [uiState, setUiState] = useState<WeeklyMissionUiState>({ status: "loading" });
+  const [generationMessageIndex, setGenerationMessageIndex] = useState(0);
 
   const fetchMissionReview = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -442,8 +449,21 @@ export function WeeklyMissionDashboard({
     return () => controller.abort();
   }, [fetchMissionReview]);
 
+  useEffect(() => {
+    if (uiState.status !== "generating") {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setGenerationMessageIndex((current) =>
+        (current + 1) % STAGED_GENERATION_MESSAGES.length,
+      );
+    }, 1200);
+    return () => window.clearInterval(timer);
+  }, [uiState.status]);
+
   const handleGenerate = useCallback(async () => {
     const period = uiState.status === "not_generated" ? uiState.period : undefined;
+    setGenerationMessageIndex(0);
     setUiState({ status: "generating", period });
     try {
       const response = await fetch("/api/weekly-review/mission", {
@@ -470,9 +490,9 @@ export function WeeklyMissionDashboard({
 
   const loadingCopy = useMemo(() => {
     return uiState.status === "generating"
-      ? "Building your weekly mission plan..."
+      ? STAGED_GENERATION_MESSAGES[generationMessageIndex]
       : "Loading weekly missions...";
-  }, [uiState.status]);
+  }, [generationMessageIndex, uiState.status]);
 
   return (
     <section className="app-panel brand-grid overflow-hidden" data-testid="weekly-mission-dashboard">

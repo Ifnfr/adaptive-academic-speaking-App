@@ -42,27 +42,60 @@ export type WeeklyMissionAiInput = {
   userLevel?: string;
 };
 
+export type WeeklyMissionAnalyticOutput = {
+  diagnosisSummary: string;
+  dataSufficiencyComment: string;
+  primaryWeaknesses: Array<{
+    category: string;
+    label: string;
+    reason: string;
+    practiceFocus?: string;
+  }>;
+  learningPriority: string;
+  recommendedMissionStrategy: string;
+};
+
+export type WeeklyMissionTitleKey =
+  | "complete_speaking_minutes"
+  | "complete_podchat_sessions"
+  | "complete_pattern_drill_sessions"
+  | "collect_vocabulary_items"
+  | "submit_vocabulary_sentences"
+  | "save_vocabulary_corrections"
+  | "complete_article_practice_sessions"
+  | "practice_on_distinct_days";
+
+export type WeeklyMissionDescriptionKey =
+  | "build_speaking_volume"
+  | "add_evaluated_speaking_samples"
+  | "target_repeated_weakness"
+  | "build_active_vocabulary"
+  | "apply_vocabulary_in_sentences"
+  | "save_revised_language"
+  | "practice_article_transfer"
+  | "build_weekly_rhythm";
+
 type ProposedMission = {
-  title: string;
-  description: string;
+  missionIntent: string;
+  titleKey: WeeklyMissionTitleKey;
+  descriptionKey: WeeklyMissionDescriptionKey;
   reason: string;
   weaknessTarget: WeeklyMission["weaknessTarget"];
   metricType: WeeklyMissionMetricType;
-  targetValue: number;
+  proposedTargetValue: number;
   unit: string;
   sourceFeatures: WeeklyMissionSourceFeature[];
   recommendedAction: WeeklyMission["recommendedAction"];
 };
 
-export type WeeklyMissionAiOutput = {
+export type WeeklyMissionPlanningOutput = {
+  missions: ProposedMission[];
+};
+
+export type WeeklyMissionAiOutput = WeeklyMissionPlanningOutput & {
   diagnosisSummary: string;
   dataSufficiency: WeeklyMissionDataSufficiency;
-  topWeaknesses: Array<{
-    category: string;
-    label: string;
-    reason: string;
-  }>;
-  missions: ProposedMission[];
+  topWeaknesses: WeeklyMissionAnalyticOutput["primaryWeaknesses"];
 };
 
 export type FinalizeWeeklyMissionsInput = {
@@ -77,7 +110,6 @@ export type FinalizeWeeklyMissionsInput = {
   now: Date;
 };
 
-const DATA_SUFFICIENCY_VALUES = new Set(["starter", "partial", "strong"]);
 const ROUTE_TARGETS = new Set<WeeklyMissionRouteTarget>([
   "podchat",
   "pattern_drill",
@@ -95,6 +127,10 @@ const SOURCE_FEATURES = new Set<WeeklyMissionSourceFeature>([
 const FORBIDDEN_OUTPUT_KEYS = new Set([
   "currentvalue",
   "current_value",
+  "completioncount",
+  "completioncounts",
+  "completion_count",
+  "completion_counts",
   "status",
   "ownerid",
   "owner_id",
@@ -107,6 +143,39 @@ const FORBIDDEN_OUTPUT_KEYS = new Set([
   "prompt",
   "model",
 ]);
+
+const TITLE_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionTitleKey | null> = {
+  speaking_minutes: "complete_speaking_minutes",
+  podchat_sessions: "complete_podchat_sessions",
+  pattern_drill_sessions: "complete_pattern_drill_sessions",
+  vocabulary_collected: "collect_vocabulary_items",
+  vocabulary_reviewed: null,
+  vocab_sentence_submitted: "submit_vocabulary_sentences",
+  vocab_correction_saved: "save_vocabulary_corrections",
+  article_practice_completed: "complete_article_practice_sessions",
+  daily_practice_days: "practice_on_distinct_days",
+  weakness_resolution: null,
+};
+
+const DESCRIPTION_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionDescriptionKey | null> = {
+  speaking_minutes: "build_speaking_volume",
+  podchat_sessions: "add_evaluated_speaking_samples",
+  pattern_drill_sessions: "target_repeated_weakness",
+  vocabulary_collected: "build_active_vocabulary",
+  vocabulary_reviewed: null,
+  vocab_sentence_submitted: "apply_vocabulary_in_sentences",
+  vocab_correction_saved: "save_revised_language",
+  article_practice_completed: "practice_article_transfer",
+  daily_practice_days: "build_weekly_rhythm",
+  weakness_resolution: null,
+};
+
+const TITLE_KEYS = new Set<WeeklyMissionTitleKey>(
+  Object.values(TITLE_KEY_BY_METRIC).filter((key): key is WeeklyMissionTitleKey => Boolean(key)),
+);
+const DESCRIPTION_KEYS = new Set<WeeklyMissionDescriptionKey>(
+  Object.values(DESCRIPTION_KEY_BY_METRIC).filter((key): key is WeeklyMissionDescriptionKey => Boolean(key)),
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -178,6 +247,16 @@ function isMetricType(value: unknown, enabledMetricTypes: ReadonlySet<string>): 
   return typeof value === "string" && enabledMetricTypes.has(value);
 }
 
+function normalizeTitleKey(raw: unknown, metricType: WeeklyMissionMetricType): WeeklyMissionTitleKey | null {
+  if (typeof raw !== "string" || !TITLE_KEYS.has(raw as WeeklyMissionTitleKey)) return null;
+  return TITLE_KEY_BY_METRIC[metricType] === raw ? raw as WeeklyMissionTitleKey : null;
+}
+
+function normalizeDescriptionKey(raw: unknown, metricType: WeeklyMissionMetricType): WeeklyMissionDescriptionKey | null {
+  if (typeof raw !== "string" || !DESCRIPTION_KEYS.has(raw as WeeklyMissionDescriptionKey)) return null;
+  return DESCRIPTION_KEY_BY_METRIC[metricType] === raw ? raw as WeeklyMissionDescriptionKey : null;
+}
+
 function normalizeSourceFeatures(raw: unknown[]): WeeklyMissionSourceFeature[] | null {
   const result: WeeklyMissionSourceFeature[] = [];
   for (const item of raw) {
@@ -204,12 +283,69 @@ function normalizeWeaknessTarget(raw: unknown): WeeklyMission["weaknessTarget"] 
 
 function normalizeRecommendedAction(raw: unknown): WeeklyMission["recommendedAction"] | null {
   if (!isRecord(raw)) return null;
-  const label = readString(raw, "label", 80);
   const routeTarget = raw.routeTarget;
-  if (!label || typeof routeTarget !== "string" || !ROUTE_TARGETS.has(routeTarget as WeeklyMissionRouteTarget)) {
+  if (typeof routeTarget !== "string" || !ROUTE_TARGETS.has(routeTarget as WeeklyMissionRouteTarget)) {
     return null;
   }
-  return { label, routeTarget: routeTarget as WeeklyMissionRouteTarget };
+  return { label: labelForRouteTarget(routeTarget as WeeklyMissionRouteTarget), routeTarget: routeTarget as WeeklyMissionRouteTarget };
+}
+
+function hasNumericProgressClaim(value: string): boolean {
+  return /\d/.test(value);
+}
+
+function labelForRouteTarget(routeTarget: WeeklyMissionRouteTarget): string {
+  switch (routeTarget) {
+    case "podchat":
+      return "Start Podchat";
+    case "pattern_drill":
+      return "Open Pattern Drill";
+    case "vocabulary":
+      return "Open Vocabulary";
+    case "article_practice":
+      return "Start Article Practice";
+    case "commonplace":
+      return "Open Commonplace";
+  }
+}
+
+function defaultReasonForMetric(
+  metricType: WeeklyMissionMetricType,
+  weaknessTarget: WeeklyMission["weaknessTarget"],
+): string {
+  switch (metricType) {
+    case "speaking_minutes":
+      return "Speaking volume helps turn feedback into more fluent academic responses.";
+    case "podchat_sessions":
+      return "Evaluated speaking sessions create reliable evidence for future feedback.";
+    case "pattern_drill_sessions":
+      return weaknessTarget
+        ? "Targeted pattern practice helps convert repeated feedback into control."
+        : "Targeted drills help turn feedback patterns into repeatable speaking habits.";
+    case "vocabulary_collected":
+      return "Useful vocabulary gives the week concrete material for review and transfer.";
+    case "vocab_sentence_submitted":
+      return "Sentence practice turns saved vocabulary into usable academic phrasing.";
+    case "vocab_correction_saved":
+      return "Saved corrections help revised language become reusable in later practice.";
+    case "article_practice_completed":
+      return "Article practice adds structured academic transfer beyond live speaking.";
+    case "daily_practice_days":
+      return "Spacing practice across the week builds a steadier learning rhythm.";
+    case "vocabulary_reviewed":
+    case "weakness_resolution":
+      return "This mission supports focused weekly practice from tracked activity.";
+  }
+}
+
+function sanitizeMissionReason(
+  reason: string,
+  metricType: WeeklyMissionMetricType,
+  weaknessTarget: WeeklyMission["weaknessTarget"],
+): string {
+  return hasNumericProgressClaim(reason)
+    ? defaultReasonForMetric(metricType, weaknessTarget)
+    : reason;
 }
 
 export function buildWeeklyMissionAiInput(input: {
@@ -256,50 +392,88 @@ export function classifySnapshotDataSufficiency(
   });
 }
 
-export function buildWeeklyMissionSystemPrompt(): string {
+export function buildWeeklyMissionAnalyticSystemPrompt(): string {
   return [
-    "You generate Weekly Mission plans for an academic English speaking app.",
+    "You analyze bounded weekly learning signals for an academic English speaking app.",
     "Return ONLY one raw JSON object. No markdown, no code fences, no commentary.",
-    "You may diagnose and propose missions, but you must not invent progress.",
-    "Use only the enabledMetricTypes provided in the user JSON.",
-    "Generate exactly 3 to 5 measurable missions.",
-    "Do not include currentValue, status, missionId, ownerId, provider, source snapshots, raw transcripts, raw answers, prompts, or model details.",
-    "If dataSufficiency is starter, create starter missions instead of pretending there is a detailed diagnosis.",
-    "Each mission must include title, description, reason, weaknessTarget or null, metricType, targetValue, unit, sourceFeatures, and recommendedAction.",
+    "Do not propose mission progress, target counts, completion counts, statuses, owner IDs, provider names, model names, source snapshots, raw transcripts, raw answers, prompts, or private data.",
+    "If dataSufficiency is starter, say that the plan should build baseline evidence instead of inventing a weakness diagnosis.",
+    "Keep every field short and safe for storage.",
   ].join("\n");
 }
 
-export function buildWeeklyMissionUserPrompt(input: WeeklyMissionAiInput): string {
+export function buildWeeklyMissionAnalyticUserPrompt(input: WeeklyMissionAiInput): string {
   return [
-    "Create a Weekly Mission Review from this bounded deterministic data:",
+    "Analyze this bounded deterministic data:",
     JSON.stringify(input),
     "",
     "Required JSON shape:",
     JSON.stringify({
       diagnosisSummary: "short summary",
-      dataSufficiency: input.dataSufficiency,
-      topWeaknesses: [{ category: "Grammar", label: "Example", reason: "short reason" }],
+      dataSufficiencyComment: "short comment about signal quality",
+      primaryWeaknesses: [
+        {
+          category: "Grammar",
+          label: "Example",
+          reason: "short reason without numbers",
+          practiceFocus: "optional short focus",
+        },
+      ],
+      learningPriority: "short priority",
+      recommendedMissionStrategy: "short strategy",
+    }),
+  ].join("\n");
+}
+
+export function buildWeeklyMissionPlanningSystemPrompt(): string {
+  return [
+    "You propose Weekly Mission intents for an academic English speaking app.",
+    "Return ONLY one raw JSON object. No markdown, no code fences, no commentary.",
+    "Use only enabled metrics and the allowed server text keys provided in the user prompt.",
+    "Generate exactly 3 to 5 measurable missions.",
+    "Do not include currentValue, status, missionId, ownerId, provider, source snapshots, raw transcripts, raw answers, prompts, model details, or progress claims.",
+    "Mission reasons must not mention target numbers, current progress, completion counts, or mission status.",
+    "The server will clamp targets, write final titles/descriptions, derive CTA labels, and compute progress.",
+  ].join("\n");
+}
+
+export function buildWeeklyMissionPlanningUserPrompt(input: {
+  aiInput: WeeklyMissionAiInput;
+  analyticOutput: WeeklyMissionAnalyticOutput;
+}): string {
+  return [
+    "Create mission proposals from this bounded data and analytic summary.",
+    "Bounded data:",
+    JSON.stringify(input.aiInput),
+    "Analytic summary:",
+    JSON.stringify(input.analyticOutput),
+    "",
+    "Allowed title keys by metric:",
+    JSON.stringify(TITLE_KEY_BY_METRIC),
+    "Allowed description keys by metric:",
+    JSON.stringify(DESCRIPTION_KEY_BY_METRIC),
+    "",
+    "Required JSON shape:",
+    JSON.stringify({
       missions: [
         {
-          title: "mission title",
-          description: "mission description",
-          reason: "why this mission helps",
-          weaknessTarget: null,
-          metricType: input.enabledMetricTypes[0],
-          targetValue: 3,
+          missionIntent: "short intent",
+          titleKey: TITLE_KEY_BY_METRIC[input.aiInput.enabledMetricTypes[0]] ?? "complete_podchat_sessions",
+          descriptionKey: DESCRIPTION_KEY_BY_METRIC[input.aiInput.enabledMetricTypes[0]] ?? "add_evaluated_speaking_samples",
+          metricType: input.aiInput.enabledMetricTypes[0],
+          proposedTargetValue: 3,
           unit: "sessions",
+          reason: "why this mission helps without numbers",
+          weaknessTarget: null,
           sourceFeatures: ["podchat"],
-          recommendedAction: { label: "Start practice", routeTarget: "podchat" },
+          recommendedAction: { label: "ignored by server", routeTarget: "podchat" },
         },
       ],
     }),
   ].join("\n");
 }
 
-export function parseWeeklyMissionAiOutput(
-  raw: string,
-  enabledMetricTypes: WeeklyMissionMetricType[],
-): WeeklyMissionAiOutput | null {
+export function parseWeeklyMissionAnalyticOutput(raw: string): WeeklyMissionAnalyticOutput | null {
   const jsonText = extractJsonObject(raw);
   if (!jsonText) return null;
 
@@ -312,10 +486,49 @@ export function parseWeeklyMissionAiOutput(
 
   if (!isRecord(parsed) || hasForbiddenKey(parsed)) return null;
   const diagnosisSummary = readString(parsed, "diagnosisSummary", 700);
-  if (!diagnosisSummary) return null;
-  if (typeof parsed.dataSufficiency !== "string" || !DATA_SUFFICIENCY_VALUES.has(parsed.dataSufficiency)) {
+  const dataSufficiencyComment = readString(parsed, "dataSufficiencyComment", 240);
+  const learningPriority = readString(parsed, "learningPriority", 240);
+  const recommendedMissionStrategy = readString(parsed, "recommendedMissionStrategy", 240);
+  if (!diagnosisSummary || !dataSufficiencyComment || !learningPriority || !recommendedMissionStrategy) {
     return null;
   }
+
+  const rawWeaknesses = parsed.primaryWeaknesses;
+  if (!Array.isArray(rawWeaknesses)) return null;
+  const primaryWeaknesses = rawWeaknesses.slice(0, 5).flatMap((item) => {
+    if (!isRecord(item) || hasForbiddenKey(item)) return [];
+    const category = readString(item, "category", 80);
+    const label = readString(item, "label", 120);
+    const reason = readString(item, "reason", 220);
+    if (!category || !label || !reason || hasNumericProgressClaim(reason)) return [];
+    const practiceFocus = readString(item, "practiceFocus", 240) ?? undefined;
+    return [{ category, label, reason, practiceFocus }];
+  });
+
+  return {
+    diagnosisSummary,
+    dataSufficiencyComment,
+    primaryWeaknesses,
+    learningPriority,
+    recommendedMissionStrategy,
+  };
+}
+
+export function parseWeeklyMissionPlanningOutput(
+  raw: string,
+  enabledMetricTypes: WeeklyMissionMetricType[],
+): WeeklyMissionPlanningOutput | null {
+  const jsonText = extractJsonObject(raw);
+  if (!jsonText) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(parsed) || hasForbiddenKey(parsed)) return null;
 
   const rawMissions = parsed.missions;
   if (!Array.isArray(rawMissions) || rawMissions.length < 3 || rawMissions.length > 5) {
@@ -326,61 +539,64 @@ export function parseWeeklyMissionAiOutput(
   const missions: ProposedMission[] = [];
   for (const rawMission of rawMissions) {
     if (!isRecord(rawMission) || hasForbiddenKey(rawMission)) return null;
-    const title = readString(rawMission, "title", 100);
-    const description = readString(rawMission, "description", 260);
+    const missionIntent = readString(rawMission, "missionIntent", 160);
     const reason = readString(rawMission, "reason", 260);
     const metricType = rawMission.metricType;
-    const targetValue = rawMission.targetValue;
+    if (!isMetricType(metricType, enabled)) return null;
+    const titleKey = normalizeTitleKey(rawMission.titleKey, metricType);
+    const descriptionKey = normalizeDescriptionKey(rawMission.descriptionKey, metricType);
+    const proposedTargetValue = rawMission.proposedTargetValue;
     const unit = readString(rawMission, "unit", 40);
     const weaknessTarget = normalizeWeaknessTarget(rawMission.weaknessTarget);
     const sourceFeatures = Array.isArray(rawMission.sourceFeatures)
       ? normalizeSourceFeatures(rawMission.sourceFeatures)
       : null;
     const recommendedAction = normalizeRecommendedAction(rawMission.recommendedAction);
+    const route = routeForMetric(metricType);
 
     if (
-      !title ||
-      !description ||
+      !missionIntent ||
+      !titleKey ||
+      !descriptionKey ||
       !reason ||
-      !isMetricType(metricType, enabled) ||
-      typeof targetValue !== "number" ||
-      !Number.isFinite(targetValue) ||
+      typeof proposedTargetValue !== "number" ||
+      !Number.isFinite(proposedTargetValue) ||
       !unit ||
       weaknessTarget === false ||
       !sourceFeatures ||
-      !recommendedAction
+      !recommendedAction ||
+      recommendedAction.routeTarget !== route.recommendedAction.routeTarget
     ) {
       return null;
     }
 
     missions.push({
-      title,
-      description,
+      missionIntent,
+      titleKey,
+      descriptionKey,
       reason,
       weaknessTarget,
       metricType,
-      targetValue,
+      proposedTargetValue,
       unit,
       sourceFeatures,
       recommendedAction,
     });
   }
 
-  const topWeaknesses = Array.isArray(parsed.topWeaknesses)
-    ? parsed.topWeaknesses.slice(0, 5).flatMap((item) => {
-        if (!isRecord(item)) return [];
-        const category = readString(item, "category", 80);
-        const label = readString(item, "label", 120);
-        const reason = readString(item, "reason", 220);
-        return category && label && reason ? [{ category, label, reason }] : [];
-      })
-    : [];
+  return { missions };
+}
 
+export function buildWeeklyMissionOutputFromPlanning(input: {
+  analyticOutput: WeeklyMissionAnalyticOutput;
+  planningOutput: WeeklyMissionPlanningOutput;
+  dataSufficiency: WeeklyMissionDataSufficiency;
+}): WeeklyMissionAiOutput {
   return {
-    diagnosisSummary,
-    dataSufficiency: parsed.dataSufficiency as WeeklyMissionDataSufficiency,
-    topWeaknesses,
-    missions,
+    diagnosisSummary: input.analyticOutput.diagnosisSummary,
+    dataSufficiency: input.dataSufficiency,
+    topWeaknesses: input.analyticOutput.primaryWeaknesses,
+    missions: input.planningOutput.missions,
   };
 }
 
@@ -412,15 +628,66 @@ function routeForMetric(metricType: WeeklyMissionMetricType): {
   }
 }
 
-function fallbackMission(metricType: WeeklyMissionMetricType, targetValue: number, title: string, description: string, reason: string, weaknessTarget: WeeklyMission["weaknessTarget"] = null): ProposedMission {
+function renderWeeklyMissionTitle(input: {
+  titleKey: WeeklyMissionTitleKey;
+  targetValue: number;
+}): string {
+  switch (input.titleKey) {
+    case "complete_speaking_minutes":
+      return `Reach ${input.targetValue} speaking minutes`;
+    case "complete_podchat_sessions":
+      return `Complete ${input.targetValue} Podchat ${input.targetValue === 1 ? "session" : "sessions"}`;
+    case "complete_pattern_drill_sessions":
+      return `Complete ${input.targetValue} Pattern Drill ${input.targetValue === 1 ? "session" : "sessions"}`;
+    case "collect_vocabulary_items":
+      return `Collect ${input.targetValue} vocabulary items`;
+    case "submit_vocabulary_sentences":
+      return `Submit ${input.targetValue} vocabulary ${input.targetValue === 1 ? "sentence" : "sentences"}`;
+    case "save_vocabulary_corrections":
+      return `Save ${input.targetValue} vocabulary ${input.targetValue === 1 ? "correction" : "corrections"}`;
+    case "complete_article_practice_sessions":
+      return `Complete ${input.targetValue} Article Practice ${input.targetValue === 1 ? "session" : "sessions"}`;
+    case "practice_on_distinct_days":
+      return `Practice on ${input.targetValue} ${input.targetValue === 1 ? "day" : "days"}`;
+  }
+}
+
+function renderWeeklyMissionDescription(input: {
+  descriptionKey: WeeklyMissionDescriptionKey;
+  targetValue: number;
+}): string {
+  switch (input.descriptionKey) {
+    case "build_speaking_volume":
+      return `Reach ${input.targetValue} saved speaking minutes this week.`;
+    case "add_evaluated_speaking_samples":
+      return `Complete ${input.targetValue} evaluated Podchat ${input.targetValue === 1 ? "session" : "sessions"} this week.`;
+    case "target_repeated_weakness":
+      return `Complete ${input.targetValue} Pattern Drill ${input.targetValue === 1 ? "session" : "sessions"} focused on the strongest current weakness signal.`;
+    case "build_active_vocabulary":
+      return `Save ${input.targetValue} useful vocabulary items from practice or article work.`;
+    case "apply_vocabulary_in_sentences":
+      return `Submit ${input.targetValue} vocabulary practice ${input.targetValue === 1 ? "sentence" : "sentences"}.`;
+    case "save_revised_language":
+      return `Save ${input.targetValue} vocabulary ${input.targetValue === 1 ? "correction" : "corrections"} or revisions.`;
+    case "practice_article_transfer":
+      return `Complete ${input.targetValue} evaluated Article Practice ${input.targetValue === 1 ? "session" : "sessions"}.`;
+    case "build_weekly_rhythm":
+      return `Complete tracked practice activity on ${input.targetValue} different UTC ${input.targetValue === 1 ? "day" : "days"}.`;
+  }
+}
+
+function fallbackMission(metricType: WeeklyMissionMetricType, targetValue: number, reason: string, weaknessTarget: WeeklyMission["weaknessTarget"] = null): ProposedMission {
   const route = routeForMetric(metricType);
+  const titleKey = TITLE_KEY_BY_METRIC[metricType] ?? "complete_podchat_sessions";
+  const descriptionKey = DESCRIPTION_KEY_BY_METRIC[metricType] ?? "add_evaluated_speaking_samples";
   return {
-    title,
-    description,
+    missionIntent: defaultReasonForMetric(metricType, weaknessTarget),
+    titleKey,
+    descriptionKey,
     reason,
     weaknessTarget,
     metricType,
-    targetValue,
+    proposedTargetValue: targetValue,
     unit: route.unit,
     sourceFeatures: route.sourceFeatures,
     recommendedAction: route.recommendedAction,
@@ -447,51 +714,51 @@ export function buildFallbackWeeklyMissionOutput(input: {
   const missions: ProposedMission[] = [];
 
   if (input.dataSufficiency === "starter") {
-    addFallbackMission(missions, fallbackMission("podchat_sessions", 1, "Complete a baseline Podchat", "Finish one evaluated Podchat session to create a speaking baseline.", "Start with a real speaking sample before diagnosing patterns."));
-    addFallbackMission(missions, fallbackMission("speaking_minutes", 15, "Log starter speaking minutes", "Reach 15 minutes of saved speaking practice this week.", "A small speaking target creates the first fluency signal."));
-    addFallbackMission(missions, fallbackMission("vocabulary_collected", 5, "Collect starter vocabulary", "Save five vocabulary items from practice or article work.", "A starter word bank gives future reviews useful material."));
-    addFallbackMission(missions, fallbackMission("daily_practice_days", 2, "Practice on two days", "Complete any tracked practice activity on two different UTC days.", "Two practice days establish a measurable weekly rhythm."));
+    addFallbackMission(missions, fallbackMission("podchat_sessions", 1, "Start with a real speaking sample before diagnosing patterns."));
+    addFallbackMission(missions, fallbackMission("speaking_minutes", 15, "A small speaking target creates the first fluency signal."));
+    addFallbackMission(missions, fallbackMission("vocabulary_collected", 5, "A starter word bank gives future reviews useful material."));
+    addFallbackMission(missions, fallbackMission("daily_practice_days", 2, "Practice spacing establishes a measurable weekly rhythm."));
   } else if (input.dataSufficiency === "partial") {
     if (lowSpeakingActivity) {
-      addFallbackMission(missions, fallbackMission("speaking_minutes", 30, "Raise speaking volume", "Reach 30 saved speaking minutes this week.", "Speaking volume is still low, so more evaluated practice will improve future feedback."));
-      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Add Podchat evidence", "Complete two evaluated Podchat sessions this week.", "More sessions make weekly progress less dependent on a single sample."));
+      addFallbackMission(missions, fallbackMission("speaking_minutes", 30, "Speaking volume is still low, so more evaluated practice will improve future feedback."));
+      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "More sessions make weekly progress less dependent on a single sample."));
     } else {
-      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Keep Podchat rhythm", "Complete two evaluated Podchat sessions this week.", "Maintain the speaking evidence you already started building."));
-      addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Extend speaking transfer", "Reach 45 saved speaking minutes this week.", "Longer speaking practice helps turn feedback into fluent use."));
+      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Maintain the speaking evidence you already started building."));
+      addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Longer speaking practice helps turn feedback into fluent use."));
     }
     if (vocabularyGap) {
-      addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Fill the vocabulary gap", "Save ten useful vocabulary items from practice or article work.", "Vocabulary activity is low, so collecting words will make review more useful."));
+      addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Vocabulary activity is low, so collecting words will make review more useful."));
     }
     if (articleGap) {
-      addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Add one article practice", "Complete one evaluated Article Practice session.", "Article work adds structured academic writing evidence."));
+      addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Article work adds structured academic writing evidence."));
     }
     if (topWeakness) {
-      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "Drill your clearest pattern", "Complete one Pattern Drill focused on the strongest current weakness signal.", "A real weakness signal is available, so targeted practice can be useful.", weaknessTarget));
+      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "A real weakness signal is available, so targeted practice can be useful.", weaknessTarget));
     }
-    addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Practice on three days", "Complete any tracked practice activity on three different UTC days.", "Spacing practice across the week improves retention."));
+    addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Spacing practice across the week improves retention."));
   } else {
     if (topWeakness) {
-      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "Drill your top weakness", "Complete one Pattern Drill focused on this week's repeated weakness.", "Targeted pattern practice turns repeated feedback into repeatable control.", weaknessTarget));
+      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "Targeted pattern practice turns repeated feedback into repeatable control.", weaknessTarget));
     }
-    addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Transfer feedback into speaking", "Reach 45 saved speaking minutes this week.", "Strong data is most useful when you transfer it back into live speaking.", weaknessTarget));
+    addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Strong data is most useful when you transfer it back into live speaking.", weaknessTarget));
     if (vocabularyGap) {
-      addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Build vocabulary for transfer", "Save ten vocabulary items that support this week's speaking work.", "Vocabulary is the clearest gap in an otherwise stronger practice record."));
+      addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Vocabulary is the clearest gap in an otherwise stronger practice record."));
     } else {
-      addFallbackMission(missions, fallbackMission("vocab_sentence_submitted", 3, "Use vocabulary in sentences", "Submit three vocabulary practice sentences.", "Sentence practice turns known words into usable academic phrasing."));
+      addFallbackMission(missions, fallbackMission("vocab_sentence_submitted", 3, "Sentence practice turns known words into usable academic phrasing."));
     }
     if (articleGap) {
-      addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Add article transfer practice", "Complete one evaluated Article Practice session.", "Article work adds a transfer surface beyond speaking."));
+      addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Article work adds a transfer surface beyond speaking."));
     } else {
-      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Keep Podchat transfer active", "Complete two evaluated Podchat sessions this week.", "A second transfer mission keeps the week grounded in live speaking."));
+      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "An additional transfer mission keeps the week grounded in live speaking."));
     }
-    addFallbackMission(missions, fallbackMission("daily_practice_days", 4, "Sustain four practice days", "Complete any tracked practice activity on four different UTC days.", "Strong evidence supports a higher consistency target."));
+    addFallbackMission(missions, fallbackMission("daily_practice_days", 4, "Strong evidence supports a higher consistency target."));
   }
 
-  addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Complete two Podchat sessions", "Finish two evaluated speaking sessions this week.", "Build steady speaking rhythm with saved evaluated practice."));
-  addFallbackMission(missions, fallbackMission("speaking_minutes", 30, "Reach 30 speaking minutes", "Accumulate 30 minutes of saved speaking practice.", "More speaking time creates more reliable fluency evidence."));
-  addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Collect ten useful vocabulary items", "Save ten vocabulary items from practice or article work.", "A small vocabulary collection gives the week concrete review material."));
-  addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Complete one Article Practice", "Finish one evaluated article writing practice.", "Article work strengthens structured academic responses."));
-  addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Practice on three days", "Complete any tracked practice activity on three different UTC days.", "Spacing practice across the week improves retention."));
+  addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Build steady speaking rhythm with saved evaluated practice."));
+  addFallbackMission(missions, fallbackMission("speaking_minutes", 30, "More speaking time creates more reliable fluency evidence."));
+  addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "A small vocabulary collection gives the week concrete review material."));
+  addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Article work strengthens structured academic responses."));
+  addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Spacing practice across the week improves retention."));
 
   return {
     diagnosisSummary:
@@ -514,10 +781,17 @@ export function finalizeWeeklyMissions(input: FinalizeWeeklyMissionsInput): Week
     const metricType = enabled.has(mission.metricType) ? mission.metricType : "podchat_sessions";
     const target = validateWeeklyMissionTarget({
       metricType,
-      proposedTargetValue: mission.targetValue,
+      proposedTargetValue: mission.proposedTargetValue,
     });
     const currentValue = 0;
     const route = routeForMetric(metricType);
+    const titleKey = TITLE_KEY_BY_METRIC[metricType] ?? "complete_podchat_sessions";
+    const descriptionKey = DESCRIPTION_KEY_BY_METRIC[metricType] ?? "add_evaluated_speaking_samples";
+    const finalTitleKey = mission.titleKey === titleKey ? mission.titleKey : titleKey;
+    const finalDescriptionKey = mission.descriptionKey === descriptionKey ? mission.descriptionKey : descriptionKey;
+    const routeTarget = mission.recommendedAction.routeTarget === route.recommendedAction.routeTarget
+      ? mission.recommendedAction.routeTarget
+      : route.recommendedAction.routeTarget;
     return {
       missionId: createWeeklyMissionId({
         ownerId: input.ownerId,
@@ -525,9 +799,15 @@ export function finalizeWeeklyMissions(input: FinalizeWeeklyMissionsInput): Week
         metricType,
         index,
       }),
-      title: mission.title,
-      description: mission.description,
-      reason: mission.reason,
+      title: renderWeeklyMissionTitle({
+        titleKey: finalTitleKey,
+        targetValue: target.targetValue,
+      }),
+      description: renderWeeklyMissionDescription({
+        descriptionKey: finalDescriptionKey,
+        targetValue: target.targetValue,
+      }),
+      reason: sanitizeMissionReason(mission.reason, metricType, mission.weaknessTarget),
       weaknessTarget: mission.weaknessTarget,
       metricType,
       targetValue: target.targetValue,
@@ -540,9 +820,10 @@ export function finalizeWeeklyMissions(input: FinalizeWeeklyMissionsInput): Week
         now: input.now,
         weekEnd: input.weekEnd,
       }),
-      recommendedAction: ROUTE_TARGETS.has(mission.recommendedAction.routeTarget)
-        ? mission.recommendedAction
-        : route.recommendedAction,
+      recommendedAction: {
+        label: labelForRouteTarget(routeTarget),
+        routeTarget,
+      },
       createdAt: input.createdAt,
       weekStart: input.weekStart,
       weekEnd: input.weekEnd,
