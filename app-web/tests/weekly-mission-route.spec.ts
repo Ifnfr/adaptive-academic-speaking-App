@@ -761,6 +761,26 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(json.review.reviewId).toBe("weekly-review-1");
   });
 
+  test("save failure reports storage unavailable after fallback generation", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: null,
+      insertError: new Error("relation weekly_mission_reviews does not exist"),
+      conflictReview: null,
+    });
+    const handlers = buildHandlers({
+      supabase,
+      provider: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toEqual({ error: "weekly_mission_storage_unavailable" });
+  });
+
   test("GET existing review recomputes live progress from updated source data and does not write to database", async () => {
     const supabase = createMockSupabase({
       cachedReview: weeklyRow(),

@@ -210,6 +210,44 @@ test.describe("Weekly Mission Dashboard UI", () => {
     await expect(page.getByRole("heading", { name: "Weekly Missions", exact: true })).toBeVisible();
   });
 
+  test("storage setup failure is shown as a safe storage message after generate", async ({ page }) => {
+    await page.route("**/api/weekly-review/mission", async (route) => {
+      if (route.request().method() === "POST") {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "weekly_mission_storage_unavailable" }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          state: "not_generated",
+          period: {
+            weekStart: "2026-06-15",
+            weekEnd: "2026-06-21",
+            timezone: "UTC",
+            nextReviewAvailableAt: "2026-06-22T00:00:00.000Z",
+          },
+          review: null,
+        }),
+      });
+    });
+
+    await gotoMockApp(page);
+    await openWeeklyReview(page);
+    await page.getByRole("button", { name: "Generate Weekly Missions" }).click();
+
+    await expect(page.getByTestId("weekly-mission-error")).toContainText(
+      "Weekly mission storage is not ready yet.",
+    );
+    await expect(page.getByTestId("weekly-mission-error")).not.toContainText("provider");
+    await expect(page.getByTestId("weekly-mission-error")).not.toContainText("model");
+  });
+
   test("existing mission CTAs route to target app surfaces", async ({ page }) => {
     await page.route("**/api/weekly-review/mission", async (route) => {
       await route.fulfill({

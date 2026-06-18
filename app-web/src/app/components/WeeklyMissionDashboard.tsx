@@ -35,6 +35,8 @@ type WeeklyMissionPostResponse =
 
 const SAFE_ERROR_MESSAGE =
   "Weekly missions are unavailable right now. Please try again.";
+const SAFE_STORAGE_ERROR_MESSAGE =
+  "Weekly mission storage is not ready yet. Please ask the site owner to finish setup, then try again.";
 const STAGED_GENERATION_MESSAGES = [
   "Analyzing your learning data...",
   "Finding your weekly focus...",
@@ -53,6 +55,12 @@ function isReviewResponse(
       "state" in value &&
       (value.state === "created" || value.state === "existing"),
   );
+}
+
+function safeErrorMessageFor(value: WeeklyMissionGetResponse | WeeklyMissionPostResponse | null): string {
+  return value && "error" in value && value.error === "weekly_mission_storage_unavailable"
+    ? SAFE_STORAGE_ERROR_MESSAGE
+    : SAFE_ERROR_MESSAGE;
 }
 
 function formatDate(value: string): string {
@@ -417,7 +425,7 @@ export function WeeklyMissionDashboard({
       const data = (await response.json().catch(() => null)) as WeeklyMissionGetResponse | null;
 
       if (!response.ok || !data) {
-        setUiState({ status: "error", message: SAFE_ERROR_MESSAGE });
+        setUiState({ status: "error", message: safeErrorMessageFor(data) });
         return;
       }
 
@@ -478,7 +486,7 @@ export function WeeklyMissionDashboard({
       const data = (await response.json().catch(() => null)) as WeeklyMissionPostResponse | null;
 
       if (!response.ok || !data || !isReviewResponse(data)) {
-        setUiState({ status: "error", message: SAFE_ERROR_MESSAGE });
+        setUiState({ status: "error", message: safeErrorMessageFor(data) });
         return;
       }
 

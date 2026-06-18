@@ -348,7 +348,7 @@ export function createWeeklyMissionRouteHandlers(deps: HandlerDeps = {}) {
     );
 
     if (!saveResult.ok) {
-      return json({ error: "weekly_mission_save_failed" }, 502);
+      return json({ error: "weekly_mission_storage_unavailable" }, 503);
     }
 
     const finalReview = withProgress(saveResult.review, sourceSnapshot, requestNow);
