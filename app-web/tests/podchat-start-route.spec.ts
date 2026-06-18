@@ -18,10 +18,17 @@ function buildRequest(body: Record<string, unknown>): Request {
   });
 }
 
-function mockDeepSeekResponse(status: number, responseText: string) {
+function mockDeepSeekResponse(
+  status: number,
+  responseText: string,
+  capture: { body?: Record<string, unknown> } = {},
+) {
   process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
   process.env.AI_PLANNING_PROVIDER = "deepseek";
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (_url, init) => {
+    if (init && typeof init.body === "string") {
+      capture.body = JSON.parse(init.body) as Record<string, unknown>;
+    }
     if (status === 200) {
       return new Response(
         JSON.stringify({
@@ -87,6 +94,38 @@ test.describe("POST /api/podchat/start Route Tests", () => {
     expect(response.status).toBe(400);
     const data = await response.json();
     expect(data.error).toContain("difficulty");
+  });
+
+  test("context open-ended article start includes article and completion guidance", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    const mockJson = {
+      opener: "Let's connect this article to your own view. What is the main implication?",
+      sessionPlan: {
+        topicAngle: "article implications",
+        targetSkill: "defending a position",
+        followUpStrategy: "ask about evidence and implications",
+        expectedLanguagePattern: "The main implication is [idea] because [evidence].",
+        evaluationFocus: ["topic development"],
+      },
+    };
+    mockDeepSeekResponse(200, JSON.stringify(mockJson), capture);
+
+    const response = await POST(buildRequest({
+      difficulty: "Expert",
+      sessionMode: "context_open_ended",
+      articleContext: {
+        articleTitle: "Policy systems",
+        articleBrief: "A complex article about evidence and implications.",
+        speakingTaskTitle: "Discuss the article",
+        speakingTaskInstruction: "Defend a position.",
+      },
+    }));
+    expect(response.status).toBe(200);
+
+    const providerBody = JSON.stringify(capture.body);
+    expect(providerBody).toContain("Policy systems");
+    expect(providerBody).toContain("Session mode: context_open_ended");
+    expect(providerBody).toContain("open-ended context discussion");
   });
 
   test("Missing planning provider key returns safe 503", async () => {

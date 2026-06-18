@@ -9,6 +9,7 @@ export type PodchatTopic =
   | "Daily Life & Casual Conversation";
 
 export type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced" | "Expert";
+export type PodchatSessionMode = "normal_timed" | "context_open_ended";
 
 export const DIFFICULTY_DURATION: Record<PodchatDifficulty, number> = {
   Beginner: 180,

@@ -611,6 +611,28 @@ test.describe("Podchat Evaluate Route", () => {
     expect(providerBody).toContain("Speak about why AI is useful.");
   });
 
+  test("context open-ended evaluation preserves Expert and adds completion guidance", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify(validEvaluation()), capture);
+
+    const response = await POST(buildRequest({
+      sessionMode: "context_open_ended",
+      difficulty: "Expert",
+      articleContext: {
+        articleTitle: "Policy systems",
+        articleBrief: "A complex article about evidence, assumptions, and implications.",
+        speakingTaskTitle: "Discuss the article",
+        speakingTaskInstruction: "Defend a position with evidence.",
+      },
+    }));
+    expect(response.status).toBe(200);
+
+    const providerBody = JSON.stringify(capture.body);
+    expect(providerBody).toContain("SESSION MODE: Context Discussion / Open-ended.");
+    expect(providerBody).toContain("Difficulty: Expert");
+    expect(providerBody).toContain("theoretical implications");
+  });
+
   test("request with mock provider and articleContext returns mock response", async () => {
     process.env.PODCHAT_AI_PROVIDER = "mock";
     process.env.CLAUDE_API_KEY = "";

@@ -12,6 +12,7 @@ import {
   DIFFICULTIES,
   type PodchatTopic,
   type PodchatDifficulty,
+  type PodchatSessionMode,
 } from "../../../lib/podchat";
 type PodchatSpeaker = "host" | "learner";
 type PodchatTurn = {
@@ -22,6 +23,7 @@ type PodchatTurn = {
 type PodchatTurnRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
+  sessionMode: PodchatSessionMode;
   turnIndex: number;
   durationSeconds: number;
   elapsedSeconds: number;
@@ -287,14 +289,18 @@ function validateRequest(
     };
   }
   const validDifficulty: PodchatDifficulty = difficulty as PodchatDifficulty;
+  const sessionMode: PodchatSessionMode =
+    b.sessionMode === "context_open_ended" ? "context_open_ended" : "normal_timed";
+  const isContextOpenEnded = sessionMode === "context_open_ended";
 
   const expectedDuration = DIFFICULTY_DURATION[validDifficulty];
 
   const durationSeconds = b.durationSeconds;
   if (
-    typeof durationSeconds !== "number" ||
-    !Number.isInteger(durationSeconds) ||
-    durationSeconds !== expectedDuration
+    !isContextOpenEnded &&
+    (typeof durationSeconds !== "number" ||
+      !Number.isInteger(durationSeconds) ||
+      durationSeconds !== expectedDuration)
   ) {
     return {
       valid: false,
@@ -307,7 +313,9 @@ function validateRequest(
     typeof elapsedSeconds !== "number" ||
     !Number.isInteger(elapsedSeconds) ||
     elapsedSeconds < 0 ||
-    elapsedSeconds > durationSeconds
+    (!isContextOpenEnded &&
+      typeof durationSeconds === "number" &&
+      elapsedSeconds > durationSeconds)
   ) {
     return {
       valid: false,
@@ -317,10 +325,11 @@ function validateRequest(
 
   const remainingSeconds = b.remainingSeconds;
   if (
-    typeof remainingSeconds !== "number" ||
-    !Number.isInteger(remainingSeconds) ||
-    remainingSeconds < 0 ||
-    remainingSeconds > durationSeconds
+    !isContextOpenEnded &&
+    (typeof remainingSeconds !== "number" ||
+      !Number.isInteger(remainingSeconds) ||
+      remainingSeconds < 0 ||
+      (typeof durationSeconds !== "number" || remainingSeconds > durationSeconds))
   ) {
     return {
       valid: false,
@@ -329,8 +338,13 @@ function validateRequest(
   }
 
   // Allow ±5 second tolerance for clock drift / round-trip latency
-  const expectedRemaining = durationSeconds - elapsedSeconds;
-  if (Math.abs(remainingSeconds - expectedRemaining) > 5) {
+  const expectedRemaining =
+    typeof durationSeconds === "number" ? durationSeconds - elapsedSeconds : 0;
+  if (
+    !isContextOpenEnded &&
+    typeof remainingSeconds === "number" &&
+    Math.abs(remainingSeconds - expectedRemaining) > 5
+  ) {
     return {
       valid: false,
       error: "remainingSeconds is inconsistent with durationSeconds - elapsedSeconds (tolerance: 5s).",
@@ -406,10 +420,11 @@ function validateRequest(
     request: {
       topic: validTopic,
       difficulty: validDifficulty,
+      sessionMode,
       turnIndex,
-      durationSeconds,
+      durationSeconds: typeof durationSeconds === "number" ? durationSeconds : expectedDuration,
       elapsedSeconds,
-      remainingSeconds,
+      remainingSeconds: typeof remainingSeconds === "number" ? remainingSeconds : 0,
       turns: turns.map((t: unknown) => {
         const turnObj = t as Record<string, unknown>;
         return {
@@ -426,6 +441,7 @@ function validateRequest(
 function buildSystemPrompt(
   topic: string,
   difficulty: string,
+  sessionMode: PodchatSessionMode,
   articleContext?: PodchatArticleContext,
   sessionPlan?: {
     topicAngle: string;
@@ -442,9 +458,12 @@ function buildSystemPrompt(
   } else if (difficulty === "Intermediate") {
     difficultyGuidance =
       "- Intermediate: Use standard vocabulary. Ask for a reason or example and ask for a clearer explanation.";
-  } else {
+  } else if (difficulty === "Advanced") {
     difficultyGuidance =
       "- Advanced: Use rich vocabulary. Ask about trade-offs, counterarguments, implications, or predictions.";
+  } else {
+    difficultyGuidance =
+      "- Expert: Use rigorous academic vocabulary. Ask about assumptions, evidence, theoretical implications, or counterarguments.";
   }
 
   let contextGuidance = `The topic of the podcast is: ${topic}`;
@@ -487,6 +506,7 @@ function buildSystemPrompt(
     contextGuidance,
     planGuidance,
     `The learner's speaking difficulty level is: ${difficulty}`,
+    `Session mode: ${sessionMode}`,
     "",
     "ROLE & BEHAVIOR CONSTRAINTS:",
     "- Speak in clear, natural British English.",
@@ -497,6 +517,15 @@ function buildSystemPrompt(
     "",
     "DIFFICULTY LEVEL GUIDANCE:",
     difficultyGuidance,
+    sessionMode === "context_open_ended"
+      ? [
+          "",
+          "OPEN-ENDED CONTEXT DISCUSSION:",
+          "- Do not guide by a timer or deadline.",
+          "- Track whether the learner has covered the main idea, evidence, implications, and their own position.",
+          "- When coverage is sufficient, offer a natural closing option while allowing the learner to continue with follow-up questions.",
+        ].join("\n")
+      : "",
     "",
     "OUTPUT FORMAT REQUIREMENTS:",
     "- You MUST respond with ONLY a single JSON object.",
@@ -513,9 +542,16 @@ function buildUserPrompt(req: PodchatTurnRequest): string {
     .join("\n\n");
 
   let timeNote = "";
-  if (req.remainingSeconds <= 30) {
+  if (req.sessionMode === "context_open_ended") {
+    timeNote = [
+      "NOTE: This is an open-ended context discussion, not a timed session.",
+      "Guide the learner through the supplied context deeply enough for the selected difficulty.",
+      "Explore the main idea, evidence, implications, and the learner's position.",
+      "Offer closure when the topic is sufficiently covered, but allow follow-up questions if the learner continues.",
+    ].join(" ");
+  } else if (typeof req.remainingSeconds === "number" && req.remainingSeconds <= 30) {
     timeNote = "NOTE: Very little time remains. Guide the conversation toward a natural close.";
-  } else if (req.remainingSeconds <= 90) {
+  } else if (typeof req.remainingSeconds === "number" && req.remainingSeconds <= 90) {
     timeNote = "NOTE: The session is nearly over. Ask a concise closing-style follow-up question.";
   } else {
     timeNote = "NOTE: The session has plenty of time remaining. Continue the discussion naturally.";
@@ -800,6 +836,7 @@ export async function POST(request: Request) {
     const systemPrompt = buildSystemPrompt(
       validatedReq.topic,
       validatedReq.difficulty,
+      validatedReq.sessionMode,
       validatedReq.articleContext,
       validatedReq.sessionPlan,
     );
@@ -827,6 +864,7 @@ export async function POST(request: Request) {
     const systemPrompt = buildSystemPrompt(
       validatedReq.topic,
       validatedReq.difficulty,
+      validatedReq.sessionMode,
       validatedReq.articleContext,
       validatedReq.sessionPlan,
     );
@@ -855,6 +893,7 @@ export async function POST(request: Request) {
   const systemPrompt = buildSystemPrompt(
     validatedReq.topic,
     validatedReq.difficulty,
+    validatedReq.sessionMode,
     validatedReq.articleContext,
     validatedReq.sessionPlan,
   );

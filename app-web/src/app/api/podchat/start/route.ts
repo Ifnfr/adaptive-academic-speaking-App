@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { resolveProvider, callRoleProvider, ProviderConfigError } from "../../pattern-drill/_lib/roleProviders";
-import { TOPICS, DIFFICULTIES, type PodchatTopic, type PodchatDifficulty } from "../../../lib/podchat";
+import {
+  TOPICS,
+  DIFFICULTIES,
+  type PodchatTopic,
+  type PodchatDifficulty,
+  type PodchatSessionMode,
+} from "../../../lib/podchat";
+import type { PodchatArticleContext } from "../_lib/providers";
 
 export const runtime = "nodejs";
 
@@ -117,7 +124,12 @@ function validateStartResponse(text: string): { valid: true; response: PodchatSt
   }
 }
 
-function buildSystemPrompt(topic: string, difficulty: string): string {
+function buildSystemPrompt(
+  topic: string,
+  difficulty: string,
+  sessionMode: PodchatSessionMode,
+  articleContext?: PodchatArticleContext,
+): string {
   let diffGuidance = "";
   if (difficulty === "Beginner") {
     diffGuidance = [
@@ -139,8 +151,16 @@ function buildSystemPrompt(topic: string, difficulty: string): string {
   return [
     "You are a friendly British podcast host for a show called Podchat.",
     "Your task is to plan the podcast session start and write the opening turn.",
-    `The topic of the podcast is: ${topic}`,
+    articleContext
+      ? `The podcast conversation is based on the article: "${articleContext.articleTitle}" (Domain: ${articleContext.sourceDomain || "unknown"}).`
+      : `The topic of the podcast is: ${topic}`,
+    articleContext ? `Article Brief: ${articleContext.articleBrief}` : "",
+    articleContext?.mainIdea ? `Article Main Idea: ${articleContext.mainIdea}` : "",
+    articleContext?.keyPoints ? `Key Points: ${articleContext.keyPoints.join(", ")}` : "",
+    articleContext ? `Speaking Task: "${articleContext.speakingTaskTitle}"` : "",
+    articleContext ? `Speaking Task Instruction: ${articleContext.speakingTaskInstruction}` : "",
     `The learner's speaking difficulty level is: ${difficulty}`,
+    `Session mode: ${sessionMode}`,
     "",
     "ROLE & BEHAVIOR CONSTRAINTS:",
     "- Speak in clear, natural British English.",
@@ -149,21 +169,37 @@ function buildSystemPrompt(topic: string, difficulty: string): string {
     "",
     "DIFFICULTY LEVEL GUIDANCE:",
     diffGuidance,
+    sessionMode === "context_open_ended"
+      ? [
+          "",
+          "CONTEXT DISCUSSION GUIDANCE:",
+          "- This is an open-ended context discussion, not a timed session.",
+          "- Explore the main idea, evidence, implications, and the learner's position.",
+          "- Guide toward closure when the topic is sufficiently covered, but allow follow-up questions.",
+        ].join("\n")
+      : "",
     "",
     "OUTPUT FORMAT REQUIREMENTS:",
     "- You MUST respond with ONLY a single JSON object.",
     "- No markdown formatting, no code fences (e.g. do NOT use ```json), no commentary outside JSON.",
     "- The JSON object MUST have exactly these keys: \"opener\", \"sessionPlan\".",
     "- opener: 1 to 2 short sentences of welcoming conversational host talk introducing the topic and ending with EXACTLY ONE clear question. Must be <= 280 characters and contain exactly one question mark ('?').",
-    "- sessionPlan: Object containing exactly: \"topicAngle\", \"targetSkill\", \"followUpStrategy\" (all short strings, each <= 150 characters).",
-  ].join("\n");
+    "- sessionPlan: Object containing exactly: \"topicAngle\", \"targetSkill\", \"followUpStrategy\", \"expectedLanguagePattern\", and \"evaluationFocus\".",
+    "- topicAngle, targetSkill, followUpStrategy, and expectedLanguagePattern must be short strings.",
+    "- evaluationFocus must be an array of 1 to 4 short strings.",
+  ].filter(Boolean).join("\n");
 }
 
-function buildUserPrompt(topic: string, difficulty: string): string {
+function buildUserPrompt(
+  topic: string,
+  difficulty: string,
+  sessionMode: PodchatSessionMode,
+): string {
   return [
     `Generate the opener and lightweight session plan for a new Podchat speaking session.`,
     `Topic: ${topic}`,
     `Difficulty: ${difficulty}`,
+    `Session mode: ${sessionMode}`,
   ].join("\n");
 }
 
@@ -201,12 +237,19 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  const requestedSessionMode = b.sessionMode;
+  const sessionMode: PodchatSessionMode =
+    requestedSessionMode === "context_open_ended" ? "context_open_ended" : "normal_timed";
+  const articleContext =
+    b.articleContext && typeof b.articleContext === "object"
+      ? (b.articleContext as PodchatArticleContext)
+      : undefined;
 
   // Use roleProviders abstraction (planning role)
   try {
     const { providerId } = resolveProvider("planning");
-    const systemPrompt = buildSystemPrompt(topic, difficulty);
-    const userPrompt = buildUserPrompt(topic, difficulty);
+    const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext);
+    const userPrompt = buildUserPrompt(topic, difficulty, sessionMode);
 
     const providerResultText = await callRoleProvider("planning", systemPrompt, userPrompt);
     const outputValidation = validateStartResponse(providerResultText);

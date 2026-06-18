@@ -216,6 +216,33 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(data.error).toContain("elapsedSeconds");
   });
 
+  test("context open-ended request can exceed normal duration cap without remainingSeconds", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "That gives us a useful direction for the discussion.",
+      followUpQuestion: "What implication should we examine next?"
+    }), capture);
+
+    const response = await POST(buildRequest({
+      sessionMode: "context_open_ended",
+      difficulty: "Expert",
+      durationSeconds: undefined,
+      elapsedSeconds: 1200,
+      remainingSeconds: undefined,
+      articleContext: {
+        articleTitle: "Policy systems",
+        articleBrief: "A complex article about evidence, assumptions, and policy implications.",
+        speakingTaskTitle: "Discuss the article",
+        speakingTaskInstruction: "Explain the main idea and defend your position.",
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    const data = (await response.json()) as { hostText: string; followUpQuestion: string };
+    expect(data.hostText).toContain("useful direction");
+    expect(JSON.stringify(capture.body)).toContain("open-ended context discussion");
+  });
+
   test("negative remainingSeconds rejects with 400", async () => {
     const response = await POST(buildRequest({ remainingSeconds: -1 }));
     expect(response.status).toBe(400);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { StoredSessionRecord } from "../lib/storage/types";
 
 import {
@@ -10,7 +10,12 @@ import {
   DIFFICULTY_LABEL,
   type PodchatTopic,
   type PodchatDifficulty,
+  type PodchatSessionMode,
 } from "../lib/podchat";
+import {
+  estimatePodchatDifficulty,
+  type PodchatDifficultyEstimate,
+} from "../lib/podchatDifficulty";
 import { getPodchatOpener } from "../lib/podchatOpener";
 
 type PodchatPhase =
@@ -293,6 +298,12 @@ export function PodchatView({
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
   const [difficulty, setDifficulty] =
     useState<PodchatDifficulty>("Intermediate");
+  const [difficultyEstimate, setDifficultyEstimate] =
+    useState<PodchatDifficultyEstimate | null>(null);
+  const [manualDifficultyOverride, setManualDifficultyOverride] =
+    useState(false);
+  const manualDifficultyOverrideRef = useRef(false);
+  const difficultyContextKeyRef = useRef("normal");
   const [status, setStatus] = useState<PodchatStatus>("host_turn");
   const [turns, setTurns] = useState<PodchatTurn[]>([]);
   const [openerLoading, setOpenerLoading] = useState(false);
@@ -344,7 +355,14 @@ export function PodchatView({
 
   const durationSeconds = DIFFICULTY_DURATION[difficulty];
   const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds);
-  const isTimeExpired = remainingSeconds === 0;
+  const hasContextSession = Boolean(
+    articleContext || commonplaceNoteContext || commonplaceMapContext,
+  );
+  const podchatSessionMode: PodchatSessionMode = hasContextSession
+    ? "context_open_ended"
+    : "normal_timed";
+  const isContextOpenEnded = podchatSessionMode === "context_open_ended";
+  const isTimeExpired = !isContextOpenEnded && remainingSeconds === 0;
   const isLastTurnLearner = turns.length > 0 && turns[turns.length - 1].speaker === "learner";
   const hasSubmitError = !!turnError && isLastTurnLearner;
   const rollingTurns = turns.slice(-3);
@@ -355,6 +373,35 @@ export function PodchatView({
         .join("\n\n"),
     [turns],
   );
+
+  const applyAutoDifficulty = useCallback((
+    estimate: PodchatDifficultyEstimate,
+    contextKey: string,
+  ) => {
+    const isNewContext = difficultyContextKeyRef.current !== contextKey;
+    if (isNewContext) {
+      difficultyContextKeyRef.current = contextKey;
+      manualDifficultyOverrideRef.current = false;
+      setManualDifficultyOverride(false);
+    }
+    setDifficultyEstimate(estimate);
+    if (!manualDifficultyOverrideRef.current) {
+      setDifficulty(estimate.difficulty);
+    }
+  }, []);
+
+  function handleDifficultySelect(option: PodchatDifficulty) {
+    manualDifficultyOverrideRef.current = true;
+    setDifficulty(option);
+    setManualDifficultyOverride(true);
+  }
+
+  function estimateSourceLabel(estimate: PodchatDifficultyEstimate | null): string {
+    if (!estimate) return "";
+    if (estimate.source === "article") return "Estimated from article context";
+    if (estimate.source === "commonplace_note") return "Estimated from Commonplace note";
+    return "Estimated from Commonplace map";
+  }
 
   function buildSessionCsv(record: StoredSessionRecord): string {
     const escapeCsv = (value: string | number) => {
@@ -556,6 +603,69 @@ export function PodchatView({
       isCurrent = false;
     };
   }, [commonplaceMapContextRef]);
+
+  useEffect(() => {
+    if (!articleContext) return;
+    setTimeout(() => {
+      applyAutoDifficulty(
+        estimatePodchatDifficulty({
+          source: "article",
+          articleTitle: articleContext.articleTitle,
+          articleBrief: articleContext.articleBrief,
+          mainIdea: articleContext.mainIdea,
+          keyPoints: articleContext.keyPoints,
+          speakingTaskTitle: articleContext.speakingTaskTitle,
+          speakingTaskInstruction: articleContext.speakingTaskInstruction,
+          targetStructure: articleContext.targetStructure,
+          sourceDomain: articleContext.sourceDomain,
+        }),
+        `article:${articleContext.articleTitle}:${articleContext.speakingTaskTitle}`,
+      );
+    }, 0);
+  }, [applyAutoDifficulty, articleContext]);
+
+  useEffect(() => {
+    if (!commonplaceNoteContext) return;
+    setTimeout(() => {
+      applyAutoDifficulty(
+        estimatePodchatDifficulty({
+          source: "commonplace_note",
+          title: commonplaceNoteContext.title,
+          sourceBook: commonplaceNoteContext.sourceBook,
+          insight: commonplaceNoteContext.insight,
+          tags: commonplaceNoteContext.tags,
+        }),
+        `commonplace-note:${commonplaceNoteContext.noteId}`,
+      );
+    }, 0);
+  }, [applyAutoDifficulty, commonplaceNoteContext]);
+
+  useEffect(() => {
+    if (!commonplaceMapContext) return;
+    setTimeout(() => {
+      applyAutoDifficulty(
+        estimatePodchatDifficulty({
+          source: "commonplace_map",
+          mapTitle: commonplaceMapContext.mapTitle,
+          mapType: commonplaceMapContext.mapType,
+          counts: commonplaceMapContext.counts,
+          nodes: commonplaceMapContext.nodes,
+          edges: commonplaceMapContext.edges,
+        }),
+        `commonplace-map:${commonplaceMapContext.mapType}:${commonplaceMapContext.mapId}`,
+      );
+    }, 0);
+  }, [applyAutoDifficulty, commonplaceMapContext]);
+
+  useEffect(() => {
+    if (articleContext || commonplaceContext || commonplaceMapContextRef) return;
+    difficultyContextKeyRef.current = "normal";
+    manualDifficultyOverrideRef.current = false;
+    setTimeout(() => {
+      setManualDifficultyOverride(false);
+      setDifficultyEstimate(null);
+    }, 0);
+  }, [articleContext, commonplaceContext, commonplaceMapContextRef]);
 
   // --- Timer management ---
   function startTimer() {
@@ -774,7 +884,7 @@ export function PodchatView({
       setTurns([opener]);
       setStatus("user_turn");
       setPhase("speaking");
-      startTimer();
+      if (!isContextOpenEnded) startTimer();
       playTts(fallbackText);
     } else {
       const dummyOpener: PodchatTurn = {
@@ -791,7 +901,12 @@ export function PodchatView({
         const res = await fetch("/api/podchat/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic, difficulty }),
+          body: JSON.stringify({
+            topic,
+            difficulty,
+            sessionMode: podchatSessionMode,
+            ...(articleContext ? { articleContext } : {}),
+          }),
         });
 
         if (!res.ok) {
@@ -810,7 +925,7 @@ export function PodchatView({
           setSessionPlan(data.sessionPlan);
           setOpenerLoading(false);
           setStatus("user_turn");
-          startTimer();
+          if (!isContextOpenEnded) startTimer();
           playTts(data.opener);
         } else {
           throw new Error("Invalid response format.");
@@ -1008,8 +1123,11 @@ export function PodchatView({
         body: JSON.stringify({
           topic,
           difficulty,
+          sessionMode: podchatSessionMode,
           turns: finalTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
           ...(articleContext ? { articleContext } : {}),
+          ...(commonplaceNoteContext ? { commonplaceContext: commonplaceNoteContext } : {}),
+          ...(commonplaceMapContext ? { commonplaceMapContext } : {}),
         }),
       });
       if (!response.ok) {
@@ -1040,18 +1158,23 @@ export function PodchatView({
   function buildTurnPayload(currentTurns: PodchatTurn[], currentIndex: number) {
     const elapsed = elapsedSeconds;
     const remaining = Math.max(0, durationSeconds - elapsed);
-    return {
+    const payload: Record<string, unknown> = {
       topic,
       difficulty,
+      sessionMode: podchatSessionMode,
       turnIndex: currentIndex,
-      durationSeconds,
       elapsedSeconds: elapsed,
-      remainingSeconds: remaining,
       turns: currentTurns.map((t) => ({ speaker: t.speaker, text: t.text })),
       ...(articleContext ? { articleContext } : {}),
       ...(commonplaceNoteContext ? { commonplaceContext: commonplaceNoteContext } : {}),
+      ...(commonplaceMapContext ? { commonplaceMapContext } : {}),
       ...(sessionPlan ? { sessionPlan } : {}),
     };
+    if (!isContextOpenEnded) {
+      payload.durationSeconds = durationSeconds;
+      payload.remainingSeconds = remaining;
+    }
+    return payload;
   }
 
   async function retryLastTurn() {
@@ -1318,8 +1441,15 @@ export function PodchatView({
               </p>
             )}
 
+            <div className="flex flex-wrap gap-2" data-testid="podchat-session-mode">
+              <span className="app-status app-status-info">Context Discussion</span>
+              <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
+                Open-ended
+              </span>
+            </div>
+
             <fieldset>
-              <legend className={labelClass}>Difficulty / Duration</legend>
+              <legend className={labelClass}>Difficulty / Depth</legend>
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-3"
                 role="radiogroup"
@@ -1331,7 +1461,7 @@ export function PodchatView({
                     type="button"
                     role="radio"
                     aria-checked={difficulty === option}
-                    onClick={() => setDifficulty(option)}
+                    onClick={() => handleDifficultySelect(option)}
                     className={
                       optionButtonBase + " " +
                       (difficulty === option
@@ -1354,6 +1484,17 @@ export function PodchatView({
                   </button>
                 ))}
               </div>
+              {difficultyEstimate && (
+                <p
+                  className="mt-3 text-sm text-[var(--brand-ink-soft)]"
+                  data-testid="podchat-difficulty-estimate-indicator"
+                >
+                  <span className="font-semibold text-[var(--brand-teal)]">
+                    {manualDifficultyOverride ? "Manual selection" : `Auto · ${difficultyEstimate.difficulty}`}
+                  </span>
+                  {!manualDifficultyOverride && ` · ${estimateSourceLabel(difficultyEstimate)}`}
+                </p>
+              )}
             </fieldset>
 
             <div className="flex justify-center mt-2">
@@ -1460,8 +1601,15 @@ export function PodchatView({
               </p>
             )}
 
+            <div className="flex flex-wrap gap-2" data-testid="podchat-session-mode">
+              <span className="app-status app-status-info">Context Discussion</span>
+              <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
+                Open-ended
+              </span>
+            </div>
+
             <fieldset>
-              <legend className={labelClass}>Difficulty / Duration</legend>
+              <legend className={labelClass}>Difficulty / Depth</legend>
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-3"
                 role="radiogroup"
@@ -1473,7 +1621,7 @@ export function PodchatView({
                     type="button"
                     role="radio"
                     aria-checked={difficulty === option}
-                    onClick={() => setDifficulty(option)}
+                    onClick={() => handleDifficultySelect(option)}
                     className={
                       optionButtonBase + " " +
                       (difficulty === option
@@ -1496,6 +1644,17 @@ export function PodchatView({
                   </button>
                 ))}
               </div>
+              {difficultyEstimate && (
+                <p
+                  className="mt-3 text-sm text-[var(--brand-ink-soft)]"
+                  data-testid="podchat-difficulty-estimate-indicator"
+                >
+                  <span className="font-semibold text-[var(--brand-teal)]">
+                    {manualDifficultyOverride ? "Manual selection" : `Auto · ${difficultyEstimate.difficulty}`}
+                  </span>
+                  {!manualDifficultyOverride && ` · ${estimateSourceLabel(difficultyEstimate)}`}
+                </p>
+              )}
             </fieldset>
 
             <div className="flex justify-center mt-2">
@@ -1561,8 +1720,15 @@ export function PodchatView({
               )}
             </div>
 
+            <div className="flex flex-wrap gap-2" data-testid="podchat-session-mode">
+              <span className="app-status app-status-info">Context Discussion</span>
+              <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
+                Open-ended
+              </span>
+            </div>
+
             <fieldset>
-              <legend className={labelClass}>Difficulty / Duration</legend>
+              <legend className={labelClass}>Difficulty / Depth</legend>
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-3"
                 role="radiogroup"
@@ -1574,7 +1740,7 @@ export function PodchatView({
                     type="button"
                     role="radio"
                     aria-checked={difficulty === option}
-                    onClick={() => setDifficulty(option)}
+                    onClick={() => handleDifficultySelect(option)}
                     className={
                       optionButtonBase + " " +
                       (difficulty === option
@@ -1597,6 +1763,17 @@ export function PodchatView({
                   </button>
                 ))}
               </div>
+              {difficultyEstimate && (
+                <p
+                  className="mt-3 text-sm text-[var(--brand-ink-soft)]"
+                  data-testid="podchat-difficulty-estimate-indicator"
+                >
+                  <span className="font-semibold text-[var(--brand-teal)]">
+                    {manualDifficultyOverride ? "Manual selection" : `Auto · ${difficultyEstimate.difficulty}`}
+                  </span>
+                  {!manualDifficultyOverride && ` · ${estimateSourceLabel(difficultyEstimate)}`}
+                </p>
+              )}
             </fieldset>
 
             <div className="flex justify-center mt-2">
@@ -1669,7 +1846,7 @@ export function PodchatView({
                   type="button"
                   role="radio"
                   aria-checked={difficulty === option}
-                  onClick={() => setDifficulty(option)}
+                  onClick={() => handleDifficultySelect(option)}
                   className={
                     optionButtonBase + " " +
                     (difficulty === option
@@ -1884,23 +2061,34 @@ export function PodchatView({
               Speaking screen
             </p>
             <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
-              {topic} Podchat · {DIFFICULTY_LABEL[difficulty]}
+              {topic} Podchat · {isContextOpenEnded ? `${difficulty} depth` : DIFFICULTY_LABEL[difficulty]}
             </h2>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-medium">
-            <span
-              className={
-                "app-status " +
-                (isTimeExpired
-                  ? "app-status-error"
-                  : remainingSeconds <= 60
-                    ? "app-status-warning"
-                    : "app-status-info")
-              }
-              data-testid="podchat-time-left"
-            >
-              {isTimeExpired ? "Time's up" : `Time left: ${formatTime(remainingSeconds)}`}
-            </span>
+            {isContextOpenEnded ? (
+              <>
+                <span className="app-status app-status-info" data-testid="podchat-session-mode">
+                  Context Discussion
+                </span>
+                <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
+                  Open-ended
+                </span>
+              </>
+            ) : (
+              <span
+                className={
+                  "app-status " +
+                  (isTimeExpired
+                    ? "app-status-error"
+                    : remainingSeconds <= 60
+                      ? "app-status-warning"
+                      : "app-status-info")
+                }
+                data-testid="podchat-time-left"
+              >
+                {isTimeExpired ? "Time's up" : `Time left: ${formatTime(remainingSeconds)}`}
+              </span>
+            )}
             <span
               className="app-status app-status-info"
               data-testid="podchat-turns-completed"
@@ -2079,8 +2267,9 @@ export function PodchatView({
                   onClick={endSession}
                   disabled={status === "submitting"}
                   className={buttonSecondary}
+                  data-testid="podchat-end-session"
                 >
-                  End Session
+                  {isContextOpenEnded ? "Finish Discussion" : "End Session"}
                 </button>
               )}
             </div>

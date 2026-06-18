@@ -332,6 +332,47 @@ test.describe("Podchat Phase 1 connected UI", () => {
     expect(contrastRatio(topicStyles.backgroundColor, topicStyles.color)).toBeGreaterThanOrEqual(4.5);
   });
 
+  test("Commonplace note handoff shows open-ended context discussion mode", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.sessionStorage.setItem(
+        "fonetik:commonplace-podchat-context",
+        JSON.stringify({ source: "commonplace", noteId: "note-open-ended" }),
+      );
+    });
+    await page.route("**/api/commonplace/notes/context?*", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          context: {
+            source: "commonplace",
+            noteId: "note-open-ended",
+            shortcode: "CP-42",
+            title: "Policy frameworks and evidence",
+            sourceBook: "Research Notes",
+            insight:
+              "This note compares policy frameworks, evidence, assumptions, and implications because each model creates a different trade-off for decision makers.",
+            tags: ["policy", "evidence", "framework", "trade-off"],
+          },
+        }),
+      });
+    });
+
+    await page.goto("/");
+
+    await expect(page.getByTestId("podchat-session-mode")).toContainText("Context Discussion");
+    await expect(page.getByTestId("podchat-open-ended-label")).toContainText("Open-ended");
+    await expect(page.getByTestId("podchat-difficulty-estimate-indicator")).toContainText("Auto");
+
+    await page.getByRole("radio", { name: "Expert" }).click();
+    await expect(page.getByTestId("podchat-difficulty-estimate-indicator")).toContainText("Manual selection");
+
+    await page.getByRole("button", { name: "Start a Podchat" }).click();
+    await expect(page.getByTestId("podchat-open-ended-label")).toContainText("Open-ended");
+    await expect(page.getByTestId("podchat-time-left")).toHaveCount(0);
+    await expect(page.getByTestId("podchat-end-session")).toContainText("Finish Discussion");
+  });
+
   test("runs full setup, speaking, and evaluation with mocked API routes and TTS success", async ({ page }) => {
     const providerCalls: string[] = [];
 

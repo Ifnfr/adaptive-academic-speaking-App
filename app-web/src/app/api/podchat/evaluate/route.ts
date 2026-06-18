@@ -19,6 +19,7 @@ import {
   DIFFICULTIES,
   type PodchatTopic,
   type PodchatDifficulty,
+  type PodchatSessionMode,
 } from "../../../lib/podchat";
 type PodchatSpeaker = "host" | "learner";
 
@@ -30,6 +31,7 @@ type PodchatTurn = {
 type PodchatEvaluateRequest = {
   topic: PodchatTopic;
   difficulty: PodchatDifficulty;
+  sessionMode: PodchatSessionMode;
   turns: PodchatTurn[];
   articleContext?: PodchatArticleContext;
 };
@@ -231,6 +233,8 @@ function validateRequest(body: unknown): ValidationResult {
       error: "Invalid difficulty.",
     };
   }
+  const sessionMode: PodchatSessionMode =
+    b.sessionMode === "context_open_ended" ? "context_open_ended" : "normal_timed";
 
   const turns = b.turns;
   if (!Array.isArray(turns) || turns.length === 0 || turns.length > MAX_TURNS) {
@@ -307,6 +311,7 @@ function validateRequest(body: unknown): ValidationResult {
     request: {
       topic: topic as PodchatTopic,
       difficulty: difficulty as PodchatDifficulty,
+      sessionMode,
       turns: normalizedTurns,
       articleContext,
     },
@@ -328,10 +333,28 @@ function difficultyGuidance(difficulty: PodchatDifficulty): string {
     ].join("\n");
   }
 
+  if (difficulty === "Advanced") {
+    return [
+      "- Advanced: Focus on nuance, precision, argument structure, trade-offs, and academic phrasing.",
+      "- Help the learner develop stronger implications, counterpoints, and topic depth.",
+    ].join("\n");
+  }
+
   return [
-    "- Advanced: Focus on nuance, precision, argument structure, trade-offs, and academic phrasing.",
-    "- Help the learner develop stronger implications, counterpoints, and topic depth.",
+    "- Expert: Focus on rigorous academic argument, assumptions, evidence quality, and theoretical implications.",
+    "- Help the learner sustain nuanced reasoning and defend a position with precision.",
   ].join("\n");
+}
+
+function sessionModeGuidance(sessionMode: PodchatSessionMode): string {
+  if (sessionMode === "context_open_ended") {
+    return [
+      "SESSION MODE: Context Discussion / Open-ended.",
+      "- Evaluate this as a completion-based discussion, not a timed conversation.",
+      "- Consider whether the learner addressed the context's main idea, evidence, implications, and their own position.",
+    ].join("\n");
+  }
+  return "SESSION MODE: Normal timed Podchat.";
 }
 
 function buildSystemPrompt(req: PodchatEvaluateRequest): string {
@@ -358,6 +381,7 @@ function buildSystemPrompt(req: PodchatEvaluateRequest): string {
     "You are an academic speaking evaluator for Podchat.",
     "Evaluate only the transcript text from a completed Podchat conversation.",
     contextGuidance,
+    sessionModeGuidance(req.sessionMode),
     `Difficulty: ${req.difficulty}`,
     "",
     "EVALUATION BEHAVIOR:",
