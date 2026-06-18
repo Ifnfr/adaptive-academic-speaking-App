@@ -201,6 +201,10 @@ function getRequest(query = "") {
   });
 }
 
+function missionMetrics(json: { review: { missions: WeeklyMission[] } }) {
+  return json.review.missions.map((mission) => mission.metricType);
+}
+
 test.describe("Weekly Mission Review route handlers", () => {
   test("unauthenticated GET and POST reject without provider or database work", async () => {
     const supabase = createMockSupabase();
@@ -322,7 +326,7 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(serialized).not.toContain("model");
   });
 
-  test("provider failure uses deterministic fallback missions", async () => {
+  test("provider failure uses starter baseline fallback missions for no activity", async () => {
     const supabase = createMockSupabase({ cachedReview: null });
     const handlers = buildHandlers({
       supabase,
@@ -336,8 +340,121 @@ test.describe("Weekly Mission Review route handlers", () => {
 
     expect(response.status).toBe(200);
     expect(json.state).toBe("created");
+    expect(json.review.dataSufficiency).toBe("starter");
     expect(json.review.missions).toHaveLength(5);
-    expect(json.review.missions.map((mission: WeeklyMission) => mission.metricType)).toContain("podchat_sessions");
+    expect(missionMetrics(json).slice(0, 4)).toEqual([
+      "podchat_sessions",
+      "speaking_minutes",
+      "vocabulary_collected",
+      "daily_practice_days",
+    ]);
+    expect(missionMetrics(json)).not.toContain("pattern_drill_sessions");
+    expect(json.review.missions.every((mission: WeeklyMission) => mission.weaknessTarget === null)).toBe(true);
+  });
+
+  test("partial fallback prioritizes speaking when speaking activity is low", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: null,
+      sourceRows: {
+        vocabulary_items: [
+          { id: "vocab-1", created_at: "2026-06-15T10:00:00.000Z" },
+          { id: "vocab-2", created_at: "2026-06-16T10:00:00.000Z" },
+          { id: "vocab-3", created_at: "2026-06-17T10:00:00.000Z" },
+          { id: "vocab-4", created_at: "2026-06-18T10:00:00.000Z" },
+        ],
+      },
+    });
+    const handlers = buildHandlers({
+      supabase,
+      provider: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.review.dataSufficiency).toBe("partial");
+    expect(missionMetrics(json).slice(0, 2)).toEqual(["speaking_minutes", "podchat_sessions"]);
+    expect(missionMetrics(json)).not.toContain("pattern_drill_sessions");
+  });
+
+  test("partial fallback includes vocabulary mission when vocabulary activity is the gap", async () => {
+    const supabase = createMockSupabase({
+      cachedReview: null,
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-15T10:00:00.000Z", duration_seconds: 1200, elapsed_seconds: null },
+          { id: "pod-2", created_at: "2026-06-17T10:00:00.000Z", duration_seconds: 1200, elapsed_seconds: null },
+        ],
+      },
+    });
+    const handlers = buildHandlers({
+      supabase,
+      provider: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+
+    const response = await handlers.POST(postRequest());
+    const json = await response.json();
+    const vocabularyMission = json.review.missions.find((mission: WeeklyMission) => mission.metricType === "vocabulary_collected");
+
+    expect(response.status).toBe(200);
+    expect(json.review.dataSufficiency).toBe("partial");
+    expect(vocabularyMission).toBeTruthy();
+    expect(vocabularyMission?.title).toContain("vocabulary gap");
+    expect(vocabularyMission?.reason).toContain("Vocabulary activity is low");
+  });
+
+  test("strong fallback includes weakness-focused Pattern Drill and differs from partial fallback", async () => {
+    const partialSupabase = createMockSupabase({
+      cachedReview: null,
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-15T10:00:00.000Z", duration_seconds: 1200, elapsed_seconds: null },
+          { id: "pod-2", created_at: "2026-06-17T10:00:00.000Z", duration_seconds: 1200, elapsed_seconds: null },
+        ],
+      },
+    });
+    const strongSupabase = createMockSupabase({
+      cachedReview: null,
+      sourceRows: {
+        podchat_sessions: [
+          { id: "pod-1", created_at: "2026-06-15T10:00:00.000Z", duration_seconds: 1200, elapsed_seconds: null },
+          { id: "pod-2", created_at: "2026-06-17T10:00:00.000Z", duration_seconds: 1200, elapsed_seconds: null },
+        ],
+        learner_error_patterns: [
+          { id: "weak-1", created_at: "2026-06-16T10:00:00.000Z", category: "Grammar", label: "Verb form", practice_focus: "Use correct verb forms." },
+          { id: "weak-2", created_at: "2026-06-18T10:00:00.000Z", category: "Grammar", label: "Verb form", practice_focus: "Use correct verb forms." },
+        ],
+      },
+    });
+    const provider = async () => {
+      throw new Error("provider unavailable");
+    };
+    const partialHandlers = buildHandlers({ supabase: partialSupabase, provider });
+    const strongHandlers = buildHandlers({ supabase: strongSupabase, provider });
+
+    const partialResponse = await partialHandlers.POST(postRequest());
+    const strongResponse = await strongHandlers.POST(postRequest());
+    const partialJson = await partialResponse.json();
+    const strongJson = await strongResponse.json();
+    const patternMission = strongJson.review.missions.find((mission: WeeklyMission) => mission.metricType === "pattern_drill_sessions");
+
+    expect(partialResponse.status).toBe(200);
+    expect(strongResponse.status).toBe(200);
+    expect(partialJson.review.dataSufficiency).toBe("partial");
+    expect(strongJson.review.dataSufficiency).toBe("strong");
+    expect(patternMission).toBeTruthy();
+    expect(patternMission?.weaknessTarget).toEqual({
+      category: "Grammar",
+      label: "Verb form",
+      practiceFocus: "Use correct verb forms.",
+    });
+    expect(missionMetrics(strongJson)).toContain("speaking_minutes");
+    expect(missionMetrics(strongJson)).not.toEqual(missionMetrics(partialJson));
   });
 
   test("invalid or untrackable AI mission output falls back", async () => {

@@ -427,34 +427,81 @@ function fallbackMission(metricType: WeeklyMissionMetricType, targetValue: numbe
   };
 }
 
+function addFallbackMission(missions: ProposedMission[], mission: ProposedMission): void {
+  if (missions.length >= 5 || missions.some((existing) => existing.metricType === mission.metricType)) return;
+  missions.push(mission);
+}
+
 export function buildFallbackWeeklyMissionOutput(input: {
   dataSufficiency: WeeklyMissionDataSufficiency;
   sourceSnapshot: WeeklyMissionSourceSnapshot;
 }): WeeklyMissionAiOutput {
+  const snapshot = input.sourceSnapshot;
   const topWeakness = input.sourceSnapshot.topWeaknesses[0];
   const weaknessTarget = topWeakness
     ? { category: topWeakness.category, label: topWeakness.label, practiceFocus: topWeakness.practiceFocus }
     : null;
+  const lowSpeakingActivity = snapshot.speakingMinutes < 30 || snapshot.podchatSessions < 2;
+  const vocabularyGap = snapshot.vocabularyCollected < 10;
+  const articleGap = snapshot.articlePracticeCompleted < 1;
+  const missions: ProposedMission[] = [];
 
-  const missions: ProposedMission[] = [
-    fallbackMission("podchat_sessions", 2, "Complete two Podchat sessions", "Finish two evaluated speaking sessions this week.", "Build steady speaking rhythm with saved evaluated practice.", weaknessTarget),
-    fallbackMission("speaking_minutes", 30, "Reach 30 speaking minutes", "Accumulate 30 minutes of saved speaking practice.", "More speaking time creates more reliable fluency evidence.", weaknessTarget),
-    fallbackMission("vocabulary_collected", 10, "Collect ten useful vocabulary items", "Save ten vocabulary items from practice or article work.", "A small vocabulary collection gives the week concrete review material."),
-    fallbackMission("article_practice_completed", 1, "Complete one Article Practice", "Finish one evaluated article writing practice.", "Article work strengthens structured academic responses."),
-    fallbackMission("daily_practice_days", 3, "Practice on three days", "Complete any tracked practice activity on three different UTC days.", "Spacing practice across the week improves retention."),
-  ];
-
-  if (input.dataSufficiency !== "starter" && topWeakness) {
-    missions[2] = fallbackMission("pattern_drill_sessions", 1, "Drill your top pattern", "Complete one Pattern Drill focused on this week's repeated weakness.", "Targeted pattern practice turns feedback into repeatable speaking control.", weaknessTarget);
+  if (input.dataSufficiency === "starter") {
+    addFallbackMission(missions, fallbackMission("podchat_sessions", 1, "Complete a baseline Podchat", "Finish one evaluated Podchat session to create a speaking baseline.", "Start with a real speaking sample before diagnosing patterns."));
+    addFallbackMission(missions, fallbackMission("speaking_minutes", 15, "Log starter speaking minutes", "Reach 15 minutes of saved speaking practice this week.", "A small speaking target creates the first fluency signal."));
+    addFallbackMission(missions, fallbackMission("vocabulary_collected", 5, "Collect starter vocabulary", "Save five vocabulary items from practice or article work.", "A starter word bank gives future reviews useful material."));
+    addFallbackMission(missions, fallbackMission("daily_practice_days", 2, "Practice on two days", "Complete any tracked practice activity on two different UTC days.", "Two practice days establish a measurable weekly rhythm."));
+  } else if (input.dataSufficiency === "partial") {
+    if (lowSpeakingActivity) {
+      addFallbackMission(missions, fallbackMission("speaking_minutes", 30, "Raise speaking volume", "Reach 30 saved speaking minutes this week.", "Speaking volume is still low, so more evaluated practice will improve future feedback."));
+      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Add Podchat evidence", "Complete two evaluated Podchat sessions this week.", "More sessions make weekly progress less dependent on a single sample."));
+    } else {
+      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Keep Podchat rhythm", "Complete two evaluated Podchat sessions this week.", "Maintain the speaking evidence you already started building."));
+      addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Extend speaking transfer", "Reach 45 saved speaking minutes this week.", "Longer speaking practice helps turn feedback into fluent use."));
+    }
+    if (vocabularyGap) {
+      addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Fill the vocabulary gap", "Save ten useful vocabulary items from practice or article work.", "Vocabulary activity is low, so collecting words will make review more useful."));
+    }
+    if (articleGap) {
+      addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Add one article practice", "Complete one evaluated Article Practice session.", "Article work adds structured academic writing evidence."));
+    }
+    if (topWeakness) {
+      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "Drill your clearest pattern", "Complete one Pattern Drill focused on the strongest current weakness signal.", "A real weakness signal is available, so targeted practice can be useful.", weaknessTarget));
+    }
+    addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Practice on three days", "Complete any tracked practice activity on three different UTC days.", "Spacing practice across the week improves retention."));
+  } else {
+    if (topWeakness) {
+      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "Drill your top weakness", "Complete one Pattern Drill focused on this week's repeated weakness.", "Targeted pattern practice turns repeated feedback into repeatable control.", weaknessTarget));
+    }
+    addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Transfer feedback into speaking", "Reach 45 saved speaking minutes this week.", "Strong data is most useful when you transfer it back into live speaking.", weaknessTarget));
+    if (vocabularyGap) {
+      addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Build vocabulary for transfer", "Save ten vocabulary items that support this week's speaking work.", "Vocabulary is the clearest gap in an otherwise stronger practice record."));
+    } else {
+      addFallbackMission(missions, fallbackMission("vocab_sentence_submitted", 3, "Use vocabulary in sentences", "Submit three vocabulary practice sentences.", "Sentence practice turns known words into usable academic phrasing."));
+    }
+    if (articleGap) {
+      addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Add article transfer practice", "Complete one evaluated Article Practice session.", "Article work adds a transfer surface beyond speaking."));
+    } else {
+      addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Keep Podchat transfer active", "Complete two evaluated Podchat sessions this week.", "A second transfer mission keeps the week grounded in live speaking."));
+    }
+    addFallbackMission(missions, fallbackMission("daily_practice_days", 4, "Sustain four practice days", "Complete any tracked practice activity on four different UTC days.", "Strong evidence supports a higher consistency target."));
   }
+
+  addFallbackMission(missions, fallbackMission("podchat_sessions", 2, "Complete two Podchat sessions", "Finish two evaluated speaking sessions this week.", "Build steady speaking rhythm with saved evaluated practice."));
+  addFallbackMission(missions, fallbackMission("speaking_minutes", 30, "Reach 30 speaking minutes", "Accumulate 30 minutes of saved speaking practice.", "More speaking time creates more reliable fluency evidence."));
+  addFallbackMission(missions, fallbackMission("vocabulary_collected", 10, "Collect ten useful vocabulary items", "Save ten vocabulary items from practice or article work.", "A small vocabulary collection gives the week concrete review material."));
+  addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Complete one Article Practice", "Finish one evaluated article writing practice.", "Article work strengthens structured academic responses."));
+  addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Practice on three days", "Complete any tracked practice activity on three different UTC days.", "Spacing practice across the week improves retention."));
 
   return {
     diagnosisSummary:
       input.dataSufficiency === "starter"
-        ? "Start this week with measurable practice across speaking, vocabulary, and article work."
-        : `This week should focus on consistent practice${topWeakness ? ` and ${topWeakness.label}` : ""}.`,
+        ? "Start this week with baseline practice across speaking, vocabulary, and daily rhythm."
+        : input.dataSufficiency === "partial"
+          ? `This week should increase useful practice evidence${topWeakness ? ` while lightly targeting ${topWeakness.label}` : ""}.`
+          : `This week should transfer strong practice data into focused speaking${topWeakness ? ` and ${topWeakness.label}` : ""}.`,
     dataSufficiency: input.dataSufficiency,
-    topWeaknesses: topWeakness
+    topWeaknesses: input.dataSufficiency !== "starter" && topWeakness
       ? [{ category: topWeakness.category, label: topWeakness.label, reason: "This pattern appeared in the bounded weekly activity snapshot." }]
       : [],
     missions,
