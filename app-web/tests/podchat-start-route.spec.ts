@@ -119,6 +119,27 @@ test.describe("POST /api/podchat/start Route Tests", () => {
         speakingTaskTitle: "Discuss the article",
         speakingTaskInstruction: "Defend a position.",
       },
+      aurUnderstandingState: {
+        sourceType: "article",
+        discussionFocus: "Policy evidence and assumptions",
+        keyConcepts: ["evidence", "assumptions"],
+        evidenceOrExamples: ["The article compares policy evidence."],
+        assumptionsToTest: ["Policy assumptions may differ by context."],
+        implications: ["The policy may affect public trust."],
+        counterarguments: ["Evidence may be incomplete."],
+        learnerLikelyProblem: "The learner may summarize without a position.",
+        discussionPath: ["claim", "evidence", "position"],
+        scope: { include: ["article claim"], exclude: ["raw article"] },
+        closureCriteria: ["The learner states a position."],
+        coverageState: {
+          mainIdeaExplored: false,
+          evidenceExplored: false,
+          implicationsExplored: false,
+          learnerPositionFormed: false,
+          counterargumentExplored: false,
+          synthesisCompleted: false,
+        },
+      },
     }));
     expect(response.status).toBe(200);
 
@@ -126,6 +147,8 @@ test.describe("POST /api/podchat/start Route Tests", () => {
     expect(providerBody).toContain("Policy systems");
     expect(providerBody).toContain("Session mode: context_open_ended");
     expect(providerBody).toContain("open-ended context discussion");
+    expect(providerBody).toContain("AUR CONTEXT BRIDGE");
+    expect(providerBody).toContain("Policy evidence and assumptions");
   });
 
   test("Missing planning provider key returns safe 503", async () => {

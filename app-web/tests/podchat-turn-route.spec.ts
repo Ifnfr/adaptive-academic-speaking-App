@@ -153,6 +153,7 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
     expect(JSON.stringify(capture.body)).not.toContain("recording");
     expect(JSON.stringify(capture.body)).not.toContain("email");
     expect(JSON.stringify(capture.body)).not.toContain("userId");
+    expect(JSON.stringify(capture.body)).not.toContain("AUR CONTEXT BRIDGE");
   });
 
   test("old maxUserTurns-only request (without duration fields) rejects with 400", async () => {
@@ -235,12 +236,80 @@ test.describe("Podchat Turn Route - Validation & Claude Integration", () => {
         speakingTaskTitle: "Discuss the article",
         speakingTaskInstruction: "Explain the main idea and defend your position.",
       },
+      aurUnderstandingState: {
+        sourceType: "article",
+        discussionFocus: "Policy evidence and assumptions",
+        keyConcepts: ["evidence", "assumptions"],
+        evidenceOrExamples: ["The article compares policy evidence."],
+        assumptionsToTest: ["Policy assumptions may differ by context."],
+        implications: ["The policy may affect public trust."],
+        counterarguments: ["Evidence may be incomplete."],
+        learnerLikelyProblem: "The learner may summarize without a position.",
+        discussionPath: ["claim", "evidence", "position"],
+        scope: { include: ["article claim"], exclude: ["raw article"] },
+        closureCriteria: ["The learner states a position."],
+        coverageState: {
+          mainIdeaExplored: false,
+          evidenceExplored: false,
+          implicationsExplored: false,
+          learnerPositionFormed: false,
+          counterargumentExplored: false,
+          synthesisCompleted: false,
+        },
+      },
     }));
 
     expect(response.status).toBe(200);
     const data = (await response.json()) as { hostText: string; followUpQuestion: string };
     expect(data.hostText).toContain("useful direction");
     expect(JSON.stringify(capture.body)).toContain("open-ended context discussion");
+    expect(JSON.stringify(capture.body)).toContain("AUR CONTEXT BRIDGE");
+    expect(JSON.stringify(capture.body)).toContain("Selected Socratic response mode: ask");
+    expect(JSON.stringify(capture.body)).toContain("Policy evidence and assumptions");
+  });
+
+  test("context open-ended route selects language coach without trusting client mode", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    mockClaudeResponse(200, JSON.stringify({
+      hostText: "Try answering that in English. You can start with a simple claim.",
+      followUpQuestion: "What is your main point in English?"
+    }), capture);
+
+    const response = await POST(buildRequest({
+      sessionMode: "context_open_ended",
+      durationSeconds: undefined,
+      elapsedSeconds: 1200,
+      remainingSeconds: undefined,
+      turns: [
+        { speaker: "host", text: "What does the article imply?" },
+        { speaker: "learner", text: "menurut saya ini penting karena masyarakat berubah" },
+      ],
+      aurUnderstandingState: {
+        sourceType: "article",
+        discussionFocus: "Article reasoning",
+        keyConcepts: ["claim"],
+        evidenceOrExamples: ["evidence"],
+        assumptionsToTest: ["assumption"],
+        implications: ["implication"],
+        counterarguments: ["counterargument"],
+        learnerLikelyProblem: "The learner may need English support.",
+        discussionPath: ["claim"],
+        scope: { include: ["article"], exclude: ["raw"] },
+        closureCriteria: ["position"],
+        coverageState: {
+          mainIdeaExplored: false,
+          evidenceExplored: false,
+          implicationsExplored: false,
+          learnerPositionFormed: false,
+          counterargumentExplored: false,
+          synthesisCompleted: false,
+        },
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(capture.body)).toContain("Selected Socratic response mode: language_coach");
+    expect(JSON.stringify(capture.body)).toContain("Try answering that in English");
   });
 
   test("negative remainingSeconds rejects with 400", async () => {

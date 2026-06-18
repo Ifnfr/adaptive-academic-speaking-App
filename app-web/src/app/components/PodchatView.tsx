@@ -17,6 +17,14 @@ import {
   type PodchatDifficultyEstimate,
 } from "../lib/podchatDifficulty";
 import { getPodchatOpener } from "../lib/podchatOpener";
+import {
+  buildFallbackUnderstandingState,
+  updateCoverageState,
+} from "../lib/podchat-aur/analysis";
+import type {
+  ContextUnderstandingState,
+  PodchatAurInput,
+} from "../lib/podchat-aur/types";
 
 type PodchatPhase =
   | "setup"
@@ -277,6 +285,63 @@ export interface PodchatViewProps {
   isActiveView?: boolean;
 }
 
+function buildAurInputFromContext(
+  articleContext: PodchatArticleContext | null | undefined,
+  commonplaceNoteContext: PodchatCommonplaceDiscussionContext | null,
+  commonplaceMapContext: PodchatCommonplaceMapDiscussionContext | null,
+): PodchatAurInput | null {
+  if (articleContext) {
+    return {
+      sourceType: "article",
+      articleTitle: articleContext.articleTitle,
+      articleBrief: articleContext.articleBrief,
+      mainIdea: articleContext.mainIdea,
+      keyPoints: articleContext.keyPoints,
+      speakingTaskTitle: articleContext.speakingTaskTitle,
+      speakingTaskInstruction: articleContext.speakingTaskInstruction,
+      targetStructure: articleContext.targetStructure,
+      sourceDomain: articleContext.sourceDomain,
+    };
+  }
+
+  if (commonplaceNoteContext) {
+    return {
+      sourceType: "commonplace_note",
+      noteId: commonplaceNoteContext.noteId,
+      shortcode: commonplaceNoteContext.shortcode,
+      title: commonplaceNoteContext.title,
+      sourceBook: commonplaceNoteContext.sourceBook,
+      insight: commonplaceNoteContext.insight,
+      tags: commonplaceNoteContext.tags,
+    };
+  }
+
+  if (commonplaceMapContext) {
+    return {
+      sourceType: "commonplace_map",
+      mapType: commonplaceMapContext.mapType,
+      mapId: commonplaceMapContext.mapId,
+      mapTitle: commonplaceMapContext.mapTitle,
+      counts: commonplaceMapContext.counts,
+      nodes: commonplaceMapContext.nodes,
+      edges: commonplaceMapContext.edges,
+    };
+  }
+
+  return null;
+}
+
+function buildAurContextKey(input: PodchatAurInput | null): string | null {
+  if (!input) return null;
+  if (input.sourceType === "article") {
+    return `article:${input.articleTitle || ""}:${input.speakingTaskTitle || ""}`;
+  }
+  if (input.sourceType === "commonplace_note") {
+    return `commonplace-note:${input.noteId || ""}`;
+  }
+  return `commonplace-map:${input.mapType || "sub"}:${input.mapId || ""}`;
+}
+
 export function PodchatView({
   sessionLevel = "Intermediate",
   sessionMode = "Fluency Sprint",
@@ -341,6 +406,10 @@ export function PodchatView({
     useState(false);
   const [commonplaceNoteContextError, setCommonplaceNoteContextError] =
     useState<string | null>(null);
+  const [aurUnderstandingState, setAurUnderstandingState] =
+    useState<ContextUnderstandingState | null>(null);
+  const [aurAnalysisLoading, setAurAnalysisLoading] = useState(false);
+  const aurAnalysisKeyRef = useRef<string | null>(null);
 
   // TTS audio playback states and refs
   const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
@@ -363,6 +432,16 @@ export function PodchatView({
     : "normal_timed";
   const isContextOpenEnded = podchatSessionMode === "context_open_ended";
   const isTimeExpired = !isContextOpenEnded && remainingSeconds === 0;
+  const aurInput = useMemo(
+    () =>
+      buildAurInputFromContext(
+        articleContext,
+        commonplaceNoteContext,
+        commonplaceMapContext,
+      ),
+    [articleContext, commonplaceNoteContext, commonplaceMapContext],
+  );
+  const aurContextKey = useMemo(() => buildAurContextKey(aurInput), [aurInput]);
   const isLastTurnLearner = turns.length > 0 && turns[turns.length - 1].speaker === "learner";
   const hasSubmitError = !!turnError && isLastTurnLearner;
   const rollingTurns = turns.slice(-3);
@@ -667,6 +746,67 @@ export function PodchatView({
     }, 0);
   }, [articleContext, commonplaceContext, commonplaceMapContextRef]);
 
+  useEffect(() => {
+    if (!aurInput || !aurContextKey || !isContextOpenEnded) {
+      aurAnalysisKeyRef.current = null;
+      setTimeout(() => {
+        setAurUnderstandingState(null);
+        setAurAnalysisLoading(false);
+      }, 0);
+      return;
+    }
+
+    if (aurAnalysisKeyRef.current === aurContextKey) return;
+    aurAnalysisKeyRef.current = aurContextKey;
+    setTimeout(() => {
+      setAurUnderstandingState(null);
+      setAurAnalysisLoading(true);
+    }, 0);
+
+    const controller = new AbortController();
+    let isCurrent = true;
+
+    const analyzeContext = async () => {
+      try {
+        const response = await fetch("/api/podchat/context/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          signal: controller.signal,
+          body: JSON.stringify({
+            sessionMode: "context_open_ended",
+            sourceType: aurInput.sourceType,
+            context: aurInput,
+          }),
+        });
+        const data = (await response.json().catch(() => null)) as
+          | { understandingState?: ContextUnderstandingState }
+          | null;
+        if (!isCurrent) return;
+        if (response.ok && data?.understandingState) {
+          setAurUnderstandingState(data.understandingState);
+        } else {
+          setAurUnderstandingState(buildFallbackUnderstandingState(aurInput));
+        }
+      } catch {
+        if (isCurrent) {
+          setAurUnderstandingState(buildFallbackUnderstandingState(aurInput));
+        }
+      } finally {
+        if (isCurrent) {
+          setAurAnalysisLoading(false);
+        }
+      }
+    };
+
+    void analyzeContext();
+
+    return () => {
+      isCurrent = false;
+      controller.abort();
+    };
+  }, [aurContextKey, aurInput, isContextOpenEnded]);
+
   // --- Timer management ---
   function startTimer() {
     setTimerEnabled(true);
@@ -702,6 +842,23 @@ export function PodchatView({
       }
     };
   }, [shouldTimerRun]);
+
+  function buildAurStateForTurns(
+    currentTurns: ReadonlyArray<PodchatTurn>,
+  ): ContextUnderstandingState | undefined {
+    if (!isContextOpenEnded || !aurInput) return undefined;
+    const baseState = aurUnderstandingState ?? buildFallbackUnderstandingState(aurInput);
+    const coverageState = currentTurns
+      .filter((turn) => turn.speaker === "learner")
+      .reduce(
+        (coverage, turn) => updateCoverageState(coverage, turn.text),
+        baseState.coverageState,
+      );
+    return {
+      ...baseState,
+      coverageState,
+    };
+  }
 
   // Handle cleanup when navigating away (isActiveView changes to false)
   useEffect(() => {
@@ -871,6 +1028,7 @@ export function PodchatView({
     setRecordingState("idle");
     setLockedTranscript(null);
     setSessionPlan(null);
+    const startingAurState = buildAurStateForTurns([]);
 
     const fallbackText = commonplaceMapOpener ?? commonplaceOpener ?? getPodchatOpener(topic, difficulty);
     const usePredefined = Boolean(commonplaceMapOpener || commonplaceOpener);
@@ -906,6 +1064,7 @@ export function PodchatView({
             difficulty,
             sessionMode: podchatSessionMode,
             ...(articleContext ? { articleContext } : {}),
+            ...(startingAurState ? { aurUnderstandingState: startingAurState } : {}),
           }),
         });
 
@@ -941,7 +1100,7 @@ export function PodchatView({
         setTurns([finalOpener]);
         setOpenerLoading(false);
         setStatus("user_turn");
-        startTimer();
+        if (!isContextOpenEnded) startTimer();
         playTts(fallbackText);
       }
     }
@@ -1116,6 +1275,7 @@ export function PodchatView({
   async function triggerEvaluation(finalTurns: PodchatTurn[]) {
     setEvalLoading(true);
     setEvalError(null);
+    const finalAurState = buildAurStateForTurns(finalTurns);
     try {
       const response = await fetch("/api/podchat/evaluate", {
         method: "POST",
@@ -1128,6 +1288,7 @@ export function PodchatView({
           ...(articleContext ? { articleContext } : {}),
           ...(commonplaceNoteContext ? { commonplaceContext: commonplaceNoteContext } : {}),
           ...(commonplaceMapContext ? { commonplaceMapContext } : {}),
+          ...(finalAurState ? { aurUnderstandingState: finalAurState } : {}),
         }),
       });
       if (!response.ok) {
@@ -1158,6 +1319,7 @@ export function PodchatView({
   function buildTurnPayload(currentTurns: PodchatTurn[], currentIndex: number) {
     const elapsed = elapsedSeconds;
     const remaining = Math.max(0, durationSeconds - elapsed);
+    const turnAurState = buildAurStateForTurns(currentTurns);
     const payload: Record<string, unknown> = {
       topic,
       difficulty,
@@ -1169,6 +1331,7 @@ export function PodchatView({
       ...(commonplaceNoteContext ? { commonplaceContext: commonplaceNoteContext } : {}),
       ...(commonplaceMapContext ? { commonplaceMapContext } : {}),
       ...(sessionPlan ? { sessionPlan } : {}),
+      ...(turnAurState ? { aurUnderstandingState: turnAurState } : {}),
     };
     if (!isContextOpenEnded) {
       payload.durationSeconds = durationSeconds;
@@ -1446,7 +1609,21 @@ export function PodchatView({
               <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
                 Open-ended
               </span>
+              <span className="app-status app-status-info" data-testid="podchat-socratic-mode-label">
+                Socratic mode
+              </span>
+              {aurAnalysisLoading && (
+                <span className="app-status app-status-warning">
+                  Analyzing your context...
+                </span>
+              )}
             </div>
+            <p
+              className="text-sm text-[var(--brand-ink-soft)]"
+              data-testid="podchat-socratic-mode-copy"
+            >
+              AI will ask, challenge, explain, and synthesize your ideas.
+            </p>
 
             <fieldset>
               <legend className={labelClass}>Difficulty / Depth</legend>
@@ -1606,7 +1783,21 @@ export function PodchatView({
               <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
                 Open-ended
               </span>
+              <span className="app-status app-status-info" data-testid="podchat-socratic-mode-label">
+                Socratic mode
+              </span>
+              {aurAnalysisLoading && (
+                <span className="app-status app-status-warning">
+                  Analyzing your context...
+                </span>
+              )}
             </div>
+            <p
+              className="text-sm text-[var(--brand-ink-soft)]"
+              data-testid="podchat-socratic-mode-copy"
+            >
+              AI will ask, challenge, explain, and synthesize your ideas.
+            </p>
 
             <fieldset>
               <legend className={labelClass}>Difficulty / Depth</legend>
@@ -1725,7 +1916,21 @@ export function PodchatView({
               <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
                 Open-ended
               </span>
+              <span className="app-status app-status-info" data-testid="podchat-socratic-mode-label">
+                Socratic mode
+              </span>
+              {aurAnalysisLoading && (
+                <span className="app-status app-status-warning">
+                  Analyzing your context...
+                </span>
+              )}
             </div>
+            <p
+              className="text-sm text-[var(--brand-ink-soft)]"
+              data-testid="podchat-socratic-mode-copy"
+            >
+              AI will ask, challenge, explain, and synthesize your ideas.
+            </p>
 
             <fieldset>
               <legend className={labelClass}>Difficulty / Depth</legend>
@@ -2072,6 +2277,9 @@ export function PodchatView({
                 </span>
                 <span className="app-status app-status-success" data-testid="podchat-open-ended-label">
                   Open-ended
+                </span>
+                <span className="app-status app-status-info" data-testid="podchat-socratic-mode-label">
+                  Socratic mode
                 </span>
               </>
             ) : (

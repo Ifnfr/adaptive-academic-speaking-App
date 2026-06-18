@@ -1086,6 +1086,9 @@ test.describe("MVP Smoke Flows", () => {
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
     await expect(page.getByTestId("podchat-article-context-card")).toBeVisible();
     await expect(page.getByText("This Podchat will discuss your article speaking task.")).toBeVisible();
+    await expect(page.getByTestId("podchat-session-mode")).toContainText("Context Discussion");
+    await expect(page.getByTestId("podchat-open-ended-label")).toContainText("Open-ended");
+    await expect(page.getByTestId("podchat-socratic-mode-label")).toContainText("Socratic mode");
 
     // Assert generic topic cards are not the main setup in article-context mode
     await expect(page.getByRole("radio", { name: "Economics" })).toHaveCount(0);
@@ -1103,6 +1106,7 @@ test.describe("MVP Smoke Flows", () => {
     expect(turnPayloads).toHaveLength(1);
     const turnPayload = turnPayloads[0] as Record<string, unknown>;
     expect(turnPayload).toHaveProperty("articleContext");
+    expect(turnPayload.sessionMode).toBe("context_open_ended");
     const articleCtx = turnPayload.articleContext as Record<string, unknown>;
     expect(articleCtx.articleTitle).toBe("Test Article Title");
     expect(articleCtx.articleBrief).toBe("Brief summary.");
@@ -1124,7 +1128,8 @@ test.describe("MVP Smoke Flows", () => {
     }
 
     // End session
-    await page.getByRole("button", { name: "End Session" }).click();
+    await expect(page.getByRole("button", { name: "Finish Discussion" })).toBeVisible();
+    await page.getByRole("button", { name: "Finish Discussion" }).click();
     await expect(page.getByTestId("podchat-evaluation")).toBeVisible();
     await expect(page.getByTestId("podchat-evaluation-success")).toBeVisible();
 

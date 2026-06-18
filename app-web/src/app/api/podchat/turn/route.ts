@@ -14,6 +14,16 @@ import {
   type PodchatDifficulty,
   type PodchatSessionMode,
 } from "../../../lib/podchat";
+import {
+  formatAurPromptBlock,
+  parseUnderstandingState,
+} from "../../../lib/podchat-aur/analysis";
+import { selectSocraticResponseMode } from "../../../lib/podchat-aur/router";
+import type {
+  ContextSourceType,
+  ContextUnderstandingState,
+  SocraticResponseMode,
+} from "../../../lib/podchat-aur/types";
 type PodchatSpeaker = "host" | "learner";
 type PodchatTurn = {
   speaker: PodchatSpeaker;
@@ -30,6 +40,8 @@ type PodchatTurnRequest = {
   remainingSeconds: number;
   turns: PodchatTurn[];
   articleContext?: PodchatArticleContext;
+  aurUnderstandingState?: ContextUnderstandingState;
+  socraticResponseMode?: SocraticResponseMode;
   sessionPlan?: {
     topicAngle: string;
     targetSkill: string;
@@ -64,6 +76,28 @@ function mapProviderStatus(status: number): ProviderErrorCategory {
     return "provider_unavailable";
   }
   return "unknown";
+}
+
+function inferAurSourceType(body: Record<string, unknown>, articleContext?: PodchatArticleContext): ContextSourceType {
+  const aur = body.aurUnderstandingState;
+  if (aur && typeof aur === "object" && !Array.isArray(aur)) {
+    const sourceType = (aur as Record<string, unknown>).sourceType;
+    if (
+      sourceType === "article" ||
+      sourceType === "commonplace_note" ||
+      sourceType === "commonplace_map"
+    ) {
+      return sourceType;
+    }
+  }
+  if (body.commonplaceMapContext && typeof body.commonplaceMapContext === "object") {
+    return "commonplace_map";
+  }
+  if (body.commonplaceContext && typeof body.commonplaceContext === "object") {
+    return "commonplace_note";
+  }
+  if (articleContext) return "article";
+  return "article";
 }
 
 function logProviderError(providerError: SafeProviderError) {
@@ -415,6 +449,24 @@ function validateRequest(
     sessionPlan = planResult.value;
   }
 
+  let aurUnderstandingState: ContextUnderstandingState | undefined;
+  let socraticResponseMode: SocraticResponseMode | undefined;
+  if (isContextOpenEnded) {
+    const sourceType = inferAurSourceType(b, articleContext);
+    aurUnderstandingState = parseUnderstandingState(b.aurUnderstandingState, sourceType);
+    const latestLearnerText = turns
+      .slice()
+      .reverse()
+      .find((turn: unknown) => (turn as Record<string, unknown>).speaker === "learner") as
+      | Record<string, unknown>
+      | undefined;
+    socraticResponseMode = selectSocraticResponseMode({
+      latestUserText: typeof latestLearnerText?.text === "string" ? latestLearnerText.text : "",
+      difficulty: validDifficulty,
+      understandingState: aurUnderstandingState,
+    });
+  }
+
   return {
     valid: true,
     request: {
@@ -433,6 +485,8 @@ function validateRequest(
         };
       }),
       articleContext,
+      aurUnderstandingState,
+      socraticResponseMode,
       sessionPlan,
     },
   };
@@ -443,6 +497,8 @@ function buildSystemPrompt(
   difficulty: string,
   sessionMode: PodchatSessionMode,
   articleContext?: PodchatArticleContext,
+  understandingState?: ContextUnderstandingState,
+  socraticResponseMode?: SocraticResponseMode,
   sessionPlan?: {
     topicAngle: string;
     targetSkill: string;
@@ -525,6 +581,9 @@ function buildSystemPrompt(
           "- Track whether the learner has covered the main idea, evidence, implications, and their own position.",
           "- When coverage is sufficient, offer a natural closing option while allowing the learner to continue with follow-up questions.",
         ].join("\n")
+      : "",
+    sessionMode === "context_open_ended" && understandingState && socraticResponseMode
+      ? formatAurPromptBlock(understandingState, socraticResponseMode)
       : "",
     "",
     "OUTPUT FORMAT REQUIREMENTS:",
@@ -838,6 +897,8 @@ export async function POST(request: Request) {
       validatedReq.difficulty,
       validatedReq.sessionMode,
       validatedReq.articleContext,
+      validatedReq.aurUnderstandingState,
+      validatedReq.socraticResponseMode,
       validatedReq.sessionPlan,
     );
     const userPrompt = buildUserPrompt(validatedReq);
@@ -866,6 +927,8 @@ export async function POST(request: Request) {
       validatedReq.difficulty,
       validatedReq.sessionMode,
       validatedReq.articleContext,
+      validatedReq.aurUnderstandingState,
+      validatedReq.socraticResponseMode,
       validatedReq.sessionPlan,
     );
     const userPrompt = buildUserPrompt(validatedReq);
@@ -895,6 +958,8 @@ export async function POST(request: Request) {
     validatedReq.difficulty,
     validatedReq.sessionMode,
     validatedReq.articleContext,
+    validatedReq.aurUnderstandingState,
+    validatedReq.socraticResponseMode,
     validatedReq.sessionPlan,
   );
   const userPrompt = buildUserPrompt(validatedReq);

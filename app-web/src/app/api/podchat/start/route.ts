@@ -7,7 +7,13 @@ import {
   type PodchatDifficulty,
   type PodchatSessionMode,
 } from "../../../lib/podchat";
+import {
+  buildFallbackUnderstandingState,
+  formatAurPromptBlock,
+  parseUnderstandingState,
+} from "../../../lib/podchat-aur/analysis";
 import type { PodchatArticleContext } from "../_lib/providers";
+import type { ContextUnderstandingState } from "../../../lib/podchat-aur/types";
 
 export const runtime = "nodejs";
 
@@ -129,6 +135,7 @@ function buildSystemPrompt(
   difficulty: string,
   sessionMode: PodchatSessionMode,
   articleContext?: PodchatArticleContext,
+  understandingState?: ContextUnderstandingState,
 ): string {
   let diffGuidance = "";
   if (difficulty === "Beginner") {
@@ -177,6 +184,9 @@ function buildSystemPrompt(
           "- Explore the main idea, evidence, implications, and the learner's position.",
           "- Guide toward closure when the topic is sufficiently covered, but allow follow-up questions.",
         ].join("\n")
+      : "",
+    sessionMode === "context_open_ended" && understandingState
+      ? formatAurPromptBlock(understandingState, "ask")
       : "",
     "",
     "OUTPUT FORMAT REQUIREMENTS:",
@@ -244,11 +254,30 @@ export async function POST(request: Request) {
     b.articleContext && typeof b.articleContext === "object"
       ? (b.articleContext as PodchatArticleContext)
       : undefined;
+  const understandingState =
+    sessionMode === "context_open_ended" && articleContext
+      ? parseUnderstandingState(
+          b.aurUnderstandingState,
+          {
+            sourceType: "article",
+            articleTitle: articleContext.articleTitle,
+            articleBrief: articleContext.articleBrief,
+            mainIdea: articleContext.mainIdea,
+            keyPoints: articleContext.keyPoints,
+            speakingTaskTitle: articleContext.speakingTaskTitle,
+            speakingTaskInstruction: articleContext.speakingTaskInstruction,
+            targetStructure: articleContext.targetStructure,
+            sourceDomain: articleContext.sourceDomain,
+          },
+        )
+      : sessionMode === "context_open_ended"
+        ? buildFallbackUnderstandingState("article")
+        : undefined;
 
   // Use roleProviders abstraction (planning role)
   try {
     const { providerId } = resolveProvider("planning");
-    const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext);
+    const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext, understandingState);
     const userPrompt = buildUserPrompt(topic, difficulty, sessionMode);
 
     const providerResultText = await callRoleProvider("planning", systemPrompt, userPrompt);

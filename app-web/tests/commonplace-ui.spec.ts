@@ -3383,7 +3383,10 @@ test.describe("Commonplace Phase 1B form and detail", () => {
     await expect(page.getByTestId("podchat-commonplace-context-card")).toContainText(
       "Inclusive institutions create stronger incentives for growth.",
     );
-    expect(providerRequests).toEqual([]);
+    expect(providerRequests).toContain("/api/podchat/context/analyze");
+    expect(
+      providerRequests.filter((pathname) => pathname !== "/api/podchat/context/analyze"),
+    ).toEqual([]);
 
     const storedContext = await page.evaluate(() =>
       window.sessionStorage.getItem("fonetik:commonplace-podchat-context"),

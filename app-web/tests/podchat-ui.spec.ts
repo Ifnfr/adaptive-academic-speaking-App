@@ -357,11 +357,44 @@ test.describe("Podchat Phase 1 connected UI", () => {
         }),
       });
     });
+    await page.route("**/api/podchat/context/analyze", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          understandingState: {
+            sourceType: "commonplace_note",
+            discussionFocus: "Policy frameworks and evidence",
+            keyConcepts: ["policy", "evidence"],
+            evidenceOrExamples: ["The note compares policy frameworks."],
+            assumptionsToTest: ["Each model has trade-offs."],
+            implications: ["Decision makers need stronger evidence."],
+            counterarguments: ["Some trade-offs may be acceptable."],
+            learnerLikelyProblem: "The learner may repeat the note without explaining it.",
+            discussionPath: ["idea", "example", "implication"],
+            scope: { include: ["note insight"], exclude: ["raw source text"] },
+            closureCriteria: ["The learner explains one implication."],
+            coverageState: {
+              mainIdeaExplored: false,
+              evidenceExplored: false,
+              implicationsExplored: false,
+              learnerPositionFormed: false,
+              counterargumentExplored: false,
+              synthesisCompleted: false,
+            },
+          },
+        }),
+      });
+    });
 
     await page.goto("/");
 
     await expect(page.getByTestId("podchat-session-mode")).toContainText("Context Discussion");
     await expect(page.getByTestId("podchat-open-ended-label")).toContainText("Open-ended");
+    await expect(page.getByTestId("podchat-socratic-mode-label")).toContainText("Socratic mode");
+    await expect(page.getByTestId("podchat-socratic-mode-copy")).toContainText(
+      "AI will ask, challenge, explain, and synthesize your ideas.",
+    );
     await expect(page.getByTestId("podchat-difficulty-estimate-indicator")).toContainText("Auto");
 
     await page.getByRole("radio", { name: "Expert" }).click();

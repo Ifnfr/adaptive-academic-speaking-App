@@ -21,6 +21,14 @@ import {
   type PodchatDifficulty,
   type PodchatSessionMode,
 } from "../../../lib/podchat";
+import {
+  formatAurPromptBlock,
+  parseUnderstandingState,
+} from "../../../lib/podchat-aur/analysis";
+import type {
+  ContextSourceType,
+  ContextUnderstandingState,
+} from "../../../lib/podchat-aur/types";
 type PodchatSpeaker = "host" | "learner";
 
 type PodchatTurn = {
@@ -34,6 +42,7 @@ type PodchatEvaluateRequest = {
   sessionMode: PodchatSessionMode;
   turns: PodchatTurn[];
   articleContext?: PodchatArticleContext;
+  aurUnderstandingState?: ContextUnderstandingState;
 };
 
 type PodchatCorrection = {
@@ -212,6 +221,28 @@ function validateArticleContext(
   };
 }
 
+function inferAurSourceType(body: Record<string, unknown>, articleContext?: PodchatArticleContext): ContextSourceType {
+  const aur = body.aurUnderstandingState;
+  if (aur && typeof aur === "object" && !Array.isArray(aur)) {
+    const sourceType = (aur as Record<string, unknown>).sourceType;
+    if (
+      sourceType === "article" ||
+      sourceType === "commonplace_note" ||
+      sourceType === "commonplace_map"
+    ) {
+      return sourceType;
+    }
+  }
+  if (body.commonplaceMapContext && typeof body.commonplaceMapContext === "object") {
+    return "commonplace_map";
+  }
+  if (body.commonplaceContext && typeof body.commonplaceContext === "object") {
+    return "commonplace_note";
+  }
+  if (articleContext) return "article";
+  return "article";
+}
+
 function validateRequest(body: unknown): ValidationResult {
   if (!body || typeof body !== "object") {
     return { valid: false, error: "Invalid request body." };
@@ -305,6 +336,10 @@ function validateRequest(body: unknown): ValidationResult {
     }
     articleContext = valResult.value;
   }
+  const aurUnderstandingState =
+    sessionMode === "context_open_ended"
+      ? parseUnderstandingState(b.aurUnderstandingState, inferAurSourceType(b, articleContext))
+      : undefined;
 
   return {
     valid: true,
@@ -314,6 +349,7 @@ function validateRequest(body: unknown): ValidationResult {
       sessionMode,
       turns: normalizedTurns,
       articleContext,
+      aurUnderstandingState,
     },
   };
 }
@@ -382,6 +418,9 @@ function buildSystemPrompt(req: PodchatEvaluateRequest): string {
     "Evaluate only the transcript text from a completed Podchat conversation.",
     contextGuidance,
     sessionModeGuidance(req.sessionMode),
+    req.sessionMode === "context_open_ended" && req.aurUnderstandingState
+      ? formatAurPromptBlock(req.aurUnderstandingState, "synthesize")
+      : "",
     `Difficulty: ${req.difficulty}`,
     "",
     "EVALUATION BEHAVIOR:",

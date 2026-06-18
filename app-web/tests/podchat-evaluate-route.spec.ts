@@ -231,6 +231,7 @@ test.describe("Podchat Evaluate Route", () => {
     expect(providerBody).not.toMatch(
       /audio|blob|recordingUrl|email|userId|owner_id|auth|device/i,
     );
+    expect(providerBody).not.toContain("AUR CONTEXT BRIDGE");
   });
 
   test("invalid topic rejects with 400", async () => {
@@ -624,6 +625,27 @@ test.describe("Podchat Evaluate Route", () => {
         speakingTaskTitle: "Discuss the article",
         speakingTaskInstruction: "Defend a position with evidence.",
       },
+      aurUnderstandingState: {
+        sourceType: "article",
+        discussionFocus: "Policy assumptions",
+        keyConcepts: ["assumptions", "evidence"],
+        evidenceOrExamples: ["The article compares evidence."],
+        assumptionsToTest: ["Evidence quality varies."],
+        implications: ["The policy may affect public trust."],
+        counterarguments: ["Some evidence may be incomplete."],
+        learnerLikelyProblem: "The learner may not synthesize the article.",
+        discussionPath: ["claim", "evidence", "synthesis"],
+        scope: { include: ["article reasoning"], exclude: ["raw article"] },
+        closureCriteria: ["The learner can summarize a position."],
+        coverageState: {
+          mainIdeaExplored: true,
+          evidenceExplored: true,
+          implicationsExplored: true,
+          learnerPositionFormed: true,
+          counterargumentExplored: false,
+          synthesisCompleted: false,
+        },
+      },
     }));
     expect(response.status).toBe(200);
 
@@ -631,6 +653,8 @@ test.describe("Podchat Evaluate Route", () => {
     expect(providerBody).toContain("SESSION MODE: Context Discussion / Open-ended.");
     expect(providerBody).toContain("Difficulty: Expert");
     expect(providerBody).toContain("theoretical implications");
+    expect(providerBody).toContain("AUR CONTEXT BRIDGE");
+    expect(providerBody).toContain("Policy assumptions");
   });
 
   test("request with mock provider and articleContext returns mock response", async () => {
