@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { GET, testHooks } from "../src/app/api/commonplace/maps/context/route";
+import { GET } from "../src/app/api/commonplace/maps/context/route";
+import { testHooks } from "../src/app/api/commonplace/maps/context/route-test-hooks";
 
 const baseMapRow = {
   id: "sub-map-123",

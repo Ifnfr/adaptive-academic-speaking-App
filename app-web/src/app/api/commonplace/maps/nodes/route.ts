@@ -12,6 +12,7 @@ import {
   type CommonplaceMapNodePositionUpdate,
   type CommonplaceMindMapType,
 } from "../../../../lib/storage/supabase-commonplace-mindmap-adapter";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
 
@@ -34,11 +35,6 @@ type DeleteNodeRequest = {
   mapId?: unknown;
   type?: unknown;
   nodeId?: unknown;
-};
-
-export const testHooks = {
-  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
-  getSupabaseClient: null as (() => unknown) | null,
 };
 
 async function resolveCurrentUserId(): Promise<string | null> {

@@ -6,8 +6,8 @@ import {
   GET,
   PATCH,
   POST,
-  testHooks,
 } from "../src/app/api/commonplace/maps/edges/route";
+import { testHooks } from "../src/app/api/commonplace/maps/edges/route-test-hooks";
 
 const baseMapRow = {
   id: "map-db-1",

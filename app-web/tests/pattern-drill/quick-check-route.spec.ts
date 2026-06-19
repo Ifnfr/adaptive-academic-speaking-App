@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { testHooks, POST } from "../../src/app/api/pattern-drill/quick-check/route";
+import { POST } from "../../src/app/api/pattern-drill/quick-check/route";
+import { testHooks } from "../../src/app/api/pattern-drill/quick-check/route-test-hooks";
 
 // Helper to create a fresh Request for each test (bodies can only be consumed once)
 function makeRequest(body: unknown): Request {

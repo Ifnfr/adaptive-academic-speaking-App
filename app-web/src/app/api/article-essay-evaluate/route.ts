@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { saveArticleWritingMemory } from "../../lib/storage/supabase-article-writing-adapter";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
 
@@ -783,11 +784,6 @@ function validateProviderOutput(
     return { valid: false, error: `Failed to parse provider output: ${message}` };
   }
 }
-
-export const testHooks = {
-  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
-  getSupabaseClient: null as (() => unknown) | null,
-};
 
 async function resolveCurrentUserId(): Promise<string | null> {
   if (testHooks.resolveCurrentUserId) {

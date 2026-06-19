@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { testHooks, POST } from "../../src/app/api/pattern-drill/evaluate-session/route";
+import { POST } from "../../src/app/api/pattern-drill/evaluate-session/route";
+import { testHooks } from "../../src/app/api/pattern-drill/evaluate-session/route-test-hooks";
 
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost/api/pattern-drill/evaluate-session", {

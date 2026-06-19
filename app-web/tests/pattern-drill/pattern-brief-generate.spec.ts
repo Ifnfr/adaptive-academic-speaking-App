@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { POST, testHooks } from "../../src/app/api/pattern-brief/generate/route";
+import { POST } from "../../src/app/api/pattern-brief/generate/route";
+import { testHooks } from "../../src/app/api/pattern-brief/generate/route-test-hooks";
 
 const baseRow = {
   id: "err-123",

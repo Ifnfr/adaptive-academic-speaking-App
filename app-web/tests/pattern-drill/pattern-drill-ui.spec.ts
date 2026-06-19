@@ -91,7 +91,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-empty")).toBeVisible();
     expect(apiCalled).toBe(true);
   });
@@ -117,7 +117,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
 
     // Verify found weakness fields
     await expect(page.getByTestId("weakness-found")).toBeVisible();
@@ -170,7 +170,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
 
     // Test loading display
     await expect(page.getByTestId("weakness-loading")).toBeVisible();
@@ -179,14 +179,14 @@ test.describe("Pattern Drill UI Wiring", () => {
     // Test empty
     mockStatus = "empty";
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-empty")).toBeVisible();
     await expect(page.getByText("No speaking weakness data yet. Complete an evaluated Podchat session first.")).toBeVisible();
 
     // Test insufficient
     mockStatus = "insufficient";
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-insufficient")).toBeVisible();
     await expect(
       page.getByText(
@@ -197,7 +197,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     // Test error
     mockStatus = "error";
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-error")).toBeVisible();
     await expect(page.getByText("Could not load weakness data. Try again later.")).toBeVisible();
   });
@@ -223,7 +223,7 @@ test.describe("Pattern Drill UI Wiring", () => {
       });
 
       await page.goto("/");
-      await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+      await page.getByRole("button", { name: "Drill Mode" }).click();
       await expect(page.getByTestId(testId)).toBeVisible();
 
       const generateBtn = page.getByTestId("generate-brief-btn");
@@ -242,7 +242,7 @@ test.describe("Pattern Drill UI Wiring", () => {
       });
     });
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-error")).toBeVisible();
     const generateBtn = page.getByTestId("generate-brief-btn");
     await expect(generateBtn).toBeDisabled();
@@ -263,7 +263,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     // Wait for weakness to load
     await expect(page.getByTestId("weakness-found")).toBeVisible();
 
@@ -294,7 +294,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
 
     // Click generate
@@ -377,7 +377,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
 
     // Click generate — the route is held pending
@@ -424,7 +424,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
 
     // First click — triggers error
@@ -505,7 +505,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
 
     await expect(page.getByTestId("quick-check-section")).not.toBeVisible();
@@ -525,7 +525,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-found")).toBeVisible();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
@@ -547,7 +547,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
@@ -572,7 +572,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
@@ -593,7 +593,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
@@ -624,7 +624,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -651,7 +651,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -678,7 +678,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -709,7 +709,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -747,7 +747,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -778,7 +778,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -813,7 +813,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("skip-check-btn-idle").click();
@@ -840,7 +840,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -871,7 +871,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -904,7 +904,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -945,7 +945,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -988,7 +988,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("start-quick-check-btn").click();
@@ -1015,7 +1015,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
@@ -1082,7 +1082,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
     await page.getByTestId("skip-check-btn-idle").click();
@@ -1142,7 +1142,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await page.getByTestId("skip-check-btn-idle").click();
     await page.getByTestId("start-drill-btn").click();
@@ -1223,7 +1223,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await page.getByTestId("skip-check-btn-idle").click();
     await page.getByTestId("start-drill-btn").click();
@@ -1308,7 +1308,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await page.getByTestId("skip-check-btn-idle").click();
     await page.getByTestId("start-drill-btn").click();
@@ -1364,7 +1364,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await page.getByTestId("skip-check-btn-idle").click();
     await page.getByTestId("start-drill-btn").click();
@@ -1452,7 +1452,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 
@@ -1553,7 +1553,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await page.getByTestId("skip-check-btn-idle").click();
     await page.getByTestId("start-drill-btn").click();
@@ -1651,7 +1651,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await page.getByTestId("skip-check-btn-idle").click();
     await page.getByTestId("start-drill-btn").click();
@@ -1760,7 +1760,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Pattern Drill (Prototype)" }).click();
+    await page.getByRole("button", { name: "Drill Mode" }).click();
     await page.getByTestId("generate-brief-btn").click();
     await expect(page.getByTestId("brief-generated")).toBeVisible();
 

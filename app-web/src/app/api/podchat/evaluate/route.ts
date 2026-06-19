@@ -7,6 +7,7 @@ import {
   callGemini,
   type PodchatArticleContext,
 } from "../_lib/providers";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
 
@@ -703,11 +704,6 @@ function buildMockAspectFeedback(): PodchatAspectFeedback {
     },
   };
 }
-
-export const testHooks = {
-  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
-  getDbClient: null as (() => unknown) | null,
-};
 
 async function resolveCurrentUserId(): Promise<string | null> {
   if (testHooks.resolveCurrentUserId) {

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import fs from "fs";
-import { POST, testHooks } from "../../src/app/api/pattern-drill/pressure-turn/route";
+import { POST } from "../../src/app/api/pattern-drill/pressure-turn/route";
+import { testHooks } from "../../src/app/api/pattern-drill/pressure-turn/route-test-hooks";
 
 const baseBody = {
   briefId: "brief-123",

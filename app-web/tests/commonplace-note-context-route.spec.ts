@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { GET, testHooks } from "../src/app/api/commonplace/notes/context/route";
+import { GET } from "../src/app/api/commonplace/notes/context/route";
+import { testHooks } from "../src/app/api/commonplace/notes/context/route-test-hooks";
 
 const baseNoteRow = {
   id: "note-db-1",

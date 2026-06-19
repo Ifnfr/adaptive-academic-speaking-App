@@ -60,7 +60,7 @@ export function ActiveSessionShell(
                 : "text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)]"
             }`}
           >
-            Pattern Drill (Prototype)
+            Drill Mode
           </button>
         </div>
       </div>

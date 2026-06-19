@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 
-import { DELETE, GET, PATCH, POST, testHooks } from "../src/app/api/commonplace/notes/route";
+import { DELETE, GET, PATCH, POST } from "../src/app/api/commonplace/notes/route";
+import { testHooks } from "../src/app/api/commonplace/notes/route-test-hooks";
 import type { CommonplaceNoteRow } from "../src/app/lib/storage/supabase-commonplace-adapter";
 
 const originalSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -449,9 +449,9 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--brand-border)] pb-4">
         <div>
-          <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]">Pattern Drill</h3>
+          <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]">Drill Mode</h3>
           <p className="text-sm text-[var(--brand-ink-soft)] mt-1">
-            Compact Prototype Mode. (No backend features active.)
+            Practice one speaking pattern through recall, feedback, and pressure.
           </p>
         </div>
         <button type="button" onClick={onExit} className="app-button-ghost px-3 py-1.5 text-sm">

@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { resolveProvider, callRoleProvider, ProviderConfigError } from "../_lib/roleProviders";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
-
-export const testHooks = {
-  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
-  callDeepSeek: null as ((apiKey: string, systemPrompt: string, userPrompt: string) => Promise<string>) | null,
-};
 
 async function resolveCurrentUserId(): Promise<string | null> {
   if (testHooks.resolveCurrentUserId) {

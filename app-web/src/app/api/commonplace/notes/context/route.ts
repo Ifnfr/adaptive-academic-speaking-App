@@ -5,16 +5,12 @@ import {
   getCommonplaceNoteById,
   type CommonplaceNote,
 } from "../../../../lib/storage/supabase-commonplace-adapter";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
 
 const MAX_INSIGHT_CONTEXT_LENGTH = 1200;
 const MAX_CONTEXT_TAGS = 8;
-
-export const testHooks = {
-  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
-  getSupabaseClient: null as (() => unknown) | null,
-};
 
 async function resolveCurrentUserId(): Promise<string | null> {
   if (testHooks.resolveCurrentUserId) {

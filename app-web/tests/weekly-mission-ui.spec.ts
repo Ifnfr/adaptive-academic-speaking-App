@@ -269,7 +269,7 @@ test.describe("Weekly Mission Dashboard UI", () => {
 
     await page.getByRole("button", { name: "Open Pattern Drill" }).click();
     await expect(page.getByRole("heading", { name: "Active Session" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Pattern Drill (Prototype)" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Drill Mode" })).toHaveAttribute("aria-pressed", "true");
 
     await openWeeklyReview(page);
     await page.getByRole("button", { name: "Open Vocabulary" }).click();

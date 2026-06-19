@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
-import { POST, testHooks } from "../src/app/api/article-essay-evaluate/route";
+import { POST } from "../src/app/api/article-essay-evaluate/route";
+import { testHooks } from "../src/app/api/article-essay-evaluate/route-test-hooks";
 
 const originalClaudeKey = process.env.CLAUDE_API_KEY;
 const originalDeepSeekKey = process.env.DEEPSEEK_API_KEY;

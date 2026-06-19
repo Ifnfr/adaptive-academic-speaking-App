@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { GET, testHooks } from "../../src/app/api/pattern-drill/latest-weakness/route";
+import { GET } from "../../src/app/api/pattern-drill/latest-weakness/route";
+import { testHooks } from "../../src/app/api/pattern-drill/latest-weakness/route-test-hooks";
 
 const baseRow = {
   id: "err-123",

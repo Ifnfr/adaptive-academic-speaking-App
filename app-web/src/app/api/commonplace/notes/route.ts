@@ -9,6 +9,7 @@ import {
   type CreateCommonplaceNoteInput,
   type UpdateCommonplaceNoteInput,
 } from "../../../lib/storage/supabase-commonplace-adapter";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
 
@@ -30,11 +31,6 @@ type UpdateCommonplaceNoteRequest = CreateCommonplaceNoteRequest & {
 
 type DeleteCommonplaceNoteRequest = {
   noteId?: string | null;
-};
-
-export const testHooks = {
-  resolveCurrentUserId: null as (() => Promise<string | null>) | null,
-  getSupabaseClient: null as (() => unknown) | null,
 };
 
 async function resolveCurrentUserId(): Promise<string | null> {
