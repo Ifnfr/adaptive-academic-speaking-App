@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import { selectLatestWeakness } from "./weaknessSelector";
 
 export async function getLatestWeaknessForUser(

@@ -117,6 +117,43 @@ test.describe("Latest Weakness API Route", () => {
     expect(json.message).toBeUndefined(); // Ensure no raw database message leak
   });
 
+  test("empty Supabase result returns safe empty status", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const { client } = createMockSupabaseClient({ data: [] });
+    testHooks.getSupabaseClient = () => client;
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const json = await response.json();
+    expect(json.status).toBe("empty");
+    expect(json.reason).toContain("No speaking weakness data yet");
+    expect(json.error).toBeUndefined();
+  });
+
+  test("generic rows return safe insufficient status without leaking internals", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const { client } = createMockSupabaseClient({
+      data: [
+        {
+          ...baseRow,
+          category: "General",
+          label: "Needs improvement",
+          evidence: "Internal DB Error - private detail should not matter.",
+          practice_focus: "Practice more.",
+        },
+      ],
+    });
+    testHooks.getSupabaseClient = () => client;
+
+    const response = await GET();
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.status).toBe("insufficient");
+    expect(json.reason).toContain("not specific enough");
+    expect(JSON.stringify(json)).not.toContain("Internal DB Error");
+  });
+
   test("successful rows retrieve calls learner_error_patterns and runs selector", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
     const { client, calls } = createMockSupabaseClient({

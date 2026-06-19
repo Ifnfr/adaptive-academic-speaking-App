@@ -34,7 +34,7 @@ test.describe("Latest Weakness Selector Utility", () => {
   test("ignores non-podchat source kinds", () => {
     const row = buildRow({ source_kind: "article_writing" });
     const res = selectLatestWeakness([row], { now: refDate });
-    expect(res.status).toBe("insufficient");
+    expect(res.status).toBe("empty");
   });
 
   test("respects owner scoping when ownerId is specified", () => {
@@ -48,6 +48,16 @@ test.describe("Latest Weakness Selector Utility", () => {
 
   test("rejects generic labels", () => {
     const row = buildRow({ label: "Grammar", category: "Grammar" });
+    const res = selectLatestWeakness([row], { now: refDate });
+    expect(res.status).toBe("insufficient");
+  });
+
+  test("rejects vague improvement labels", () => {
+    const row = buildRow({
+      label: "Needs improvement",
+      evidence: "The answer was unclear.",
+      practice_focus: "Practice more speaking.",
+    });
     const res = selectLatestWeakness([row], { now: refDate });
     expect(res.status).toBe("insufficient");
   });
@@ -91,6 +101,39 @@ test.describe("Latest Weakness Selector Utility", () => {
     expect(res.status).toBe("insufficient");
   });
 
+  test("rejects explicit low-confidence rows", () => {
+    const row = buildRow({
+      confidence: 0.3,
+      evidence: "Learner stated a claim without explaining the reason.",
+      practice_focus: "Add a because clause to justify claims.",
+    });
+    const res = selectLatestWeakness([row], { now: refDate });
+    expect(res.status).toBe("insufficient");
+  });
+
+  test("handles malformed rows safely", () => {
+    const res = selectLatestWeakness([
+      null,
+      { id: "err-1", source_kind: "podchat" },
+      { ...buildRow({}), label: "" },
+    ], { now: refDate });
+    expect(res.status).toBe("insufficient");
+    expect(res.reason).toContain("not specific enough");
+  });
+
+  test("bounds long display fields in found output", () => {
+    const longFocus = `${"Add a because clause to justify claims. ".repeat(20)}Use specific examples.`;
+    const row = buildRow({
+      label: "Missing because clauses after opinions",
+      evidence: "Learner stated an opinion but omitted the reason.",
+      practice_focus: longFocus,
+    });
+    const res = selectLatestWeakness([row], { now: refDate });
+    expect(res.status).toBe("found");
+    expect(res.weakness?.description.length).toBeLessThanOrEqual(320);
+    expect(res.weakness?.description.endsWith("...")).toBe(true);
+  });
+
   test("accepts a single high-quality candidate with count = 1", () => {
     const row = buildRow({
       evidence: "Learner did not explain why.",
@@ -125,13 +168,13 @@ test.describe("Latest Weakness Selector Utility", () => {
   test("tie-breaks by confidence first, then count, then recency, then completeness", () => {
     // Row A: High confidence (0.8), count=2, newer
     const rowA1 = buildRow({
-      label: "Weakness A",
+      label: "Missing hedging phrase",
       evidence: "Some evidence A",
       practice_focus: "Improve your hedging phrase use.",
       created_at: "2026-06-12T12:00:00Z",
     });
     const rowA2 = buildRow({
-      label: "Weakness A",
+      label: "Missing hedging phrase",
       evidence: "More evidence A",
       practice_focus: "Improve your hedging phrase use.",
       created_at: "2026-06-13T12:00:00Z",
@@ -139,7 +182,7 @@ test.describe("Latest Weakness Selector Utility", () => {
 
     // Row B: Lower confidence (0.65), count=1, but very new
     const rowB = buildRow({
-      label: "Weakness B",
+      label: "Missing specific examples",
       evidence: "Evidence B is extremely fresh",
       practice_focus: "Acknowledge opposing view at all times.",
       created_at: "2026-06-14T12:00:00Z",
@@ -148,21 +191,21 @@ test.describe("Latest Weakness Selector Utility", () => {
     const res = selectLatestWeakness([rowA1, rowA2, rowB], { now: refDate });
     expect(res.status).toBe("found");
     // High confidence (0.8) should win over lower confidence (0.65) despite newer date
-    expect(res.weakness?.label).toBe("Weakness A");
+    expect(res.weakness?.label).toBe("Missing hedging phrase");
   });
 
   test("tie-breaks by count if confidence matches", () => {
-    // Weakness A: count=3, older
-    const rA1 = buildRow({ label: "Weakness A", created_at: "2026-06-01T12:00:00Z" });
-    const rA2 = buildRow({ label: "Weakness A", created_at: "2026-06-02T12:00:00Z" });
-    const rA3 = buildRow({ label: "Weakness A", created_at: "2026-06-03T12:00:00Z" });
+    // Pattern A: count=3, older
+    const rA1 = buildRow({ label: "Missing because clauses", created_at: "2026-06-01T12:00:00Z" });
+    const rA2 = buildRow({ label: "Missing because clauses", created_at: "2026-06-02T12:00:00Z" });
+    const rA3 = buildRow({ label: "Missing because clauses", created_at: "2026-06-03T12:00:00Z" });
 
-    // Weakness B: count=2, newer
-    const rB1 = buildRow({ label: "Weakness B", created_at: "2026-06-10T12:00:00Z" });
-    const rB2 = buildRow({ label: "Weakness B", created_at: "2026-06-11T12:00:00Z" });
+    // Pattern B: count=2, newer
+    const rB1 = buildRow({ label: "Missing specific examples", created_at: "2026-06-10T12:00:00Z" });
+    const rB2 = buildRow({ label: "Missing specific examples", created_at: "2026-06-11T12:00:00Z" });
 
     const res = selectLatestWeakness([rA1, rA2, rA3, rB1, rB2], { now: refDate });
     expect(res.status).toBe("found");
-    expect(res.weakness?.label).toBe("Weakness A");
+    expect(res.weakness?.label).toBe("Missing because clauses");
   });
 });
