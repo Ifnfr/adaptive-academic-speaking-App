@@ -1,21 +1,33 @@
 import { createHash, createHmac } from "crypto";
 import { NextResponse } from "next/server";
+import {
+  AMAZON_POLLY_VOICE_PROFILES,
+  DEFAULT_TTS_VOICE_PROFILE,
+  isTtsVoiceProfile,
+  normalizeTtsProvider,
+  type TtsProvider,
+  type TtsVoiceProfile,
+} from "../../../lib/tts/voiceProfiles";
 
 export const runtime = "nodejs";
 
 const MAX_TEXT_LENGTH = 700;
-const VALID_VOICES = ["Brian", "Amy", "Emma"] as const;
 const POLLY_SERVICE = "polly";
 const POLLY_PATH = "/v1/speech";
 const SIGNING_ALGORITHM = "AWS4-HMAC-SHA256";
+const VALID_OUTPUT_FORMATS = ["mp3"] as const;
+const VALID_SAMPLE_RATES = ["8000", "16000", "22050", "24000"] as const;
 
-type PodchatTtsVoice = (typeof VALID_VOICES)[number];
-type TtsProvider = "polly" | "elevenlabs";
+type TtsErrorCode =
+  | "invalid_tts_voice_profile"
+  | "invalid_tts_input"
+  | "tts_unavailable"
+  | "tts_provider_error";
 
 type PodchatTtsRequest = {
   text: string;
-  voice: PodchatTtsVoice;
   ttsProvider: TtsProvider;
+  voiceProfile: TtsVoiceProfile;
   elevenLabsModelId?: string;
 };
 
@@ -23,7 +35,8 @@ type AwsConfig = {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
-  engine: string;
+  outputFormat: "mp3";
+  sampleRate: "8000" | "16000" | "22050" | "24000";
 };
 
 type ElevenLabsConfig = {
@@ -32,67 +45,74 @@ type ElevenLabsConfig = {
   modelId: string;
 };
 
-function isValidVoice(value: unknown): value is PodchatTtsVoice {
-  return VALID_VOICES.includes(value as PodchatTtsVoice);
-}
-
-function defaultVoice(): PodchatTtsVoice {
-  return isValidVoice(process.env.POLLY_VOICE_ID)
-    ? process.env.POLLY_VOICE_ID
-    : "Brian";
-}
-
 function getTargetProvider(source: Record<string, unknown>): TtsProvider {
   const raw = source.provider !== undefined ? source.provider : source.ttsProvider;
-  if (typeof raw === "string") {
-    const norm = raw.trim().toLowerCase();
-    if (norm === "polly" || norm === "elevenlabs") {
-      return norm;
-    }
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    return normalizeTtsProvider(raw);
   }
-  // Fallback to env variable
-  const envVal = process.env.PODCHAT_TTS_PROVIDER;
+
+  const envVal = process.env.TTS_PROVIDER || process.env.PODCHAT_TTS_PROVIDER;
   if (typeof envVal === "string") {
-    const norm = envVal.trim().toLowerCase();
-    if (norm === "polly" || norm === "elevenlabs") {
-      return norm;
-    }
+    return normalizeTtsProvider(envVal);
   }
-  return "polly";
+  return "amazon-polly";
+}
+
+function getDefaultVoiceProfile(): TtsVoiceProfile {
+  return isTtsVoiceProfile(process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE)
+    ? process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE
+    : DEFAULT_TTS_VOICE_PROFILE;
 }
 
 function validateRequest(
   body: unknown,
 ):
   | { valid: true; request: PodchatTtsRequest }
-  | { valid: false; error: string } {
+  | { valid: false; status: number; code: TtsErrorCode; message: string } {
   if (!body || typeof body !== "object") {
-    return { valid: false, error: "Invalid request body." };
+    return { valid: false, status: 400, code: "invalid_tts_input", message: "Invalid request body." };
   }
 
   const source = body as Record<string, unknown>;
   if (typeof source.text !== "string" || source.text.trim().length === 0) {
-    return { valid: false, error: "text must be a non-empty string." };
+    return { valid: false, status: 400, code: "invalid_tts_input", message: "Text is required." };
   }
 
   const text = source.text.trim();
   if (text.length > MAX_TEXT_LENGTH) {
-    return { valid: false, error: "text must be 700 characters or fewer." };
+    return { valid: false, status: 400, code: "invalid_tts_input", message: "Text is too long." };
   }
 
-  if (source.voice !== undefined && !isValidVoice(source.voice)) {
-    return { valid: false, error: "Invalid voice." };
+  if (source.voice !== undefined || source.voiceId !== undefined || source.VoiceId !== undefined) {
+    return {
+      valid: false,
+      status: 400,
+      code: "invalid_tts_voice_profile",
+      message: "Select a supported voice profile.",
+    };
   }
 
   const ttsProvider = getTargetProvider(source);
+  let voiceProfile = getDefaultVoiceProfile();
+  if (source.voiceProfile !== undefined) {
+    if (!isTtsVoiceProfile(source.voiceProfile)) {
+      return {
+        valid: false,
+        status: 400,
+        code: "invalid_tts_voice_profile",
+        message: "Select a supported voice profile.",
+      };
+    }
+    voiceProfile = source.voiceProfile;
+  }
   const elevenLabsModelId = typeof source.elevenLabsModelId === "string" ? source.elevenLabsModelId.trim() : undefined;
 
   return {
     valid: true,
     request: {
       text,
-      voice: source.voice === undefined ? defaultVoice() : source.voice,
       ttsProvider,
+      voiceProfile,
       elevenLabsModelId,
     },
   };
@@ -115,7 +135,12 @@ function getAwsConfig(): AwsConfig | null {
     accessKeyId,
     secretAccessKey,
     region,
-    engine: process.env.POLLY_ENGINE?.trim() || "neural",
+    outputFormat: VALID_OUTPUT_FORMATS.includes(process.env.AMAZON_POLLY_OUTPUT_FORMAT as "mp3")
+      ? process.env.AMAZON_POLLY_OUTPUT_FORMAT as "mp3"
+      : "mp3",
+    sampleRate: VALID_SAMPLE_RATES.includes(process.env.AMAZON_POLLY_SAMPLE_RATE as AwsConfig["sampleRate"])
+      ? process.env.AMAZON_POLLY_SAMPLE_RATE as AwsConfig["sampleRate"]
+      : "24000",
   };
 }
 
@@ -184,11 +209,14 @@ async function synthesizeSpeech(
   config: AwsConfig,
 ): Promise<ArrayBuffer> {
   const host = `polly.${config.region}.amazonaws.com`;
+  const profile = AMAZON_POLLY_VOICE_PROFILES[request.voiceProfile];
   const body = JSON.stringify({
-    Engine: config.engine,
-    OutputFormat: "mp3",
+    Engine: profile.engine,
+    LanguageCode: profile.languageCode,
+    OutputFormat: config.outputFormat,
+    SampleRate: config.sampleRate,
     Text: request.text,
-    VoiceId: request.voice,
+    VoiceId: profile.voiceId,
   });
   const { amzDate, dateStamp } = formatAmzDate(new Date());
   const payloadHash = sha256Hex(body);
@@ -213,14 +241,15 @@ async function synthesizeSpeech(
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    console.error(
-      `Polly request failed with status ${response.status}: ${errorText.slice(0, 500)}`,
-    );
+    console.error(`Polly request failed with status ${response.status}`);
     throw new Error("Polly request failed.");
   }
 
-  return response.arrayBuffer();
+  const audioBytes = await response.arrayBuffer();
+  if (audioBytes.byteLength === 0) {
+    throw new Error("Polly returned empty audio.");
+  }
+  return audioBytes;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,14 +309,17 @@ export async function POST(request: Request) {
     parsedBody = await request.json();
   } catch {
     return NextResponse.json(
-      { error: "Request body must be valid JSON." },
+      { error: "invalid_tts_input", message: "Request body must be valid JSON." },
       { status: 400 },
     );
   }
 
   const validation = validateRequest(parsedBody);
   if (!validation.valid) {
-    return NextResponse.json({ error: validation.error }, { status: 400 });
+    return NextResponse.json(
+      { error: validation.code, message: validation.message },
+      { status: validation.status },
+    );
   }
 
   const { ttsProvider, elevenLabsModelId } = validation.request;
@@ -301,7 +333,7 @@ export async function POST(request: Request) {
           elevenLabsModelId !== "eleven_v3")
       ) {
         return NextResponse.json(
-          { error: "Text-to-speech model is not selected. Continuing with text." },
+          { error: "tts_unavailable", message: "Text-to-speech is unavailable. Continuing with text." },
           { status: 503 },
         );
       }
@@ -309,7 +341,7 @@ export async function POST(request: Request) {
       const elevenLabsConfig = getElevenLabsConfig(elevenLabsModelId);
       if (!elevenLabsConfig) {
         return NextResponse.json(
-          { error: "Text-to-speech is not configured. Continuing with text." },
+          { error: "tts_unavailable", message: "Text-to-speech is unavailable. Continuing with text." },
           { status: 503 },
         );
       }
@@ -326,11 +358,11 @@ export async function POST(request: Request) {
       });
     }
 
-    // Default: AWS Polly
+    // Amazon Polly
     const config = getAwsConfig();
     if (!config) {
       return NextResponse.json(
-        { error: "Text-to-speech is not configured. Please try again later." },
+        { error: "tts_unavailable", message: "Text-to-speech is unavailable. Please try again later." },
         { status: 503 },
       );
     }
@@ -346,7 +378,7 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Unexpected TTS error: ${message}`);
     return NextResponse.json(
-      { error: "Text-to-speech request failed. Please try again later." },
+      { error: "tts_provider_error", message: "Text-to-speech request failed. Please try again later." },
       { status: 502 },
     );
   }

@@ -16,6 +16,9 @@ interface EvalPayload {
 
 interface TtsPayload {
   text?: string;
+  ttsProvider?: string;
+  voiceProfile?: string;
+  elevenLabsModelId?: string;
 }
 
 function parseRgb(color: string): [number, number, number] {
@@ -506,7 +509,9 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // 3. Confirm TTS is called for the generated opener text (length should be 1)
     await expect.poll(() => ttsPayloads.length).toBe(1);
     expect(ttsPayloads[0]).toMatchObject({
-      text: "Welcome to Podchat! Let's discuss technology. How do you think technology changes learning?"
+      text: "Welcome to Podchat! Let's discuss technology. How do you think technology changes learning?",
+      ttsProvider: "amazon-polly",
+      voiceProfile: "british_female",
     });
 
     // Verify microphone was not requested on setup or initial speaking screen
@@ -545,7 +550,9 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // Check TTS payload and invocation
     await expect.poll(() => ttsPayloads.length).toBe(2);
     expect(ttsPayloads[1]).toMatchObject({
-      text: "This is a mocked host response. What is your next point?"
+      text: "This is a mocked host response. What is your next point?",
+      ttsProvider: "amazon-polly",
+      voiceProfile: "british_female",
     });
 
     // Verify /api/podchat/turn payload has duration-based fields and NOT maxUserTurns

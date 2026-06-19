@@ -130,6 +130,13 @@ import {
   type Translate,
 } from "./lib/i18n";
 import type { WeeklyMissionRouteTarget } from "./lib/weekly-review-missions";
+import {
+  DEFAULT_TTS_VOICE_PROFILE,
+  normalizeTtsProvider,
+  normalizeTtsVoiceProfile,
+  type TtsProvider,
+  type TtsVoiceProfile,
+} from "./lib/tts/voiceProfiles";
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
 
@@ -145,7 +152,6 @@ type Mode =
 type FeedbackType = "Quick" | "Deep";
 type SessionType = "Micro" | "Standard" | "Deep";
 type AIProvider = "Claude" | "DeepSeek" | "Gemini";
-type TtsProvider = "polly" | "elevenlabs";
 
 type VocabularyCorrectionResult = Omit<
   VocabSentenceCorrection,
@@ -559,24 +565,25 @@ export default function Home() {
   };
 
   // --- Global TTS Provider Setting ---
-  const [ttsProvider, setTtsProvider] = useState<TtsProvider>("polly");
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>("amazon-polly");
+  const [ttsVoiceProfile, setTtsVoiceProfile] =
+    useState<TtsVoiceProfile>(DEFAULT_TTS_VOICE_PROFILE);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (typeof window !== "undefined") {
         const stored = window.localStorage.getItem("defaultTtsProvider");
-        if (stored === "polly" || stored === "elevenlabs") {
-          setTtsProvider(stored);
-        } else if (stored === "Polly") {
-          setTtsProvider("polly");
-          window.localStorage.setItem("defaultTtsProvider", "polly");
-        } else if (stored === "ElevenLabs") {
-          setTtsProvider("elevenlabs");
-          window.localStorage.setItem("defaultTtsProvider", "elevenlabs");
-        } else if (stored) {
-          // invalid value, sanitize to polly
-          setTtsProvider("polly");
-          window.localStorage.setItem("defaultTtsProvider", "polly");
+        const normalized = normalizeTtsProvider(stored);
+        setTtsProvider(normalized);
+        if (stored !== normalized) {
+          window.localStorage.setItem("defaultTtsProvider", normalized);
+        }
+
+        const storedProfile = window.localStorage.getItem("defaultTtsVoiceProfile");
+        const normalizedProfile = normalizeTtsVoiceProfile(storedProfile);
+        setTtsVoiceProfile(normalizedProfile);
+        if (storedProfile !== normalizedProfile) {
+          window.localStorage.setItem("defaultTtsVoiceProfile", normalizedProfile);
         }
       }
     }, 0);
@@ -587,6 +594,13 @@ export default function Home() {
     setTtsProvider(provider);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("defaultTtsProvider", provider);
+    }
+  };
+
+  const handleDefaultTtsVoiceProfileChange = (profile: TtsVoiceProfile) => {
+    setTtsVoiceProfile(profile);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("defaultTtsVoiceProfile", profile);
     }
   };
 
@@ -2570,6 +2584,7 @@ export default function Home() {
                 clearStoredCommonplacePodchatContext();
               }}
               ttsProvider={ttsProvider}
+              ttsVoiceProfile={ttsVoiceProfile}
               elevenLabsModelId={elevenLabsModel}
               isActiveView={view === "active"}
               activePanel={activeSessionPanel}
@@ -2816,6 +2831,8 @@ export default function Home() {
               onDefaultAiProviderChange={handleDefaultAiProviderChange}
               defaultTtsProvider={ttsProvider}
               onDefaultTtsProviderChange={handleDefaultTtsProviderChange}
+              defaultTtsVoiceProfile={ttsVoiceProfile}
+              onDefaultTtsVoiceProfileChange={handleDefaultTtsVoiceProfileChange}
               defaultElevenLabsModel={elevenLabsModel}
               onDefaultElevenLabsModelChange={handleDefaultElevenLabsModelChange}
             />

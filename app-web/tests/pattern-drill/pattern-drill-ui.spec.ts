@@ -403,7 +403,7 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
   });
 
   test("plays short audio feedback for partial credit and repeat does not submit or persist", async ({ page }) => {
-    const ttsPayloads: Array<{ text?: string }> = [];
+    const ttsPayloads: Array<{ text?: string; ttsProvider?: string; voiceProfile?: string }> = [];
     const turnPayloads: Record<string, unknown>[] = [];
     const completePayloads: Record<string, unknown>[] = [];
 
@@ -427,7 +427,7 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
     );
 
     await page.route("**/api/podchat/tts", async (route) => {
-      ttsPayloads.push(route.request().postDataJSON() as { text?: string });
+      ttsPayloads.push(route.request().postDataJSON() as { text?: string; ttsProvider?: string; voiceProfile?: string });
       await route.fulfill({
         status: 200,
         contentType: "audio/mpeg",
@@ -447,6 +447,8 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
     await expect.poll(() => ttsPayloads.length).toBe(1);
     expect(ttsPayloads[0].text).toContain(MOCK_BRIEF.responsePattern.spokenModelFragment);
     expect(ttsPayloads[0].text).toContain("Missing reason.");
+    expect(ttsPayloads[0].ttsProvider).toBe("amazon-polly");
+    expect(ttsPayloads[0].voiceProfile).toBe("british_female");
 
     await expect(page.getByText(MOCK_BRIEF.responsePattern.spokenModelFragment)).toHaveCount(0);
     await expect(page.getByText("Phase two partial answer.")).toHaveCount(0);
@@ -455,6 +457,8 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
     const turnsBeforeRepeat = turnPayloads.length;
     await page.getByTestId("repeat-audio-btn").click();
     await expect.poll(() => ttsPayloads.length).toBe(2);
+    expect(ttsPayloads[1].ttsProvider).toBe("amazon-polly");
+    expect(ttsPayloads[1].voiceProfile).toBe("british_female");
     expect(turnPayloads).toHaveLength(turnsBeforeRepeat);
     expect(completePayloads).toHaveLength(0);
   });

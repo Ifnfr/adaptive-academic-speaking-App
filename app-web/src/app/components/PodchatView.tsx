@@ -25,6 +25,7 @@ import type {
   ContextUnderstandingState,
   PodchatAurInput,
 } from "../lib/podchat-aur/types";
+import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
 
 type PodchatPhase =
   | "setup"
@@ -280,7 +281,8 @@ export interface PodchatViewProps {
   onClearCommonplaceContext?: () => void;
   commonplaceMapContextRef?: PodchatCommonplaceMapContextRef | null;
   onClearCommonplaceMapContext?: () => void;
-  ttsProvider?: "polly" | "elevenlabs";
+  ttsProvider?: TtsProvider;
+  ttsVoiceProfile?: TtsVoiceProfile;
   elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
   isActiveView?: boolean;
 }
@@ -355,7 +357,8 @@ export function PodchatView({
   onClearCommonplaceContext,
   commonplaceMapContextRef,
   onClearCommonplaceMapContext,
-  ttsProvider = "polly",
+  ttsProvider = "amazon-polly",
+  ttsVoiceProfile = "british_female",
   elevenLabsModelId = "",
   isActiveView = true,
 }: PodchatViewProps) {
@@ -931,7 +934,7 @@ export function PodchatView({
     try {
       const requestBody = ttsProvider === "elevenlabs"
         ? { text, ttsProvider, elevenLabsModelId }
-        : { text, ttsProvider };
+        : { text, ttsProvider, voiceProfile: ttsVoiceProfile };
 
       const response = await fetch("/api/podchat/tts", {
         method: "POST",

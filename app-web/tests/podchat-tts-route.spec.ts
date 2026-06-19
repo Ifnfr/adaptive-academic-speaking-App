@@ -5,8 +5,11 @@ import { POST } from "../src/app/api/podchat/tts/route";
 const originalAccessKey = process.env.AWS_ACCESS_KEY_ID;
 const originalSecretKey = process.env.AWS_SECRET_ACCESS_KEY;
 const originalRegion = process.env.AWS_REGION;
-const originalVoice = process.env.POLLY_VOICE_ID;
-const originalEngine = process.env.POLLY_ENGINE;
+const originalProvider = process.env.TTS_PROVIDER;
+const originalLegacyProvider = process.env.PODCHAT_TTS_PROVIDER;
+const originalVoiceProfile = process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE;
+const originalOutputFormat = process.env.AMAZON_POLLY_OUTPUT_FORMAT;
+const originalSampleRate = process.env.AMAZON_POLLY_SAMPLE_RATE;
 const originalElevenLabsKey = process.env.ELEVENLABS_API_KEY;
 const originalElevenLabsVoice = process.env.ELEVENLABS_VOICE_ID;
 const originalFetch = globalThis.fetch;
@@ -34,16 +37,21 @@ function configureAwsEnv(overrides: Record<string, string | undefined> = {}) {
   process.env.AWS_ACCESS_KEY_ID = overrides.AWS_ACCESS_KEY_ID ?? "test-access";
   process.env.AWS_SECRET_ACCESS_KEY = overrides.AWS_SECRET_ACCESS_KEY ?? "test-secret";
   process.env.AWS_REGION = overrides.AWS_REGION ?? "eu-west-2";
-  process.env.POLLY_VOICE_ID = overrides.POLLY_VOICE_ID ?? "Brian";
-  process.env.POLLY_ENGINE = overrides.POLLY_ENGINE ?? "neural";
+  process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE =
+    overrides.AMAZON_POLLY_DEFAULT_VOICE_PROFILE ?? "british_female";
+  process.env.AMAZON_POLLY_OUTPUT_FORMAT =
+    overrides.AMAZON_POLLY_OUTPUT_FORMAT ?? "mp3";
+  process.env.AMAZON_POLLY_SAMPLE_RATE =
+    overrides.AMAZON_POLLY_SAMPLE_RATE ?? "24000";
 }
 
 function clearAwsEnv() {
   process.env.AWS_ACCESS_KEY_ID = "";
   process.env.AWS_SECRET_ACCESS_KEY = "";
   process.env.AWS_REGION = "";
-  process.env.POLLY_VOICE_ID = "";
-  process.env.POLLY_ENGINE = "";
+  process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE = "";
+  process.env.AMAZON_POLLY_OUTPUT_FORMAT = "";
+  process.env.AMAZON_POLLY_SAMPLE_RATE = "";
 }
 
 function configureElevenLabsEnv(
@@ -123,8 +131,11 @@ test.describe("Podchat TTS Route", () => {
     process.env.AWS_ACCESS_KEY_ID = originalAccessKey;
     process.env.AWS_SECRET_ACCESS_KEY = originalSecretKey;
     process.env.AWS_REGION = originalRegion;
-    process.env.POLLY_VOICE_ID = originalVoice;
-    process.env.POLLY_ENGINE = originalEngine;
+    process.env.TTS_PROVIDER = originalProvider;
+    process.env.PODCHAT_TTS_PROVIDER = originalLegacyProvider;
+    process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE = originalVoiceProfile;
+    process.env.AMAZON_POLLY_OUTPUT_FORMAT = originalOutputFormat;
+    process.env.AMAZON_POLLY_SAMPLE_RATE = originalSampleRate;
     process.env.ELEVENLABS_API_KEY = originalElevenLabsKey;
     process.env.ELEVENLABS_VOICE_ID = originalElevenLabsVoice;
     globalThis.fetch = originalFetch;
@@ -143,10 +154,21 @@ test.describe("Podchat TTS Route", () => {
     expect(Array.from(bytes)).toEqual([1, 2, 3]);
   });
 
-  test("omitted voice uses env voice when valid", async () => {
+  test("omitted voiceProfile uses configured default profile", async () => {
     const capture: { body?: Record<string, unknown> } = {};
-    configureAwsEnv({ POLLY_VOICE_ID: "Amy" });
+    configureAwsEnv({ AMAZON_POLLY_DEFAULT_VOICE_PROFILE: "american_male" });
     mockPollyResponse(200, new Uint8Array([4]), capture);
+
+    const response = await POST(buildRequest({}));
+
+    expect(response.status).toBe(200);
+    expect(capture.body?.VoiceId).toBe("Stephen");
+  });
+
+  test("omitted voiceProfile falls back to british_female when env profile is invalid", async () => {
+    const capture: { body?: Record<string, unknown> } = {};
+    configureAwsEnv({ AMAZON_POLLY_DEFAULT_VOICE_PROFILE: "invalid_profile" });
+    mockPollyResponse(200, new Uint8Array([5]), capture);
 
     const response = await POST(buildRequest({}));
 
@@ -154,31 +176,29 @@ test.describe("Podchat TTS Route", () => {
     expect(capture.body?.VoiceId).toBe("Amy");
   });
 
-  test("omitted voice falls back to Brian when env voice is invalid", async () => {
-    const capture: { body?: Record<string, unknown> } = {};
-    configureAwsEnv({ POLLY_VOICE_ID: "Joanna" });
-    mockPollyResponse(200, new Uint8Array([5]), capture);
+  const voiceProfiles = [
+    ["british_female", "Amy", "en-GB"],
+    ["british_male", "Arthur", "en-GB"],
+    ["american_female", "Danielle", "en-US"],
+    ["american_male", "Stephen", "en-US"],
+  ] as const;
 
-    const response = await POST(buildRequest({}));
-
-    expect(response.status).toBe(200);
-    expect(capture.body?.VoiceId).toBe("Brian");
-  });
-
-  for (const voice of ["Brian", "Amy", "Emma"] as const) {
-    test(`${voice} voice is accepted`, async () => {
+  for (const [voiceProfile, voiceId, languageCode] of voiceProfiles) {
+    test(`amazon-polly ${voiceProfile} maps to ${voiceId}`, async () => {
       const capture: { body?: Record<string, unknown> } = {};
       configureAwsEnv();
       mockPollyResponse(200, new Uint8Array([6]), capture);
 
-      const response = await POST(buildRequest({ voice }));
+      const response = await POST(buildRequest({ ttsProvider: "amazon-polly", voiceProfile }));
 
       expect(response.status).toBe(200);
-      expect(capture.body?.VoiceId).toBe(voice);
+      expect(capture.body?.VoiceId).toBe(voiceId);
+      expect(capture.body?.LanguageCode).toBe(languageCode);
+      expect(capture.body?.Engine).toBe("neural");
     });
   }
 
-  test("invalid voice rejects with 400", async () => {
+  test("invalid voiceProfile rejects safely with 400", async () => {
     configureAwsEnv();
     let fetchCalled = false;
     globalThis.fetch = (async () => {
@@ -186,11 +206,27 @@ test.describe("Podchat TTS Route", () => {
       return new Response("should not be called", { status: 500 });
     }) as typeof fetch;
 
-    const response = await POST(buildRequest({ voice: "Joanna" }));
+    const response = await POST(buildRequest({ ttsProvider: "amazon-polly", voiceProfile: "joanna" }));
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(400);
-    expect(data.error).toContain("voice");
+    expect(data.error).toBe("invalid_tts_voice_profile");
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("client VoiceId is rejected even when it looks valid", async () => {
+    configureAwsEnv();
+    let fetchCalled = false;
+    globalThis.fetch = (async () => {
+      fetchCalled = true;
+      return new Response("should not be called", { status: 500 });
+    }) as typeof fetch;
+
+    const response = await POST(buildRequest({ ttsProvider: "amazon-polly", voice: "Amy" }));
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("invalid_tts_voice_profile");
     expect(fetchCalled).toBe(false);
   });
 
@@ -200,7 +236,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(400);
-    expect(data.error).toContain("valid JSON");
+    expect(data.error).toBe("invalid_tts_input");
   });
 
   test("empty text rejects with 400", async () => {
@@ -209,7 +245,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(400);
-    expect(data.error).toContain("text");
+    expect(data.error).toBe("invalid_tts_input");
   });
 
   test("oversized text rejects with 400", async () => {
@@ -218,7 +254,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(400);
-    expect(data.error).toContain("700");
+    expect(data.error).toBe("invalid_tts_input");
   });
 
   test("missing AWS env returns sanitized 503", async () => {
@@ -227,9 +263,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(503);
-    expect(data.error).toBe(
-      "Text-to-speech is not configured. Please try again later.",
-    );
+    expect(data.error).toBe("tts_unavailable");
   });
 
   test("AWS failure returns sanitized 502", async () => {
@@ -240,10 +274,19 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(502);
-    expect(data.error).toBe(
-      "Text-to-speech request failed. Please try again later.",
-    );
+    expect(data.error).toBe("tts_provider_error");
     expect(data.error).not.toMatch(/aws|secret|raw/i);
+  });
+
+  test("missing Polly audio stream returns safe provider error", async () => {
+    configureAwsEnv();
+    mockPollyResponse(200, new Uint8Array([]));
+
+    const response = await POST(buildRequest({ ttsProvider: "amazon-polly" }));
+    const data = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(502);
+    expect(data.error).toBe("tts_provider_error");
   });
 
   test("request to Polly contains only host text synthesis fields", async () => {
@@ -263,9 +306,11 @@ test.describe("Podchat TTS Route", () => {
     expect(capture.url).toBe("https://polly.eu-west-2.amazonaws.com/v1/speech");
     expect(capture.body).toEqual({
       Engine: "neural",
+      LanguageCode: "en-GB",
       OutputFormat: "mp3",
+      SampleRate: "24000",
       Text: "Host text only.",
-      VoiceId: "Brian",
+      VoiceId: "Amy",
     });
     expect(authorization).toContain("AWS4-HMAC-SHA256");
     expect(authorization).not.toContain("test-secret");
@@ -319,19 +364,31 @@ test.describe("Podchat TTS Route", () => {
   // ElevenLabs provider tests
   // ---------------------------------------------------------------------------
 
-  test("polly provider (explicit) still returns audio/mpeg", async () => {
+  test("amazon-polly provider (explicit) returns audio/mpeg", async () => {
     configureAwsEnv();
     mockPollyResponse(200, new Uint8Array([10, 20, 30]));
 
     const response = await POST(
-      buildRequest({ ttsProvider: "polly" }),
+      buildRequest({ ttsProvider: "amazon-polly", voiceProfile: "british_female" }),
     );
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("audio/mpeg");
   });
 
-  test("invalid ttsProvider falls back safely to polly", async () => {
+  test("legacy polly provider alias still returns audio/mpeg", async () => {
+    configureAwsEnv();
+    mockPollyResponse(200, new Uint8Array([11, 22, 33]));
+
+    const response = await POST(
+      buildRequest({ ttsProvider: "polly", voiceProfile: "british_female" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("audio/mpeg");
+  });
+
+  test("invalid ttsProvider falls back safely to amazon-polly", async () => {
     configureAwsEnv();
     mockPollyResponse(200, new Uint8Array([11, 22, 33]));
 
@@ -366,9 +423,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(503);
-    expect(data.error).toBe(
-      "Text-to-speech model is not selected. Continuing with text.",
-    );
+    expect(data.error).toBe("tts_unavailable");
   });
 
   test("ElevenLabs invalid model returns safe 503", async () => {
@@ -379,9 +434,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(503);
-    expect(data.error).toBe(
-      "Text-to-speech model is not selected. Continuing with text.",
-    );
+    expect(data.error).toBe("tts_unavailable");
   });
 
   test("ElevenLabs does not fallback to ELEVENLABS_MODEL_ID", async () => {
@@ -395,9 +448,7 @@ test.describe("Podchat TTS Route", () => {
       const data = (await response.json()) as { error: string };
 
       expect(response.status).toBe(503);
-      expect(data.error).toBe(
-        "Text-to-speech model is not selected. Continuing with text.",
-      );
+      expect(data.error).toBe("tts_unavailable");
     } finally {
       process.env.ELEVENLABS_MODEL_ID = originalModelEnv;
     }
@@ -411,9 +462,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(503);
-    expect(data.error).toBe(
-      "Text-to-speech is not configured. Continuing with text.",
-    );
+    expect(data.error).toBe("tts_unavailable");
   });
 
   test("ElevenLabs upstream failure returns sanitized 502", async () => {
@@ -429,9 +478,7 @@ test.describe("Podchat TTS Route", () => {
     const data = (await response.json()) as { error: string };
 
     expect(response.status).toBe(502);
-    expect(data.error).toBe(
-      "Text-to-speech request failed. Please try again later.",
-    );
+    expect(data.error).toBe("tts_provider_error");
     expect(data.error).not.toMatch(/elevenlabs|secret|raw/i);
   });
 
@@ -481,9 +528,9 @@ test.describe("Podchat TTS Route", () => {
   });
 
   test("uses env fallback when request ttsProvider is missing or invalid", async () => {
-    const originalFallback = process.env.PODCHAT_TTS_PROVIDER;
+    const originalFallback = process.env.TTS_PROVIDER;
     try {
-      process.env.PODCHAT_TTS_PROVIDER = "elevenlabs";
+      process.env.TTS_PROVIDER = "elevenlabs";
       configureElevenLabsEnv();
       mockElevenLabsResponse(200, new Uint8Array([8, 9]));
 
@@ -493,15 +540,16 @@ test.describe("Podchat TTS Route", () => {
       expect(response.status).toBe(200);
       expect(Array.from(bytes)).toEqual([8, 9]);
     } finally {
-      process.env.PODCHAT_TTS_PROVIDER = originalFallback;
+      process.env.TTS_PROVIDER = originalFallback;
     }
   });
 
   test(".env.example contains only placeholders", () => {
     const envExample = readFileSync(".env.example", "utf8");
     expect(envExample).not.toMatch(/sk-[a-zA-Z0-9]{32,}/);
-    expect(envExample).toContain("PODCHAT_TTS_PROVIDER=polly");
+    expect(envExample).toContain("TTS_PROVIDER=amazon-polly");
     expect(envExample).toContain("AWS_ACCESS_KEY_ID=");
+    expect(envExample).toContain("AMAZON_POLLY_DEFAULT_VOICE_PROFILE=british_female");
     expect(envExample).toContain("ELEVENLABS_API_KEY=");
   });
 });
@@ -648,7 +696,7 @@ test.describe("Podchat TTS Browser Integration", () => {
     expect(hasKeys).toBe(false);
   });
 
-  test("Invalid localStorage defaultTtsProvider sanitizes to polly", async ({ page }) => {
+  test("Invalid localStorage defaultTtsProvider sanitizes to amazon-polly", async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => {
       localStorage.setItem("defaultTtsProvider", "GoogleCloud");
@@ -657,7 +705,43 @@ test.describe("Podchat TTS Browser Integration", () => {
     await page.waitForTimeout(100);
 
     const stored = await page.evaluate(() => localStorage.getItem("defaultTtsProvider"));
-    expect(stored).toBe("polly");
+    expect(stored).toBe("amazon-polly");
+  });
+
+  test("Amazon Polly voice profiles render, persist, and default safely", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    const providerSelect = page.locator("#default-tts-provider-select");
+    await expect(providerSelect).toHaveValue("amazon-polly");
+
+    const profileSelect = page.locator("#default-tts-voice-profile-select");
+    await expect(profileSelect).toBeVisible();
+    await expect(profileSelect).toHaveValue("british_female");
+
+    await expect(profileSelect.locator("option")).toHaveText([
+      "British Female",
+      "British Male",
+      "American Female",
+      "American Male",
+    ]);
+
+    for (const profile of ["british_female", "british_male", "american_female", "american_male"] as const) {
+      await profileSelect.selectOption(profile);
+      const storedProfile = await page.evaluate(() => localStorage.getItem("defaultTtsVoiceProfile"));
+      expect(storedProfile).toBe(profile);
+      await expect(profileSelect).toHaveValue(profile);
+    }
+
+    await page.evaluate(() => {
+      localStorage.setItem("defaultTtsVoiceProfile", "Joanna");
+    });
+    await page.reload();
+    await page.waitForTimeout(100);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.locator("#default-tts-voice-profile-select")).toHaveValue("british_female");
+    const storedProfile = await page.evaluate(() => localStorage.getItem("defaultTtsVoiceProfile"));
+    expect(storedProfile).toBe("british_female");
   });
 
   test("Podchat TTS request sends canonical provider value", async ({ page }) => {
@@ -765,8 +849,8 @@ test.describe("Podchat TTS Browser Integration", () => {
     await expect(modelSelect).toHaveValue("");
   });
 
-  test("Podchat sends selected elevenLabsModelId when provider is elevenlabs, and none when polly", async ({ page }) => {
-    let requestPayload: { ttsProvider?: string; elevenLabsModelId?: string } | null = null;
+  test("Podchat sends selected voiceProfile for Amazon Polly", async ({ page }) => {
+    let requestPayload: { ttsProvider?: string; elevenLabsModelId?: string; voiceProfile?: string } | null = null;
     await page.route("**/api/podchat/tts", async (route) => {
       requestPayload = JSON.parse(route.request().postData() || "{}");
       await route.fulfill({
@@ -778,8 +862,8 @@ test.describe("Podchat TTS Browser Integration", () => {
 
     await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
-    await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
-    await page.locator("#default-elevenlabs-model-select").selectOption("eleven_multilingual_v2");
+    await page.locator("#default-tts-provider-select").selectOption("amazon-polly");
+    await page.locator("#default-tts-voice-profile-select").selectOption("american_male");
 
     await page.getByRole("button", { name: "Active Session" }).click();
     await page.getByRole("button", { name: "Start a Podchat" }).click();
@@ -791,25 +875,8 @@ test.describe("Podchat TTS Browser Integration", () => {
 
     // Wait for requestPayload to populate
     await expect.poll(() => requestPayload).not.toBeNull();
-
-    expect(requestPayload!.ttsProvider).toBe("elevenlabs");
-    expect(requestPayload!.elevenLabsModelId).toBe("eleven_multilingual_v2");
-
-    // Now switch to polly and verify model ID is not sent
-    requestPayload = null;
-    await page.goto("/");
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.locator("#default-tts-provider-select").selectOption("polly");
-
-    await page.getByRole("button", { name: "Active Session" }).click();
-    await page.getByRole("button", { name: "Start a Podchat" }).click();
-    // Re-record and submit to fire TTS
-    await page.getByTestId("podchat-start-recording").click();
-    await page.getByTestId("podchat-stop-recording").click();
-    await page.getByTestId("podchat-submit-turn").click();
-
-    await expect.poll(() => requestPayload).not.toBeNull();
-    expect(requestPayload!.ttsProvider).toBe("polly");
+    expect(requestPayload!.ttsProvider).toBe("amazon-polly");
+    expect(requestPayload!.voiceProfile).toBe("american_male");
     expect(requestPayload!.elevenLabsModelId).toBeUndefined();
   });
 });

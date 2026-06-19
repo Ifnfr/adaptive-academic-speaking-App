@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DrillSessionState, TurnResult } from "../lib/drill-session/types";
+import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
 
 type WeaknessDetails = {
   title: string;
@@ -83,7 +84,8 @@ type DrillSummary = {
 
 type PatternDrillPrototypeProps = {
   onExit: () => void;
-  ttsProvider?: "polly" | "elevenlabs";
+  ttsProvider?: TtsProvider;
+  ttsVoiceProfile?: TtsVoiceProfile;
   elevenLabsModelId?: string;
 };
 
@@ -160,7 +162,8 @@ function getNow(): number {
 
 export function PatternDrillPrototype({
   onExit,
-  ttsProvider = "polly",
+  ttsProvider = "amazon-polly",
+  ttsVoiceProfile = "british_female",
   elevenLabsModelId = "",
 }: PatternDrillPrototypeProps) {
   const [weaknessState, setWeaknessState] = useState<FetchState>({ status: "loading" });
@@ -318,7 +321,7 @@ export function PatternDrillPrototype({
     try {
       const requestBody = ttsProvider === "elevenlabs"
         ? { text, ttsProvider, elevenLabsModelId }
-        : { text, ttsProvider };
+        : { text, ttsProvider, voiceProfile: ttsVoiceProfile };
 
       const response = await fetch("/api/podchat/tts", {
         method: "POST",

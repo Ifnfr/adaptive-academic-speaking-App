@@ -29,6 +29,11 @@ import {
   type AppAppearanceMode,
   assertAppAppearanceMode,
 } from "../lib/storage/supabase-profile-adapter";
+import {
+  AMAZON_POLLY_VOICE_PROFILES,
+  type TtsProvider,
+  type TtsVoiceProfile,
+} from "../lib/tts/voiceProfiles";
 
 // Shared visual primitives from globals.css, scoped here for Settings.
 const card = "app-panel brand-grid";
@@ -50,8 +55,10 @@ export type SettingsViewProps = {
   onAppLanguageChange?: (language: AppLanguage) => void;
   defaultAiProvider?: string;
   onDefaultAiProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
-  defaultTtsProvider?: "polly" | "elevenlabs";
-  onDefaultTtsProviderChange?: (provider: "polly" | "elevenlabs") => void;
+  defaultTtsProvider?: TtsProvider;
+  onDefaultTtsProviderChange?: (provider: TtsProvider) => void;
+  defaultTtsVoiceProfile?: TtsVoiceProfile;
+  onDefaultTtsVoiceProfileChange?: (profile: TtsVoiceProfile) => void;
   defaultElevenLabsModel?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
   onDefaultElevenLabsModelChange?: (model: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "") => void;
 };
@@ -843,8 +850,10 @@ export function SettingsView({
   onAppLanguageChange,
   defaultAiProvider = "Claude",
   onDefaultAiProviderChange,
-  defaultTtsProvider = "polly",
+  defaultTtsProvider = "amazon-polly",
   onDefaultTtsProviderChange,
+  defaultTtsVoiceProfile = "british_female",
+  onDefaultTtsVoiceProfileChange,
   defaultElevenLabsModel = "",
   onDefaultElevenLabsModelChange,
 }: SettingsViewProps) {
@@ -1003,15 +1012,42 @@ export function SettingsView({
                 id="default-tts-provider-select"
                 value={defaultTtsProvider}
                 onChange={(e) =>
-                  onDefaultTtsProviderChange?.(e.target.value as "polly" | "elevenlabs")
+                  onDefaultTtsProviderChange?.(e.target.value as TtsProvider)
                 }
                 className="app-field"
               >
-                <option value="polly">AWS Polly</option>
+                <option value="amazon-polly">Amazon Polly</option>
                 <option value="elevenlabs">ElevenLabs</option>
               </select>
             </label>
           </div>
+
+          {defaultTtsProvider === "amazon-polly" && (
+            <div className="mt-4 max-w-xs">
+              <label className="flex flex-col gap-1.5 font-sans">
+                <span className="app-label">
+                  TTS Voice Profile
+                </span>
+                <select
+                  id="default-tts-voice-profile-select"
+                  value={defaultTtsVoiceProfile}
+                  onChange={(e) =>
+                    onDefaultTtsVoiceProfileChange?.(e.target.value as TtsVoiceProfile)
+                  }
+                  className="app-field"
+                >
+                  {Object.entries(AMAZON_POLLY_VOICE_PROFILES).map(([value, profile]) => (
+                    <option key={value} value={value}>
+                      {profile.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="app-helper mt-2">
+                The browser stores only this profile ID. The server maps it to the approved Amazon Polly voice.
+              </p>
+            </div>
+          )}
 
           {/* ElevenLabs Model Dropdown */}
           {defaultTtsProvider === "elevenlabs" && (

@@ -73,6 +73,7 @@ export function ActiveSessionShell(
           <PatternDrillPrototype
             onExit={() => setPanel("podchat")}
             ttsProvider={podchatProps.ttsProvider}
+            ttsVoiceProfile={podchatProps.ttsVoiceProfile}
             elevenLabsModelId={podchatProps.elevenLabsModelId}
           />
         )}
