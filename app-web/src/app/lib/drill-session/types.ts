@@ -31,6 +31,8 @@ export type DrillBriefContent = {
   };
   miniExample: string;
   commonMistakes: string[];
+  weaknessLabel?: string;
+  weaknessDescription?: string;
 };
 
 export type DrillSessionState = {

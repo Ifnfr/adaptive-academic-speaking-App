@@ -1,4 +1,5 @@
 import { savePatternDrillSession } from "../storage/supabase-pattern-drill-adapter";
+import { calculateReinforcementScores } from "./reinforcement/reinforcementScoring";
 
 export type EvaluateSessionInput = {
   briefId: string;
@@ -23,6 +24,8 @@ export type EvaluateSessionInput = {
     pressureAccuracy: number;
     pressureFailRate: number;
   };
+  weaknessLabel?: string;
+  weaknessDescription?: string;
 };
 
 export async function executeEvaluateSession(
@@ -39,6 +42,8 @@ export async function executeEvaluateSession(
     phase1CompletedPromptCount,
     phase2Attempts,
     phase3,
+    weaknessLabel,
+    weaknessDescription,
   } = input;
 
   // Validate basic strings & arrays
@@ -269,6 +274,8 @@ export async function executeEvaluateSession(
           weaknessUpdate,
           phase3PressureAccuracy,
           pressureFailRate,
+          weaknessLabel,
+          weaknessDescription,
         },
         supabaseClient
       );
@@ -284,6 +291,42 @@ export async function executeEvaluateSession(
     }
   } else {
     console.error("Supabase client unavailable for pattern drill session persistence.");
+  }
+
+  // Calculate reinforcement status
+  let reinforcementStatus = "Still needs reinforcement.";
+  if (supabaseClient) {
+    try {
+      const { data: dbSessions } = await supabaseClient
+        .from("pattern_drill_sessions")
+        .select("id, owner_id, target_pattern, phase2_accuracy, phase3_pressure_accuracy, pressure_fail_rate, saved_summary, created_at")
+        .eq("owner_id", ownerId);
+
+      if (dbSessions && dbSessions.length > 0) {
+        const scores = calculateReinforcementScores(dbSessions);
+        const practicedTitle = weaknessLabel || targetPattern;
+        const scoreObj = scores.find(s => s.weaknessTitle === practicedTitle);
+        if (scoreObj) {
+          if (scoreObj.isResolved) {
+            reinforcementStatus = "Reinforcement complete.";
+          } else if (scoreObj.consecutiveSuccessCount === 1) {
+            reinforcementStatus = "Improving.";
+          } else {
+            reinforcementStatus = "Still needs reinforcement.";
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error calculating post-session reinforcement status:", err);
+    }
+  } else {
+    // If no supabaseClient (e.g. offline testing), compute status based on the single session in-memory
+    const isSuccess = phase2Accuracy >= 75 && (phase3PressureAccuracy === null || phase3PressureAccuracy <= 25);
+    if (isSuccess) {
+      reinforcementStatus = "Improving.";
+    } else {
+      reinforcementStatus = "Still needs reinforcement.";
+    }
   }
 
   return {
@@ -302,6 +345,7 @@ export async function executeEvaluateSession(
     phase3PressureAccuracy,
     pressureFailRate,
     saved,
+    reinforcementStatus,
     ...(sessionId ? { sessionId } : {}),
   };
 }

@@ -72,5 +72,7 @@ export function mapSessionToEvaluateInput(session: DrillSessionState): EvaluateS
     phase1CompletedPromptCount,
     phase2Attempts,
     phase3,
+    weaknessLabel: brief.weaknessLabel,
+    weaknessDescription: brief.weaknessDescription,
   };
 }

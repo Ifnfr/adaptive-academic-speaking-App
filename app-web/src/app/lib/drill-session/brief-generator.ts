@@ -2,6 +2,7 @@ import { getLatestWeaknessForUser } from "../pattern-drill/latestWeaknessServer"
 import { resolveProvider, callRoleProvider, ProviderConfigError } from "../../api/pattern-drill/_lib/roleProviders";
 import { validateSpokenModelFragment } from "./validation";
 import crypto from "crypto";
+import { selectReinforcementWeakness } from "./reinforcement/reinforcementSelector";
 
 export interface PatternBriefInput {
   level: string;
@@ -9,6 +10,7 @@ export interface PatternBriefInput {
   source: string;
   focus?: string;
   sourceId?: string;
+  allowFallbacks?: boolean;
 }
 
 export type BriefContentOutput = {
@@ -29,6 +31,8 @@ export type BriefContentOutput = {
     commonMistakes: string[];
     suggestedEntryPhase: number;
   };
+  weaknessLabel?: string;
+  weaknessDescription?: string;
 };
 
 function cleanJsonResponse(text: string): string {
@@ -52,9 +56,12 @@ export async function generatePatternBriefContent(
     callClaude?: (apiKey: string, systemPrompt: string, userPrompt: string) => Promise<string>;
   }
 ): Promise<BriefContentOutput> {
-  const { level, mode, source, focus, sourceId } = input;
+  const { level, mode, source, focus, sourceId, allowFallbacks } = input;
 
   let validatedFocus = "";
+  let selectedWeaknessLabel = "";
+  let selectedWeaknessDescription = "";
+
   if (source === "manual") {
     if (!focus || focus.trim().length === 0) {
       throw new Error("focus_required");
@@ -64,23 +71,76 @@ export async function generatePatternBriefContent(
       throw new Error("focus_too_long");
     }
     validatedFocus = trimmedFocus;
+    selectedWeaknessLabel = trimmedFocus;
+    selectedWeaknessDescription = trimmedFocus;
   } else {
     // source === "latest_weakness"
     if (!supabaseClient) {
       throw new Error("latest_weakness_unavailable");
     }
 
-    const selectorResult = await getLatestWeaknessForUser(ownerId, supabaseClient, { sourceId });
-    if (selectorResult.status === "empty") {
-      throw new Error("latest_weakness_not_found");
+    // 1. Check unresolved Drill reinforcement weakness
+    const reinforcementWeakness = await selectReinforcementWeakness(ownerId, supabaseClient);
+    if (reinforcementWeakness) {
+      selectedWeaknessLabel = reinforcementWeakness.weaknessTitle;
+      selectedWeaknessDescription = reinforcementWeakness.weaknessDescription;
+    } else {
+      // 2. Check learner_error_patterns weakness
+      let selectorResult;
+      try {
+        selectorResult = await getLatestWeaknessForUser(ownerId, supabaseClient, { sourceId });
+      } catch (err) {
+        console.error("Error fetching latest weakness:", err);
+      }
+
+      if (selectorResult && selectorResult.status === "found" && selectorResult.weakness) {
+        selectedWeaknessLabel = selectorResult.weakness.title;
+        selectedWeaknessDescription = selectorResult.weakness.description;
+      } else {
+        if (allowFallbacks) {
+          // 3. latest weakness fallback (query absolute most recent row)
+          let fallbackRow = null;
+          try {
+            let query = supabaseClient
+              .from("learner_error_patterns")
+              .select("id, category, label, evidence, practice_focus, created_at")
+              .eq("owner_id", ownerId)
+              .eq("source_kind", "podchat");
+            if (sourceId) {
+              query = query.eq("source_id", sourceId);
+            }
+            const { data } = await query
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (data && data.length > 0) {
+              fallbackRow = data[0];
+            }
+          } catch (err) {
+            console.error("Error fetching latest weakness fallback:", err);
+          }
+
+          if (fallbackRow) {
+            selectedWeaknessLabel = fallbackRow.label || "Academic Speaking Issue";
+            selectedWeaknessDescription = fallbackRow.practice_focus || fallbackRow.evidence || fallbackRow.label || "Improve speaking structure and transitions.";
+          } else {
+            // 4. generic Drill fallback
+            selectedWeaknessLabel = "Academic Discourse Structure";
+            selectedWeaknessDescription = "Organizing speaking responses with a clear claim and supporting evidence.";
+          }
+        } else {
+          const status = selectorResult?.status || "empty";
+          if (status === "empty") {
+            throw new Error("latest_weakness_not_found");
+          }
+          if (status === "insufficient") {
+            throw new Error("latest_weakness_insufficient");
+          }
+          throw new Error("pattern_brief_failed");
+        }
+      }
     }
-    if (selectorResult.status === "insufficient") {
-      throw new Error("latest_weakness_insufficient");
-    }
-    if (selectorResult.status === "error" || !selectorResult.weakness) {
-      throw new Error("pattern_brief_failed");
-    }
-    validatedFocus = selectorResult.weakness.description;
+
+    validatedFocus = selectedWeaknessDescription;
   }
 
   let apiKey = "__test__";
@@ -257,5 +317,7 @@ Focus: ${validatedFocus}`;
     miniExample: parsed.miniExample,
     commonMistakes: parsed.commonMistakes,
     drillEntryConfig: parsed.drillEntryConfig,
+    weaknessLabel: selectedWeaknessLabel || undefined,
+    weaknessDescription: selectedWeaknessDescription || undefined,
   };
 }

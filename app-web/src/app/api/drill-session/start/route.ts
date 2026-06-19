@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     const brief = await generatePatternBriefContent(
       ownerId,
       supabaseClient,
-      { level, mode, source, focus, sourceId },
+      { level, mode, source, focus, sourceId, allowFallbacks: true },
       { callClaude: testHooks.callClaude || undefined }
     );
 

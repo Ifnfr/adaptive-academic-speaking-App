@@ -27,6 +27,8 @@ export type SavePatternDrillSessionInput = {
   } | null;
   phase3PressureAccuracy: number | null;
   pressureFailRate: number | null;
+  weaknessLabel?: string;
+  weaknessDescription?: string;
 };
 
 export async function savePatternDrillSession(
@@ -148,6 +150,8 @@ export async function savePatternDrillSession(
     weaknessUpdate: input.weaknessUpdate,
     phase3PressureAccuracy: input.phase3PressureAccuracy,
     pressureFailRate: input.pressureFailRate,
+    weaknessLabel: input.weaknessLabel,
+    weaknessDescription: input.weaknessDescription,
   };
 
   try {

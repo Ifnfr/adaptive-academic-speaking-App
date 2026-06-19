@@ -80,6 +80,7 @@ type DrillSummary = {
   phase3PressureAccuracy: number | null;
   pressureFailRate: number | null;
   saved: boolean;
+  reinforcementStatus?: string;
 };
 
 type PatternDrillPrototypeProps = {
@@ -1202,6 +1203,11 @@ export function PatternDrillPrototype({
         {summary.mostMissedSteps.length > 0 && (
           <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="summary-missed-steps">
             Focus next on: {summary.mostMissedSteps.join(", ")}
+          </p>
+        )}
+        {summary.reinforcementStatus && (
+          <p className="text-sm text-[var(--brand-ink-soft)]">
+            Reinforcement: <span data-testid="summary-reinforcement-status">{summary.reinforcementStatus}</span>
           </p>
         )}
         <div className="flex flex-col gap-3 sm:flex-row">
