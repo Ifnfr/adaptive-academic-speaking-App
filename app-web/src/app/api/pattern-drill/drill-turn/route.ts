@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveProvider, callRoleProvider, ProviderConfigError } from "../_lib/roleProviders";
+import { executeDrillTurn } from "../../../lib/drill-session/drill-turner";
 import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
@@ -16,21 +16,6 @@ async function resolveCurrentUserId(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-
-
-function cleanJsonResponse(text: string): string {
-  let cleaned = text.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
-  }
-  return cleaned.trim();
 }
 
 export async function POST(request: Request) {
@@ -160,114 +145,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "transcript_too_long" }, { status: 400, headers });
   }
 
-  let apiKey: string;
-  if (testHooks.callDeepSeek) {
-    apiKey = "__test__";
-  } else {
-    try {
-      const providerConfig = resolveProvider("execution");
-      apiKey = providerConfig.apiKey;
-    } catch (err) {
-      if (err instanceof ProviderConfigError) {
-        return NextResponse.json({ error: "provider_not_configured" }, { status: 503, headers });
-      }
-      throw err;
-    }
-  }
-
-  const systemPrompt = `You are a strict language learning assistant evaluating spoken turns in a Contrastive Repetition drill.
-Evaluate whether the learner's transcript correctly uses the target response pattern for the given topic.
-Compare the target steps of the response pattern with the learner's transcript.
-
-You must return ONLY a JSON object matching this schema:
-{
-  "credit": "full" | "partial" | "none",
-  "missingSteps": string[], // steps from the pattern that the learner missed
-  "usedSteps": string[], // steps from the pattern that the learner used
-  "shortFeedback": string // a brief feedback message complying with the rules below
-}
-
-Feedback rules:
-1. If credit is "full", the shortFeedback MUST be EXACTLY one of: "Good.", "Yes.", or "Exactly.". No additional text, commentary, or punctuation.
-2. If credit is "partial", the shortFeedback must list only the missing steps or what is incorrect, with no coaching or conversational fluff (e.g. "Missing slot: [reason]."). Keep it very short.
-3. If credit is "none", the shortFeedback must be a concise contrastive explanation (e.g. "You said X, but the pattern requires Y."). Keep it under 150 characters.
-
-Return only raw JSON. Do not include markdown fences, comments, or any other wrapper text.`;
-
-  const userPrompt = `Target Pattern Name: ${targetPattern}
-Target Steps: ${targetSteps.join(", ")}
-Common Mistakes: ${commonMistakes.join("; ")}
-Topic: ${promptTopic}
-Learner Transcript: "${trimmedTranscript}"
-Attempt Number: ${attemptNumber}
-Previous Credit: ${previousCredit || "none"}
-
-Evaluate the learner transcript against the pattern and topic.`;
-
   try {
-    let text: string;
-    if (testHooks.callDeepSeek) {
-      text = await testHooks.callDeepSeek(apiKey, systemPrompt, userPrompt);
-    } else {
-      text = await callRoleProvider("execution", systemPrompt, userPrompt);
-    }
-    const cleanedText = cleanJsonResponse(text);
-
-    interface DeepSeekResponseParsed {
-      credit?: unknown;
-      missingSteps?: unknown;
-      usedSteps?: unknown;
-      shortFeedback?: unknown;
-    }
-
-    let parsed: DeepSeekResponseParsed;
-    try {
-      parsed = JSON.parse(cleanedText) as DeepSeekResponseParsed;
-    } catch {
-      console.error("Drill turn JSON parse error");
-      return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
-    }
-
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      (parsed.credit !== "full" && parsed.credit !== "partial" && parsed.credit !== "none") ||
-      !Array.isArray(parsed.missingSteps) ||
-      parsed.missingSteps.some((s) => typeof s !== "string") ||
-      !Array.isArray(parsed.usedSteps) ||
-      parsed.usedSteps.some((s) => typeof s !== "string") ||
-      typeof parsed.shortFeedback !== "string"
-    ) {
-      console.error("Drill turn invalid provider result fields:", parsed);
-      return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
-    }
-
-    const feedback = parsed.shortFeedback.trim();
-
-    // Limit feedback length to prevent verbose coaching/prompts leakage
-    if (feedback.length > 150) {
-      console.error("Drill turn feedback exceeded character limit:", feedback.length);
-      return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
-    }
-
-    if (parsed.credit === "full") {
-      if (feedback !== "Good." && feedback !== "Yes." && feedback !== "Exactly.") {
-        console.error("Drill turn full credit feedback was not one of 'Good.', 'Yes.', 'Exactly.':", feedback);
-        return NextResponse.json({ error: "invalid_provider_response" }, { status: 502, headers });
-      }
-    }
-
-    return NextResponse.json(
+    const result = await executeDrillTurn(
       {
-        credit: parsed.credit,
-        missingSteps: parsed.missingSteps,
-        usedSteps: parsed.usedSteps,
-        shortFeedback: feedback,
+        targetPattern,
+        targetSteps: targetSteps as string[],
+        commonMistakes: commonMistakes as string[],
+        promptTopic,
+        transcript: trimmedTranscript,
+        attemptNumber,
+        previousCredit: previousCredit as "partial" | "none" | null,
       },
-      { headers }
+      { callDeepSeek: testHooks.callDeepSeek || undefined }
     );
-  } catch (err: unknown) {
-    console.error("Drill turn DeepSeek call error:", err);
+    return NextResponse.json(result, { headers });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "provider_not_configured") {
+      return NextResponse.json({ error: msg }, { status: 503, headers });
+    }
+    if (msg === "invalid_provider_response" || msg === "provider_unavailable") {
+      return NextResponse.json({ error: msg }, { status: 502, headers });
+    }
+    console.error("Drill Turn helper error:", err);
     return NextResponse.json({ error: "provider_unavailable" }, { status: 502, headers });
   }
 }

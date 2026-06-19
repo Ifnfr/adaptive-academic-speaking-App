@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { savePatternDrillSession } from "../../../lib/storage/supabase-pattern-drill-adapter";
+import { executeEvaluateSession, EvaluateSessionInput } from "../../../lib/drill-session/session-completer";
 import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
@@ -101,319 +101,50 @@ export async function POST(request: Request) {
     phase3?: unknown;
   };
 
-  // Validate basic strings & arrays
-  if (
-    typeof briefId !== "string" ||
-    briefId.trim().length === 0 ||
-    typeof targetPattern !== "string" ||
-    targetPattern.trim().length === 0
-  ) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-  }
-
-  if (
-    !Array.isArray(targetSteps) ||
-    targetSteps.length < 2 ||
-    targetSteps.length > 5 ||
-    targetSteps.some((s) => typeof s !== "string" || s.trim().length === 0)
-  ) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-  }
-
-  if (
-    !Array.isArray(commonMistakes) ||
-    commonMistakes.length > 3 ||
-    commonMistakes.some((m) => typeof m !== "string")
-  ) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-  }
-
-  // Validate quickCheck
+  // Basic validation of structures in route to avoid runtime crashes before calling helper
   if (
     !quickCheck ||
     typeof quickCheck !== "object" ||
-    typeof (quickCheck as Record<string, unknown>).status !== "string" ||
-    !["detected", "not_detected_or_partial", "skipped"].includes(
-      (quickCheck as Record<string, string>).status
-    )
-  ) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-  }
-
-  const qcStatus = (quickCheck as { status: "detected" | "not_detected_or_partial" | "skipped" }).status;
-
-  // Validate phase1
-  if (
     !phase1 ||
     typeof phase1 !== "object" ||
-    typeof (phase1 as Record<string, unknown>).baselineAnswerCount !== "number" ||
-    typeof (phase1 as Record<string, unknown>).completedPromptCount !== "number"
-  ) {
-    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-  }
-
-  const p1 = phase1 as { baselineAnswerCount: number; completedPromptCount: number };
-
-  // Rejects incomplete Phase 1 if quick check is not "detected"
-  if (qcStatus !== "detected" && p1.completedPromptCount < 2) {
-    return NextResponse.json({ error: "incomplete_session" }, { status: 400, headers });
-  }
-
-  // Validate phase2
-  if (
     !phase2 ||
-    typeof phase2 !== "object" ||
-    !Array.isArray((phase2 as Record<string, unknown>).attempts)
+    typeof phase2 !== "object"
   ) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
   }
 
-  interface Attempt {
-    topic: string;
-    credit: "full" | "partial" | "none";
-    missingSteps: string[];
-    usedSteps: string[];
-    attemptNumber: 1 | 2 | 3;
-    simplifiedTopicUsed?: boolean;
-  }
+  const qc = quickCheck as { status?: unknown };
+  const p1 = phase1 as { completedPromptCount?: unknown };
+  const p2 = phase2 as { attempts?: unknown };
 
-  const p2Attempts = (phase2 as { attempts: unknown[] }).attempts;
-
-  if (p2Attempts.length === 0) {
+  if (typeof qc.status !== "string" || typeof p1.completedPromptCount !== "number" || !Array.isArray(p2.attempts)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
   }
-
-  for (const att of p2Attempts) {
-    if (
-      !att ||
-      typeof att !== "object" ||
-      typeof (att as Record<string, unknown>).topic !== "string" ||
-      (att as Record<string, string>).topic.trim().length === 0 ||
-      !["full", "partial", "none"].includes((att as Record<string, string>).credit) ||
-      typeof (att as Record<string, unknown>).attemptNumber !== "number" ||
-      ![1, 2, 3].includes((att as Record<string, number>).attemptNumber) ||
-      !Array.isArray((att as Record<string, unknown>).missingSteps) ||
-      (att as { missingSteps: unknown[] }).missingSteps.some((s) => typeof s !== "string") ||
-      !Array.isArray((att as Record<string, unknown>).usedSteps) ||
-      (att as { usedSteps: unknown[] }).usedSteps.some((s) => typeof s !== "string")
-    ) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-  }
-
-  if (phase3 !== undefined) {
-    if (
-      !phase3 ||
-      typeof phase3 !== "object" ||
-      typeof (phase3 as Record<string, unknown>).completedRoundCount !== "number" ||
-      typeof (phase3 as Record<string, unknown>).detectedCount !== "number" ||
-      typeof (phase3 as Record<string, unknown>).missedCount !== "number" ||
-      typeof (phase3 as Record<string, unknown>).timeoutCount !== "number" ||
-      typeof (phase3 as Record<string, unknown>).pressureAccuracy !== "number" ||
-      typeof (phase3 as Record<string, unknown>).pressureFailRate !== "number"
-    ) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-
-    const p3 = phase3 as {
-      completedRoundCount: number;
-      detectedCount: number;
-      missedCount: number;
-      timeoutCount: number;
-      pressureAccuracy: number;
-      pressureFailRate: number;
-    };
-
-    if (
-      !Number.isInteger(p3.completedRoundCount) ||
-      !Number.isInteger(p3.detectedCount) ||
-      !Number.isInteger(p3.missedCount) ||
-      !Number.isInteger(p3.timeoutCount) ||
-      !Number.isInteger(p3.pressureAccuracy) ||
-      !Number.isInteger(p3.pressureFailRate)
-    ) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-
-    if (
-      p3.completedRoundCount !== 4 ||
-      p3.detectedCount < 0 || p3.detectedCount > 4 ||
-      p3.missedCount < 0 || p3.missedCount > 4 ||
-      p3.timeoutCount < 0 || p3.timeoutCount > 4
-    ) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-
-    if (
-      p3.pressureAccuracy < 0 || p3.pressureAccuracy > 100 ||
-      p3.pressureFailRate < 0 || p3.pressureFailRate > 100
-    ) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-
-    if (p3.completedRoundCount !== p3.detectedCount + p3.missedCount + p3.timeoutCount) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-
-    const computedAccuracy = Math.round((p3.detectedCount / p3.completedRoundCount) * 100);
-    const computedFailRate = Math.round(((p3.missedCount + p3.timeoutCount) / p3.completedRoundCount) * 100);
-
-    if (p3.pressureAccuracy !== computedAccuracy || p3.pressureFailRate !== computedFailRate) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-
-    const p3Keys = Object.keys(p3);
-    const allowedP3Keys = [
-      "completedRoundCount",
-      "detectedCount",
-      "missedCount",
-      "timeoutCount",
-      "pressureAccuracy",
-      "pressureFailRate"
-    ];
-    if (p3Keys.some((k) => !allowedP3Keys.includes(k))) {
-      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
-    }
-  }
-
-  const attempts = p2Attempts as Attempt[];
-
-  // Compute metrics
-  const fullCreditCount = attempts.filter((a) => a.credit === "full").length;
-  const partialCreditCount = attempts.filter((a) => a.credit === "partial").length;
-  const noCreditCount = attempts.filter((a) => a.credit === "none").length;
-  const evaluatedAttemptCount = attempts.length;
-
-  const phase2Accuracy = evaluatedAttemptCount > 0
-    ? Math.round((fullCreditCount / evaluatedAttemptCount) * 100)
-    : 0;
-
-  // Streak of full credits at the end
-  let finalFullCreditStreak = 0;
-  for (let i = attempts.length - 1; i >= 0; i--) {
-    if (attempts[i].credit === "full") {
-      finalFullCreditStreak++;
-    } else {
-      break;
-    }
-  }
-
-  // Most missed steps
-  const stepCounts: Record<string, number> = {};
-  attempts.forEach((a) => {
-    a.missingSteps.forEach((step) => {
-      stepCounts[step] = (stepCounts[step] || 0) + 1;
-    });
-  });
-  const mostMissedSteps = Object.entries(stepCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map((entry) => entry[0]);
-
-  const simplifiedTopicUsed = attempts.some((a) => !!a.simplifiedTopicUsed);
-
-  // Qualitative signal
-  let improvementSignal: "strong" | "emerging" | "needs_more_repetition" = "needs_more_repetition";
-  if (phase2Accuracy >= 75) {
-    improvementSignal = "strong";
-  } else if (phase2Accuracy >= 50) {
-    improvementSignal = "emerging";
-  }
-
-  const nextSessionRecommendation = phase2Accuracy >= 75
-    ? "Pattern mastered. Ready for faster pacing or full context speaking in next Podchat."
-    : "Keep practicing. Focus on including all target slots in order.";
-
-  const weaknessUpdate = {
-    category: "pattern_drill" as const,
-    label: targetPattern,
-    practiceFocus: mostMissedSteps.length > 0
-      ? `Ensure slots like ${mostMissedSteps.slice(0, 2).join(" and ")} are correct.`
-      : "Maintain current accurate slot sequencing.",
-  };
-
-  const phase1BaselineCompleteness: "complete" | "partial" | "missing" =
-    p1.completedPromptCount >= 2 ? "complete" : p1.completedPromptCount > 0 ? "partial" : "missing";
-
-  let phase3PressureAccuracy: number | null = null;
-  let pressureFailRate: number | null = null;
-  if (phase3 !== undefined && phase3 !== null) {
-    const p3 = phase3 as {
-      completedRoundCount: number;
-      detectedCount: number;
-      missedCount: number;
-      timeoutCount: number;
-    };
-    phase3PressureAccuracy = Math.round((p3.detectedCount / p3.completedRoundCount) * 100);
-    pressureFailRate = Math.round(((p3.missedCount + p3.timeoutCount) / p3.completedRoundCount) * 100);
-  }
-
-  // Try to save the session to the database
-  let saved = false;
-  let sessionId: string | undefined = undefined;
 
   const supabaseClient = getSupabaseClient();
-  if (supabaseClient) {
-    try {
-      const saveResult = await savePatternDrillSession(
-        {
-          ownerId,
-          briefId,
-          targetPattern,
-          targetSteps,
-          commonMistakes,
-          quickCheckStatus: qcStatus,
-          entryPhase: qcStatus === "detected" ? 3 : 1,
-          phase1BaselineCompleteness,
-          phase1CompletedPromptCount: p1.completedPromptCount,
-          phase2Accuracy,
-          fullCreditCount,
-          partialCreditCount,
-          noCreditCount,
-          evaluatedAttemptCount,
-          finalFullCreditStreak,
-          mostMissedSteps,
-          simplifiedTopicUsed,
-          improvementSignal,
-          nextSessionRecommendation,
-          weaknessUpdate,
-          phase3PressureAccuracy,
-          pressureFailRate,
-        },
-        supabaseClient
-      );
 
-      if (saveResult.ok && saveResult.sessionId) {
-        saved = true;
-        sessionId = saveResult.sessionId;
-      } else {
-        console.error("Pattern drill session persistence failed:", saveResult.error);
+  try {
+    const result = await executeEvaluateSession(
+      ownerId,
+      supabaseClient,
+      {
+        briefId: briefId as string,
+        targetPattern: targetPattern as string,
+        targetSteps: targetSteps as string[],
+        commonMistakes: commonMistakes as string[],
+        quickCheckStatus: qc.status as "detected" | "not_detected_or_partial" | "skipped",
+        phase1CompletedPromptCount: p1.completedPromptCount,
+        phase2Attempts: p2.attempts as EvaluateSessionInput["phase2Attempts"],
+        phase3: phase3 as EvaluateSessionInput["phase3"],
       }
-    } catch (saveErr) {
-      console.error("Unexpected error saving pattern drill session:", saveErr);
+    );
+    return NextResponse.json(result, { headers });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "invalid_request" || msg === "incomplete_session") {
+      return NextResponse.json({ error: msg }, { status: 400, headers });
     }
-  } else {
-    console.error("Supabase client unavailable for pattern drill session persistence.");
+    console.error("Evaluate session helper error:", err);
+    return NextResponse.json({ error: "evaluation_failed" }, { status: 500, headers });
   }
-
-  return NextResponse.json(
-    {
-      phase1BaselineCompleteness,
-      phase2Accuracy,
-      fullCreditCount,
-      partialCreditCount,
-      noCreditCount,
-      evaluatedAttemptCount,
-      finalFullCreditStreak,
-      mostMissedSteps,
-      simplifiedTopicUsed,
-      improvementSignal,
-      nextSessionRecommendation,
-      weaknessUpdate,
-      phase3PressureAccuracy,
-      pressureFailRate,
-      saved,
-      ...(sessionId ? { sessionId } : {}),
-    },
-    { headers }
-  );
 }

@@ -1,0 +1,261 @@
+import { getLatestWeaknessForUser } from "../pattern-drill/latestWeaknessServer";
+import { resolveProvider, callRoleProvider, ProviderConfigError } from "../../api/pattern-drill/_lib/roleProviders";
+import { validateSpokenModelFragment } from "./validation";
+import crypto from "crypto";
+
+export interface PatternBriefInput {
+  level: string;
+  mode: string;
+  source: string;
+  focus?: string;
+  sourceId?: string;
+}
+
+export type BriefContentOutput = {
+  briefId: string;
+  title: string;
+  focus: string;
+  qualityCriteria: string[];
+  responsePattern: {
+    name: string;
+    steps: string[];
+    spokenModelFragment: string;
+  };
+  miniExample: string;
+  commonMistakes: string[];
+  drillEntryConfig: {
+    targetPattern: string;
+    targetSteps: string[];
+    commonMistakes: string[];
+    suggestedEntryPhase: number;
+  };
+};
+
+function cleanJsonResponse(text: string): string {
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.slice(3);
+  }
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  return cleaned.trim();
+}
+
+export async function generatePatternBriefContent(
+  ownerId: string,
+  supabaseClient: Parameters<typeof getLatestWeaknessForUser>[1],
+  input: PatternBriefInput,
+  overrides?: {
+    callClaude?: (apiKey: string, systemPrompt: string, userPrompt: string) => Promise<string>;
+  }
+): Promise<BriefContentOutput> {
+  const { level, mode, source, focus, sourceId } = input;
+
+  let validatedFocus = "";
+  if (source === "manual") {
+    if (!focus || focus.trim().length === 0) {
+      throw new Error("focus_required");
+    }
+    const trimmedFocus = focus.trim();
+    if (trimmedFocus.length > 200) {
+      throw new Error("focus_too_long");
+    }
+    validatedFocus = trimmedFocus;
+  } else {
+    // source === "latest_weakness"
+    if (!supabaseClient) {
+      throw new Error("latest_weakness_unavailable");
+    }
+
+    const selectorResult = await getLatestWeaknessForUser(ownerId, supabaseClient, { sourceId });
+    if (selectorResult.status === "empty") {
+      throw new Error("latest_weakness_not_found");
+    }
+    if (selectorResult.status === "insufficient") {
+      throw new Error("latest_weakness_insufficient");
+    }
+    if (selectorResult.status === "error" || !selectorResult.weakness) {
+      throw new Error("pattern_brief_failed");
+    }
+    validatedFocus = selectorResult.weakness.description;
+  }
+
+  let apiKey = "__test__";
+  if (!overrides?.callClaude) {
+    try {
+      const providerConfig = resolveProvider("planning");
+      apiKey = providerConfig.apiKey;
+    } catch (err) {
+      if (err instanceof ProviderConfigError) {
+        throw new Error("provider_not_configured");
+      }
+      throw err;
+    }
+  }
+
+  const systemPrompt = `You are an AI language learning assistant specializing in pre-drill speech instruction for academic English. Your task is to generate a pre-drill briefing ("Pattern Brief") in JSON format based on the user's level, mode, and target speaking focus/weakness.
+
+The generated JSON must match the following schema exactly:
+{
+  "title": "A short, engaging pattern title",
+  "focus": "Brief restatement of the practice focus",
+  "qualityCriteria": ["Criterion 1", "Criterion 2"], // 1 to 3 short criteria
+  "responsePattern": {
+    "name": "Name of response structure",
+    "steps": ["Step 1", "Step 2"], // 2 to 5 steps using slot notation, e.g. "[claim]"
+    "spokenModelFragment": "A short spoken model fragment demonstrating the pattern steps, e.g. 'I think it helps because it saves time.'" // MUST be a short string, max 12 words, max 120 chars, single-line, demonstrating the pattern
+  },
+  "miniExample": "Example sentence. Illustration only — do not copy or memorize.", // 1 to 2 sentences max, MUST contain "Illustration only" and ("do not copy" or "do not memorize")
+  "commonMistakes": ["Mistake 1", "Mistake 2"], // 1 to 3 short strings
+  "drillEntryConfig": {
+    "targetPattern": "Name of response structure", // Must match responsePattern.name
+    "targetSteps": ["Step 1", "Step 2"], // Must match responsePattern.steps exactly
+    "commonMistakes": ["Mistake 1", "Mistake 2"], // Must match commonMistakes exactly
+    "suggestedEntryPhase": 1 // Must be 1 or 3
+  }
+}
+
+Do not include any wrapper, markdown fences, or notes. Return only raw JSON.`;
+
+  const userPrompt = `Generate a Pattern Brief for:
+Level: ${level}
+Mode: ${mode}
+Focus: ${validatedFocus}`;
+
+  let text: string;
+  if (overrides?.callClaude) {
+    text = await overrides.callClaude(apiKey, systemPrompt, userPrompt);
+  } else {
+    text = await callRoleProvider("planning", systemPrompt, userPrompt);
+  }
+
+  const cleanedText = cleanJsonResponse(text);
+  interface RawBrief {
+    title: string;
+    focus: string;
+    qualityCriteria: string[];
+    responsePattern: {
+      name: string;
+      steps: string[];
+      spokenModelFragment: string;
+    };
+    miniExample: string;
+    commonMistakes: string[];
+    drillEntryConfig: {
+      targetPattern: string;
+      targetSteps: string[];
+      commonMistakes: string[];
+      suggestedEntryPhase: number;
+    };
+  }
+  let parsed: RawBrief;
+  try {
+    parsed = JSON.parse(cleanedText) as RawBrief;
+  } catch (parseErr) {
+    console.error("JSON Parse Error in helper:", parseErr);
+    throw new Error("invalid_provider_response");
+  }
+
+  // Strict validation rules
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    typeof parsed.title !== "string" ||
+    typeof parsed.focus !== "string" ||
+    !Array.isArray(parsed.qualityCriteria) ||
+    parsed.qualityCriteria.length < 1 ||
+    parsed.qualityCriteria.length > 3 ||
+    parsed.qualityCriteria.some((c: unknown) => typeof c !== "string")
+  ) {
+    console.error("Validation failed: basic fields", parsed);
+    throw new Error("invalid_provider_response");
+  }
+
+  if (
+    typeof parsed.responsePattern !== "object" ||
+    parsed.responsePattern === null ||
+    typeof parsed.responsePattern.name !== "string" ||
+    !Array.isArray(parsed.responsePattern.steps) ||
+    parsed.responsePattern.steps.length < 2 ||
+    parsed.responsePattern.steps.length > 5 ||
+    parsed.responsePattern.steps.some((s: unknown) => typeof s !== "string")
+  ) {
+    console.error("Validation failed: responsePattern", parsed);
+    throw new Error("invalid_provider_response");
+  }
+
+  // Validate spokenModelFragment
+  if (!validateSpokenModelFragment(parsed.responsePattern.spokenModelFragment, parsed.responsePattern.steps)) {
+    console.error("Validation failed: spokenModelFragment", parsed.responsePattern.spokenModelFragment);
+    throw new Error("invalid_provider_response");
+  }
+
+  // Check slot notation in steps
+  const slotRegex = /\[[a-zA-Z0-9_\s-]+\]/;
+  const hasAtLeastOneSlot = parsed.responsePattern.steps.some((step: string) => slotRegex.test(step));
+  const allStepsAreShort = parsed.responsePattern.steps.every((step: string) => step.split(/\s+/).length <= 10);
+  const stepsOk = hasAtLeastOneSlot && allStepsAreShort;
+  if (!stepsOk) {
+    console.error("Validation failed: slot steps", parsed.responsePattern.steps);
+    throw new Error("invalid_provider_response");
+  }
+
+  // Check miniExample
+  if (typeof parsed.miniExample !== "string") {
+    console.error("Validation failed: miniExample type", parsed);
+    throw new Error("invalid_provider_response");
+  }
+  const sentences = parsed.miniExample.split(/[.!?]/).filter((s: string) => s.trim().length > 0);
+  const hasExactWarning = parsed.miniExample.includes("Illustration only — do not memorize or copy.");
+  if (sentences.length < 1 || sentences.length > 2 || !hasExactWarning) {
+    console.error("Validation failed: miniExample checks", {
+      sentenceCount: sentences.length,
+      hasExactWarning,
+    });
+    throw new Error("invalid_provider_response");
+  }
+
+  // Check commonMistakes
+  if (
+    !Array.isArray(parsed.commonMistakes) ||
+    parsed.commonMistakes.length < 1 ||
+    parsed.commonMistakes.length > 3 ||
+    parsed.commonMistakes.some((m: unknown) => typeof m !== "string")
+  ) {
+    console.error("Validation failed: commonMistakes", parsed);
+    throw new Error("invalid_provider_response");
+  }
+
+  // Check drillEntryConfig
+  if (
+    typeof parsed.drillEntryConfig !== "object" ||
+    parsed.drillEntryConfig === null ||
+    parsed.drillEntryConfig.targetPattern !== parsed.responsePattern.name ||
+    !Array.isArray(parsed.drillEntryConfig.targetSteps) ||
+    parsed.drillEntryConfig.targetSteps.length !== parsed.responsePattern.steps.length ||
+    parsed.drillEntryConfig.targetSteps.some((s: unknown, idx: number) => s !== parsed.responsePattern.steps[idx]) ||
+    !Array.isArray(parsed.drillEntryConfig.commonMistakes) ||
+    parsed.drillEntryConfig.commonMistakes.length !== parsed.commonMistakes.length ||
+    parsed.drillEntryConfig.commonMistakes.some((m: unknown, idx: number) => m !== parsed.commonMistakes[idx]) ||
+    ![1, 3].includes(parsed.drillEntryConfig.suggestedEntryPhase)
+  ) {
+    console.error("Validation failed: drillEntryConfig", parsed.drillEntryConfig);
+    throw new Error("invalid_provider_response");
+  }
+
+  parsed.responsePattern.spokenModelFragment = parsed.responsePattern.spokenModelFragment.trim();
+
+  return {
+    briefId: crypto.randomUUID(),
+    title: parsed.title,
+    focus: parsed.focus,
+    qualityCriteria: parsed.qualityCriteria,
+    responsePattern: parsed.responsePattern,
+    miniExample: parsed.miniExample,
+    commonMistakes: parsed.commonMistakes,
+    drillEntryConfig: parsed.drillEntryConfig,
+  };
+}

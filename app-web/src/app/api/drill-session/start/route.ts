@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { testHooks } from "./route-test-hooks";
 import { generatePatternBriefContent } from "../../../lib/drill-session/brief-generator";
+import { createInitialState } from "../../../lib/drill-session/state";
+import { containsOwnerOrInternalFields, validateSessionInputKeys } from "../../../lib/drill-session/validation";
+import { testHooks } from "./route-test-hooks";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 
@@ -60,10 +63,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
   }
 
-  // Reject unexpected fields
-  const allowedKeys = ["level", "mode", "focus", "source", "sourceId"];
-  const bodyKeys = Object.keys(body as Record<string, unknown>);
-  if (bodyKeys.some((k) => !allowedKeys.includes(k))) {
+  // Reject owner or internal fields
+  if (containsOwnerOrInternalFields(body)) {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Allowed keys: level, mode, source, focus, sourceId
+  const allowedKeys = ["level", "mode", "source", "focus", "sourceId"];
+  if (!validateSessionInputKeys(body, allowedKeys)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
   }
 
@@ -104,7 +111,14 @@ export async function POST(request: Request) {
       { level, mode, source, focus, sourceId },
       { callClaude: testHooks.callClaude || undefined }
     );
-    return NextResponse.json(brief, { headers });
+
+    const sessionId = crypto.randomUUID();
+    const state = createInitialState(sessionId, brief);
+
+    return NextResponse.json({
+      ...state,
+      drillEntryConfig: brief.drillEntryConfig,
+    }, { headers });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg === "focus_required" || msg === "focus_too_long" || msg === "invalid_request") {
@@ -125,7 +139,7 @@ export async function POST(request: Request) {
     if (msg === "provider_not_configured") {
       return NextResponse.json({ error: msg }, { status: 503, headers });
     }
-    console.error("Pattern Brief generation error:", err);
+    console.error("Drill session start error:", err);
     return NextResponse.json({ error: "pattern_brief_failed" }, { status: 500, headers });
   }
 }

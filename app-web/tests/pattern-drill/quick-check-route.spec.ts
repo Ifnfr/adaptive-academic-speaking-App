@@ -55,7 +55,8 @@ test.describe("Pattern Quick Check Route", () => {
 
   test("missing transcript returns 400 transcript_required", async () => {
     testHooks.resolveCurrentUserId = async () => "user-123";
-    const { transcript: _, ...bodyWithoutTranscript } = VALID_BODY;
+    const bodyWithoutTranscript = { ...VALID_BODY } as Partial<typeof VALID_BODY>;
+    delete bodyWithoutTranscript.transcript;
     const res = await POST(makeRequest(bodyWithoutTranscript));
     expect(res.status).toBe(400);
     const json = await res.json();

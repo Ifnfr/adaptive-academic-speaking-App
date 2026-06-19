@@ -20,7 +20,8 @@ const validClaudeResponse = {
   qualityCriteria: ["Parallel structural verbs", "Proper clause connection"],
   responsePattern: {
     name: "Claim because Reason structure",
-    steps: ["[claim]", "because", "[reason]"]
+    steps: ["[claim]", "because", "[reason]"],
+    spokenModelFragment: "I agree because it has positive outcomes."
   },
   miniExample: "I agree because it has positive outcomes. Illustration only — do not memorize or copy.",
   commonMistakes: ["Using simple sentences without connection", "Incomplete thoughts"],
@@ -353,5 +354,88 @@ test.describe("Pattern Brief Generate Route", () => {
 
     const response = await POST(req);
     expect(response.status).toBe(502);
+  });
+
+  test("missing/non-string/empty/overlong/>12-word fragment returns safe 502", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+
+    // 1. Missing fragment
+    const badResp1 = {
+      ...validClaudeResponse,
+      responsePattern: {
+        ...validClaudeResponse.responsePattern,
+        spokenModelFragment: undefined,
+      },
+    };
+    testHooks.callClaude = async () => JSON.stringify(badResp1);
+    const res1 = await POST(buildRequest({ level: "beginner", mode: "fluency_sprint", source: "manual", focus: "hedging" }));
+    expect(res1.status).toBe(502);
+
+    // 2. Empty fragment
+    const badResp2 = {
+      ...validClaudeResponse,
+      responsePattern: {
+        ...validClaudeResponse.responsePattern,
+        spokenModelFragment: "",
+      },
+    };
+    testHooks.callClaude = async () => JSON.stringify(badResp2);
+    const res2 = await POST(buildRequest({ level: "beginner", mode: "fluency_sprint", source: "manual", focus: "hedging" }));
+    expect(res2.status).toBe(502);
+
+    // 3. >12 words (13 words)
+    const badResp3 = {
+      ...validClaudeResponse,
+      responsePattern: {
+        ...validClaudeResponse.responsePattern,
+        spokenModelFragment: "one two three four five six seven eight nine ten eleven twelve thirteen",
+      },
+    };
+    testHooks.callClaude = async () => JSON.stringify(badResp3);
+    const res3 = await POST(buildRequest({ level: "beginner", mode: "fluency_sprint", source: "manual", focus: "hedging" }));
+    expect(res3.status).toBe(502);
+
+    // 4. Overlong (>120 chars)
+    const badResp4 = {
+      ...validClaudeResponse,
+      responsePattern: {
+        ...validClaudeResponse.responsePattern,
+        spokenModelFragment: "This is a very long string that uses short words so it has less than twelve words but exceeds one hundred and twenty characters limit by a lot of repeating spaces.",
+      },
+    };
+    testHooks.callClaude = async () => JSON.stringify(badResp4);
+    const res4 = await POST(buildRequest({ level: "beginner", mode: "fluency_sprint", source: "manual", focus: "hedging" }));
+    expect(res4.status).toBe(502);
+  });
+
+  test("trimmed valid fragment is returned", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const respWithSpaces = {
+      ...validClaudeResponse,
+      responsePattern: {
+        ...validClaudeResponse.responsePattern,
+        spokenModelFragment: "   I agree because it has positive outcomes.   ",
+      },
+    };
+    testHooks.callClaude = async () => JSON.stringify(respWithSpaces);
+    const res = await POST(buildRequest({ level: "beginner", mode: "fluency_sprint", source: "manual", focus: "hedging" }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.responsePattern.spokenModelFragment).toBe("I agree because it has positive outcomes.");
+  });
+
+  test("unrelated fragment is rejected when concrete pattern tokens exist", async () => {
+    testHooks.resolveCurrentUserId = async () => "user-123";
+    const badResp = {
+      ...validClaudeResponse,
+      responsePattern: {
+        name: "Claim because Reason structure",
+        steps: ["[claim]", "because", "[reason]"],
+        spokenModelFragment: "I think cats are cute.", // doesn't contain "because" (the concrete token)
+      },
+    };
+    testHooks.callClaude = async () => JSON.stringify(badResp);
+    const res = await POST(buildRequest({ level: "beginner", mode: "fluency_sprint", source: "manual", focus: "hedging" }));
+    expect(res.status).toBe(502);
   });
 });
