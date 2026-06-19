@@ -267,6 +267,52 @@ test.describe("Drill Session Complete Route", () => {
     expect(json.session.currentPhase).toBe("complete");
   });
 
+  test("complete accepts detected quick-check sessions that enter Phase 3 directly", async () => {
+    completeHooks.resolveCurrentUserId = async () => "user-123";
+    completeHooks.getSupabaseClient = () => {
+      return {
+        from: () => ({
+          insert: () => ({
+            select: () => ({
+              single: async () => ({
+                data: { id: "inserted-pressure-uuid" },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      };
+    };
+
+    const pressureState: DrillSessionState = {
+      ...VALID_STATE,
+      currentPhase: "complete",
+      entryPhase: 3,
+      phase1Results: [],
+      phase2Results: [],
+      phase3Results: [0, 1, 2, 3].map((roundIndex) => ({
+        phase: 3,
+        patternDetected: true,
+        missingSteps: [],
+        usedSteps: ["[claim]", "because [reason]"],
+        timedOut: false,
+        shortFeedback: "Good.",
+        roundSeconds: [10, 7, 5, 3][roundIndex],
+        roundIndex,
+      })),
+    };
+
+    const res = await completePOST(makeRequest("http://localhost/api/drill-session/complete", pressureState));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.saved).toBe(true);
+    expect(json.sessionId).toBe("inserted-pressure-uuid");
+    expect(json.phase1BaselineCompleteness).toBe("missing");
+    expect(json.evaluatedAttemptCount).toBe(0);
+    expect(json.phase3PressureAccuracy).toBe(100);
+    expect(json.session.currentPhase).toBe("complete");
+  });
+
   test("complete rejects client-provided owner fields", async () => {
     completeHooks.resolveCurrentUserId = async () => "user-123";
     const body = {

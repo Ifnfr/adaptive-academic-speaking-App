@@ -83,8 +83,12 @@ export async function executeEvaluateSession(
     throw new Error("incomplete_session");
   }
 
-  // Validate phase2 attempts
-  if (!Array.isArray(phase2Attempts) || phase2Attempts.length === 0) {
+  // Validate phase2 attempts. A detected quick check can enter Phase 3 directly.
+  if (!Array.isArray(phase2Attempts)) {
+    throw new Error("invalid_request");
+  }
+
+  if (phase2Attempts.length === 0 && quickCheckStatus !== "detected") {
     throw new Error("invalid_request");
   }
 

@@ -281,7 +281,7 @@ test.describe("Podchat Phase 1 connected UI", () => {
     // Toggle Drill Mode
     await patternDrillModeBtn.click();
     await expect(patternDrillModeBtn).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByText("Latest Weakness Check & Brief")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Latest Weakness Check" })).toBeVisible();
 
     // Switch back
     await podchatModeBtn.click();

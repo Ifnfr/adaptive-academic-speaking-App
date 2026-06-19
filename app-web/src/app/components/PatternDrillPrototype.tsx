@@ -1,7 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { PatternDrillModeCore } from "./PatternDrillModeCore";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { DrillSessionState, TurnResult } from "../lib/drill-session/types";
 
 type WeaknessDetails = {
   title: string;
@@ -21,56 +19,93 @@ type FetchState = {
   reason?: string;
 };
 
-type PatternBriefResponse = {
-  briefId: string;
-  title: string;
-  focus: string;
-  qualityCriteria: string[];
-  responsePattern: { name: string; steps: string[] };
-  miniExample: string;
-  commonMistakes: string[];
-  drillEntryConfig: unknown; // kept in state for future handoff, never rendered
-};
+type FlowState =
+  | "idle"
+  | "generating"
+  | "phase0_brief"
+  | "quick_check"
+  | "phase1"
+  | "phase2"
+  | "phase3_intro"
+  | "phase3"
+  | "completing"
+  | "summary"
+  | "error";
 
-type BriefState =
-  | { status: "idle" }
-  | { status: "generating" }
-  | { status: "generated"; brief: PatternBriefResponse }
-  | { status: "error" };
+type RecorderState = "ready" | "recording" | "transcribing" | "submitting" | "error_mic" | "error_stt" | "error_submit";
 
-type QuickCheckStatus =
-  | "idle"                   // brief generated, check not started
-  | "recording_ready"        // check panel open, mic not yet active
-  | "recording"              // MediaRecorder active
-  | "transcribing"           // audio uploaded, waiting for STT response
-  | "transcript_ready"       // transcript returned, user can check or re-record
-  | "checking"               // transcript submitted to quick-check API
-  | "detected"               // result: pattern detected
-  | "not_detected_or_partial"
-  | "skipped"
-  | "error_mic"              // getUserMedia failed or MediaRecorder unavailable
-  | "error_stt"              // STT API returned error
-  | "error_check";           // quick-check API returned error
-
-type QuickCheckState = {
-  status: QuickCheckStatus;
+type QuickCheckTurnResult = {
+  phase: "quick_check";
+  result: "detected" | "not_detected_or_partial";
   entryPhase: 1 | 3;
-  transcript: string; // returned from STT, editable as fallback
 };
 
-type DrillModeContext = {
-  briefId: string;
-  targetPattern: string;
-  targetSteps: string[];
-  commonMistakes: string[];
-  entryPhase: 1 | 3;
-  quickCheck:
-    | { status: "detected"; transcript: string }
-    | { status: "not_detected_or_partial"; transcript: string }
-    | { status: "skipped" };
+type Phase2Result = {
+  phase: 2;
+  credit: "full" | "partial" | "none";
+  missingSteps: string[];
+  usedSteps: string[];
+  shortFeedback: string;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+type Phase3Result = {
+  phase: 3;
+  patternDetected: boolean;
+  missingSteps: string[];
+  usedSteps: string[];
+  timedOut: boolean;
+  shortFeedback: string;
+};
+
+type DrillTurnResponse = {
+  session: DrillSessionState;
+  turnResult: QuickCheckTurnResult | TurnResult | Phase2Result | Phase3Result;
+};
+
+type DrillSummary = {
+  phase1BaselineCompleteness: "complete" | "partial" | "missing";
+  phase2Accuracy: number;
+  fullCreditCount: number;
+  partialCreditCount: number;
+  noCreditCount: number;
+  evaluatedAttemptCount: number;
+  finalFullCreditStreak: number;
+  mostMissedSteps: string[];
+  simplifiedTopicUsed: boolean;
+  improvementSignal: "strong" | "emerging" | "needs_more_repetition";
+  nextSessionRecommendation: string;
+  phase3PressureAccuracy: number | null;
+  pressureFailRate: number | null;
+  saved: boolean;
+};
+
+type PatternDrillPrototypeProps = {
+  onExit: () => void;
+};
+
+type PracticePhase = "quick_check" | 1 | 2 | 3;
+
+const PHASE1_PROMPTS = [
+  "Speak one sentence about online education from memory.",
+  "Speak one sentence about renewable energy from memory.",
+] as const;
+
+const PHASE2_TOPICS = [
+  "Explain how artificial intelligence impacts job roles.",
+  "Discuss the pros and cons of remote work.",
+] as const;
+
+const SIMPLIFIED_TOPICS = [
+  "Explain why eating healthy is good.",
+  "Discuss why people like to travel.",
+] as const;
+
+const PRESSURE_ROUNDS = [
+  { seconds: 10, topic: "Explain how artificial intelligence impacts job roles." },
+  { seconds: 7, topic: "Discuss the pros and cons of remote work." },
+  { seconds: 5, topic: "Explain why eating healthy is good." },
+  { seconds: 3, topic: "Discuss why people like to travel." },
+] as const;
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === "undefined") return "audio/webm";
@@ -84,41 +119,75 @@ function pickMimeType(): string {
 function stopMediaStream(stream: MediaStream | null) {
   if (!stream) return;
   try {
-    stream.getTracks().forEach((t) => t.stop());
+    stream.getTracks().forEach((track) => track.stop());
   } catch {
-    // ignore
+    // Best-effort microphone cleanup.
   }
 }
 
-// ─── Props ───────────────────────────────────────────────────────────────────
+function getConfidenceLabel(confidence: number) {
+  if (confidence >= 0.8) return `High (${confidence.toFixed(2)})`;
+  if (confidence >= 0.65) return `Medium (${confidence.toFixed(2)})`;
+  return `Low (${confidence.toFixed(2)})`;
+}
 
-type PatternDrillPrototypeProps = {
-  onExit: () => void;
-};
+function formatDate(isoString: string) {
+  const date = new Date(isoString);
+  return Number.isNaN(date.getTime()) ? isoString : date.toLocaleDateString();
+}
 
-// ─── Component ───────────────────────────────────────────────────────────────
+function getSafeErrorCopy(state: RecorderState | FlowState) {
+  if (state === "error_mic") return "Microphone access is unavailable. Please allow microphone access and try again.";
+  if (state === "error_stt") return "We could not capture that attempt. Please record again.";
+  return "That step could not be completed. Please try again.";
+}
+
+function getPhaseLabel(flow: FlowState) {
+  if (flow === "phase1") return "Phase 1 - Cold Recall";
+  if (flow === "phase2") return "Phase 2 - Contrastive Repetition";
+  if (flow === "phase3_intro" || flow === "phase3") return "Phase 3 - Pressure Test";
+  if (flow === "quick_check") return "Preparing Your Spoken Drill";
+  return "Drill Mode";
+}
 
 export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
-  const [state, setState] = useState<FetchState>({ status: "loading" });
-  const [briefState, setBriefState] = useState<BriefState>({ status: "idle" });
-  const [quickCheckState, setQuickCheckState] = useState<QuickCheckState>({
-    status: "idle",
-    entryPhase: 1,
-    transcript: "",
-  });
-  const [drillContext, setDrillContext] = useState<DrillModeContext | null>(null);
-  const [drillActive, setDrillActive] = useState<boolean>(false);
+  const [weaknessState, setWeaknessState] = useState<FetchState>({ status: "loading" });
+  const [flowState, setFlowState] = useState<FlowState>("idle");
+  const [session, setSession] = useState<DrillSessionState | null>(null);
+  const [recorderState, setRecorderState] = useState<RecorderState>("ready");
+  const [lastResult, setLastResult] = useState<DrillTurnResponse["turnResult"] | null>(null);
+  const [summary, setSummary] = useState<DrillSummary | null>(null);
+  const [phase2TopicIndex, setPhase2TopicIndex] = useState(0);
+  const [phase2AttemptNumber, setPhase2AttemptNumber] = useState<1 | 2 | 3>(1);
+  const [phase2PreviousCredit, setPhase2PreviousCredit] = useState<"partial" | "none" | null>(null);
+  const [phase2Simplified, setPhase2Simplified] = useState(false);
+  const [phase3RoundIndex, setPhase3RoundIndex] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
-  // Recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const pendingPhaseRef = useRef<PracticePhase | null>(null);
+  const pendingTopicRef = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
-  // Request abort refs
-  const briefAbortRef = useRef<AbortController | null>(null);
-  const checkAbortRef = useRef<AbortController | null>(null);
+  const brief = session?.briefContent ?? null;
+  const phase1PromptIndex = Math.min(session?.phase1Results.length ?? 0, PHASE1_PROMPTS.length - 1);
+  const currentPhase2Topic = phase2Simplified
+    ? SIMPLIFIED_TOPICS[phase2TopicIndex]
+    : PHASE2_TOPICS[phase2TopicIndex];
+  const currentPressureRound = PRESSURE_ROUNDS[phase3RoundIndex];
 
-  // ── Fetch weakness on mount ──────────────────────────────────────────────
+  const canGenerate = weaknessState.status === "found" && !!weaknessState.weakness && flowState !== "generating";
+
+  const disabledReason = useMemo(() => {
+    if (weaknessState.status === "loading") return "Loading your weakness data...";
+    if (weaknessState.status === "empty") return "No weakness data yet. Complete an evaluated Podchat session first.";
+    if (weaknessState.status === "insufficient") return "More specific repeated feedback is needed before generating a brief.";
+    if (weaknessState.status === "error") return "Weakness data could not be loaded.";
+    return null;
+  }, [weaknessState.status]);
 
   useEffect(() => {
     let active = true;
@@ -130,10 +199,10 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
           signal: controller.signal,
           headers: { Accept: "application/json" },
         });
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+        if (!res.ok) throw new Error("weakness_fetch_failed");
         const data = await res.json();
         if (active) {
-          setState({
+          setWeaknessState({
             status: data.status,
             weakness: data.weakness,
             reason: data.reason || data.error,
@@ -141,7 +210,7 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
         }
       } catch (err) {
         if (active && (err as Error)?.name !== "AbortError") {
-          setState({ status: "error" });
+          setWeaknessState({ status: "error" });
         }
       }
     }
@@ -153,48 +222,51 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
     };
   }, []);
 
-  // ── Cleanup on unmount ───────────────────────────────────────────────────
-
   useEffect(() => {
     return () => {
-      briefAbortRef.current?.abort();
-      checkAbortRef.current?.abort();
+      abortRef.current?.abort();
       stopMediaStream(mediaStreamRef.current);
-      mediaStreamRef.current = null;
+      if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     };
   }, []);
 
-  // ── Derived ─────────────────────────────────────────────────────────────
+  function resetRecorder() {
+    stopMediaStream(mediaStreamRef.current);
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+    setRecorderState("ready");
+  }
 
-  const canGenerate =
-    state.status === "found" && !!state.weakness && briefState.status !== "generating";
-
-  const isCheckActive = quickCheckState.status !== "idle";
-
-  const isCheckTerminal =
-    quickCheckState.status === "detected" ||
-    quickCheckState.status === "not_detected_or_partial" ||
-    quickCheckState.status === "skipped";
-
-  const displayEntryPhase = isCheckTerminal ? quickCheckState.entryPhase : null;
-
-  // ── Handlers ────────────────────────────────────────────────────────────
+  function startPressureTimer(seconds: number) {
+    if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
+    setRemainingSeconds(seconds);
+    intervalRef.current = window.setInterval(() => {
+      setRemainingSeconds((previous) => {
+        const next = Math.max(0, (previous ?? seconds) - 1);
+        if (next === 0 && intervalRef.current !== null) {
+          window.clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        return next;
+      });
+    }, 1000);
+  }
 
   async function handleGenerateBrief() {
     if (!canGenerate) return;
 
-    briefAbortRef.current?.abort();
+    abortRef.current?.abort();
     const controller = new AbortController();
-    briefAbortRef.current = controller;
-
-    setBriefState({ status: "generating" });
-    setQuickCheckState({ status: "idle", entryPhase: 1, transcript: "" });
-    setDrillContext(null);
-    stopMediaStream(mediaStreamRef.current);
-    mediaStreamRef.current = null;
+    abortRef.current = controller;
+    setFlowState("generating");
+    setSummary(null);
+    setLastResult(null);
+    setSession(null);
+    resetRecorder();
 
     try {
-      const res = await fetch("/api/pattern-brief/generate", {
+      const res = await fetch("/api/drill-session/start", {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -206,345 +278,411 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
       });
 
       if (!res.ok) {
-        setBriefState({ status: "error" });
+        setFlowState("error");
         return;
       }
 
-      const data = (await res.json()) as PatternBriefResponse;
-      setBriefState({ status: "generated", brief: data });
+      const data = (await res.json()) as DrillSessionState;
+      setSession(data);
+      setFlowState("phase0_brief");
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
-      setBriefState({ status: "error" });
+      setFlowState("error");
     }
   }
 
-  function handleStartCheck() {
-    setQuickCheckState({ status: "recording_ready", entryPhase: 1, transcript: "" });
+  function handleStartDrill() {
+    if (!session) return;
+    setLastResult(null);
+    setFlowState("quick_check");
+    resetRecorder();
   }
 
-  function handleSkip() {
-    if (briefState.status !== "generated") return;
-    const brief = briefState.brief;
-    stopMediaStream(mediaStreamRef.current);
-    mediaStreamRef.current = null;
-    setQuickCheckState({ status: "skipped", entryPhase: 1, transcript: "" });
-    setDrillContext({
-      briefId: brief.briefId,
-      targetPattern: brief.responsePattern.name,
-      targetSteps: brief.responsePattern.steps,
-      commonMistakes: brief.commonMistakes,
-      entryPhase: 1,
-      quickCheck: { status: "skipped" },
-    });
+  async function submitTurn(phase: PracticePhase, transcript: string, topic: string) {
+    if (!session) return;
+
+    setRecorderState("submitting");
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const body: Record<string, unknown> = {
+      session,
+      phase,
+      transcript,
+    };
+
+    if (phase === 1) {
+      body.topic = topic;
+      body.promptTopic = topic;
+    }
+
+    if (phase === 2) {
+      body.topic = topic;
+      body.promptTopic = topic;
+      body.attemptNumber = phase2AttemptNumber;
+      body.simplifiedTopicUsed = phase2Simplified;
+      if (phase2PreviousCredit) body.previousCredit = phase2PreviousCredit;
+    }
+
+    if (phase === 3) {
+      body.topic = topic;
+      body.promptTopic = topic;
+      body.roundSeconds = currentPressureRound.seconds;
+      body.roundIndex = phase3RoundIndex;
+    }
+
+    try {
+      const res = await fetch("/api/drill-session/turn", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        setRecorderState("error_submit");
+        return;
+      }
+
+      const data = (await res.json()) as DrillTurnResponse;
+      setSession(data.session);
+      setLastResult(data.turnResult);
+      setRecorderState("ready");
+
+      if (phase === "quick_check") {
+        const result = data.turnResult as QuickCheckTurnResult;
+        if (result.entryPhase === 3) {
+          setFlowState("phase3_intro");
+        } else {
+          setFlowState("phase1");
+        }
+        return;
+      }
+
+      if (phase === 1) {
+        if (data.session.phase1Results.length >= 2) {
+          setFlowState("phase2");
+          setLastResult(null);
+        }
+        return;
+      }
+
+      if (phase === 2) {
+        const result = data.turnResult as Phase2Result;
+        if (result.credit === "full" || phase2AttemptNumber === 3) {
+          setPhase2PreviousCredit(null);
+        } else {
+          setPhase2PreviousCredit(result.credit);
+          setPhase2AttemptNumber((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : 3));
+        }
+        return;
+      }
+
+      if (phase === 3 && data.session.phase3Results.length >= 4) {
+        await completeSession(data.session);
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      setRecorderState("error_submit");
+    }
   }
 
-  async function handleStartRecording() {
+  async function transcribeAndSubmit(phase: PracticePhase, topic: string, audioBlob: Blob, blobMimeType: string) {
+    setRecorderState("transcribing");
+
+    try {
+      const formData = new FormData();
+      formData.append(
+        "audio",
+        audioBlob,
+        `speech.${blobMimeType.split("/")[1]?.split(";")[0] || "webm"}`,
+      );
+
+      const res = await fetch("/api/podchat/stt", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        setRecorderState("error_stt");
+        return;
+      }
+
+      const data = (await res.json()) as { transcript?: string };
+      const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
+      if (!transcript) {
+        setRecorderState("error_stt");
+        return;
+      }
+
+      await submitTurn(phase, transcript, topic);
+    } catch {
+      setRecorderState("error_stt");
+    }
+  }
+
+  async function handleStartRecording(phase: PracticePhase, topic: string) {
     if (typeof MediaRecorder === "undefined") {
-      setQuickCheckState((prev) => ({
-        ...prev,
-        status: "error_mic",
-        transcript: "",
-      }));
+      setRecorderState("error_mic");
       return;
     }
 
+    pendingPhaseRef.current = phase;
+    pendingTopicRef.current = topic;
     audioChunksRef.current = [];
+    setLastResult(null);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
-
       const mimeType = pickMimeType();
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data && event.data.size > 0) audioChunksRef.current.push(event.data);
       };
 
-      recorder.onstop = async () => {
-        // Stop tracks immediately
+      recorder.onstop = () => {
         stopMediaStream(mediaStreamRef.current);
         mediaStreamRef.current = null;
-
         const chunks = audioChunksRef.current;
-        if (chunks.length === 0) {
-          setQuickCheckState((prev) => ({ ...prev, status: "error_stt", transcript: "" }));
+        audioChunksRef.current = [];
+        const pendingPhase = pendingPhaseRef.current;
+        const pendingTopic = pendingTopicRef.current;
+        if (!pendingPhase || chunks.length === 0) {
+          setRecorderState("error_stt");
           return;
         }
-
         const blobMimeType = recorder.mimeType || mimeType;
         const audioBlob = new Blob(chunks, { type: blobMimeType });
-        audioChunksRef.current = [];
-
-        setQuickCheckState((prev) => ({ ...prev, status: "transcribing" }));
-
-        try {
-          const formData = new FormData();
-          formData.append(
-            "audio",
-            audioBlob,
-            `speech.${blobMimeType.split("/")[1]?.split(";")[0] || "webm"}`,
-          );
-
-          const res = await fetch("/api/podchat/stt", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!res.ok) {
-            setQuickCheckState((prev) => ({ ...prev, status: "error_stt", transcript: "" }));
-            return;
-          }
-
-          const data = (await res.json()) as { transcript?: string };
-          if (data.transcript && typeof data.transcript === "string") {
-            setQuickCheckState((prev) => ({
-              ...prev,
-              status: "transcript_ready",
-              transcript: data.transcript as string,
-            }));
-          } else {
-            setQuickCheckState((prev) => ({ ...prev, status: "error_stt", transcript: "" }));
-          }
-        } catch {
-          setQuickCheckState((prev) => ({ ...prev, status: "error_stt", transcript: "" }));
-        }
+        void transcribeAndSubmit(pendingPhase, pendingTopic, audioBlob, blobMimeType);
       };
 
       recorder.start();
-      setQuickCheckState((prev) => ({ ...prev, status: "recording" }));
+      setRecorderState("recording");
+      if (phase === 3) startPressureTimer(currentPressureRound.seconds);
     } catch {
       stopMediaStream(mediaStreamRef.current);
       mediaStreamRef.current = null;
-      setQuickCheckState((prev) => ({ ...prev, status: "error_mic", transcript: "" }));
+      setRecorderState("error_mic");
     }
   }
 
   function handleStopRecording() {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state !== "inactive"
-    ) {
+    if (intervalRef.current !== null) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       try {
         mediaRecorderRef.current.stop();
       } catch {
-        // ignore
+        setRecorderState("error_stt");
       }
     }
   }
 
-  function handleRecordAgain() {
-    stopMediaStream(mediaStreamRef.current);
-    mediaStreamRef.current = null;
-    setQuickCheckState((prev) => ({
-      ...prev,
-      status: "recording_ready",
-      transcript: "",
-    }));
+  function handleNextPhase2Step() {
+    setLastResult(null);
+    setRecorderState("ready");
+    setPhase2AttemptNumber(1);
+    setPhase2PreviousCredit(null);
+    setPhase2Simplified(false);
+
+    if (phase2TopicIndex + 1 < PHASE2_TOPICS.length) {
+      setPhase2TopicIndex((prev) => prev + 1);
+    } else {
+      setFlowState("phase3_intro");
+    }
   }
 
-  async function handleSubmitCheck() {
-    if (briefState.status !== "generated") return;
-    const trimmedTranscript = quickCheckState.transcript.trim();
-    if (!trimmedTranscript) return;
+  function handleStartPressureRound() {
+    setLastResult(null);
+    setRemainingSeconds(currentPressureRound.seconds);
+    setFlowState("phase3");
+    resetRecorder();
+  }
 
-    checkAbortRef.current?.abort();
+  function handleNextPressureRound() {
+    setLastResult(null);
+    setRecorderState("ready");
+    setRemainingSeconds(null);
+    if (phase3RoundIndex + 1 < PRESSURE_ROUNDS.length) {
+      setPhase3RoundIndex((prev) => prev + 1);
+      setFlowState("phase3_intro");
+    } else if (session) {
+      void completeSession(session);
+    }
+  }
+
+  async function completeSession(finalSession: DrillSessionState) {
+    setFlowState("completing");
+    abortRef.current?.abort();
     const controller = new AbortController();
-    checkAbortRef.current = controller;
-
-    const brief = briefState.brief;
-    setQuickCheckState((prev) => ({ ...prev, status: "checking" }));
+    abortRef.current = controller;
 
     try {
-      const res = await fetch("/api/pattern-drill/quick-check", {
+      const res = await fetch("/api/drill-session/complete", {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          briefId: brief.briefId,
-          responsePattern: {
-            name: brief.responsePattern.name,
-            steps: brief.responsePattern.steps,
-          },
-          commonMistakes: brief.commonMistakes,
-          transcript: trimmedTranscript,
-        }),
+        body: JSON.stringify(finalSession),
       });
 
       if (!res.ok) {
-        setQuickCheckState((prev) => ({ ...prev, status: "error_check" }));
+        setFlowState("error");
         return;
       }
 
-      const data = (await res.json()) as {
-        result: "detected" | "not_detected_or_partial";
-        entryPhase: 1 | 3;
-      };
-
-      const newStatus: QuickCheckStatus = data.result;
-      const entryPhase: 1 | 3 = data.entryPhase;
-
-      setQuickCheckState({ status: newStatus, entryPhase, transcript: trimmedTranscript });
-      setDrillContext({
-        briefId: brief.briefId,
-        targetPattern: brief.responsePattern.name,
-        targetSteps: brief.responsePattern.steps,
-        commonMistakes: brief.commonMistakes,
-        entryPhase,
-        quickCheck:
-          data.result === "detected"
-            ? { status: "detected", transcript: trimmedTranscript }
-            : { status: "not_detected_or_partial", transcript: trimmedTranscript },
-      });
+      const data = (await res.json()) as DrillSummary & { session?: DrillSessionState };
+      if (data.session) setSession(data.session);
+      setSummary(data);
+      setFlowState("summary");
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
-      setQuickCheckState((prev) => ({ ...prev, status: "error_check" }));
+      setFlowState("error");
     }
   }
 
-  function handleRetryCheck() {
-    setQuickCheckState({ status: "recording_ready", entryPhase: 1, transcript: "" });
-  }
+  function renderRecordControls(phase: PracticePhase, topic: string) {
+    const isBusy = recorderState === "transcribing" || recorderState === "submitting";
+    const errorCopy = recorderState.startsWith("error") ? getSafeErrorCopy(recorderState) : null;
 
-  // ── Utility ─────────────────────────────────────────────────────────────
+    return (
+      <div className="space-y-4" data-testid="spoken-recorder">
+        {recorderState === "recording" ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
+              Recording. Speak your answer now.
+            </div>
+            <button
+              type="button"
+              data-testid="stop-recording-btn"
+              onClick={handleStopRecording}
+              className="app-button px-5 py-2.5 text-sm"
+            >
+              Stop Recording
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            data-testid="start-speaking-btn"
+            onClick={() => void handleStartRecording(phase, topic)}
+            disabled={isBusy}
+            aria-disabled={isBusy}
+            className={`app-button px-5 py-2.5 text-sm ${isBusy ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            {isBusy ? "Processing..." : "Start Speaking"}
+          </button>
+        )}
 
-  const getConfidenceLabel = (confidence: number) => {
-    if (confidence >= 0.8) return `High (${confidence.toFixed(2)})`;
-    if (confidence >= 0.65) return `Medium (${confidence.toFixed(2)})`;
-    return `Low (${confidence.toFixed(2)})`;
-  };
-
-  const formatDate = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return isNaN(date.getTime()) ? isoString : date.toLocaleDateString();
-    } catch {
-      return isoString;
-    }
-  };
-
-  function getDisabledReason(): string | null {
-    if (state.status === "loading") return "Loading your weakness data…";
-    if (state.status === "empty")
-      return "No weakness data yet. Complete an evaluated Podchat session first.";
-    if (state.status === "insufficient")
-      return "More specific repeated feedback is needed before generating a brief.";
-    if (state.status === "error") return "Weakness data could not be loaded.";
-    return null;
-  }
-
-  const disabledReason = getDisabledReason();
-
-  // ── Render ───────────────────────────────────────────────────────────────
-
-  if (drillActive && drillContext) {
-    return <PatternDrillModeCore context={drillContext} onExit={onExit} />;
-  }
-
-  return (
-    <div className="flex flex-col h-full overflow-y-auto p-6 lg:p-8 space-y-8 bg-[var(--brand-surface)] text-[var(--brand-ink)]">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--brand-border)] pb-4">
-        <div>
-          <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]">Drill Mode</h3>
-          <p className="text-sm text-[var(--brand-ink-soft)] mt-1">
-            Practice one speaking pattern through recall, feedback, and pressure.
+        {recorderState === "transcribing" && (
+          <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="stt-safe-status">
+            Capturing your spoken answer...
           </p>
+        )}
+        {recorderState === "submitting" && (
+          <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="turn-submit-status">
+            Checking the attempt...
+          </p>
+        )}
+        {errorCopy && (
+          <div
+            role="alert"
+            data-testid="spoken-safe-error"
+            className="rounded-lg border border-[var(--brand-danger)] bg-[var(--brand-danger)] bg-opacity-10 p-3 text-sm text-[var(--brand-danger)]"
+          >
+            {errorCopy}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderHeader(title = getPhaseLabel(flowState), subtitle?: string) {
+    return (
+      <div className="flex flex-col gap-3 border-b border-[var(--brand-border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-[var(--brand-teal-ink)]" data-testid="phase-indicator">
+            {title}
+          </h3>
+          {subtitle && <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">{subtitle}</p>}
         </div>
         <button type="button" onClick={onExit} className="app-button-ghost px-3 py-1.5 text-sm">
           Exit to Podchat
         </button>
       </div>
+    );
+  }
 
-      {/* Section 1 — Weakness Check & Brief */}
+  function renderWeaknessGate() {
+    return (
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-teal-soft)] text-xs font-bold text-[var(--brand-teal-ink)]">
             1
           </span>
-          <h4 className="font-semibold">Latest Weakness Check &amp; Brief</h4>
+          <h4 className="font-semibold">Latest Weakness Check</h4>
         </div>
 
-        <div className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3">
-          {/* Loading */}
-          {state.status === "loading" && (
+        <div className="ml-0 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-3 sm:ml-8">
+          {weaknessState.status === "loading" && (
             <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="weakness-loading">
               Checking your latest speaking weakness...
             </p>
           )}
-          {/* Error */}
-          {state.status === "error" && (
-            <p className="text-sm text-[var(--brand-danger)]" data-testid="weakness-error">
-              Could not load weakness data. Try again later.
-            </p>
-          )}
-          {/* Empty */}
-          {state.status === "empty" && (
-            <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="weakness-empty">
-              No speaking weakness data yet. Complete an evaluated Podchat session first.
-            </p>
-          )}
-          {/* Insufficient */}
-          {state.status === "insufficient" && (
-            <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="weakness-insufficient">
-              Your recent feedback is not specific enough for a useful Pattern Brief yet. Complete
-              more evaluated Podchat sessions so Fonetik can detect a repeated pattern.
-            </p>
+
+          {weaknessState.status === "empty" && (
+            <div data-testid="weakness-empty" className="space-y-2">
+              <p className="text-sm font-medium">No speaking weakness data yet.</p>
+              <p className="text-sm text-[var(--brand-ink-soft)]">
+                Complete an evaluated Podchat session first.
+              </p>
+            </div>
           )}
 
-          {/* Found */}
-          {state.status === "found" && state.weakness && (
-            <div className="space-y-4" data-testid="weakness-found">
+          {weaknessState.status === "insufficient" && (
+            <div data-testid="weakness-insufficient" className="space-y-2">
+              <p className="text-sm font-medium">More evidence is needed.</p>
+              <p className="text-sm text-[var(--brand-ink-soft)]">
+                Your recent feedback is not specific enough for a useful Pattern Brief yet. Complete more evaluated Podchat sessions so Fonetik can detect a repeated pattern.
+              </p>
+            </div>
+          )}
+
+          {weaknessState.status === "error" && (
+            <div data-testid="weakness-error" role="alert" className="space-y-2">
+              <p className="text-sm font-medium text-[var(--brand-danger)]">Could not load weakness data.</p>
+              <p className="text-sm text-[var(--brand-ink-soft)]">Try again later.</p>
+            </div>
+          )}
+
+          {weaknessState.status === "found" && weaknessState.weakness && (
+            <div data-testid="weakness-found" className="space-y-3">
               <div>
-                <p className="text-xs uppercase tracking-wider text-[var(--brand-teal-ink)] font-semibold">
-                  Recommended Weakness
-                </p>
-                <h5 className="text-base font-semibold mt-1">{state.weakness.description}</h5>
+                <p className="text-sm font-semibold">{weaknessState.weakness.title}</p>
+                <p className="text-sm text-[var(--brand-ink-soft)]">{weaknessState.weakness.description}</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs border-t border-[var(--brand-border)] pt-3">
-                <div>
-                  <span className="text-[var(--brand-muted)] block">Category</span>
-                  <span className="font-medium">{state.weakness.category}</span>
-                </div>
-                <div>
-                  <span className="text-[var(--brand-muted)] block">Occurrences</span>
-                  <span className="font-medium">{state.weakness.failureCount} times</span>
-                </div>
-                <div>
-                  <span className="text-[var(--brand-muted)] block">Last Seen</span>
-                  <span className="font-medium">{formatDate(state.weakness.lastSeenAt)}</span>
-                </div>
-                <div>
-                  <span className="text-[var(--brand-muted)] block">Confidence</span>
-                  <span className="font-medium">
-                    {getConfidenceLabel(state.weakness.derivedConfidence)}
-                  </span>
-                </div>
+              <div className="grid grid-cols-1 gap-2 text-xs text-[var(--brand-muted)] sm:grid-cols-2">
+                <span>Category: {weaknessState.weakness.category}</span>
+                <span>Seen: {weaknessState.weakness.failureCount} times</span>
+                <span>Confidence: {getConfidenceLabel(weaknessState.weakness.derivedConfidence)}</span>
+                <span>Last seen: {formatDate(weaknessState.weakness.lastSeenAt)}</span>
               </div>
-              {state.weakness.evidence && (
-                <div className="rounded bg-[var(--brand-bg)] p-3 border border-[var(--brand-border)]">
-                  <p className="text-xs font-mono text-[var(--brand-muted)] mb-1">
-                    Observed Evidence
-                  </p>
-                  <p className="text-sm">{state.weakness.evidence}</p>
-                </div>
+              {weaknessState.weakness.evidence && (
+                <p className="text-xs text-[var(--brand-ink-soft)]">{weaknessState.weakness.evidence}</p>
               )}
-              {state.weakness.practiceFocus && (
-                <div className="rounded bg-[var(--brand-bg)] p-3 border border-[var(--brand-border)]">
-                  <p className="text-xs font-mono text-[var(--brand-muted)] mb-1">
-                    Practice Focus
-                  </p>
-                  <p className="text-sm">{state.weakness.practiceFocus}</p>
-                </div>
+              {weaknessState.weakness.practiceFocus && (
+                <p className="text-xs text-[var(--brand-ink-soft)]">{weaknessState.weakness.practiceFocus}</p>
               )}
             </div>
           )}
 
-          {/* Generate button */}
-          <div className="pt-2" role="region" aria-live="polite">
+          <div className="border-t border-[var(--brand-border)] pt-3">
             <button
               type="button"
               data-testid="generate-brief-btn"
@@ -553,492 +691,393 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
               aria-disabled={!canGenerate}
               className={`app-button px-4 py-2 text-sm ${!canGenerate ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              {briefState.status === "generating"
-                ? "Building your pattern brief…"
-                : "Generate Pattern Brief"}
+              {flowState === "generating" ? "Generating..." : "Generate Pattern Brief"}
             </button>
-            {!canGenerate && disabledReason && (
-              <p
-                className="text-xs text-[var(--brand-muted)] mt-2"
-                data-testid="generate-disabled-reason"
-              >
+            {disabledReason && (
+              <p className="mt-2 text-xs text-[var(--brand-muted)]" data-testid="generate-disabled-reason">
                 {disabledReason}
               </p>
             )}
-            {briefState.status === "error" && (
-              <p className="text-sm text-[var(--brand-danger)] mt-2" data-testid="brief-error">
-                Unable to generate. Please try again.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  function renderPhase0Brief() {
+    if (!brief) return null;
+
+    return (
+      <section className="space-y-4" data-testid="brief-generated">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-teal-soft)] text-xs font-bold text-[var(--brand-teal-ink)]">
+            2
+          </span>
+          <h4 className="font-semibold">Pattern Brief</h4>
+        </div>
+        <div className="ml-0 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 space-y-5 sm:ml-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">Focus</p>
+            <h5 className="mt-1 text-base font-semibold">{brief.title}</h5>
+            <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">{brief.focus}</p>
+          </div>
+
+          <div data-testid="brief-quality-criteria">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">Quality Criteria</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+              {brief.qualityCriteria.map((criterion) => (
+                <li key={criterion}>{criterion}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div data-testid="brief-response-pattern">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">Response Pattern</p>
+            <p className="mt-1 text-sm font-medium">{brief.responsePattern.name}</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
+              {brief.responsePattern.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
+
+          <div data-testid="brief-mini-example">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">Mini Example</p>
+            <div className="mt-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-3">
+              <p className="text-sm">{brief.miniExample}</p>
+              <p className="mt-2 text-xs italic text-[var(--brand-muted)]" data-testid="mini-example-warning">
+                Illustration only - do not memorize or copy.
+              </p>
+            </div>
+          </div>
+
+          <div data-testid="brief-common-mistakes">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">Common Mistakes</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+              {brief.commonMistakes.map((mistake) => (
+                <li key={mistake}>{mistake}</li>
+              ))}
+            </ul>
+          </div>
+
+          <button
+            type="button"
+            data-testid="start-drill-btn"
+            onClick={handleStartDrill}
+            className="app-button px-5 py-2.5 text-sm"
+          >
+            Start Drill
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  function renderQuickCheck() {
+    return (
+      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-5" data-testid="quick-check-section">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+            Internal Quick Check
+          </p>
+          <p className="text-sm text-[var(--brand-ink-soft)]">
+            Speak one short answer from memory. The pattern brief is no longer visible.
+          </p>
+        </div>
+        {renderRecordControls("quick_check", brief?.focus || "Pattern practice")}
+      </div>
+    );
+  }
+
+  function renderPhase1() {
+    const prompt = PHASE1_PROMPTS[phase1PromptIndex];
+    const completedCount = session?.phase1Results.length ?? 0;
+
+    return (
+      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-5">
+        <div className="space-y-2">
+          <span className="text-xs uppercase tracking-wider text-[var(--brand-muted)]">
+            Baseline collection {completedCount + 1} of 2
+          </span>
+          <p className="text-base font-semibold" data-testid="drill-prompt-text">
+            {prompt}
+          </p>
+          <p className="text-sm text-[var(--brand-ink-soft)]">
+            This phase collects a baseline spoken response. Full pattern scoring starts in Phase 2.
+          </p>
+        </div>
+        {lastResult && (
+          <p className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-3 text-sm" data-testid="baseline-result">
+            Baseline response recorded.
+          </p>
+        )}
+        {renderRecordControls(1, prompt)}
+      </div>
+    );
+  }
+
+  function renderPhase2() {
+    const result = lastResult && "credit" in lastResult ? (lastResult as Phase2Result) : null;
+    const canAdvance = !!result && (result.credit === "full" || phase2AttemptNumber === 3);
+
+    return (
+      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-5">
+        <div className="space-y-2">
+          <span className="text-xs uppercase tracking-wider text-[var(--brand-muted)]">
+            Topic {phase2TopicIndex + 1} of 2 - Attempt {phase2AttemptNumber} of 3
+          </span>
+          <p className="text-base font-semibold" data-testid="drill-prompt-text">
+            {currentPhase2Topic}
+          </p>
+          <p className="text-sm text-[var(--brand-ink-soft)]">
+            Speak from memory. The pattern reference stays hidden.
+          </p>
+        </div>
+
+        {result && (
+          <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4 space-y-2" data-testid="drill-feedback-box">
+            <span className="inline-flex rounded-full bg-[var(--brand-teal-soft)] px-2 py-0.5 text-xs font-semibold uppercase text-[var(--brand-teal-ink)]">
+              {result.credit === "full" ? "Full Credit" : result.credit === "partial" ? "Partial Credit" : "Keep Practicing"}
+            </span>
+            <p className="text-sm font-medium" data-testid="drill-feedback-text">
+              {result.shortFeedback}
+            </p>
+            {result.missingSteps.length > 0 && (
+              <p className="text-xs text-[var(--brand-muted)]" data-testid="drill-retry-prompt">
+                Missing steps: {result.missingSteps.join(", ")}
               </p>
             )}
           </div>
+        )}
 
-          {/* Generated Brief */}
-          {briefState.status === "generated" && (
-            <div
-              className="space-y-5 border-t border-[var(--brand-border)] pt-5 mt-4"
-              data-testid="brief-generated"
-              aria-label="Generated Pattern Brief"
-            >
-              <div>
-                <h5 className="text-sm font-semibold uppercase tracking-wider text-[var(--brand-teal-ink)] mb-1">
-                  {briefState.brief.title}
-                </h5>
-                <p className="text-xs text-[var(--brand-muted)]">{briefState.brief.focus}</p>
-              </div>
+        {canAdvance ? (
+          <button type="button" data-testid="drill-next-btn" onClick={handleNextPhase2Step} className="app-button px-5 py-2.5 text-sm">
+            {phase2TopicIndex + 1 < PHASE2_TOPICS.length ? "Next Topic" : "Start Phase 3"}
+          </button>
+        ) : (
+          renderRecordControls(2, currentPhase2Topic)
+        )}
+      </div>
+    );
+  }
 
-              {/* Quality Criteria — always visible */}
-              <div data-testid="brief-quality-criteria">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
-                  Quality Criteria
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {briefState.brief.qualityCriteria.map((c, i) => (
-                    <li key={i} className="text-sm">
-                      {c}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Response Pattern — hidden once check starts */}
-              {!isCheckActive ? (
-                <div data-testid="brief-response-pattern">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
-                    Response Pattern
-                  </p>
-                  <p className="text-sm font-medium mb-2">
-                    {briefState.brief.responsePattern.name}
-                  </p>
-                  <ol className="list-decimal pl-5 space-y-1">
-                    {briefState.brief.responsePattern.steps.map((step, i) => (
-                      <li key={i} className="text-sm font-mono text-[var(--brand-teal-ink)]">
-                        {step}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              ) : (
-                <div data-testid="brief-pattern-hidden">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-1">
-                    Response Pattern
-                  </p>
-                  <p className="text-sm text-[var(--brand-muted)] italic">
-                    Pattern hidden for the check.
-                  </p>
-                </div>
-              )}
-
-              {/* Mini Example — hidden once check starts */}
-              {!isCheckActive && (
-                <div data-testid="brief-mini-example">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
-                    Mini Example
-                  </p>
-                  <div className="rounded bg-[var(--brand-bg)] p-3 border border-[var(--brand-border)] space-y-2">
-                    <p className="text-sm">{briefState.brief.miniExample}</p>
-                    <p
-                      className="text-xs italic text-[var(--brand-muted)]"
-                      data-testid="mini-example-warning"
-                    >
-                      Illustration only — do not memorize or copy.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Common Mistakes — always visible */}
-              <div data-testid="brief-common-mistakes">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-2">
-                  Common Mistakes to Avoid
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {briefState.brief.commonMistakes.map((m, i) => (
-                    <li key={i} className="text-sm">
-                      {m}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* ── Quick Spoken Check ─────────────────────────────────── */}
-              <div
-                className="border-t border-[var(--brand-border)] pt-4"
-                data-testid="quick-check-section"
-                role="region"
-                aria-live="polite"
-                aria-label="Quick Spoken Check"
-              >
-                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-3">
-                  Quick Spoken Check
-                </p>
-
-                {/* idle */}
-                {quickCheckState.status === "idle" && (
-                  <div className="space-y-2">
-                    <p className="text-sm text-[var(--brand-ink-soft)]">
-                      Try saying the pattern once before starting your drill session.
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        data-testid="start-quick-check-btn"
-                        onClick={handleStartCheck}
-                        className="app-button px-4 py-2 text-sm"
-                      >
-                        Start Quick Check
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="skip-check-btn-idle"
-                        onClick={handleSkip}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Skip Quick Check
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* recording_ready */}
-                {quickCheckState.status === "recording_ready" && (
-                  <div className="space-y-3" data-testid="quick-check-recording-ready">
-                    <p className="text-sm text-[var(--brand-ink-soft)]">
-                      Speak one sentence using the pattern. Click{" "}
-                      <strong>Start Speaking</strong> when ready.
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        data-testid="start-speaking-btn"
-                        onClick={handleStartRecording}
-                        className="app-button px-4 py-2 text-sm"
-                      >
-                        Start Speaking
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="skip-check-btn"
-                        onClick={handleSkip}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Skip Quick Check
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* recording */}
-                {quickCheckState.status === "recording" && (
-                  <div className="space-y-3" data-testid="quick-check-recording">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-                      <p className="text-sm font-medium text-[var(--brand-ink)]">
-                        Recording… Speak your sentence now.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      data-testid="stop-recording-btn"
-                      onClick={handleStopRecording}
-                      className="app-button px-4 py-2 text-sm"
-                    >
-                      Stop Recording
-                    </button>
-                  </div>
-                )}
-
-                {/* transcribing */}
-                {quickCheckState.status === "transcribing" && (
-                  <div data-testid="quick-check-transcribing">
-                    <p className="text-sm text-[var(--brand-ink-soft)]">Transcribing…</p>
-                  </div>
-                )}
-
-                {/* transcript_ready */}
-                {quickCheckState.status === "transcript_ready" && (
-                  <div className="space-y-3" data-testid="quick-check-transcript-ready">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-ink-soft)] mb-1">
-                        Your sentence
-                      </p>
-                      <p
-                        className="text-sm rounded bg-[var(--brand-bg)] border border-[var(--brand-border)] px-3 py-2"
-                        data-testid="quick-check-transcript"
-                      >
-                        {quickCheckState.transcript}
-                      </p>
-                    </div>
-                    {/* Typed fallback — secondary, for accessibility / STT correction */}
-                    <div>
-                      <label
-                        htmlFor="quick-check-transcript-edit"
-                        className="block text-xs text-[var(--brand-muted)] mb-1"
-                      >
-                        Edit if needed (optional):
-                      </label>
-                      <textarea
-                        id="quick-check-transcript-edit"
-                        data-testid="transcript-input"
-                        rows={2}
-                        maxLength={500}
-                        value={quickCheckState.transcript}
-                        onChange={(e) =>
-                          setQuickCheckState((prev) => ({
-                            ...prev,
-                            transcript: e.target.value,
-                          }))
-                        }
-                        className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
-                      />
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        data-testid="submit-check-btn"
-                        onClick={handleSubmitCheck}
-                        disabled={!quickCheckState.transcript.trim()}
-                        aria-disabled={!quickCheckState.transcript.trim()}
-                        className={`app-button px-4 py-2 text-sm ${!quickCheckState.transcript.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        Check Sentence
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="record-again-btn"
-                        onClick={handleRecordAgain}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Record Again
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="skip-check-btn"
-                        onClick={handleSkip}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Skip Quick Check
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* checking */}
-                {quickCheckState.status === "checking" && (
-                  <div data-testid="quick-check-checking">
-                    <p className="text-sm text-[var(--brand-ink-soft)]">Checking your sentence…</p>
-                  </div>
-                )}
-
-                {/* result states */}
-                {(quickCheckState.status === "detected" ||
-                  quickCheckState.status === "not_detected_or_partial" ||
-                  quickCheckState.status === "skipped") && (
-                  <div className="space-y-2" data-testid="quick-check-result">
-                    {quickCheckState.status === "detected" && (
-                      <p className="text-sm text-[var(--brand-teal-ink)] font-medium">
-                        Pattern detected. Future Drill will start from Phase 3.
-                      </p>
-                    )}
-                    {quickCheckState.status === "not_detected_or_partial" && (
-                      <p className="text-sm text-[var(--brand-ink-soft)]">
-                        Pattern not clearly detected. Future Drill will start from Phase 1.
-                      </p>
-                    )}
-                    {quickCheckState.status === "skipped" && (
-                      <p className="text-sm text-[var(--brand-ink-soft)]">
-                        Quick check skipped. Future Drill will start from Phase 1.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* error_mic */}
-                {quickCheckState.status === "error_mic" && (
-                  <div className="space-y-3" data-testid="quick-check-error-mic">
-                    <p className="text-sm text-[var(--brand-danger)]">
-                      Microphone access was denied or is not supported in this browser. You can
-                      type your sentence below instead.
-                    </p>
-                    {/* Typed fallback — primary when mic unavailable */}
-                    <div>
-                      <label
-                        htmlFor="quick-check-transcript-fallback"
-                        className="block text-sm font-medium mb-1"
-                      >
-                        Type or paste your sentence:
-                      </label>
-                      <textarea
-                        id="quick-check-transcript-fallback"
-                        data-testid="transcript-input"
-                        rows={3}
-                        maxLength={500}
-                        placeholder="Type your sentence here…"
-                        value={quickCheckState.transcript}
-                        onChange={(e) =>
-                          setQuickCheckState((prev) => ({
-                            ...prev,
-                            transcript: e.target.value,
-                          }))
-                        }
-                        className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
-                      />
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        data-testid="submit-check-btn"
-                        onClick={handleSubmitCheck}
-                        disabled={!quickCheckState.transcript.trim()}
-                        aria-disabled={!quickCheckState.transcript.trim()}
-                        className={`app-button px-4 py-2 text-sm ${!quickCheckState.transcript.trim() ? "opacity-50 cursor-not-allowed" : ""}`}
-                      >
-                        Check Sentence
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="retry-check-btn"
-                        onClick={() =>
-                          setQuickCheckState((prev) => ({
-                            ...prev,
-                            status: "recording_ready",
-                            transcript: "",
-                          }))
-                        }
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Try Microphone Again
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="skip-check-btn"
-                        onClick={handleSkip}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Skip Quick Check
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* error_stt */}
-                {quickCheckState.status === "error_stt" && (
-                  <div className="space-y-2" data-testid="quick-check-error-stt">
-                    <p className="text-sm text-[var(--brand-danger)]">
-                      Speech transcription failed. Please try recording again.
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        data-testid="record-again-btn"
-                        onClick={handleRecordAgain}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Record Again
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="skip-check-btn"
-                        onClick={handleSkip}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Skip Quick Check
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* error_check */}
-                {quickCheckState.status === "error_check" && (
-                  <div className="space-y-2" data-testid="quick-check-error-check">
-                    <p className="text-sm text-[var(--brand-danger)]">
-                      Unable to check that sentence. Please try again.
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        data-testid="retry-check-btn"
-                        onClick={handleRetryCheck}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Try Again
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="skip-check-btn"
-                        onClick={handleSkip}
-                        className="app-button-ghost px-4 py-2 text-sm"
-                      >
-                        Skip Quick Check
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* ── /Quick Spoken Check ────────────────────────────────── */}
-
-              {/* Start Drill button */}
-              <div data-testid="brief-start-drill">
-                <button
-                  type="button"
-                  disabled={!isCheckTerminal}
-                  aria-disabled={!isCheckTerminal}
-                  onClick={() => setDrillActive(true)}
-                  className={`app-button px-4 py-2 text-sm ${!isCheckTerminal ? "opacity-50 cursor-not-allowed" : ""}`}
-                  data-testid="start-drill-btn"
-                >
-                  Start Drill
-                </button>
-                <p className="text-xs text-[var(--brand-muted)] mt-2">
-                  {!isCheckTerminal
-                    ? "Complete or skip the quick check to start the drill."
-                    : `Start the repetition drill (Phase ${displayEntryPhase}).`}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Section 2 — Drill Mode (placeholder) */}
-      <section className="space-y-4 opacity-50 pointer-events-none">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-border)] text-xs font-bold text-[var(--brand-ink-soft)]">
-            2
+  function renderPhase3Intro() {
+    return (
+      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-5">
+        <div className="space-y-2">
+          <span className="text-xs uppercase tracking-wider text-[var(--brand-muted)]">
+            Round {phase3RoundIndex + 1} of {PRESSURE_ROUNDS.length}
           </span>
-          <h4 className="font-semibold text-[var(--brand-ink-soft)]">Drill Mode</h4>
-        </div>
-        <div className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4 space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
-              Phase: Contrastive Repetition
-            </span>
-            <span className="text-xs font-mono tabular-nums text-[var(--brand-muted)]">
-              Time left: 02:00
-            </span>
-          </div>
-          <div className="h-24 rounded bg-[var(--brand-bg)] border border-dashed border-[var(--brand-border)] flex items-center justify-center text-sm text-[var(--brand-muted)]">
-            [ Transcript Placeholder ]
-          </div>
-          <div className="text-xs text-[var(--brand-muted)] border-b border-dotted cursor-pointer">
-            Show Pattern Reference
-          </div>
-        </div>
-      </section>
-
-      {/* Section 3 — Session Summary (placeholder) */}
-      <section className="space-y-4 opacity-50 pointer-events-none">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-border)] text-xs font-bold text-[var(--brand-ink-soft)]">
-            3
-          </span>
-          <h4 className="font-semibold text-[var(--brand-ink-soft)]">Session Summary</h4>
-        </div>
-        <div className="ml-8 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4">
-          <p className="text-sm text-[var(--brand-muted)]">
-            Summary placeholder. (Unlocked after drill completion.)
+          <h4 className="text-base font-semibold">Time limit: {currentPressureRound.seconds} seconds</h4>
+          <p className="text-sm text-[var(--brand-ink-soft)]">
+            Speak after the timer starts. The timer is visual pressure; your spoken answer is still submitted only after recording stops.
           </p>
         </div>
-      </section>
+        <button type="button" data-testid="start-pressure-round-btn" onClick={handleStartPressureRound} className="app-button px-5 py-2.5 text-sm">
+          Start Round {phase3RoundIndex + 1}
+        </button>
+      </div>
+    );
+  }
+
+  function renderPhase3() {
+    const result = lastResult && "patternDetected" in lastResult ? (lastResult as Phase3Result) : null;
+    const isFinalRound = phase3RoundIndex === PRESSURE_ROUNDS.length - 1;
+
+    return (
+      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <span className="text-xs uppercase tracking-wider text-[var(--brand-muted)]">
+              Round {phase3RoundIndex + 1} of {PRESSURE_ROUNDS.length}
+            </span>
+            <p className="text-base font-semibold" data-testid="drill-prompt-text">
+              {currentPressureRound.topic}
+            </p>
+          </div>
+          <div
+            data-testid="pressure-countdown"
+            className={`w-fit rounded px-3 py-1 text-lg font-bold ${
+              (remainingSeconds ?? currentPressureRound.seconds) <= 3
+                ? "bg-red-100 text-red-700"
+                : "bg-[var(--brand-bg)] text-[var(--brand-teal-ink)]"
+            }`}
+          >
+            {remainingSeconds ?? currentPressureRound.seconds}s
+          </div>
+        </div>
+
+        {result && (
+          <div
+            data-testid="pressure-feedback-box"
+            className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4 text-sm"
+          >
+            <p className="font-medium">{result.shortFeedback}</p>
+            {result.missingSteps.length > 0 && (
+              <p className="mt-1 text-xs text-[var(--brand-muted)]">
+                Missing steps: {result.missingSteps.join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+
+        {result ? (
+          <button type="button" data-testid="pressure-next-btn" onClick={handleNextPressureRound} className="app-button px-5 py-2.5 text-sm">
+            {isFinalRound ? "View Summary" : "Next Round"}
+          </button>
+        ) : (
+          renderRecordControls(3, currentPressureRound.topic)
+        )}
+      </div>
+    );
+  }
+
+  function renderSummary() {
+    if (!summary) return null;
+
+    return (
+      <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 space-y-5" data-testid="drill-session-summary">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h4 className="text-base font-semibold">Session Summary</h4>
+          <span
+            className="w-fit rounded-full bg-[var(--brand-teal-soft)] px-3 py-1 text-xs font-semibold text-[var(--brand-teal-ink)]"
+            data-testid="summary-save-status"
+          >
+            {summary.saved ? "Saved to your practice history." : "Summary available locally."}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Phase 2 Accuracy</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-accuracy">{summary.phase2Accuracy}%</p>
+          </div>
+          <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Full Credit</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-full-credit-count">{summary.fullCreditCount}</p>
+          </div>
+          <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Pressure Accuracy</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-pressure-accuracy">
+              {summary.phase3PressureAccuracy === null ? "not available yet" : `${summary.phase3PressureAccuracy}%`}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-sm text-[var(--brand-ink-soft)]">{summary.nextSessionRecommendation}</p>
+        {summary.mostMissedSteps.length > 0 && (
+          <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="summary-missed-steps">
+            Focus next on: {summary.mostMissedSteps.join(", ")}
+          </p>
+        )}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button type="button" onClick={handleGenerateBrief} className="app-button-primary px-5 py-2.5 text-sm">
+            New Session
+          </button>
+          <button type="button" onClick={onExit} className="app-button px-5 py-2.5 text-sm">
+            Return to Podchat
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderActiveFlow() {
+    if (flowState === "quick_check") {
+      return (
+        <>
+          {renderHeader("Preparing Your Spoken Drill", "Quick Check runs internally. The Pattern Brief has been removed from the page.")}
+          {renderQuickCheck()}
+        </>
+      );
+    }
+
+    if (flowState === "phase1") {
+      return (
+        <>
+          {renderHeader("Phase 1 - Cold Recall", "Speak from memory. This is baseline collection, not full pattern scoring.")}
+          {renderPhase1()}
+        </>
+      );
+    }
+
+    if (flowState === "phase2") {
+      return (
+        <>
+          {renderHeader("Phase 2 - Contrastive Repetition", "Repeat the idea until the core pattern is clear.")}
+          {renderPhase2()}
+        </>
+      );
+    }
+
+    if (flowState === "phase3_intro") {
+      return (
+        <>
+          {renderHeader("Phase 3 - Pressure Test", "Use the pattern under tighter timing.")}
+          {renderPhase3Intro()}
+        </>
+      );
+    }
+
+    if (flowState === "phase3") {
+      return (
+        <>
+          {renderHeader("Phase 3 - Pressure Test", "The timer is visible, but the pattern remains hidden.")}
+          {renderPhase3()}
+        </>
+      );
+    }
+
+    if (flowState === "completing") {
+      return (
+        <>
+          {renderHeader("Completing Drill Session")}
+          <p className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 text-sm text-[var(--brand-ink-soft)]">
+            Preparing your session summary...
+          </p>
+        </>
+      );
+    }
+
+    if (flowState === "summary") {
+      return (
+        <>
+          {renderHeader("Drill Session Complete")}
+          {renderSummary()}
+        </>
+      );
+    }
+
+    if (flowState === "error") {
+      return (
+        <>
+          {renderHeader("Drill Mode")}
+          <div
+            role="alert"
+            data-testid="drill-flow-error"
+            className="rounded-xl border border-[var(--brand-danger)] bg-[var(--brand-danger)] bg-opacity-10 p-6 text-sm text-[var(--brand-danger)]"
+          >
+            Drill Mode is unavailable right now. Please try again.
+          </div>
+        </>
+      );
+    }
+
+    return null;
+  }
+
+  const activeFlowVisible = ["quick_check", "phase1", "phase2", "phase3_intro", "phase3", "completing", "summary", "error"].includes(flowState);
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto bg-[var(--brand-surface)] p-6 text-[var(--brand-ink)] lg:p-8">
+      <div className="space-y-8">
+        {!activeFlowVisible && renderHeader("Drill Mode", "Practice one speaking pattern through recall, repetition, and pressure.")}
+
+        {!activeFlowVisible && renderWeaknessGate()}
+        {flowState === "phase0_brief" && renderPhase0Brief()}
+
+        {activeFlowVisible && renderActiveFlow()}
+      </div>
     </div>
   );
 }
