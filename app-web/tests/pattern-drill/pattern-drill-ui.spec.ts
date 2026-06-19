@@ -86,7 +86,42 @@ async function injectMediaMocks(page: Page) {
   });
 }
 
-async function installStandardRoutes(page: Page, sttTranscripts: string[]) {
+async function injectAudioMocks(page: Page) {
+  await page.addInitScript(() => {
+    class MockAudio extends EventTarget {
+      src: string;
+
+      constructor(src: string) {
+        super();
+        this.src = src;
+      }
+
+      pause() {}
+
+      async play() {
+        queueMicrotask(() => this.dispatchEvent(new Event("ended")));
+      }
+    }
+
+    window.Audio = MockAudio as unknown as typeof Audio;
+    URL.createObjectURL = () => "blob:mock-audio";
+    URL.revokeObjectURL = () => {};
+  });
+}
+
+type InstallRoutesOptions = {
+  phase2Credit?: "full" | "partial" | "none";
+  phase2MissingSteps?: string[];
+  phase2ShortFeedback?: string;
+  onTurn?: (body: Record<string, unknown>) => void;
+  onComplete?: (body: Record<string, unknown>) => void;
+};
+
+async function installStandardRoutes(
+  page: Page,
+  sttTranscripts: string[],
+  options: InstallRoutesOptions = {},
+) {
   await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
     await route.fulfill({
       status: 200,
@@ -121,7 +156,9 @@ async function installStandardRoutes(page: Page, sttTranscripts: string[]) {
       roundSeconds?: number;
       roundIndex?: number;
       simplifiedTopicUsed?: boolean;
+      startLatencyMs?: number;
     };
+    options.onTurn?.(body as unknown as Record<string, unknown>);
 
     if (body.phase === "quick_check") {
       await route.fulfill({
@@ -158,10 +195,10 @@ async function installStandardRoutes(page: Page, sttTranscripts: string[]) {
     if (body.phase === 2) {
       const turnResult = {
         phase: 2,
-        credit: "full",
-        missingSteps: [],
+        credit: options.phase2Credit ?? "full",
+        missingSteps: options.phase2MissingSteps ?? [],
         usedSteps: ["[claim]", "because [reason]", "for example [evidence]"],
-        shortFeedback: "Good pattern use.",
+        shortFeedback: options.phase2ShortFeedback ?? "Good pattern use.",
       };
       await route.fulfill({
         status: 200,
@@ -193,6 +230,10 @@ async function installStandardRoutes(page: Page, sttTranscripts: string[]) {
       missingSteps: [],
       timedOut: false,
       shortFeedback: "Clear under pressure.",
+      startLatencyMs: body.startLatencyMs,
+      pressurePassed: typeof body.startLatencyMs === "number"
+        ? body.startLatencyMs <= (body.roundSeconds ?? 0) * 1000
+        : true,
     };
     const phase3Results = [
       ...body.session.phase3Results,
@@ -217,6 +258,7 @@ async function installStandardRoutes(page: Page, sttTranscripts: string[]) {
   });
 
   await page.route("**/api/drill-session/complete", async (route) => {
+    options.onComplete?.(route.request().postDataJSON() as Record<string, unknown>);
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -354,9 +396,141 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
     await expect(page.getByTestId("drill-feedback-text")).toContainText("Good pattern use.");
     await expect(page.getByText("Phase two first answer.")).toHaveCount(0);
     await expect(page.getByTestId("drill-transcript-input")).toHaveCount(0);
+    await expect(page.getByText(MOCK_BRIEF.responsePattern.spokenModelFragment)).toHaveCount(0);
+    await expect(page.getByText(MOCK_BRIEF.miniExample)).toHaveCount(0);
+    await expect(page.getByText("Jumping straight to evidence")).toHaveCount(0);
+    await expect(page.getByText("for example [evidence]")).toHaveCount(0);
+  });
+
+  test("plays short audio feedback for partial credit and repeat does not submit or persist", async ({ page }) => {
+    const ttsPayloads: Array<{ text?: string }> = [];
+    const turnPayloads: Record<string, unknown>[] = [];
+    const completePayloads: Record<string, unknown>[] = [];
+
+    await injectMediaMocks(page);
+    await injectAudioMocks(page);
+    await installStandardRoutes(
+      page,
+      [
+        "Quick check spoken answer.",
+        "Phase one baseline answer.",
+        "Phase one second answer.",
+        "Phase two partial answer.",
+      ],
+      {
+        phase2Credit: "partial",
+        phase2MissingSteps: ["[reason]"],
+        phase2ShortFeedback: "Add the missing link.",
+        onTurn: (body) => turnPayloads.push(body),
+        onComplete: (body) => completePayloads.push(body),
+      },
+    );
+
+    await page.route("**/api/podchat/tts", async (route) => {
+      ttsPayloads.push(route.request().postDataJSON() as { text?: string });
+      await route.fulfill({
+        status: 200,
+        contentType: "audio/mpeg",
+        body: "mock-audio",
+      });
+    });
+
+    await openDrillMode(page);
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("start-drill-btn").click();
+    await recordOneAttempt(page);
+    await recordOneAttempt(page);
+    await recordOneAttempt(page);
+    await recordOneAttempt(page);
+
+    await expect(page.getByTestId("drill-feedback-text")).toContainText("Add the missing link.");
+    await expect.poll(() => ttsPayloads.length).toBe(1);
+    expect(ttsPayloads[0].text).toContain(MOCK_BRIEF.responsePattern.spokenModelFragment);
+    expect(ttsPayloads[0].text).toContain("Missing reason.");
+
+    await expect(page.getByText(MOCK_BRIEF.responsePattern.spokenModelFragment)).toHaveCount(0);
+    await expect(page.getByText("Phase two partial answer.")).toHaveCount(0);
+    await expect(page.getByTestId("repeat-audio-btn")).toBeVisible();
+
+    const turnsBeforeRepeat = turnPayloads.length;
+    await page.getByTestId("repeat-audio-btn").click();
+    await expect.poll(() => ttsPayloads.length).toBe(2);
+    expect(turnPayloads).toHaveLength(turnsBeforeRepeat);
+    expect(completePayloads).toHaveLength(0);
+  });
+
+  test("TTS failure shows generic copy without visual model fallback", async ({ page }) => {
+    await injectMediaMocks(page);
+    await injectAudioMocks(page);
+    await installStandardRoutes(
+      page,
+      [
+        "Quick check spoken answer.",
+        "Phase one baseline answer.",
+        "Phase one second answer.",
+        "Phase two no credit answer.",
+      ],
+      {
+        phase2Credit: "none",
+        phase2MissingSteps: ["[claim]"],
+        phase2ShortFeedback: "Try the structure again.",
+      },
+    );
+
+    await page.route("**/api/podchat/tts", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "provider details should not be shown" }),
+      });
+    });
+
+    await openDrillMode(page);
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("start-drill-btn").click();
+    await recordOneAttempt(page);
+    await recordOneAttempt(page);
+    await recordOneAttempt(page);
+    await recordOneAttempt(page);
+
+    await expect(page.getByTestId("tts-error")).toContainText("Voice feedback unavailable. Try again or continue.");
+    await expect(page.getByText("provider details should not be shown")).toHaveCount(0);
+    await expect(page.getByText(MOCK_BRIEF.responsePattern.spokenModelFragment)).toHaveCount(0);
+    await expect(page.getByText("Phase two no credit answer.")).toHaveCount(0);
+  });
+
+  test("exit discard confirmation avoids completion persistence", async ({ page }) => {
+    let completeCallCount = 0;
+
+    await injectMediaMocks(page);
+    await installStandardRoutes(page, ["Quick check spoken answer."], {
+      onComplete: () => {
+        completeCallCount += 1;
+      },
+    });
+
+    await openDrillMode(page);
+    await page.getByTestId("generate-brief-btn").click();
+    await page.getByTestId("start-drill-btn").click();
+
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toBe("Leaving now will discard this drill session.");
+      await dialog.dismiss();
+    });
+    await page.getByTestId("exit-drill-btn").click();
+    await expect(page.getByTestId("quick-check-section")).toBeVisible();
+
+    page.once("dialog", async (dialog) => {
+      expect(dialog.message()).toBe("Leaving now will discard this drill session.");
+      await dialog.accept();
+    });
+    await page.getByTestId("exit-drill-btn").click();
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    expect(completeCallCount).toBe(0);
   });
 
   test("runs Phase 3 through drill-session turns and completes with in-place summary", async ({ page }) => {
+    const turnPayloads: Record<string, unknown>[] = [];
     await injectMediaMocks(page);
     await installStandardRoutes(page, [
       "Quick check spoken answer.",
@@ -368,7 +542,9 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
       "Pressure answer two.",
       "Pressure answer three.",
       "Pressure answer four.",
-    ]);
+    ], {
+      onTurn: (body) => turnPayloads.push(body),
+    });
 
     await openDrillMode(page);
     await page.getByTestId("generate-brief-btn").click();
@@ -388,11 +564,17 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
       await expect(page.getByTestId("pressure-countdown")).toBeVisible();
       await recordOneAttempt(page);
       if (round < 3) {
+        await expect(page.getByTestId("pressure-timing-status")).toBeVisible();
         await page.getByTestId("pressure-next-btn").click();
       }
     }
 
     await expect(page.getByTestId("drill-session-summary")).toBeVisible({ timeout: 10000 });
+    const phase3Payloads = turnPayloads.filter((payload) => payload.phase === 3);
+    expect(phase3Payloads).toHaveLength(4);
+    expect(phase3Payloads.every((payload) => typeof payload.startLatencyMs === "number")).toBe(true);
+    expect(turnPayloads.filter((payload) => payload.phase !== 3).some((payload) => "startLatencyMs" in payload)).toBe(false);
+
     await expect(page.getByTestId("summary-save-status")).toContainText("Saved to your practice history.");
     await expect(page.getByText("Pressure answer four.")).toHaveCount(0);
 

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { POST as startPOST } from "../../src/app/api/drill-session/start/route";
 import { testHooks as startHooks } from "../../src/app/api/drill-session/start/route-test-hooks";
 import { POST as turnPOST } from "../../src/app/api/drill-session/turn/route";
@@ -402,5 +403,18 @@ test.describe("Drill Session Complete Route", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe("invalid_request");
+  });
+
+  test("complete path does not mutate learner_error_patterns or create weakness history", () => {
+    const completeRoute = readFileSync("src/app/api/drill-session/complete/route.ts", "utf8");
+    const completer = readFileSync("src/app/lib/drill-session/session-completer.ts", "utf8");
+    const adapter = readFileSync("src/app/lib/storage/supabase-pattern-drill-adapter.ts", "utf8");
+    const combined = `${completeRoute}\n${completer}\n${adapter}`;
+
+    expect(combined).toContain("savePatternDrillSession");
+    expect(combined).toContain('from("pattern_drill_sessions")');
+    expect(combined).not.toContain('from("learner_error_patterns")');
+    expect(combined).not.toContain('from("weakness_history")');
+    expect(combined).not.toMatch(/learner_error_patterns[\s\S]{0,120}\.(insert|update|upsert|delete)\(/);
   });
 });
