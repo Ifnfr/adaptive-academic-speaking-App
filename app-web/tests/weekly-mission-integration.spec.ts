@@ -49,7 +49,7 @@ function mockReview(overrides: Record<string, unknown> = {}) {
         metricType: "pattern_drill_sessions",
         unit: "sessions",
         sourceFeatures: ["pattern_drill"],
-        recommendedAction: { label: "Open Pattern Drill", routeTarget: "pattern_drill" },
+        recommendedAction: { label: "Open Drill Mode", routeTarget: "pattern_drill" },
       }),
       mockMission({
         missionId: "mission-vocab",
@@ -172,9 +172,9 @@ test.describe("Weekly Mission CTA Routing UI Integration", () => {
     await expect(page.getByRole("button", { name: "Podchat", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
 
-    // 2. Pattern Drill CTA
+    // 2. Drill Mode CTA
     await openWeeklyReview(page);
-    await page.getByRole("button", { name: "Open Pattern Drill" }).click();
+    await page.getByRole("button", { name: "Open Drill Mode" }).click();
     await expect(page.getByRole("heading", { name: "Active Session" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Drill Mode" })).toHaveAttribute("aria-pressed", "true");
 

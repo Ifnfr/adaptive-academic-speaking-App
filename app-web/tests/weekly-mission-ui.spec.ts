@@ -59,7 +59,7 @@ function review(overrides: Record<string, unknown> = {}) {
         unit: "sessions",
         sourceFeatures: ["pattern_drill"],
         status: "not_started",
-        recommendedAction: { label: "Open Pattern Drill", routeTarget: "pattern_drill" },
+        recommendedAction: { label: "Open Drill Mode", routeTarget: "pattern_drill" },
       }),
       mission({
         missionId: "mission-article",
@@ -267,7 +267,7 @@ test.describe("Weekly Mission Dashboard UI", () => {
     await gotoMockApp(page);
     await openWeeklyReview(page);
 
-    await page.getByRole("button", { name: "Open Pattern Drill" }).click();
+    await page.getByRole("button", { name: "Open Drill Mode" }).click();
     await expect(page.getByRole("heading", { name: "Active Session" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Drill Mode" })).toHaveAttribute("aria-pressed", "true");
 

@@ -299,7 +299,7 @@ function labelForRouteTarget(routeTarget: WeeklyMissionRouteTarget): string {
     case "podchat":
       return "Start Podchat";
     case "pattern_drill":
-      return "Open Pattern Drill";
+      return "Open Drill Mode";
     case "vocabulary":
       return "Open Vocabulary";
     case "article_practice":
@@ -611,7 +611,7 @@ function routeForMetric(metricType: WeeklyMissionMetricType): {
     case "podchat_sessions":
       return { sourceFeatures: ["podchat"], recommendedAction: { label: "Start Podchat", routeTarget: "podchat" }, unit: "sessions" };
     case "pattern_drill_sessions":
-      return { sourceFeatures: ["pattern_drill"], recommendedAction: { label: "Open Pattern Drill", routeTarget: "pattern_drill" }, unit: "sessions" };
+      return { sourceFeatures: ["pattern_drill"], recommendedAction: { label: "Open Drill Mode", routeTarget: "pattern_drill" }, unit: "sessions" };
     case "vocabulary_collected":
       return { sourceFeatures: ["vocabulary"], recommendedAction: { label: "Open Vocabulary", routeTarget: "vocabulary" }, unit: "items" };
     case "vocab_sentence_submitted":
@@ -638,7 +638,7 @@ function renderWeeklyMissionTitle(input: {
     case "complete_podchat_sessions":
       return `Complete ${input.targetValue} Podchat ${input.targetValue === 1 ? "session" : "sessions"}`;
     case "complete_pattern_drill_sessions":
-      return `Complete ${input.targetValue} Pattern Drill ${input.targetValue === 1 ? "session" : "sessions"}`;
+      return `Complete ${input.targetValue} Drill Mode ${input.targetValue === 1 ? "session" : "sessions"}`;
     case "collect_vocabulary_items":
       return `Collect ${input.targetValue} vocabulary items`;
     case "submit_vocabulary_sentences":
@@ -662,7 +662,7 @@ function renderWeeklyMissionDescription(input: {
     case "add_evaluated_speaking_samples":
       return `Complete ${input.targetValue} evaluated Podchat ${input.targetValue === 1 ? "session" : "sessions"} this week.`;
     case "target_repeated_weakness":
-      return `Complete ${input.targetValue} Pattern Drill ${input.targetValue === 1 ? "session" : "sessions"} focused on the strongest current weakness signal.`;
+      return `Complete ${input.targetValue} Drill Mode ${input.targetValue === 1 ? "session" : "sessions"} focused on the strongest current weakness signal.`;
     case "build_active_vocabulary":
       return `Save ${input.targetValue} useful vocabulary items from practice or article work.`;
     case "apply_vocabulary_in_sentences":

@@ -37,7 +37,7 @@ const MOCK_WEAKNESS_FOUND = {
   },
 };
 
-test.describe("Pattern Drill UI Wiring", () => {
+test.describe("Drill Mode UI Wiring", () => {
   test.beforeEach(async ({ page }) => {
     // Standard mock auth redirect bypass
     await page.route("**/*", async (route) => {
@@ -79,7 +79,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     expect(apiCalled).toBe(false);
   });
 
-  test("asserts latest-weakness API is fetched when Pattern Drill mode is entered", async ({ page }) => {
+  test("asserts latest-weakness API is fetched when Drill Mode is entered", async ({ page }) => {
     let apiCalled = false;
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       apiCalled = true;
@@ -248,7 +248,7 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(generateBtn).toBeDisabled();
   });
 
-  test("pattern brief API is NOT called on Pattern Drill page load", async ({ page }) => {
+  test("pattern brief API is NOT called on Drill Mode page load", async ({ page }) => {
     let briefApiCalled = false;
     await page.route("**/api/pattern-brief/**", async (route) => {
       briefApiCalled = true;
@@ -956,9 +956,9 @@ test.describe("Pattern Drill UI Wiring", () => {
     await expect(page.getByTestId("quick-check-result")).toBeVisible({ timeout: 5000 });
 
     const patternDrillKeys = await page.evaluate(() => {
-      // Collect all localStorage + sessionStorage keys belonging to Pattern Drill.
+      // Collect all localStorage + sessionStorage keys belonging to Drill Mode.
       // Clerk and other framework libs may write their own keys — we only care
-      // that Pattern Drill does not persist transcript, audio, brief, or drill context.
+      // that Drill Mode does not persist transcript, audio, brief, or drill context.
       const keywords = ["transcript", "brief", "drill", "audio", "quick", "pattern"];
       const localKeys = Object.keys(window.localStorage).filter((k) =>
         keywords.some((kw) => k.toLowerCase().includes(kw))

@@ -83,9 +83,9 @@ test.describe("Sidebar Simplification Flows", () => {
     await expect(page.getByTestId("mobile-shell-bar")).toContainText(
       "Settings",
     );
-    await expect(page.locator("h2").first()).toContainText(
-      /Profile & Settings/i,
-    );
+    await expect(
+      page.getByTestId("settings-signed-in").or(page.getByTestId("settings-signed-out")),
+    ).toBeVisible();
     await expectNoHorizontalOverflow(page);
   });
 

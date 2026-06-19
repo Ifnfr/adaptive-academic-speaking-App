@@ -236,12 +236,6 @@ export function Sidebar({
 
           <SidebarGroup label={t("sidebar.groupSystem")}>
             <SidebarItem
-              active={view === "mental-model"}
-              onClick={() => onSelectView("mental-model")}
-            >
-              {t("sidebar.viewMentalModel")}
-            </SidebarItem>
-            <SidebarItem
               active={view === "settings"}
               onClick={() => onSelectView("settings")}
             >

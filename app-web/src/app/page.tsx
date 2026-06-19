@@ -629,7 +629,7 @@ export default function Home() {
     null,
   );
 
-  // --- Mental Model Session state ---
+  // --- Legacy speaking pattern lab state ---
   const [mentalModelFocus, setMentalModelFocus] = useState("");
   const [mentalModelResult, setMentalModelResult] =
     useState<MentalModelResult | null>(null);
@@ -2213,7 +2213,7 @@ export default function Home() {
         !result.microDrill ||
         !result.referenceModel
       ) {
-        setMentalModelError("Mental Model response was incomplete. Try again.");
+        setMentalModelError("Practice guide response was incomplete. Try again.");
         return;
       }
 
@@ -2748,7 +2748,7 @@ export default function Home() {
             />
           )}
 
-          {/* ===================== Mental Model ===================== */}
+          {/* ===================== Legacy speaking pattern lab ===================== */}
           {view === "mental-model" && (
             <MentalModelView
               level={level}

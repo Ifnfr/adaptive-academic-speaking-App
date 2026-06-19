@@ -94,7 +94,7 @@ function sourceLabel(source: VocabSource): string {
   if (source === "manual") return "Manual";
   if (source === "article") return "Article";
   if (source === "feedback") return "Feedback";
-  return "Mental Model";
+  return "Legacy Practice Lab";
 }
 
 function partOfSpeechLabel(partOfSpeech: VocabPartOfSpeech | undefined): string {

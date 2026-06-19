@@ -570,7 +570,7 @@ test.describe("Weekly Mission Review route handlers", () => {
     expect(vocabularyMission?.reason).toContain("Vocabulary activity is low");
   });
 
-  test("strong fallback includes weakness-focused Pattern Drill and differs from partial fallback", async () => {
+  test("strong fallback includes weakness-focused Drill Mode and differs from partial fallback", async () => {
     const partialSupabase = createMockSupabase({
       cachedReview: null,
       sourceRows: {
