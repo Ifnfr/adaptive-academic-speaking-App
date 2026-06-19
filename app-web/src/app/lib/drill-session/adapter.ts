@@ -36,8 +36,18 @@ export function mapSessionToEvaluateInput(session: DrillSessionState): EvaluateS
   if (session.phase3Results.length > 0) {
     // Recompute phase3 summary stats from individual results
     const completedRoundCount = session.phase3Results.length;
-    const detectedCount = session.phase3Results.filter((r) => r.patternDetected).length;
-    const timeoutCount = session.phase3Results.filter((r) => r.timedOut).length;
+    const timeoutCount = session.phase3Results.filter((r) => {
+      if (r.pressurePassed !== undefined) {
+        return !r.pressurePassed;
+      }
+      return !!r.timedOut;
+    }).length;
+
+    const detectedCount = session.phase3Results.filter((r) => {
+      const isTimeout = r.pressurePassed !== undefined ? !r.pressurePassed : !!r.timedOut;
+      return !isTimeout && !!r.patternDetected;
+    }).length;
+
     const missedCount = completedRoundCount - detectedCount - timeoutCount;
 
     const pressureAccuracy = Math.round((detectedCount / completedRoundCount) * 100);

@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
   }
 
-  // Allowed keys: session, phase, transcript, topic, promptTopic, attemptNumber, previousCredit, roundSeconds, roundIndex, simplifiedTopicUsed
+  // Allowed keys: session, phase, transcript, topic, promptTopic, attemptNumber, previousCredit, roundSeconds, roundIndex, simplifiedTopicUsed, startLatencyMs
   const allowedKeys = [
     "session",
     "phase",
@@ -63,6 +63,7 @@ export async function POST(request: Request) {
     "roundSeconds",
     "roundIndex",
     "simplifiedTopicUsed",
+    "startLatencyMs",
   ];
   if (!validateSessionInputKeys(body, allowedKeys)) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
@@ -79,6 +80,7 @@ export async function POST(request: Request) {
     roundSeconds,
     roundIndex,
     simplifiedTopicUsed,
+    startLatencyMs,
   } = body as {
     session?: unknown;
     phase?: unknown;
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
     roundSeconds?: unknown;
     roundIndex?: unknown;
     simplifiedTopicUsed?: unknown;
+    startLatencyMs?: unknown;
   };
 
   // Validate session state
@@ -105,6 +108,22 @@ export async function POST(request: Request) {
     phase !== 3
   ) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+  }
+
+  // Validate startLatencyMs if provided
+  if (startLatencyMs !== undefined && startLatencyMs !== null) {
+    if (phase !== 3) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
+    if (
+      typeof startLatencyMs !== "number" ||
+      !Number.isFinite(startLatencyMs) ||
+      !Number.isInteger(startLatencyMs) ||
+      startLatencyMs < 0 ||
+      startLatencyMs > 60000
+    ) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers });
+    }
   }
 
   // Validate transcript
@@ -266,6 +285,11 @@ export async function POST(request: Request) {
         { callClaude: testHooks.callClaude || undefined }
       );
 
+      let pressurePassed: boolean | undefined = undefined;
+      if (typeof startLatencyMs === "number") {
+        pressurePassed = startLatencyMs <= roundSeconds * 1000;
+      }
+
       const turnResult: TurnResult = {
         phase: 3,
         patternDetected: evalResult.patternDetected,
@@ -275,6 +299,8 @@ export async function POST(request: Request) {
         shortFeedback: evalResult.shortFeedback,
         roundSeconds,
         roundIndex,
+        startLatencyMs: typeof startLatencyMs === "number" ? startLatencyMs : undefined,
+        pressurePassed,
       };
 
       const updatedSession = applyTurnResult(session, 3, turnResult);
@@ -292,6 +318,8 @@ export async function POST(request: Request) {
             missingSteps: evalResult.missingSteps,
             timedOut: evalResult.timedOut,
             shortFeedback: evalResult.shortFeedback,
+            startLatencyMs: typeof startLatencyMs === "number" ? startLatencyMs : undefined,
+            pressurePassed,
           },
         },
         { headers }

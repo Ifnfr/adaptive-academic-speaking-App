@@ -508,6 +508,24 @@ test.describe("Podchat TTS Route", () => {
 
 test.describe("Podchat TTS Browser Integration", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname === "/" &&
+        !url.searchParams.has("mockAuth") &&
+        route.request().resourceType() === "document"
+      ) {
+        url.searchParams.set("mockAuth", "true");
+        await route.fulfill({
+          status: 302,
+          headers: { location: url.toString() },
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+
     await page.addInitScript(() => {
       class MockMediaStreamTrack {
         kind = "audio";
@@ -580,6 +598,21 @@ test.describe("Podchat TTS Browser Integration", () => {
           hostText: "This is a response.",
           followUpQuestion: "Any questions?",
         }),
+      });
+    });
+
+    await page.route("**/api/podchat/start", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          opener: "Let's discuss technology. How do you think technology changes learning?",
+          sessionPlan: {
+            topicAngle: "how tech impacts learning",
+            targetSkill: "providing reasons/examples",
+            followUpStrategy: "ask about details or downsides"
+          }
+        })
       });
     });
   });
@@ -764,6 +797,7 @@ test.describe("Podchat TTS Browser Integration", () => {
 
     // Now switch to polly and verify model ID is not sent
     requestPayload = null;
+    await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("#default-tts-provider-select").selectOption("polly");
 

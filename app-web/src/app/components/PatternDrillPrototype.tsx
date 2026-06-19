@@ -55,6 +55,8 @@ type Phase3Result = {
   usedSteps: string[];
   timedOut: boolean;
   shortFeedback: string;
+  startLatencyMs?: number;
+  pressurePassed?: boolean;
 };
 
 type DrillTurnResponse = {
@@ -81,6 +83,8 @@ type DrillSummary = {
 
 type PatternDrillPrototypeProps = {
   onExit: () => void;
+  ttsProvider?: "polly" | "elevenlabs";
+  elevenLabsModelId?: string;
 };
 
 type PracticePhase = "quick_check" | 1 | 2 | 3;
@@ -150,7 +154,15 @@ function getPhaseLabel(flow: FlowState) {
   return "Drill Mode";
 }
 
-export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
+function getNow(): number {
+  return Date.now();
+}
+
+export function PatternDrillPrototype({
+  onExit,
+  ttsProvider = "polly",
+  elevenLabsModelId = "",
+}: PatternDrillPrototypeProps) {
   const [weaknessState, setWeaknessState] = useState<FetchState>({ status: "loading" });
   const [flowState, setFlowState] = useState<FlowState>("idle");
   const [session, setSession] = useState<DrillSessionState | null>(null);
@@ -163,6 +175,14 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
   const [phase2Simplified, setPhase2Simplified] = useState(false);
   const [phase3RoundIndex, setPhase3RoundIndex] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+
+  const [isTtsSpeaking, setIsTtsSpeaking] = useState(false);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const [lastTtsText, setLastTtsText] = useState("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const roundStartTimeRef = useRef<number | null>(null);
+  const latencyRef = useRef<number | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -188,6 +208,34 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
     if (weaknessState.status === "error") return "Weakness data could not be loaded.";
     return null;
   }, [weaknessState.status]);
+
+  function resetRecorder() {
+    stopMediaStream(mediaStreamRef.current);
+    mediaStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    audioChunksRef.current = [];
+    setRecorderState("ready");
+  }
+
+  function cleanupAudio() {
+    setIsTtsSpeaking(false);
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+      } catch {
+        // ignore
+      }
+      audioRef.current = null;
+    }
+    if (objectUrlRef.current) {
+      try {
+        URL.revokeObjectURL(objectUrlRef.current);
+      } catch {
+        // ignore
+      }
+      objectUrlRef.current = null;
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -226,16 +274,119 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
     return () => {
       abortRef.current?.abort();
       stopMediaStream(mediaStreamRef.current);
+      cleanupAudio();
       if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     };
   }, []);
 
-  function resetRecorder() {
+
+
+  function buildTtsFeedbackText(
+    spokenModelFragment: string,
+    missingSteps: string[],
+    credit: "full" | "partial" | "none"
+  ): string {
+    let missingElement = "";
+    if (credit === "none") {
+      missingElement = "Incorrect structure.";
+    } else if (missingSteps && missingSteps.length > 0) {
+      const cleanStep = missingSteps[0].replace(/[\[\]]/g, "").trim();
+      missingElement = `Missing ${cleanStep}.`;
+    } else {
+      missingElement = "Try again.";
+    }
+
+    const words = missingElement.split(/\s+/);
+    if (words.length > 6) {
+      missingElement = words.slice(0, 6).join(" ");
+    }
+
+    return `${missingElement} ... ${spokenModelFragment} ... Repeat the phrase.`;
+  }
+
+  async function playTts(text: string) {
+    cleanupAudio();
+    setTtsError(null);
+    setIsTtsSpeaking(true);
+
+    if (ttsProvider === "elevenlabs" && !elevenLabsModelId) {
+      setIsTtsSpeaking(false);
+      setTtsError("Voice feedback unavailable. Try again or continue.");
+      return;
+    }
+
+    try {
+      const requestBody = ttsProvider === "elevenlabs"
+        ? { text, ttsProvider, elevenLabsModelId }
+        : { text, ttsProvider };
+
+      const response = await fetch("/api/podchat/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      if (!response.ok) {
+        throw new Error("TTS request failed");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      objectUrlRef.current = objectUrl;
+
+      const audio = new Audio(objectUrl);
+      audioRef.current = audio;
+
+      audio.addEventListener("ended", () => {
+        setIsTtsSpeaking(false);
+        if (objectUrlRef.current === objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrlRef.current = null;
+        }
+      });
+
+      audio.addEventListener("error", () => {
+        setIsTtsSpeaking(false);
+        setTtsError("Voice feedback unavailable. Try again or continue.");
+        if (objectUrlRef.current === objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrlRef.current = null;
+        }
+      });
+
+      await audio.play();
+    } catch {
+      setIsTtsSpeaking(false);
+      setTtsError("Voice feedback unavailable. Try again or continue.");
+      if (objectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(objectUrlRef.current);
+        } catch {
+          // ignore
+        }
+        objectUrlRef.current = null;
+      }
+    }
+  }
+
+  function handleExit() {
+    const isSessionActive = session !== null && flowState !== "summary" && flowState !== "idle" && flowState !== "error";
+    if (isSessionActive) {
+      const confirmLeave = window.confirm("Leaving now will discard this drill session.");
+      if (!confirmLeave) {
+        return;
+      }
+    }
+    cleanupAudio();
     stopMediaStream(mediaStreamRef.current);
-    mediaStreamRef.current = null;
-    mediaRecorderRef.current = null;
-    audioChunksRef.current = [];
-    setRecorderState("ready");
+    if (intervalRef.current !== null) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setSession(null);
+    setFlowState("idle");
+    setSummary(null);
+    setLastResult(null);
+    resetRecorder();
+    onExit();
   }
 
   function startPressureTimer(seconds: number) {
@@ -330,6 +481,9 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
       body.promptTopic = topic;
       body.roundSeconds = currentPressureRound.seconds;
       body.roundIndex = phase3RoundIndex;
+      if (latencyRef.current !== null) {
+        body.startLatencyMs = latencyRef.current;
+      }
     }
 
     try {
@@ -375,6 +529,18 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
         } else {
           setPhase2PreviousCredit(result.credit);
           setPhase2AttemptNumber((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : 3));
+        }
+
+        if (result.credit !== "full" && brief) {
+          const ttsText = buildTtsFeedbackText(
+            brief.responsePattern.spokenModelFragment,
+            result.missingSteps,
+            result.credit
+          );
+          setLastTtsText(ttsText);
+          void playTts(ttsText);
+        } else {
+          setLastTtsText("");
         }
         return;
       }
@@ -462,7 +628,11 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
 
       recorder.start();
       setRecorderState("recording");
-      if (phase === 3) startPressureTimer(currentPressureRound.seconds);
+      if (phase === 3) {
+        const latency = roundStartTimeRef.current ? getNow() - roundStartTimeRef.current : 0;
+        latencyRef.current = Math.max(0, Math.min(60000, latency));
+        startPressureTimer(currentPressureRound.seconds);
+      }
     } catch {
       stopMediaStream(mediaStreamRef.current);
       mediaStreamRef.current = null;
@@ -503,6 +673,8 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
     setRemainingSeconds(currentPressureRound.seconds);
     setFlowState("phase3");
     resetRecorder();
+    roundStartTimeRef.current = getNow();
+    latencyRef.current = null;
   }
 
   function handleNextPressureRound() {
@@ -612,7 +784,7 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
           </h3>
           {subtitle && <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">{subtitle}</p>}
         </div>
-        <button type="button" onClick={onExit} className="app-button-ghost px-3 py-1.5 text-sm">
+        <button type="button" data-testid="exit-drill-btn" onClick={handleExit} className="app-button-ghost px-3 py-1.5 text-sm">
           Exit to Podchat
         </button>
       </div>
@@ -834,7 +1006,7 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
           </p>
         </div>
 
-        {result && (
+         {result && (
           <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4 space-y-2" data-testid="drill-feedback-box">
             <span className="inline-flex rounded-full bg-[var(--brand-teal-soft)] px-2 py-0.5 text-xs font-semibold uppercase text-[var(--brand-teal-ink)]">
               {result.credit === "full" ? "Full Credit" : result.credit === "partial" ? "Partial Credit" : "Keep Practicing"}
@@ -846,6 +1018,29 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
               <p className="text-xs text-[var(--brand-muted)]" data-testid="drill-retry-prompt">
                 Missing steps: {result.missingSteps.join(", ")}
               </p>
+            )}
+            {result.credit !== "full" && lastTtsText && (
+              <div className="mt-3 flex flex-col gap-2 border-t border-[var(--brand-border)] pt-2" data-testid="audio-feedback-controls">
+                {isTtsSpeaking && (
+                  <p className="text-xs text-[var(--brand-teal-ink)] animate-pulse" data-testid="playing-feedback-status">
+                    Playing feedback…
+                  </p>
+                )}
+                {ttsError && (
+                  <p className="text-xs text-[var(--brand-danger)]" data-testid="tts-error">
+                    {ttsError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  data-testid="repeat-audio-btn"
+                  onClick={() => void playTts(lastTtsText)}
+                  disabled={isTtsSpeaking}
+                  className="app-button-ghost w-fit px-3 py-1.5 text-xs flex items-center gap-1"
+                >
+                  Repeat audio
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -910,9 +1105,33 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
         {result && (
           <div
             data-testid="pressure-feedback-box"
-            className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4 text-sm"
+            className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4 text-sm space-y-2"
           >
-            <p className="font-medium">{result.shortFeedback}</p>
+            <div className="flex gap-2">
+              <span
+                data-testid="pressure-pattern-status"
+                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
+                  result.patternDetected
+                    ? "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)]"
+                    : "bg-red-100 text-red-700"
+                }`}
+              >
+                {result.patternDetected ? "Pattern Detected" : "Pattern Missed"}
+              </span>
+              {result.pressurePassed !== undefined && (
+                <span
+                  data-testid="pressure-timing-status"
+                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
+                    result.pressurePassed
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {result.pressurePassed ? "Timing Pass" : "Timing Fail"}
+                </span>
+              )}
+            </div>
+            <p className="font-medium" data-testid="pressure-feedback-text">{result.shortFeedback}</p>
             {result.missingSteps.length > 0 && (
               <p className="mt-1 text-xs text-[var(--brand-muted)]">
                 Missing steps: {result.missingSteps.join(", ")}
@@ -949,12 +1168,14 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
-            <p className="text-xs uppercase text-[var(--brand-muted)]">Phase 2 Accuracy</p>
-            <p className="mt-1 text-2xl font-bold" data-testid="summary-accuracy">{summary.phase2Accuracy}%</p>
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Phase 1 Baseline</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-baseline-completeness">
+              {summary.phase1BaselineCompleteness}
+            </p>
           </div>
           <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
-            <p className="text-xs uppercase text-[var(--brand-muted)]">Full Credit</p>
-            <p className="mt-1 text-2xl font-bold" data-testid="summary-full-credit-count">{summary.fullCreditCount}</p>
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Phase 2 Accuracy</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-accuracy">{summary.phase2Accuracy}%</p>
           </div>
           <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
             <p className="text-xs uppercase text-[var(--brand-muted)]">Pressure Accuracy</p>
@@ -962,19 +1183,29 @@ export function PatternDrillPrototype({ onExit }: PatternDrillPrototypeProps) {
               {summary.phase3PressureAccuracy === null ? "not available yet" : `${summary.phase3PressureAccuracy}%`}
             </p>
           </div>
+          <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Pressure Fail Rate</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-pressure-fail-rate">
+              {summary.pressureFailRate === null ? "not available yet" : `${summary.pressureFailRate}%`}
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--brand-border)] bg-[var(--brand-bg)] p-4">
+            <p className="text-xs uppercase text-[var(--brand-muted)]">Improvement Signal</p>
+            <p className="mt-1 text-2xl font-bold" data-testid="summary-improvement-signal">{summary.improvementSignal}</p>
+          </div>
         </div>
 
-        <p className="text-sm text-[var(--brand-ink-soft)]">{summary.nextSessionRecommendation}</p>
+        <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="summary-recommendation">{summary.nextSessionRecommendation}</p>
         {summary.mostMissedSteps.length > 0 && (
           <p className="text-sm text-[var(--brand-ink-soft)]" data-testid="summary-missed-steps">
             Focus next on: {summary.mostMissedSteps.join(", ")}
           </p>
         )}
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button type="button" onClick={handleGenerateBrief} className="app-button-primary px-5 py-2.5 text-sm">
+          <button type="button" data-testid="new-session-btn" onClick={handleGenerateBrief} className="app-button-primary px-5 py-2.5 text-sm">
             New Session
           </button>
-          <button type="button" onClick={onExit} className="app-button px-5 py-2.5 text-sm">
+          <button type="button" onClick={handleExit} className="app-button px-5 py-2.5 text-sm">
             Return to Podchat
           </button>
         </div>

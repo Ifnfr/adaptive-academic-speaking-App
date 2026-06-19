@@ -15,6 +15,8 @@ export type TurnResult = {
   timedOut?: boolean;
   roundSeconds?: number;
   roundIndex?: number;
+  startLatencyMs?: number;
+  pressurePassed?: boolean;
 };
 
 export type DrillBriefContent = {

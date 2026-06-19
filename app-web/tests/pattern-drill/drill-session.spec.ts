@@ -217,6 +217,85 @@ test.describe("Drill Session Turn Route", () => {
     const json = await res.json();
     expect(json.error).toBe("transcript_required");
   });
+
+  test("turn validates startLatencyMs in Phase 3", async () => {
+    turnHooks.resolveCurrentUserId = async () => "user-123";
+    turnHooks.callClaude = async () => JSON.stringify({
+      patternDetected: true,
+      usedSteps: ["[claim]"],
+      missingSteps: [],
+      timedOut: false,
+      shortFeedback: "Good.",
+    });
+
+    const res1 = await turnPOST(makeRequest("http://localhost/api/drill-session/turn", {
+      session: VALID_STATE,
+      phase: 1,
+      topic: "academic topic",
+      transcript: "This is transcript",
+      startLatencyMs: 1500,
+    }));
+    expect(res1.status).toBe(400);
+
+    const res2 = await turnPOST(makeRequest("http://localhost/api/drill-session/turn", {
+      session: {
+        ...VALID_STATE,
+        currentPhase: 3,
+      },
+      phase: 3,
+      roundSeconds: 10,
+      roundIndex: 0,
+      transcript: "This is transcript",
+      startLatencyMs: -50,
+    }));
+    expect(res2.status).toBe(400);
+
+    const res3 = await turnPOST(makeRequest("http://localhost/api/drill-session/turn", {
+      session: {
+        ...VALID_STATE,
+        currentPhase: 3,
+      },
+      phase: 3,
+      roundSeconds: 10,
+      roundIndex: 0,
+      transcript: "This is transcript",
+      startLatencyMs: 65000,
+    }));
+    expect(res3.status).toBe(400);
+
+    const res4 = await turnPOST(makeRequest("http://localhost/api/drill-session/turn", {
+      session: {
+        ...VALID_STATE,
+        currentPhase: 3,
+      },
+      phase: 3,
+      roundSeconds: 10,
+      roundIndex: 0,
+      transcript: "This is transcript",
+      startLatencyMs: 5000,
+    }));
+    expect(res4.status).toBe(200);
+    const json4 = await res4.json();
+    expect(json4.session.phase3Results[0].startLatencyMs).toBe(5000);
+    expect(json4.session.phase3Results[0].pressurePassed).toBe(true);
+    expect(json4.turnResult.pressurePassed).toBe(true);
+
+    const res5 = await turnPOST(makeRequest("http://localhost/api/drill-session/turn", {
+      session: {
+        ...VALID_STATE,
+        currentPhase: 3,
+      },
+      phase: 3,
+      roundSeconds: 10,
+      roundIndex: 0,
+      transcript: "This is transcript",
+      startLatencyMs: 12000,
+    }));
+    expect(res5.status).toBe(200);
+    const json5 = await res5.json();
+    expect(json5.session.phase3Results[0].pressurePassed).toBe(false);
+    expect(json5.turnResult.pressurePassed).toBe(false);
+  });
 });
 
 test.describe("Drill Session Complete Route", () => {

@@ -70,7 +70,11 @@ export function ActiveSessionShell(
         {panel === "podchat" ? (
           <PodchatView {...podchatProps} isActiveView={isActiveView} />
         ) : (
-          <PatternDrillPrototype onExit={() => setPanel("podchat")} />
+          <PatternDrillPrototype
+            onExit={() => setPanel("podchat")}
+            ttsProvider={podchatProps.ttsProvider}
+            elevenLabsModelId={podchatProps.elevenLabsModelId}
+          />
         )}
       </div>
     </div>
