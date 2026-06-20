@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ListeningExerciseLayout } from "./ListeningExerciseLayout";
 import { type Question } from "./QuestionList";
 
@@ -48,6 +48,14 @@ export function ListeningExerciseSession({
   const [step, setStep] = useState<StepType>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
   
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Section details
   const [sectionId, setSectionId] = useState<string>("");
   const [sectionIndex, setSectionIndex] = useState(0);
@@ -69,7 +77,6 @@ export function ListeningExerciseSession({
   useEffect(() => {
     if (step !== "generating" || !sessionId) return;
 
-    let isMounted = true;
     let timeoutId: NodeJS.Timeout;
 
     async function pollStatus() {
@@ -80,7 +87,7 @@ export function ListeningExerciseSession({
         }
 
         const data = await res.json();
-        if (!isMounted) return;
+        if (!isMountedRef.current) return;
 
         if (data.generation_status === "ready") {
           const sectionData = data.section;
@@ -97,13 +104,13 @@ export function ListeningExerciseSession({
           setStep("loading_audio");
           try {
             const url = await fetchTtsAudio(sectionData.audio_script);
-            if (isMounted) {
+            if (isMountedRef.current) {
               setAudioUrl(url);
               setStep("ready");
             }
           } catch (audioErr) {
             console.error("Audio download error:", audioErr);
-            if (isMounted) {
+            if (isMountedRef.current) {
               setStep("error");
               setErrorMsg("Failed to load audio track.");
               setErrorPhase("audio");
@@ -119,7 +126,7 @@ export function ListeningExerciseSession({
         }
       } catch (err: unknown) {
         console.error("Status check failed:", err);
-        if (isMounted) {
+        if (isMountedRef.current) {
           setStep("error");
           setErrorMsg(err instanceof Error ? err.message : "Failed to establish database connection.");
           setErrorPhase("status");
@@ -130,7 +137,6 @@ export function ListeningExerciseSession({
     timeoutId = setTimeout(pollStatus, 2000);
 
     return () => {
-      isMounted = false;
       clearTimeout(timeoutId);
     };
   }, [step, sessionId]);
@@ -399,6 +405,30 @@ export function ListeningExerciseSession({
             <span className="text-2xl font-black text-[var(--brand-teal)]">
               {estimatedBand}
             </span>
+          </div>
+        </div>
+
+        <div
+          data-testid="listening-disclaimer"
+          className="p-4 bg-[var(--brand-surface-2)] border border-[var(--brand-border)] rounded-2xl text-[10px] text-[var(--brand-muted)] text-left leading-relaxed flex gap-2.5"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-4 h-4 text-[var(--brand-muted)] shrink-0 mt-0.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <div>
+            <span className="font-bold block text-[var(--brand-ink-soft)] mb-0.5">Disclaimer</span>
+            Important: The &quot;Estimated Listening Level&quot; is an internal Fonetik estimate.
+            It is NOT a certified or officially recognized IELTS or TOEFL score, and
+            must not be used for visa, academic admission, or official certification purposes.
           </div>
         </div>
 
