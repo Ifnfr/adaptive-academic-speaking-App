@@ -75,7 +75,7 @@ test.describe("Listening Exercise - E2E Isolation & Production Hardening", () =>
     });
 
     // 1. Intercept/mock Clerk authentication bypass redirect
-    await page.route("**/listening-exercise-test*", async (route) => {
+    await page.route("**/listening*", async (route) => {
       const url = new URL(route.request().url());
       if (
         !url.searchParams.has("mockAuth") &&
@@ -220,7 +220,7 @@ test.describe("Listening Exercise - E2E Isolation & Production Hardening", () =>
     });
 
     // 1. Go to Sandbox Page
-    await page.goto("/listening-exercise-test?mockAuth=true");
+    await page.goto("/listening?mockAuth=true");
 
     // Wait for redirects, Next.js Turbopack compilation, and Clerk handshake to settle
     await page.waitForLoadState("networkidle");

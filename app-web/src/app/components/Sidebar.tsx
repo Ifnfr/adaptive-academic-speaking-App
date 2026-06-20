@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 
@@ -15,7 +16,8 @@ export type SidebarView =
   | "settings"
   | "leaderboard"
   | "learning-path"
-  | "profile";
+  | "profile"
+  | "listening";
 
 export type SidebarProps = {
   view: SidebarView;
@@ -70,6 +72,31 @@ function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
       >
         {children}
       </button>
+    </li>
+  );
+}
+
+type SidebarLinkProps = {
+  active?: boolean;
+  href: string;
+  children: ReactNode;
+};
+
+function SidebarLink({ active = false, href, children }: SidebarLinkProps) {
+  const base =
+    "app-button w-full justify-start px-3 py-2 text-left flex items-center";
+  const activeClass =
+    "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-medium";
+  const idleClass = "app-button-ghost text-[var(--brand-ink-soft)]";
+  return (
+    <li>
+      <Link
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={`${base} ${active ? activeClass : idleClass}`}
+      >
+        {children}
+      </Link>
     </li>
   );
 }
@@ -181,6 +208,29 @@ export function Sidebar({
             >
               {t("sidebar.viewActive")}
             </SidebarItem>
+            <SidebarLink
+              active={view === "listening"}
+              href="/listening"
+            >
+              <div className="flex items-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-4 h-4 flex-shrink-0"
+                >
+                  <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+                </svg>
+                <span>{t("sidebar.viewListening") || "Listening"}</span>
+              </div>
+            </SidebarLink>
             <SidebarItem
               active={view === "vocabulary"}
               onClick={() => onSelectView("vocabulary")}
