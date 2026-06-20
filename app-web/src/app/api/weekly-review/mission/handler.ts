@@ -91,6 +91,7 @@ function emptyWeeklyMissionSourceSnapshot(): WeeklyMissionSourceSnapshot {
     vocabularySentencesSubmitted: 0,
     vocabularyCorrectionsSaved: 0,
     articlePracticeCompleted: 0,
+    listeningExerciseSessions: 0,
     activeDays: [],
     repeatedWeaknessCount: 0,
     topWeaknesses: [],

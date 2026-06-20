@@ -19,6 +19,7 @@ export const WEEKLY_MISSION_TARGET_BOUNDS: Record<
   article_practice_completed: { min: 1, max: 7 },
   daily_practice_days: { min: 1, max: 7 },
   weakness_resolution: { min: 1, max: 5 },
+  listening_exercise_sessions: { min: 1, max: 7 },
 };
 
 export function validateWeeklyMissionTarget(input: {

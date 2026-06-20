@@ -155,6 +155,7 @@ const TITLE_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionTitleKey
   article_practice_completed: "complete_article_practice_sessions",
   daily_practice_days: "practice_on_distinct_days",
   weakness_resolution: null,
+  listening_exercise_sessions: null,
 };
 
 const DESCRIPTION_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionDescriptionKey | null> = {
@@ -168,6 +169,7 @@ const DESCRIPTION_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionDe
   article_practice_completed: "practice_article_transfer",
   daily_practice_days: "build_weekly_rhythm",
   weakness_resolution: null,
+  listening_exercise_sessions: null,
 };
 
 const TITLE_KEYS = new Set<WeeklyMissionTitleKey>(
@@ -334,6 +336,7 @@ function defaultReasonForMetric(
       return "Spacing practice across the week builds a steadier learning rhythm.";
     case "vocabulary_reviewed":
     case "weakness_resolution":
+    case "listening_exercise_sessions":
       return "This mission supports focused weekly practice from tracked activity.";
   }
 }
@@ -625,6 +628,8 @@ function routeForMetric(metricType: WeeklyMissionMetricType): {
     case "vocabulary_reviewed":
     case "weakness_resolution":
       return { sourceFeatures: ["vocabulary"], recommendedAction: { label: "Practice", routeTarget: "vocabulary" }, unit: "items" };
+    case "listening_exercise_sessions":
+      return { sourceFeatures: ["podchat"], recommendedAction: { label: "Start Podchat", routeTarget: "podchat" }, unit: "sessions" };
   }
 }
 

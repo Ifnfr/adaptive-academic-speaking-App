@@ -9,6 +9,7 @@ export const WEEKLY_MISSION_METRIC_TYPES = [
   "article_practice_completed",
   "daily_practice_days",
   "weakness_resolution",
+  "listening_exercise_sessions",
 ] as const;
 
 export type WeeklyMissionMetricType = (typeof WEEKLY_MISSION_METRIC_TYPES)[number];

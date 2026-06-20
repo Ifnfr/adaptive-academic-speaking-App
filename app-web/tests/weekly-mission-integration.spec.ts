@@ -238,6 +238,9 @@ test.describe("Weekly Mission Progress Source Snapshot & Metrics integration", (
         { id: "a1", created_at: "2026-06-17T14:00:00.000Z" },
       ],
       learner_error_patterns: [],
+      listening_exercise_sessions: [
+        { id: "le1", completed_at: "2026-06-18T08:00:00.000Z", status: "completed" },
+      ],
     };
 
     const mock = createMockSupabase(sourceRows);
@@ -253,7 +256,8 @@ test.describe("Weekly Mission Progress Source Snapshot & Metrics integration", (
     expect(snapshot.vocabularySentencesSubmitted).toBe(1);
     expect(snapshot.vocabularyCorrectionsSaved).toBe(1);
     expect(snapshot.articlePracticeCompleted).toBe(1);
-    expect(snapshot.activeDays).toEqual(["2026-06-15", "2026-06-16", "2026-06-17"]);
+    expect(snapshot.listeningExerciseSessions).toBe(1);
+    expect(snapshot.activeDays).toEqual(["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18"]);
   });
 
   test("getWeeklyMissionSourceSnapshot handles 0 duration and draft rows correctly (exclusion of drafts/aborted)", async () => {
@@ -268,6 +272,7 @@ test.describe("Weekly Mission Progress Source Snapshot & Metrics integration", (
       vocabulary_corrections: [],
       article_writing_sessions: [], // unsubmitted articles/essays are never saved to database
       learner_error_patterns: [],
+      listening_exercise_sessions: [],
     };
 
     const mock = createMockSupabase(sourceRows);
@@ -278,6 +283,7 @@ test.describe("Weekly Mission Progress Source Snapshot & Metrics integration", (
 
     expect(snapshot.speakingMinutes).toBe(1); // 60 seconds / 60
     expect(snapshot.podchatSessions).toBe(2); // row is present, so counted as session (though speaking seconds are 0 for p1)
+    expect(snapshot.listeningExerciseSessions).toBe(0);
   });
 
   test("calculateWeeklyMissionProgress recomputes currentValue and status for missions", () => {
@@ -310,6 +316,7 @@ test.describe("Weekly Mission Progress Source Snapshot & Metrics integration", (
       vocabularySentencesSubmitted: 0,
       vocabularyCorrectionsSaved: 0,
       articlePracticeCompleted: 0,
+      listeningExerciseSessions: 0,
       activeDays: ["2026-06-15", "2026-06-16"],
       repeatedWeaknessCount: 0,
       topWeaknesses: [],
@@ -357,6 +364,7 @@ test.describe("Weekly Mission Progress Source Snapshot & Metrics integration", (
       vocabularySentencesSubmitted: 0,
       vocabularyCorrectionsSaved: 0,
       articlePracticeCompleted: 0,
+      listeningExerciseSessions: 0,
       activeDays: ["2026-06-15"],
       repeatedWeaknessCount: 0,
       topWeaknesses: [],

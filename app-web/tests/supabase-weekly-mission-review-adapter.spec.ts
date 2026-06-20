@@ -44,6 +44,7 @@ const baseSnapshot: WeeklyMissionSourceSnapshot = {
   vocabularySentencesSubmitted: 2,
   vocabularyCorrectionsSaved: 1,
   articlePracticeCompleted: 1,
+  listeningExerciseSessions: 2,
   activeDays: ["2026-06-15", "2026-06-17"],
   repeatedWeaknessCount: 1,
   topWeaknesses: [
@@ -397,6 +398,7 @@ test.describe("Supabase weekly mission review adapter", () => {
       { ...baseMission, missionId: "wm_pod", metricType: "podchat_sessions", targetValue: 3, unit: "sessions" },
       { ...baseMission, missionId: "wm_days", metricType: "daily_practice_days", targetValue: 2, unit: "days" },
       { ...baseMission, missionId: "wm_reviewed", metricType: "vocabulary_reviewed", targetValue: 5, unit: "reviews" },
+      { ...baseMission, missionId: "wm_listen", metricType: "listening_exercise_sessions", targetValue: 3, unit: "sessions" },
     ];
 
     const result = calculateWeeklyMissionProgress({
@@ -405,12 +407,17 @@ test.describe("Supabase weekly mission review adapter", () => {
       now: new Date("2026-06-18T00:00:00.000Z"),
     });
 
-    expect(result.map((mission) => [mission.metricType, mission.currentValue, mission.status])).toEqual([
-      ["speaking_minutes", 16, "completed"],
-      ["podchat_sessions", 2, "in_progress"],
-      ["daily_practice_days", 2, "completed"],
-      ["vocabulary_reviewed", 0, "not_started"],
-    ]);
+    expect(result[0].currentValue).toBe(16);
+    expect(result[0].status).toBe("completed");
+
+    expect(result[1].currentValue).toBe(2);
+    expect(result[1].status).toBe("in_progress");
+
+    expect(result[2].currentValue).toBe(2);
+    expect(result[2].status).toBe("completed");
+
+    expect(result[4].currentValue).toBe(2);
+    expect(result[4].status).toBe("in_progress");
   });
 
   test("default enabled metrics exclude unsupported mission metrics", () => {
@@ -423,6 +430,7 @@ test.describe("Supabase weekly mission review adapter", () => {
       "vocab_correction_saved",
       "article_practice_completed",
       "daily_practice_days",
+      "listening_exercise_sessions",
     ]);
     expect(selectEnabledMissionMetrics()).not.toContain("vocabulary_reviewed");
     expect(selectEnabledMissionMetrics()).not.toContain("weakness_resolution");

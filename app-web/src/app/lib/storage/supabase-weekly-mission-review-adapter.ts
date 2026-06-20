@@ -19,6 +19,7 @@ export const READY_WEEKLY_MISSION_METRICS: WeeklyMissionMetricType[] = [
   "vocab_correction_saved",
   "article_practice_completed",
   "daily_practice_days",
+  "listening_exercise_sessions",
 ];
 
 export type WeeklyMissionSourceSnapshot = {
@@ -30,6 +31,7 @@ export type WeeklyMissionSourceSnapshot = {
   vocabularySentencesSubmitted: number;
   vocabularyCorrectionsSaved: number;
   articlePracticeCompleted: number;
+  listeningExerciseSessions: number;
   activeDays: string[];
   repeatedWeaknessCount: number;
   topWeaknesses: Array<{
@@ -78,6 +80,7 @@ type TimestampRow = {
   id?: string;
   created_at?: string | null;
   checked_at?: string | null;
+  completed_at?: string | null;
 };
 
 type PodchatSnapshotRow = TimestampRow & {
@@ -114,11 +117,11 @@ function utcDateFromTimestamp(value: unknown): string | null {
 }
 
 export function deriveWeeklyMissionActiveDays(
-  rows: ReadonlyArray<{ created_at?: string | null; checked_at?: string | null }>,
+  rows: ReadonlyArray<{ created_at?: string | null; checked_at?: string | null; completed_at?: string | null }>,
 ): string[] {
   const days = new Set<string>();
   for (const row of rows) {
-    const day = utcDateFromTimestamp(row.created_at ?? row.checked_at);
+    const day = utcDateFromTimestamp(row.created_at ?? row.checked_at ?? row.completed_at);
     if (day) days.add(day);
   }
   return Array.from(days).sort();
@@ -285,6 +288,7 @@ export async function getWeeklyMissionSourceSnapshot(input: {
   weekStart: string;
   weekEnd: string;
 }, supabaseClient: FonetikSupabaseClient): Promise<WeeklyMissionSourceSnapshot> {
+  const range = dateRange(input.weekStart, input.weekEnd);
   const [
     podchatRows,
     patternRows,
@@ -293,6 +297,7 @@ export async function getWeeklyMissionSourceSnapshot(input: {
     correctionRows,
     articleRows,
     weaknessRows,
+    listeningResult,
   ] = await Promise.all([
     selectRows<PodchatSnapshotRow>(supabaseClient, "podchat_sessions", "id, created_at, duration_seconds, elapsed_seconds", input.ownerId, "created_at", input.weekStart, input.weekEnd),
     selectRows<TimestampRow>(supabaseClient, "pattern_drill_sessions", "id, created_at", input.ownerId, "created_at", input.weekStart, input.weekEnd),
@@ -301,7 +306,17 @@ export async function getWeeklyMissionSourceSnapshot(input: {
     selectRows<TimestampRow>(supabaseClient, "vocabulary_corrections", "id, checked_at", input.ownerId, "checked_at", input.weekStart, input.weekEnd),
     selectRows<TimestampRow>(supabaseClient, "article_writing_sessions", "id, created_at", input.ownerId, "created_at", input.weekStart, input.weekEnd),
     selectRows<WeaknessRow>(supabaseClient, "learner_error_patterns", "id, created_at, category, label, practice_focus", input.ownerId, "created_at", input.weekStart, input.weekEnd),
+    supabaseClient
+      .from("listening_exercise_sessions")
+      .select("id, completed_at")
+      .eq("owner_id", input.ownerId)
+      .eq("status", "completed")
+      .gte("completed_at", range.start)
+      .lte("completed_at", range.end),
   ]);
+
+  if (listeningResult.error) throw listeningResult.error;
+  const listeningRows = (listeningResult.data as TimestampRow[] | null) ?? [];
 
   const speakingSeconds = podchatRows.reduce((sum, row) => {
     const elapsed = safeCount(row.elapsed_seconds);
@@ -315,6 +330,7 @@ export async function getWeeklyMissionSourceSnapshot(input: {
     ...sentenceRows,
     ...correctionRows,
     ...articleRows,
+    ...listeningRows,
   ];
 
   return {
@@ -326,6 +342,7 @@ export async function getWeeklyMissionSourceSnapshot(input: {
     vocabularySentencesSubmitted: sentenceRows.length,
     vocabularyCorrectionsSaved: correctionRows.length,
     articlePracticeCompleted: articleRows.length,
+    listeningExerciseSessions: listeningRows.length,
     activeDays: deriveWeeklyMissionActiveDays(activityRows),
     repeatedWeaknessCount: normalizeTopWeaknesses(weaknessRows).filter((item) => item.count > 1).length,
     topWeaknesses: normalizeTopWeaknesses(weaknessRows),
@@ -348,6 +365,8 @@ function progressForMetric(metricType: WeeklyMissionMetricType, snapshot: Weekly
       return snapshot.vocabularyCorrectionsSaved;
     case "article_practice_completed":
       return snapshot.articlePracticeCompleted;
+    case "listening_exercise_sessions":
+      return snapshot.listeningExerciseSessions;
     case "daily_practice_days":
       return snapshot.activeDays.length;
     case "vocabulary_reviewed":

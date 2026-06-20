@@ -57,7 +57,8 @@ export type XpEventType =
   | "mental_model_completed"
   | "level_up_applied"
   | "article_practice_completed"
-  | "vocab_reused";
+  | "vocab_reused"
+  | "listening_exercise_completed";
 
 type XpEventSourceKind =
   | "session"
@@ -70,7 +71,8 @@ type XpEventSourceKind =
   | "article"
   | "vocabulary"
   | "commonplace"
-  | "daily-activity";
+  | "daily-activity"
+  | "listening-exercise";
 
 export type XpEvent = {
   version: StorageVersion;
@@ -279,7 +281,7 @@ export const BADGE_DEFINITIONS: Readonly<Record<string, BadgeDefinition>> = {
 } as const;
 
 export const XP_RULES: Readonly<
-  Record<XpEventType, { xp: number; dailyCap: number }>
+  Record<XpEventType, { xp: number; dailyCap: number; description?: string }>
 > = {
   podchat_beginner_evaluated: { xp: 30, dailyCap: 10 },
   podchat_intermediate_evaluated: { xp: 50, dailyCap: 10 },
@@ -307,6 +309,7 @@ export const XP_RULES: Readonly<
   level_up_applied: { xp: 25, dailyCap: 1 },
   article_practice_completed: { xp: 25, dailyCap: 3 },
   vocab_reused: { xp: 10, dailyCap: 5 },
+  listening_exercise_completed: { xp: 50, dailyCap: 3, description: "Completed a Listening Exercise" },
 } as const;
 
 export const DAILY_XP_CAP = 220;
@@ -325,6 +328,7 @@ const EVENT_SOURCE_KINDS: readonly XpEventSourceKind[] = [
   "vocabulary",
   "commonplace",
   "daily-activity",
+  "listening-exercise",
 ];
 
 export type PodchatXpDifficulty =

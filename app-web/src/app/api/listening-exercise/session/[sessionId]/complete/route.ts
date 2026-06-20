@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateSessionScore } from "../../../../../lib/listening-exercise/evaluation/scoreAccumulator";
 import { mapScoreToBand } from "../../../../../lib/listening-exercise/evaluation/bandMapper";
+import {
+  createXpEvent,
+  awardXpEvent,
+  getLocalDateString,
+} from "../../../../../lib/gamification";
+import {
+  loadSupabaseXpProfile,
+  loadSupabaseXpEvents,
+  upsertXpProfileRow,
+  upsertXpEventRows,
+} from "../../../../../lib/storage/supabase-gamification-adapter";
 
 export const runtime = "nodejs";
 
@@ -129,6 +140,27 @@ export async function POST(
       { error: "Database operation failed. Please try again." },
       { status: 500 }
     );
+  }
+
+  // Award XP for completing the listening session
+  try {
+    const today = getLocalDateString(new Date());
+    const profile = await loadSupabaseXpProfile(ownerId, supabase);
+    const events = await loadSupabaseXpEvents(ownerId, supabase);
+    const candidate = createXpEvent({
+      type: "listening_exercise_completed",
+      sourceId: `listening-session-${sessionId}`,
+      sourceKind: "listening-exercise",
+      reason: "Completed a Listening Exercise session.",
+      localDate: today,
+    });
+    const awarded = awardXpEvent(profile, events, candidate);
+    if (awarded.result.allowed && awarded.result.xpToAward > 0) {
+      await upsertXpProfileRow(ownerId, awarded.profile, supabase);
+      await upsertXpEventRows(ownerId, [awarded.events[awarded.events.length - 1]], supabase);
+    }
+  } catch (xpError) {
+    console.error("Failed to award listening exercise completion XP:", xpError);
   }
 
   return NextResponse.json({
