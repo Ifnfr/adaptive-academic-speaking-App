@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { SignInButton } from "@clerk/nextjs";
 import { useSignIn } from "@clerk/nextjs/legacy";
 
@@ -131,151 +131,7 @@ function ArrowRightIcon() {
   );
 }
 
-// --- Particles Background Component ---
 
-interface ParticleData {
-  left: number;
-  top: number;
-  size: number;
-  duration: number;
-  delay: number;
-  xOffset: number;
-  yOffset: number;
-}
-
-function Particles() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [particles, setParticles] = useState<ParticleData[]>([]);
-
-  useEffect(() => {
-    const arr: ParticleData[] = [];
-    for (let i = 0; i < 60; i++) {
-      arr.push({
-        left: Math.random() * 100,
-        top: Math.random() * 100,
-        size: 1.5 + Math.random() * 4.0, // 1.5px to 5.5px
-        duration: 15 + Math.random() * 10, // 15s to 25s
-        delay: Math.random() * 10, // 0s to 10s
-        xOffset: -30 + Math.random() * 60, // -30px to 30px
-        yOffset: -50 - Math.random() * 200, // -50px to -250px
-      });
-    }
-    setTimeout(() => setParticles(arr), 0);
-  }, []);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
-    };
-    updateDimensions();
-    window.addEventListener("resize", updateDimensions);
-    return () => window.removeEventListener("resize", updateDimensions);
-  }, []);
-
-  const mouseRef = useRef({ x: -1000, y: -1000 });
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      mouseRef.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-    };
-
-    const handleMouseLeave = () => {
-      mouseRef.current = { x: -1000, y: -1000 };
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseleave", handleMouseLeave);
-
-    let animationFrameId: number;
-    const updateParticles = () => {
-      if (!containerRef.current || dimensions.width === 0 || particles.length === 0) {
-        animationFrameId = requestAnimationFrame(updateParticles);
-        return;
-      }
-
-      const elements = containerRef.current.querySelectorAll(".particle-inner");
-      const mouse = mouseRef.current;
-      const maxDist = 180;
-
-      elements.forEach((el, index) => {
-        const p = particles[index];
-        if (!p) return;
-        const anchorX = (p.left / 100) * dimensions.width;
-        const anchorY = (p.top / 100) * dimensions.height;
-
-        const distX = mouse.x - anchorX;
-        const distY = mouse.y - anchorY;
-        const dist = Math.sqrt(distX * distX + distY * distY);
-
-        const htmlEl = el as HTMLElement;
-
-        if (dist < maxDist) {
-          const force = Math.pow((maxDist - dist) / maxDist, 1.2);
-          const pushX = (distX / dist) * force * -60;
-          const pushY = (distY / dist) * force * -60;
-          htmlEl.style.transform = `translate3d(${pushX}px, ${pushY}px, 0) scale(1.5)`;
-          htmlEl.style.opacity = "1";
-        } else {
-          htmlEl.style.transform = "translate3d(0, 0, 0) scale(1)";
-          htmlEl.style.opacity = "0.7";
-        }
-      });
-
-      animationFrameId = requestAnimationFrame(updateParticles);
-    };
-
-    animationFrameId = requestAnimationFrame(updateParticles);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseleave", handleMouseLeave);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [dimensions, particles]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0 overflow-hidden pointer-events-none z-0"
-      data-testid="particles-bg"
-    >
-      {particles.map((p, idx) => (
-        <div
-          key={idx}
-          className="absolute pointer-events-none"
-          style={{
-            left: `${p.left}%`,
-            top: `${p.top}%`,
-            animation: `float-particle ${p.duration}s linear infinite ${p.delay}s`,
-            "--x-offset": `${p.xOffset}px`,
-            "--y-offset": `${p.yOffset}px`,
-          } as React.CSSProperties}
-        >
-          <div
-            className="particle-inner w-full h-full rounded-full bg-[#1A554A] transition-all duration-700 ease-out"
-            style={{
-              width: `${p.size}px`,
-              height: `${p.size}px`,
-              opacity: 0.7,
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // --- Typewriter Component ---
 
@@ -318,7 +174,7 @@ function TypewriterEffect() {
 
   return (
     <span
-      className="text-[#1A554A] italic pr-2 sm:pr-4 font-serif relative inline-grid min-h-[1.15em] leading-[1.1] align-baseline"
+      className="text-teal-400 pr-2 sm:pr-4 relative inline-grid min-h-[1.15em] leading-[1.1] align-baseline"
       data-testid="typewriter-slot"
     >
       <span
@@ -329,7 +185,7 @@ function TypewriterEffect() {
       </span>
       <span className="col-start-1 row-start-1 inline-flex min-h-[1.15em] items-center whitespace-nowrap">
         <span data-testid="typewriter-word">{currentText}</span>
-        <span className="bg-[#1A554A] w-[2px] h-[0.8em] ml-1 animate-blink-cursor" />
+        <span className="bg-teal-400 w-[2px] h-[0.8em] ml-1 animate-blink-cursor" />
       </span>
     </span>
   );
@@ -676,25 +532,9 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
   const [view, setView] = useState<CoverPageViewMode>("landing");
 
   return (
-    <div className="min-h-[100dvh] bg-[#F4F2E6] text-slate-800 font-sans relative flex items-center justify-center p-4 sm:p-12 selection:bg-[#1A554A] selection:text-white overflow-x-hidden overflow-y-auto w-full">
+    <div className="min-h-[100dvh] bg-[#0a0a0a] text-white font-sans relative flex items-center justify-center p-4 sm:p-12 selection:bg-teal-500 selection:text-white overflow-x-hidden overflow-y-auto w-full">
       {/* Dynamic styles tag to avoid global.css edits */}
       <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes float-particle {
-          0% {
-            transform: translate3d(0, 0, 0);
-            opacity: 0;
-          }
-          20% {
-            opacity: 0.6;
-          }
-          80% {
-            opacity: 0.6;
-          }
-          100% {
-            transform: translate3d(var(--x-offset), var(--y-offset), 0);
-            opacity: 0;
-          }
-        }
         @keyframes blink-cursor {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
@@ -743,18 +583,12 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
             opacity: 1 !important;
             transform: none !important;
           }
-          .particle-inner {
-            animation: none !important;
-          }
         }
       ` }} />
 
-      {/* Ambient glowing orbs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-[#D3F0E3]/40 blur-[120px] rounded-full pointer-events-none z-0" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-[#1A554A]/5 blur-[120px] rounded-full pointer-events-none z-0" />
-
-      {/* Drifting repelling particles */}
-      <Particles />
+      {/* Diffused spotlight mesh gradient */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-teal-600/20 rounded-full blur-[120px] pointer-events-none z-0" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[30vw] h-[30vw] bg-teal-800/20 rounded-full blur-[100px] pointer-events-none z-0" />
 
       {/* Main Layout wrapper */}
       <div
@@ -772,17 +606,17 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
         >
           {/* Logo */}
           <div className="flex items-center gap-3 animate-branding opacity-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#1A554A] text-white shadow-xl shadow-[#1A554A]/20 flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-teal-500 text-white shadow-xl shadow-teal-500/20 flex items-center justify-center">
               <MicIcon />
             </div>
-            <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight text-[#1A554A]">
+            <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight text-white">
               fonetik
             </span>
           </div>
 
           {/* Heading */}
           <h1
-            className={`text-slate-900 leading-[1.1] font-display font-semibold transition-all duration-700 ease-out mt-6 sm:mt-8 ${
+            className={`text-white leading-[1.1] font-display font-extrabold tracking-tight transition-all duration-700 ease-out mt-6 sm:mt-8 ${
               view === "landing"
                 ? "text-5xl sm:text-7xl lg:text-8xl"
                 : "text-4xl sm:text-5xl lg:text-6xl"
@@ -797,14 +631,14 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
 
           {/* Subheadline */}
           <p
-            className={`text-slate-600/90 font-light leading-relaxed transition-all duration-700 ease-out mt-4 sm:mt-6 ${
+            className={`text-gray-400 font-light leading-relaxed transition-all duration-700 ease-out mt-4 sm:mt-6 ${
               view === "landing"
-                ? "text-lg sm:text-xl max-w-2xl"
+                ? "text-lg sm:text-xl max-w-2xl mx-auto"
                 : "text-base sm:text-lg"
             }`}
           >
-            An intelligent environment designed for refining pronunciation,
-            expanding vocabulary, and structuring professional discourse.
+            Stop sounding unsure. Train your articulation, expand your academic
+            vocabulary, and speak with absolute authority.
           </p>
 
           {/* Start CTA */}
@@ -812,7 +646,7 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
             <button
               type="button"
               onClick={() => setView("login")}
-              className="mt-8 sm:mt-10 bg-[#1A554A] text-white rounded-full font-semibold px-8 sm:px-10 py-3.5 sm:py-4 transition-all shadow-[0_4px_14px_rgba(26,85,74,0.2)] hover:shadow-[0_6px_20px_rgba(26,85,74,0.3)] flex items-center gap-2 group cursor-pointer"
+              className="mt-8 sm:mt-10 bg-teal-500 text-white rounded-full font-semibold px-8 sm:px-10 py-3.5 sm:py-4 transition-all duration-300 shadow-[0_4px_14px_rgba(20,184,166,0.3)] hover:bg-teal-400 hover:scale-105 hover:shadow-[0_6px_20px_rgba(20,184,166,0.4)] flex items-center gap-2 group cursor-pointer"
             >
               Start
               <ArrowRightIcon />

@@ -573,10 +573,7 @@ html.dark {
   color: var(--brand-teal-ink) !important;
 }
 
-/* Drifting particles color */
-.dark [data-testid="particles-bg"] .particle-inner {
-  background-color: var(--brand-teal-ink) !important;
-}
+
 
 /* Floating label background overrides */
 .dark .peer-focus\:bg-white,
