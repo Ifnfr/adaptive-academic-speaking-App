@@ -62,7 +62,7 @@ export async function GET(
   // Query the database for the active section (most recently created section index)
   const { data: sections, error: sectionsError } = await supabase
     .from("listening_exercise_sections")
-    .select("generation_status, section_index")
+    .select("id, generation_status, section_index, topic, questions, audio_script")
     .eq("session_id", sessionId)
     .eq("owner_id", ownerId)
     .order("section_index", { ascending: false })
@@ -89,8 +89,19 @@ export async function GET(
   // Map db status 'error' to response status 'failed'
   const generationStatus = dbStatus === "error" ? "failed" : dbStatus;
 
-  return NextResponse.json({
+  const response: Record<string, unknown> = {
     generation_status: generationStatus,
     section_index: activeSection.section_index,
-  });
+  };
+
+  if (dbStatus === "ready") {
+    response.section = {
+      id: activeSection.id,
+      topic: activeSection.topic,
+      questions: activeSection.questions,
+      audio_script: activeSection.audio_script,
+    };
+  }
+
+  return NextResponse.json(response);
 }
