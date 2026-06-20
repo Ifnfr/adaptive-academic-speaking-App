@@ -4,18 +4,28 @@ import { POST } from "../src/app/api/podchat/stt/route";
 
 const originalApiKey = process.env.DEEPGRAM_API_KEY;
 const originalProvider = process.env.PODCHAT_STT_PROVIDER;
+const originalInternalKey = process.env.INTERNAL_SPEECH_SECURITY_KEY;
 const originalFetch = globalThis.fetch;
+
+const TEST_INTERNAL_KEY = "test-internal-speech-key";
 
 function buildSttRequest(options: {
   audio?: Blob;
   contentType?: string;
   useRawBody?: string;
   durationMs?: number;
+  omitInternalKey?: boolean;
 }): Request {
   if (options.useRawBody !== undefined) {
+    const headers: Record<string, string> = {
+      "content-type": options.contentType ?? "application/json",
+    };
+    if (!options.omitInternalKey) {
+      headers["X-Internal-Key"] = TEST_INTERNAL_KEY;
+    }
     return new Request("http://localhost/api/podchat/stt", {
       method: "POST",
-      headers: { "content-type": options.contentType ?? "application/json" },
+      headers,
       body: options.useRawBody,
     });
   }
@@ -29,10 +39,20 @@ function buildSttRequest(options: {
     formData.append("durationMs", String(options.durationMs));
   }
 
-  return new Request("http://localhost/api/podchat/stt", {
+  const req = new Request("http://localhost/api/podchat/stt", {
     method: "POST",
     body: formData,
   });
+
+  // FormData requests can't have headers set via the constructor without
+  // overriding the multipart boundary. We instead attach the security key
+  // by constructing a new Request that merges headers.
+  if (!options.omitInternalKey) {
+    const headers = new Headers(req.headers);
+    headers.set("X-Internal-Key", TEST_INTERNAL_KEY);
+    return new Request(req, { headers });
+  }
+  return req;
 }
 
 function mockDeepgramResponse(
@@ -56,10 +76,56 @@ function mockDeepgramResponse(
 }
 
 test.describe("Podchat STT Route", () => {
+  test.beforeEach(() => {
+    // Set the shared internal key so all tests pass the route security guard.
+    process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
+  });
+
   test.afterEach(() => {
     process.env.DEEPGRAM_API_KEY = originalApiKey;
     process.env.PODCHAT_STT_PROVIDER = originalProvider;
+    process.env.INTERNAL_SPEECH_SECURITY_KEY = originalInternalKey;
     globalThis.fetch = originalFetch;
+  });
+
+  // ---------------------------------------------------------------------------
+  // Internal security guard tests
+  // ---------------------------------------------------------------------------
+
+  test("guard: missing X-Internal-Key returns 401", async () => {
+    process.env.DEEPGRAM_API_KEY = "test-deepgram-key";
+    process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
+    const audioBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob, omitInternalKey: true }));
+    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(401);
+    expect(data.error).toBe("unauthorized");
+  });
+
+  test("guard: wrong X-Internal-Key returns 401", async () => {
+    process.env.DEEPGRAM_API_KEY = "test-deepgram-key";
+    process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
+    const audioBlob = new Blob([new Uint8Array([1, 2, 3])], { type: "audio/webm" });
+    // Build a request with the wrong key
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "speech.webm");
+    const baseReq = new Request("http://localhost/api/podchat/stt", { method: "POST", body: formData });
+    const wrongKeyHeaders = new Headers(baseReq.headers);
+    wrongKeyHeaders.set("X-Internal-Key", "wrong-key");
+    const wrongKeyReq = new Request(baseReq, { headers: wrongKeyHeaders });
+    const response = await POST(wrongKeyReq);
+    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(401);
+    expect(data.error).toBe("unauthorized");
+  });
+
+  test("guard: correct X-Internal-Key passes through to Deepgram key check", async () => {
+    process.env.DEEPGRAM_API_KEY = "";
+    process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
+    const audioBlob = new Blob([new Uint8Array([1])], { type: "audio/webm" });
+    const response = await POST(buildSttRequest({ audio: audioBlob }));
+    // Should reach the Deepgram key check and return 503, not 401
+    expect(response.status).toBe(503);
   });
 
   test("1. valid audio returns transcript", async () => {

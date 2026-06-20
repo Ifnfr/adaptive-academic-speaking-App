@@ -12,9 +12,26 @@ const originalOutputFormat = process.env.AMAZON_POLLY_OUTPUT_FORMAT;
 const originalSampleRate = process.env.AMAZON_POLLY_SAMPLE_RATE;
 const originalElevenLabsKey = process.env.ELEVENLABS_API_KEY;
 const originalElevenLabsVoice = process.env.ELEVENLABS_VOICE_ID;
+const originalInternalKey = process.env.INTERNAL_SPEECH_SECURITY_KEY;
 const originalFetch = globalThis.fetch;
 
-function buildRequest(body: Record<string, unknown>): Request {
+const TEST_INTERNAL_KEY = "test-internal-speech-key";
+
+function buildRequest(body: Record<string, unknown>, internalKey?: string): Request {
+  return new Request("http://localhost/api/podchat/tts", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-Internal-Key": internalKey ?? TEST_INTERNAL_KEY,
+    },
+    body: JSON.stringify({
+      text: "This is a short AI host response.",
+      ...body,
+    }),
+  });
+}
+
+function buildRequestNoKey(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/podchat/tts", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -28,7 +45,10 @@ function buildRequest(body: Record<string, unknown>): Request {
 function buildMalformedJsonRequest(): Request {
   return new Request("http://localhost/api/podchat/tts", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "X-Internal-Key": TEST_INTERNAL_KEY,
+    },
     body: "not-json",
   });
 }
@@ -43,6 +63,7 @@ function configureAwsEnv(overrides: Record<string, string | undefined> = {}) {
     overrides.AMAZON_POLLY_OUTPUT_FORMAT ?? "mp3";
   process.env.AMAZON_POLLY_SAMPLE_RATE =
     overrides.AMAZON_POLLY_SAMPLE_RATE ?? "24000";
+  process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
 }
 
 function clearAwsEnv() {
@@ -52,6 +73,7 @@ function clearAwsEnv() {
   process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE = "";
   process.env.AMAZON_POLLY_OUTPUT_FORMAT = "";
   process.env.AMAZON_POLLY_SAMPLE_RATE = "";
+  process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
 }
 
 function configureElevenLabsEnv(
@@ -61,11 +83,13 @@ function configureElevenLabsEnv(
     overrides.ELEVENLABS_API_KEY ?? "test-el-key";
   process.env.ELEVENLABS_VOICE_ID =
     overrides.ELEVENLABS_VOICE_ID ?? "test-voice-id";
+  process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
 }
 
 function clearElevenLabsEnv() {
   process.env.ELEVENLABS_API_KEY = "";
   process.env.ELEVENLABS_VOICE_ID = "";
+  process.env.INTERNAL_SPEECH_SECURITY_KEY = TEST_INTERNAL_KEY;
 }
 
 function mockElevenLabsResponse(
@@ -138,7 +162,37 @@ test.describe("Podchat TTS Route", () => {
     process.env.AMAZON_POLLY_SAMPLE_RATE = originalSampleRate;
     process.env.ELEVENLABS_API_KEY = originalElevenLabsKey;
     process.env.ELEVENLABS_VOICE_ID = originalElevenLabsVoice;
+    process.env.INTERNAL_SPEECH_SECURITY_KEY = originalInternalKey;
     globalThis.fetch = originalFetch;
+  });
+
+  // ---------------------------------------------------------------------------
+  // Internal security guard tests
+  // ---------------------------------------------------------------------------
+
+  test("guard: missing X-Internal-Key returns 401", async () => {
+    configureAwsEnv();
+    const response = await POST(buildRequestNoKey({}));
+    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(401);
+    expect(data.error).toBe("unauthorized");
+  });
+
+  test("guard: wrong X-Internal-Key returns 401", async () => {
+    configureAwsEnv();
+    const response = await POST(buildRequest({}, "wrong-key"));
+    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(401);
+    expect(data.error).toBe("unauthorized");
+  });
+
+  test("guard: correct X-Internal-Key passes through to AWS config check", async () => {
+    clearAwsEnv();
+    // Correct key but no AWS config — should get 503, not 401
+    const response = await POST(buildRequest({}));
+    const data = (await response.json()) as { error: string };
+    expect(response.status).toBe(503);
+    expect(data.error).toBe("tts_unavailable");
   });
 
   test("valid text returns audio/mpeg", async () => {
