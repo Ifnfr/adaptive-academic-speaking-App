@@ -72,6 +72,7 @@ import type {
 } from "./components/PodchatView";
 import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
 import { CommonplaceView } from "./components/CommonplaceView";
+import { ListeningExerciseSession } from "./components/listening-exercise/ListeningExerciseSession";
 import {
   ArticlePracticeView,
   type ArticlePracticeResult,
@@ -355,6 +356,7 @@ const FONETIK_RETURN_VIEWS = new Set<SidebarView>([
   "leaderboard",
   "learning-path",
   "profile",
+  "listening",
 ]);
 
 const COMMONPLACE_PODCHAT_CONTEXT_SESSION_KEY =
@@ -2763,6 +2765,17 @@ export default function Home() {
             />
           )}
 
+          {/* ===================== Academic Listening Practice ===================== */}
+          {view === "listening" && (
+            <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
+              <ListeningExerciseSession
+                initialCefrLevel={mapLearnerLevelToCefr(level)}
+                initialSectionCount={2}
+                initialIsPlacement={false}
+              />
+            </div>
+          )}
+
           {/* ===================== Legacy speaking pattern lab ===================== */}
           {view === "mental-model" && (
             <MentalModelView
@@ -3294,6 +3307,23 @@ function MobileNavigationDrawer({
   );
 }
 
+function mapLearnerLevelToCefr(learnerLevel: string): string {
+  switch (learnerLevel) {
+    case "Foundation":
+      return "A2";
+    case "Beginner":
+      return "B1";
+    case "Intermediate":
+      return "B2";
+    case "Advanced":
+      return "C1";
+    case "Expert":
+      return "C2";
+    default:
+      return "B2";
+  }
+}
+
 // ---------- Topbar copy helpers ----------
 // Pure functions used by the topbar; defined at module scope so they don't
 // rebuild on every render.
@@ -3307,6 +3337,8 @@ function viewTitle(view: string, translate: Translate): string {
       return translate("topbar.titleCommonplace");
     case "article-practice":
       return translate("topbar.titleArticlePractice");
+    case "listening":
+      return translate("topbar.titleListening");
     case "session-log":
       return translate("topbar.titleSessionLog");
     case "progress":
@@ -3340,6 +3372,8 @@ function viewSubtitle(view: string, translate: Translate): string {
       return translate("sidebar.viewCommonplace");
     case "article-practice":
       return translate("topbar.titleArticlePractice");
+    case "listening":
+      return translate("sidebar.viewListening") || "Listening";
     case "session-log":
       return translate("topbar.titleSessionLog");
     case "progress":
@@ -3371,6 +3405,8 @@ function viewDescription(view: string, translate: Translate): string {
       return translate("topbar.descCommonplace");
     case "article-practice":
       return translate("topbar.descArticlePractice");
+    case "listening":
+      return translate("topbar.descListening");
     case "session-log":
       return translate("topbar.descSessionLog");
     case "progress":

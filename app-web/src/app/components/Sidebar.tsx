@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 
@@ -72,31 +71,6 @@ function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
       >
         {children}
       </button>
-    </li>
-  );
-}
-
-type SidebarLinkProps = {
-  active?: boolean;
-  href: string;
-  children: ReactNode;
-};
-
-function SidebarLink({ active = false, href, children }: SidebarLinkProps) {
-  const base =
-    "app-button w-full justify-start px-3 py-2 text-left flex items-center";
-  const activeClass =
-    "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-medium";
-  const idleClass = "app-button-ghost text-[var(--brand-ink-soft)]";
-  return (
-    <li>
-      <Link
-        href={href}
-        aria-current={active ? "page" : undefined}
-        className={`${base} ${active ? activeClass : idleClass}`}
-      >
-        {children}
-      </Link>
     </li>
   );
 }
@@ -208,9 +182,9 @@ export function Sidebar({
             >
               {t("sidebar.viewActive")}
             </SidebarItem>
-            <SidebarLink
+            <SidebarItem
               active={view === "listening"}
-              href="/listening"
+              onClick={() => onSelectView("listening")}
             >
               <div className="flex items-center gap-2">
                 <svg
@@ -230,7 +204,7 @@ export function Sidebar({
                 </svg>
                 <span>{t("sidebar.viewListening") || "Listening"}</span>
               </div>
-            </SidebarLink>
+            </SidebarItem>
             <SidebarItem
               active={view === "vocabulary"}
               onClick={() => onSelectView("vocabulary")}
