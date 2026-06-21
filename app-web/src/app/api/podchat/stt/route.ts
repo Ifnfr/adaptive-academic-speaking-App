@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server";
 import { checkTranscriptQuality } from "../../../lib/podchat/transcriptQuality";
+import { testHooks } from "./route-test-hooks";
 
 export const runtime = "nodejs";
+
+async function resolveCurrentUserId(): Promise<string | null> {
+  if (testHooks.resolveCurrentUserId) {
+    return testHooks.resolveCurrentUserId();
+  }
+  try {
+    const { auth } = await import("@clerk/nextjs/server");
+    const session = await auth();
+    return session?.userId || null;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_AUDIO_SIZE = 2 * 1024 * 1024; // 2 MB
 const VALID_MIME_TYPES = [
@@ -17,14 +31,8 @@ function normalizeAudioMimeType(mimeType: string) {
 }
 
 export async function POST(request: Request) {
-  // ---------------------------------------------------------------------------
-  // Internal security guard — server-to-server only.
-  // Reject any request that does not carry the correct X-Internal-Key header.
-  // This prevents external callers from abusing shared speech bandwidth costs.
-  // ---------------------------------------------------------------------------
-  const internalKey = process.env.INTERNAL_SPEECH_SECURITY_KEY;
-  const receivedKey = request.headers.get("X-Internal-Key");
-  if (!internalKey || !receivedKey || receivedKey !== internalKey) {
+  const userId = await resolveCurrentUserId();
+  if (!userId) {
     return NextResponse.json(
       { error: "unauthorized", message: "Unauthorized." },
       { status: 401 }
