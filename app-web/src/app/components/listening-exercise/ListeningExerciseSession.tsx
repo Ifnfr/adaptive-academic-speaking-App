@@ -39,6 +39,69 @@ async function fetchTtsAudio(text: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+function splitTextIntoChunks(text: string): string[] {
+  const sentences = text.match(/[^.!?]+(?:[.!?]+(?:\s+|$)|$)/g) || [text];
+  const chunks: string[] = [];
+  let currentChunk = "";
+
+  for (const rawSentence of sentences) {
+    const s = rawSentence.trim();
+    if (!s) continue;
+
+    // Split sentences if they are single-handedly longer than 450 characters
+    const splitSentences = s.length > 450 ? splitSentenceIfTooLong(s, 450) : [s];
+
+    for (const subS of splitSentences) {
+      if (!currentChunk) {
+        currentChunk = subS;
+      } else if (currentChunk.length + subS.length + 1 < 450) {
+        currentChunk += " " + subS;
+      } else {
+        chunks.push(currentChunk);
+        currentChunk = subS;
+      }
+    }
+  }
+
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  // Merge extremely short trailing chunks (< 50 chars) into the previous chunk if possible
+  if (chunks.length > 1) {
+    const lastIdx = chunks.length - 1;
+    if (chunks[lastIdx].length < 50) {
+      if (chunks[lastIdx - 1].length + chunks[lastIdx].length + 1 < 450) {
+        chunks[lastIdx - 1] = chunks[lastIdx - 1] + " " + chunks[lastIdx];
+        chunks.pop();
+      }
+    }
+  }
+
+  return chunks;
+}
+
+function splitSentenceIfTooLong(sentence: string, maxLen = 450): string[] {
+  if (sentence.length <= maxLen) return [sentence];
+  const parts: string[] = [];
+  let currentPart = "";
+  const words = sentence.split(/(\s+)/);
+  for (const word of words) {
+    if (currentPart.length + word.length <= maxLen) {
+      currentPart += word;
+    } else {
+      if (currentPart.trim()) {
+        parts.push(currentPart.trim());
+      }
+      currentPart = word;
+    }
+  }
+  if (currentPart.trim()) {
+    parts.push(currentPart.trim());
+  }
+  return parts;
+}
+
 export function ListeningExerciseSession({
   initialCefrLevel = "B2",
   initialSectionCount = 3,
@@ -61,7 +124,7 @@ export function ListeningExerciseSession({
   const [sectionIndex, setSectionIndex] = useState(0);
   const [sectionCount] = useState(initialSectionCount);
   const [topic, setTopic] = useState("");
-  const [audioUrl, setAudioUrl] = useState("");
+  const [audioUrls, setAudioUrls] = useState<(string | null)[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
@@ -103,10 +166,36 @@ export function ListeningExerciseSession({
           // Retrieve and cache passage audio
           setStep("loading_audio");
           try {
-            const url = await fetchTtsAudio(sectionData.audio_script);
+            const scriptText = sectionData.audio_script || "";
+            const chunks = splitTextIntoChunks(scriptText);
+            
+            // Fetch chunk 0 immediately
+            const firstChunkUrl = await fetchTtsAudio(chunks[0] || "");
+            
             if (isMountedRef.current) {
-              setAudioUrl(url);
+              const initialUrls = new Array(chunks.length).fill(null);
+              initialUrls[0] = firstChunkUrl;
+              setAudioUrls(initialUrls);
               setStep("ready");
+
+              // Asynchronously prefetch remaining chunks sequentially
+              (async () => {
+                for (let i = 1; i < chunks.length; i++) {
+                  if (!isMountedRef.current) break;
+                  try {
+                    const chunkUrl = await fetchTtsAudio(chunks[i]);
+                    if (isMountedRef.current) {
+                      setAudioUrls((prev) => {
+                        const updated = [...prev];
+                        updated[i] = chunkUrl;
+                        return updated;
+                      });
+                    }
+                  } catch (prefetchErr) {
+                    console.error(`Prefetch failed for chunk ${i}:`, prefetchErr);
+                  }
+                }
+              })();
             }
           } catch (audioErr) {
             console.error("Audio download error:", audioErr);
@@ -144,11 +233,13 @@ export function ListeningExerciseSession({
   // Clean up Blob URLs when unmounting
   useEffect(() => {
     return () => {
-      if (audioUrl && audioUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(audioUrl);
-      }
+      audioUrls.forEach((url) => {
+        if (url && url.startsWith("blob:")) {
+          URL.revokeObjectURL(url);
+        }
+      });
     };
-  }, [audioUrl]);
+  }, [audioUrls]);
 
   const handleStartSession = async () => {
     setStep("generating");
@@ -224,11 +315,13 @@ export function ListeningExerciseSession({
         throw new Error("Unable to submit section answers.");
       }
 
-      // Evict old Object URL
-      if (audioUrl && audioUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(audioUrl);
-      }
-      setAudioUrl("");
+      // Evict old Object URLs
+      audioUrls.forEach((url) => {
+        if (url && url.startsWith("blob:")) {
+          URL.revokeObjectURL(url);
+        }
+      });
+      setAudioUrls([]);
 
       const isFinalSection = sectionIndex + 1 >= sectionCount;
 
@@ -518,7 +611,7 @@ export function ListeningExerciseSession({
           sectionIndex={sectionIndex}
           sectionCount={sectionCount}
           topic={topic}
-          audioUrl={audioUrl}
+          audioUrls={audioUrls}
           questions={questions}
           onSubmit={handleSubmit}
         />

@@ -7,7 +7,7 @@ export interface ListeningExerciseLayoutProps {
   sectionIndex: number;
   sectionCount: number;
   topic: string;
-  audioUrl?: string;
+  audioUrls?: (string | null)[];
   questions: Question[];
   onSubmit: (answers: Record<string, string>) => void;
 }
@@ -17,7 +17,7 @@ export function ListeningExerciseLayout({
   sectionIndex,
   sectionCount,
   topic,
-  audioUrl,
+  audioUrls,
   questions,
   onSubmit,
 }: ListeningExerciseLayoutProps) {
@@ -117,8 +117,8 @@ export function ListeningExerciseLayout({
 
       {/* Audio Controller */}
       <AudioController
-        key={audioUrl}
-        audioUrl={audioUrl}
+        key={audioUrls?.[0]}
+        audioUrls={audioUrls}
         replayCount={replayCount}
         onPlayStart={handlePlayStart}
         onPlaybackComplete={handlePlaybackComplete}

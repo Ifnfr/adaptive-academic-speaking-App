@@ -936,9 +936,15 @@ export function PodchatView({
         ? { text, ttsProvider, elevenLabsModelId }
         : { text, ttsProvider, voiceProfile: ttsVoiceProfile };
 
+      const internalKey =
+        process.env.NEXT_PUBLIC_INTERNAL_SPEECH_SECURITY_KEY || "test-internal-speech-key";
+
       const response = await fetch("/api/podchat/tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": internalKey,
+        },
         body: JSON.stringify(requestBody),
       });
       if (!response.ok) {
@@ -1202,8 +1208,14 @@ export function PodchatView({
           formData.append("audio", audioBlob, `speech.${blobMimeType.split("/")[1] || "webm"}`);
           formData.append("durationMs", String(durationMs));
 
+          const internalKey =
+            process.env.NEXT_PUBLIC_INTERNAL_SPEECH_SECURITY_KEY || "test-internal-speech-key";
+
           const response = await fetch("/api/podchat/stt", {
             method: "POST",
+            headers: {
+              "X-Internal-Key": internalKey,
+            },
             body: formData,
             signal: controller.signal,
           });

@@ -1,28 +1,43 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export interface AudioControllerProps {
-  audioUrl?: string;
+  audioUrls?: (string | null)[];
   replayCount: number;
   onPlayStart: () => void;
   onPlaybackComplete: () => void;
 }
 
 export function AudioController({
-  audioUrl,
+  audioUrls = [],
   replayCount,
   onPlayStart,
   onPlaybackComplete,
 }: AudioControllerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  const currentAudioUrl = audioUrls[currentChunkIndex] || "";
+
+  // Load and play next chunk when ready
+  useEffect(() => {
+    if (isPlaying && audioRef.current && currentAudioUrl) {
+      if (audioRef.current.src !== currentAudioUrl) {
+        audioRef.current.load();
+        audioRef.current.play().catch((err) => {
+          console.error("Playback failed for chunk:", currentChunkIndex, err);
+        });
+      }
+    }
+  }, [currentChunkIndex, isPlaying, currentAudioUrl]);
+
   const handlePlayClick = () => {
     if (replayCount >= 3 || isPlaying) return;
     
-    if (audioRef.current) {
+    if (audioRef.current && currentAudioUrl) {
       onPlayStart();
       audioRef.current.play().catch((err) => {
         console.error("Audio playback failed:", err);
@@ -44,12 +59,23 @@ export function AudioController({
   };
 
   const handleEnded = () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-    onPlaybackComplete();
+    if (currentChunkIndex < audioUrls.length - 1) {
+      setCurrentTime(0);
+      setDuration(0);
+      setCurrentChunkIndex((prev) => prev + 1);
+    } else {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setCurrentChunkIndex(0);
+      onPlaybackComplete();
+    }
   };
 
-  const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const totalChunks = audioUrls.length || 1;
+  const progressPct = duration > 0
+    ? ((currentChunkIndex + (currentTime / duration)) / totalChunks) * 100
+    : (currentChunkIndex / totalChunks) * 100;
 
   // Format time (e.g. 1:30)
   const formatTime = (time: number) => {
@@ -60,13 +86,13 @@ export function AudioController({
   };
 
   // Enforce disabled play
-  const isPlayDisabled = isPlaying || replayCount >= 3 || !audioUrl;
+  const isPlayDisabled = isPlaying || replayCount >= 3 || !currentAudioUrl;
 
   return (
     <div className="flex flex-col gap-4 p-5 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-2xl shadow-sm">
       <audio
         ref={audioRef}
-        src={audioUrl}
+        src={currentAudioUrl || undefined}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleEnded}
@@ -77,7 +103,7 @@ export function AudioController({
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-[var(--brand-ink-soft)]">
-            Listening Passage
+            {audioUrls.length > 1 ? `Listening Passage (Part ${currentChunkIndex + 1}/${audioUrls.length})` : "Listening Passage"}
           </span>
           <span className="text-xs text-[var(--brand-muted)]">
             {replayCount >= 3

@@ -74,15 +74,18 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
         section_index: i,
         cefr_level: cefrLevel,
         topic: i === 0 ? "Chemistry Basics" : `Academic Lecture Topic ${i + 1}`,
-        question_types: ["fill_blank"]
+        question_types: ["fill_blank", "true_false", "multiple_choice"]
       }))
     },
     section: {
       topic: "Chemistry Basics",
-      audio_script: "Welcome to this chemistry lecture. Today we discuss water boiling points. Under standard sea-level atmospheric pressure, pure water always boils at exactly one hundred degrees Celsius. However, at higher altitudes where pressure is lower, water boils at lower temperatures.",
+      audio_script: "Welcome to this chemistry lecture. Today we discuss water boiling points. Under standard sea-level atmospheric pressure, pure water always boils at exactly one hundred degrees Celsius. However, at higher altitudes where pressure is lower, water boils at lower temperatures. Oxygen and hydrogen bind together to form water molecules.",
       fact_units: [
         { id: "fact_0", text: "Under standard sea-level atmospheric pressure, pure water always boils at exactly 100 degrees Celsius." },
-        { id: "fact_1", text: "At higher altitudes where pressure is lower, water boils at lower temperatures." }
+        { id: "fact_1", text: "At higher altitudes where pressure is lower, water boils at lower temperatures." },
+        { id: "fact_2", text: "Water is composed of oxygen and hydrogen atoms." },
+        { id: "fact_3", text: "Hydrogen is the lightest element on the periodic table." },
+        { id: "fact_4", text: "Water molecules exhibit polarity due to unequal electron sharing." }
       ],
       questions: [
         {
@@ -95,11 +98,35 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
         },
         {
           id: "q_1",
-          question_type: "fill_blank",
-          question_text: "At higher altitudes, water boils at [blank] temperatures.",
-          answer: "lower",
-          accepted_variants: ["colder", "lesser"],
+          question_type: "true_false",
+          question_text: "Water boils at a higher temperature at higher altitudes.",
+          options: ["True", "False"],
+          answer: "False",
           testing_fact_unit_id: "fact_1"
+        },
+        {
+          id: "q_2",
+          question_type: "multiple_choice",
+          question_text: "Which elements bind together to form water molecules?",
+          options: ["Oxygen and Carbon", "Oxygen and Hydrogen", "Hydrogen and Helium", "Nitrogen and Hydrogen"],
+          answer: "Oxygen and Hydrogen",
+          testing_fact_unit_id: "fact_2"
+        },
+        {
+          id: "q_3",
+          question_type: "fill_blank",
+          question_text: "The lightest element on the periodic table is [blank].",
+          answer: "hydrogen",
+          accepted_variants: ["H"],
+          testing_fact_unit_id: "fact_3"
+        },
+        {
+          id: "q_4",
+          question_type: "multiple_choice",
+          question_text: "Why do water molecules exhibit polarity?",
+          options: ["Unequal electron sharing", "Equal electron sharing", "Ionic bonding", "None of the above"],
+          answer: "Unequal electron sharing",
+          testing_fact_unit_id: "fact_4"
         }
       ]
     }
@@ -116,9 +143,13 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
     },
     section: {
       topic: topic || `Academic Lecture Topic ${sectionIndex + 1}`,
-      audio_script: `This is the transcript for section ${sectionIndex + 1} covering ${topic || 'academic concepts'}. In this part, we examine how pressure decreases with altitude, which is roughly one hectopascal per eight meters.`,
+      audio_script: `This is the transcript for section ${sectionIndex + 1} covering ${topic || 'academic concepts'}. In this part, we examine how atmospheric pressure decreases with altitude, which is roughly one hectopascal per eight meters. Gravity pulls the air molecules closer to the surface, creating higher density. Warm air expands and rises, while cold air contracts and sinks.`,
       fact_units: [
-        { id: `fact_${sectionIndex}_0`, text: `Pressure decreases with altitude at approximately one hectopascal per eight meters.` }
+        { id: `fact_${sectionIndex}_0`, text: `Pressure decreases with altitude at approximately one hectopascal per eight meters.` },
+        { id: `fact_${sectionIndex}_1`, text: `Gravity pulls air molecules closer to the Earth's surface.` },
+        { id: `fact_${sectionIndex}_2`, text: `Warm air expands and rises.` },
+        { id: `fact_${sectionIndex}_3`, text: `Cold air contracts and sinks.` },
+        { id: `fact_${sectionIndex}_4`, text: `Air pressure is measured using a barometer.` }
       ],
       questions: [
         {
@@ -128,6 +159,38 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
           answer: "eight",
           accepted_variants: ["8", "8 meters"],
           testing_fact_unit_id: `fact_${sectionIndex}_0`
+        },
+        {
+          id: `q_${sectionIndex}_1`,
+          question_type: "true_false",
+          question_text: "Gravity causes air density to be higher at higher altitudes.",
+          options: ["True", "False"],
+          answer: "False",
+          testing_fact_unit_id: `fact_${sectionIndex}_1`
+        },
+        {
+          id: `q_${sectionIndex}_2`,
+          question_type: "multiple_choice",
+          question_text: "What happens to warm air?",
+          options: ["It contracts and sinks", "It expands and rises", "It remains stable", "It turns into liquid"],
+          answer: "It expands and rises",
+          testing_fact_unit_id: `fact_${sectionIndex}_2`
+        },
+        {
+          id: `q_${sectionIndex}_3`,
+          question_type: "fill_blank",
+          question_text: "Cold air contracts and [blank].",
+          answer: "sinks",
+          accepted_variants: ["falls"],
+          testing_fact_unit_id: `fact_${sectionIndex}_3`
+        },
+        {
+          id: `q_${sectionIndex}_4`,
+          question_type: "multiple_choice",
+          question_text: "Which instrument is used to measure air pressure?",
+          options: ["Thermometer", "Hygrometer", "Barometer", "Anemometer"],
+          answer: "Barometer",
+          testing_fact_unit_id: `fact_${sectionIndex}_4`
         }
       ]
     }
@@ -287,23 +350,36 @@ export function buildSection1SystemPrompt(): string {
     "Analyze the learner's previous listening attempts history (if provided) to identify strengths and weaknesses. If no history is provided or is_placement is true, summarize that this is a new placement session.",
     "",
     "PHASE 2: PLANNING",
-    "Plan the overall CEFR level, topic progression across sections, and distribution of question types. The plan must match the requested number of sections and average CEFR level. Ensure question types strictly focus on 'fill_blank'.",
+    "Plan the overall CEFR level, topic progression across sections, and distribution of question types. The plan must match the requested number of sections and average CEFR level. Ensure question types include a variety of formats: true_false, multiple_choice, and fill_blank.",
     "",
     "PHASE 3: IMPLEMENTATION",
     "Generate the listening passage script (audio_script) for Section 1 (index 0). Extract a discrete array of key facts (fact_units) from the passage script. Finally, formulate the questions array. Each question must target a specific fact unit and map to it via testing_fact_unit_id.",
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
-    "- You MUST extract 2-4 discrete, clear factual statements (fact_units) from that audio_script.",
-    "- You MUST formulate one question for each fact unit. Each question MUST test a key word or phrase from the script. You must associate each question with the correct fact_unit_id in the testing_fact_unit_id property.",
+    "- You MUST extract exactly 5 discrete, clear factual statements (fact_units) from that audio_script.",
+    "- You must associate each question with the correct fact_unit_id in the testing_fact_unit_id property.",
+    "",
+    "CRITICAL RULE: You MUST generate exactly 5 questions. Do not generate fewer.",
+    "",
+    "FORMAT VARIETY: You MUST include at least one Multiple Choice, one True/False, and one Fill in the Blank question in every set. Do not use only one format.",
+    "",
+    "DIFFICULTY SCALING: Analyze the user's past performance (if provided in context) or the target academic level. Increase vocabulary complexity and inferential reasoning requirements for each subsequent question.",
     "",
     "QUESTION FORMAT RULES:",
-    "- The question type is 'fill_blank'.",
-    "- The question_text MUST contain a single '[blank]' placeholder (e.g. 'Water boils at [blank] degrees.').",
-    "- You must provide the primary correct 'answer' and a list of 'accepted_variants' (alternate spellings, numbers vs. words, etc.).",
+    "1. fill_blank:",
+    "   - The question_text MUST contain a single '[blank]' placeholder (e.g., 'Standard sea-level pressure causes water to boil at [blank] degrees.').",
+    "   - You must provide the primary correct 'answer' and a list of 'accepted_variants' (alternate spellings, numbers vs. words, etc.).",
+    "2. true_false:",
+    "   - The question_text MUST be a complete statement.",
+    "   - The 'options' array MUST contain exactly ['True', 'False'].",
+    "   - The 'answer' MUST be either 'True' or 'False'.",
+    "3. multiple_choice:",
+    "   - The question_text MUST be a clear question or incomplete statement.",
+    "   - The 'options' array MUST contain exactly 4 distinct choices.",
+    "   - The 'answer' MUST be the exact string of the correct choice from the options array.",
     "",
-    "RESPONSE FORMAT:",
-    "You must respond with ONLY a single valid JSON object containing exactly the keys below. Do not wrap in markdown code blocks like ```json or add any extra text:",
+    "JSON ENFORCEMENT: Return strictly valid JSON matching the schema.",
     "{",
     '  "reasoning": {',
     '    "phase1_analysis": "your phase 1 findings here",',
@@ -314,17 +390,25 @@ export function buildSection1SystemPrompt(): string {
     '    "cefr_level": "A1-C2",',
     '    "section_count": 3,',
     '    "sections": [',
-    '      { "section_index": 0, "cefr_level": "A1-C2", "topic": "topic name", "question_types": ["fill_blank"] }',
+    '      { "section_index": 0, "cefr_level": "A1-C2", "topic": "topic name", "question_types": ["fill_blank", "true_false", "multiple_choice"] }',
     "    ]",
     "  },",
     '  "section": {',
     '    "topic": "topic name",',
     '    "audio_script": "lecture text...",',
     '    "fact_units": [',
-    '      { "id": "fact_0", "text": "fact statement" }',
+    '      { "id": "fact_0", "text": "fact statement 1" },',
+    '      { "id": "fact_1", "text": "fact statement 2" },',
+    '      { "id": "fact_2", "text": "fact statement 3" },',
+    '      { "id": "fact_3", "text": "fact statement 4" },',
+    '      { "id": "fact_4", "text": "fact statement 5" }',
     "    ],",
     '    "questions": [',
-    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" }',
+    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
+    '      { "id": "q_1", "question_type": "true_false", "question_text": "statement...", "options": ["True", "False"], "answer": "True", "testing_fact_unit_id": "fact_1" },',
+    '      { "id": "q_2", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_2" },',
+    '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_3" },',
+    '      { "id": "q_4", "question_type": "multiple_choice", "question_text": "advanced question...", "options": ["c1", "c2", "c3", "c4"], "answer": "c1", "testing_fact_unit_id": "fact_4" }',
     "    ]",
     "  }",
     "}"
@@ -361,16 +445,29 @@ export function buildNextSectionSystemPrompt(): string {
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
-    "- You MUST extract 2-4 discrete, clear factual statements (fact_units) from that audio_script.",
-    "- You MUST formulate one question for each fact unit. Each question MUST test a key word or phrase from the script. You must associate each question with the correct fact_unit_id in the testing_fact_unit_id property.",
+    "- You MUST extract exactly 5 discrete, clear factual statements (fact_units) from that audio_script.",
+    "- You must associate each question with the correct fact_unit_id in the testing_fact_unit_id property.",
+    "",
+    "CRITICAL RULE: You MUST generate exactly 5 questions. Do not generate fewer.",
+    "",
+    "FORMAT VARIETY: You MUST include at least one Multiple Choice, one True/False, and one Fill in the Blank question in every set. Do not use only one format.",
+    "",
+    "DIFFICULTY SCALING: Analyze the user's past performance (if provided in context) or the target academic level. Increase vocabulary complexity and inferential reasoning requirements for each subsequent question.",
     "",
     "QUESTION FORMAT RULES:",
-    "- The question type is 'fill_blank'.",
-    "- The question_text MUST contain a single '[blank]' placeholder.",
-    "- You must provide the primary correct 'answer' and a list of 'accepted_variants'.",
+    "1. fill_blank:",
+    "   - The question_text MUST contain a single '[blank]' placeholder (e.g., 'Standard sea-level pressure causes water to boil at [blank] degrees.').",
+    "   - You must provide the primary correct 'answer' and a list of 'accepted_variants' (alternate spellings, numbers vs. words, etc.).",
+    "2. true_false:",
+    "   - The question_text MUST be a complete statement.",
+    "   - The 'options' array MUST contain exactly ['True', 'False'].",
+    "   - The 'answer' MUST be either 'True' or 'False'.",
+    "3. multiple_choice:",
+    "   - The question_text MUST be a clear question or incomplete statement.",
+    "   - The 'options' array MUST contain exactly 4 distinct choices.",
+    "   - The 'answer' MUST be the exact string of the correct choice from the options array.",
     "",
-    "RESPONSE FORMAT:",
-    "You must respond with ONLY a single valid JSON object containing exactly the keys below. Do not wrap in markdown code blocks or add any extra text:",
+    "JSON ENFORCEMENT: Return strictly valid JSON matching the schema.",
     "{",
     '  "reasoning": {',
     '    "phase3_implementation": "your phase 3 details here"',
@@ -379,13 +476,21 @@ export function buildNextSectionSystemPrompt(): string {
     '    "topic": "topic name",',
     '    "audio_script": "lecture text...",',
     '    "fact_units": [',
-    '      { "id": "fact_0", "text": "fact statement" }',
+    '      { "id": "fact_0", "text": "fact statement 1" },',
+    '      { "id": "fact_1", "text": "fact statement 2" },',
+    '      { "id": "fact_2", "text": "fact statement 3" },',
+    '      { "id": "fact_3", "text": "fact statement 4" },',
+    '      { "id": "fact_4", "text": "fact statement 5" }',
     "    ],",
     '    "questions": [',
-    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" }',
-    "    ]",
-    "  }",
-    "}"
+    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
+    '      { "id": "q_1", "question_type": "true_false", "question_text": "statement...", "options": ["True", "False"], "answer": "True", "testing_fact_unit_id": "fact_1" },',
+    '      { "id": "q_2", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_2" },',
+    '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_3" },',
+    '      { "id": "q_4", "question_type": "multiple_choice", "question_text": "advanced question...", "options": ["c1", "c2", "c3", "c4"], "answer": "c1", "testing_fact_unit_id": "fact_4" }',
+    "    ],",
+    "  },",
+    "}",
   ].join("\n");
 }
 
