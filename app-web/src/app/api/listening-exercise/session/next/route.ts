@@ -6,8 +6,9 @@ import {
   buildNextSectionUserPrompt,
   extractJsonObject
 } from "../../_lib/providers";
+import { waitUntil } from "@vercel/functions";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 async function resolveCurrentUserId(): Promise<string | null> {
   try {
@@ -168,8 +169,8 @@ export async function POST(request: Request) {
 
   const sectionId = newSectionData.id;
 
-  // Background promise execution
-  (async () => {
+  // Register background AI execution with the runtime lifecycle manager
+  waitUntil((async () => {
     try {
       const systemPrompt = buildNextSectionSystemPrompt();
       const userPrompt = buildNextSectionUserPrompt(
@@ -224,7 +225,7 @@ export async function POST(request: Request) {
         })
         .eq("id", sectionId);
     }
-  })();
+  })());
 
   // Immediately respond HTTP 202 Accepted
   return NextResponse.json(
