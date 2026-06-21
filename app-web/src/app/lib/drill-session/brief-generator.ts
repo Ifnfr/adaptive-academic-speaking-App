@@ -166,7 +166,7 @@ The generated JSON must match the following schema exactly:
   "responsePattern": {
     "name": "Name of response structure",
     "steps": ["Step 1", "Step 2"], // 2 to 5 steps using slot notation, e.g. "[claim]"
-    "spokenModelFragment": "A short spoken model fragment demonstrating the pattern steps, e.g. 'I think it helps because it saves time.'" // MUST be a short string, max 12 words, max 120 chars, single-line, demonstrating the pattern
+    "spokenModelFragment": "A short spoken sentence that DEMONSTRATES this exact pattern by using the CONCRETE (non-bracketed) words from responsePattern.steps above — do NOT write a generic unrelated sentence. The fragment must contain at least one concrete keyword from the steps (e.g. if a step says 'because + reason', the fragment MUST contain the word 'because'). Max 12 words, max 120 characters, single sentence, no internal punctuation other than the final period."
   },
   "miniExample": "Example sentence. Illustration only — do not copy or memorize.", // 1 to 2 sentences max, MUST contain "Illustration only" and ("do not copy" or "do not memorize")
   "commonMistakes": ["Mistake 1", "Mistake 2"], // 1 to 3 short strings
@@ -178,7 +178,8 @@ The generated JSON must match the following schema exactly:
   }
 }
 
-Do not include any wrapper, markdown fences, or notes. Return only raw JSON.`;
+Do not include any wrapper, markdown fences, or notes. Return only raw JSON.
+Ensure you define the responsePattern.steps first, and then construct responsePattern.spokenModelFragment by directly incorporating the concrete keywords (e.g., transition words like 'because', 'therefore', 'although') that are explicitly defined in those steps.`;
 
   const userPrompt = `Generate a Pattern Brief for:
 Level: ${level}
@@ -191,6 +192,7 @@ Focus: ${validatedFocus}`;
   } else {
     text = await callRoleProvider("planning", systemPrompt, userPrompt);
   }
+  console.log("Raw provider response for Pattern Brief:", text);
 
   const cleanedText = cleanJsonResponse(text);
   interface RawBrief {
