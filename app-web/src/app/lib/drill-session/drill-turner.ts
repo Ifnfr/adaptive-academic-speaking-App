@@ -47,7 +47,7 @@ export async function executeDrillTurn(
   let apiKey = "__test__";
   if (!overrides?.callDeepSeek) {
     try {
-      const providerConfig = resolveProvider("execution");
+      const providerConfig = await resolveProvider("execution");
       apiKey = providerConfig.apiKey;
     } catch (err) {
       if (err instanceof ProviderConfigError) {

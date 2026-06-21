@@ -53,8 +53,12 @@ export type SettingsViewProps = {
   profileSaveError: string | null;
   onSavePreferences: (patch: UserProfilePreferencesPatch) => void;
   onAppLanguageChange?: (language: AppLanguage) => void;
-  defaultAiProvider?: string;
-  onDefaultAiProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  podchatProvider?: string;
+  onPodchatProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  listeningProvider?: string;
+  onListeningProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  fluencyProvider?: string;
+  onFluencyProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
   defaultTtsProvider?: TtsProvider;
   onDefaultTtsProviderChange?: (provider: TtsProvider) => void;
   defaultTtsVoiceProfile?: TtsVoiceProfile;
@@ -848,8 +852,12 @@ export function SettingsView({
   profileSaveError,
   onSavePreferences,
   onAppLanguageChange,
-  defaultAiProvider = "Claude",
-  onDefaultAiProviderChange,
+  podchatProvider = "Claude",
+  onPodchatProviderChange,
+  listeningProvider = "Gemini",
+  onListeningProviderChange,
+  fluencyProvider = "DeepSeek",
+  onFluencyProviderChange,
   defaultTtsProvider = "amazon-polly",
   onDefaultTtsProviderChange,
   defaultTtsVoiceProfile = "british_female",
@@ -910,34 +918,66 @@ export function SettingsView({
     <div className="flex flex-col gap-6">
       {mainSettingsBlock}
 
-      {/* Global AI Provider Card */}
+      {/* Model Selection Card */}
       <div className={card}>
         <div className={cardHeader}>
           <p className="app-label text-[var(--brand-teal)]">
-            AI Configuration
+            Model Selection
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Default AI Provider
+            AI Provider Routing
           </h2>
           <p className="app-helper mt-1">
-            Choose which server-side AI provider supported features should use. API keys stay on the server and are never stored in the browser.
+            Assign different AI execution providers to optimize cognitive and speed requirements per feature.
           </p>
         </div>
         <div className={cardBody}>
-          <div className="max-w-xs mb-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 mb-6">
             <label className="flex flex-col gap-1.5 font-sans">
               <span className="app-label">
-                AI Provider
+                Podchat Provider
               </span>
               <select
-                id="default-ai-provider-select"
-                value={defaultAiProvider}
-                onChange={(e) => onDefaultAiProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                id="podchat-provider-select"
+                value={podchatProvider}
+                onChange={(e) => onPodchatProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
                 className="app-field"
               >
-                <option value="Claude">Claude</option>
-                <option value="Gemini">Gemini</option>
-                <option value="DeepSeek">DeepSeek</option>
+                <option value="Claude">Claude (Slower, precise Socratic coaching)</option>
+                <option value="Gemini">Gemini (Fast, multimodal, flexible)</option>
+                <option value="DeepSeek">DeepSeek (Cost-efficient, smart context bridge)</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1.5 font-sans">
+              <span className="app-label">
+                Listening Provider
+              </span>
+              <select
+                id="listening-provider-select"
+                value={listeningProvider}
+                onChange={(e) => onListeningProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                className="app-field"
+              >
+                <option value="Claude">Claude (Detailed exercise planning)</option>
+                <option value="Gemini">Gemini (Fast, high-fidelity audio mapping)</option>
+                <option value="DeepSeek">DeepSeek (Swift reasoning & cost efficiency)</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1.5 font-sans">
+              <span className="app-label">
+                Fluency Provider
+              </span>
+              <select
+                id="fluency-provider-select"
+                value={fluencyProvider}
+                onChange={(e) => onFluencyProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                className="app-field"
+              >
+                <option value="Claude">Claude (Advanced debate & argument coach)</option>
+                <option value="Gemini">Gemini (Ultra-low latency fluency drills)</option>
+                <option value="DeepSeek">DeepSeek (Default, balanced grammar corrections)</option>
               </select>
             </label>
           </div>

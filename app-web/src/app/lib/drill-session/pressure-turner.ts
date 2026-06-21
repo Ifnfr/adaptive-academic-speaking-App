@@ -48,7 +48,7 @@ export async function executePressureTurn(
   let apiKey = "__test__";
   if (!overrides?.callClaude) {
     try {
-      const providerConfig = resolveProvider("execution");
+      const providerConfig = await resolveProvider("execution");
       apiKey = providerConfig.apiKey;
     } catch (err) {
       if (err instanceof ProviderConfigError) {

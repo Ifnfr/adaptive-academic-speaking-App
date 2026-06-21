@@ -1,5 +1,7 @@
+import { cookies } from "next/headers";
+
 export type AiProviderRole = "planning" | "execution";
-export type AiProviderId = "claude" | "deepseek" | "minimax_m3";
+export type AiProviderId = "claude" | "deepseek" | "minimax_m3" | "gemini" | "minimax";
 
 export interface ProviderResponse {
   text: string;
@@ -27,50 +29,56 @@ export const roleTestHooks = {
 /**
  * Resolves the configured provider ID and API Key for a specific role.
  */
-export function resolveProvider(role: AiProviderRole): { providerId: AiProviderId; apiKey: string; modelName: string } {
-  if (role === "planning") {
-    const providerId = (process.env.AI_PLANNING_PROVIDER || "claude") as AiProviderId;
-    let apiKey = "";
-    let modelName = "";
-
-    if (providerId === "minimax_m3") {
-      apiKey = process.env.MINIMAX_API_KEY || "";
-      modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
-    } else if (providerId === "deepseek") {
-      apiKey = process.env.DEEPSEEK_API_KEY || "";
-      modelName = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-    } else {
-      apiKey = process.env.CLAUDE_API_KEY || "";
-      modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
-    }
-
-    if (!apiKey) {
-      throw new ProviderConfigError(`API key for provider ${providerId} is not configured.`);
-    }
-
-    return { providerId, apiKey, modelName };
-  } else {
-    const providerId = (process.env.AI_EXECUTION_PROVIDER || "deepseek") as AiProviderId;
-    let apiKey = "";
-    let modelName = "";
-
-    if (providerId === "minimax_m3") {
-      apiKey = process.env.MINIMAX_API_KEY || "";
-      modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
-    } else if (providerId === "claude") {
-      apiKey = process.env.CLAUDE_API_KEY || "";
-      modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
-    } else {
-      apiKey = process.env.DEEPSEEK_API_KEY || "";
-      modelName = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-    }
-
-    if (!apiKey) {
-      throw new ProviderConfigError(`API key for provider ${providerId} is not configured.`);
-    }
-
-    return { providerId, apiKey, modelName };
+export async function resolveProvider(role: AiProviderRole): Promise<{ providerId: AiProviderId; apiKey: string; modelName: string }> {
+  let userPreference: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    userPreference = cookieStore.get("fluency_provider")?.value;
+  } catch {
+    // ignore outside request context (e.g. static build or tests)
   }
+
+  let providerId = userPreference?.toLowerCase().trim() as AiProviderId | undefined;
+  if (providerId && !["claude", "deepseek", "minimax_m3", "gemini"].includes(providerId)) {
+    providerId = undefined;
+  }
+
+  if (!providerId) {
+    if (role === "planning") {
+      providerId = (process.env.DEFAULT_FLUENCY_AI || process.env.AI_PLANNING_PROVIDER || "claude").toLowerCase() as AiProviderId;
+    } else {
+      providerId = (process.env.DEFAULT_FLUENCY_AI || process.env.AI_EXECUTION_PROVIDER || "deepseek").toLowerCase() as AiProviderId;
+    }
+  }
+
+  let apiKey = "";
+  let modelName = "";
+
+  if (providerId === "minimax_m3" || providerId === "minimax") {
+    providerId = "minimax_m3";
+    apiKey = process.env.MINIMAX_API_KEY || "";
+    modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
+  } else if (providerId === "deepseek") {
+    apiKey = process.env.DEEPSEEK_API_KEY || "";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  } else if (providerId === "claude") {
+    apiKey = process.env.CLAUDE_API_KEY || "";
+    modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
+  } else if (providerId === "gemini") {
+    apiKey = process.env.GEMINI_API_KEY || "";
+    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  } else {
+    // Default fallback to Claude config
+    providerId = "claude";
+    apiKey = process.env.CLAUDE_API_KEY || "";
+    modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
+  }
+
+  if (!apiKey) {
+    throw new ProviderConfigError(`API key for provider ${providerId} is not configured.`);
+  }
+
+  return { providerId, apiKey, modelName };
 }
 
 /**
@@ -81,7 +89,7 @@ export async function callRoleProvider(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const { providerId, apiKey, modelName } = resolveProvider(role);
+  const { providerId, apiKey, modelName } = await resolveProvider(role);
 
   if (!apiKey) {
     throw new ProviderConfigError(`API key for provider ${providerId} is not configured.`);
@@ -91,6 +99,8 @@ export async function callRoleProvider(
     return callMiniMaxM3(apiKey, modelName, systemPrompt, userPrompt);
   } else if (providerId === "claude") {
     return callClaude(apiKey, modelName, systemPrompt, userPrompt);
+  } else if (providerId === "gemini") {
+    return callGemini(apiKey, modelName, systemPrompt, userPrompt);
   } else {
     return callDeepSeek(apiKey, modelName, systemPrompt, userPrompt);
   }
@@ -233,4 +243,51 @@ async function callDeepSeek(
     choices?: Array<{ message?: { content?: string } }>;
   };
   return data.choices?.[0]?.message?.content ?? "";
+}
+
+/**
+ * Gemini call implementation
+ */
+async function callGemini(
+  apiKey: string,
+  modelName: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=` +
+    encodeURIComponent(apiKey);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+        },
+      }),
+    });
+  } catch (err) {
+    console.error(`Gemini request connection error:`, err);
+    throw new ProviderUnavailableError(`Gemini request connection failed.`);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`Gemini API error ${res.status}: ${errText.slice(0, 500)}`);
+    throw new ProviderUnavailableError(`Gemini request failed with status ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
+  };
+
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }

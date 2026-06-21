@@ -536,33 +536,73 @@ export default function Home() {
   // --- Session setup form state ---
   const [level, setLevel] = useState<Level>("Intermediate");
   const [mode, setMode] = useState<Mode>("Fluency Sprint");
-  const [aiProvider, setAiProvider] = useState<AIProvider>("Claude");
+  const [podchatProvider, setPodchatProvider] = useState<AIProvider>("Claude");
+  const [listeningProvider, setListeningProvider] = useState<AIProvider>("Gemini");
+  const [fluencyProvider, setFluencyProvider] = useState<AIProvider>("DeepSeek");
   const [target, setTarget] = useState("");
 
-  // --- Global AI Provider Setting ---
+  // --- Granular AI Provider Settings ---
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (typeof window !== "undefined") {
-        const stored = window.localStorage.getItem("defaultAiProvider");
-        if (
-          stored === "Claude" ||
-          stored === "Gemini" ||
-          stored === "DeepSeek"
-        ) {
-          setAiProvider(stored);
-        } else if (stored === "Mock") {
-          setAiProvider("Claude");
-          window.localStorage.setItem("defaultAiProvider", "Claude");
+        const storedPodchat = window.localStorage.getItem("podchatProvider");
+        if (storedPodchat === "Claude" || storedPodchat === "Gemini" || storedPodchat === "DeepSeek") {
+          setPodchatProvider(storedPodchat as AIProvider);
+          document.cookie = `podchat_provider=${storedPodchat}; path=/; max-age=31536000; SameSite=Lax`;
+        } else {
+          const initial = "Claude";
+          setPodchatProvider(initial);
+          window.localStorage.setItem("podchatProvider", initial);
+          document.cookie = `podchat_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
+        }
+
+        const storedListening = window.localStorage.getItem("listeningProvider");
+        if (storedListening === "Claude" || storedListening === "Gemini" || storedListening === "DeepSeek") {
+          setListeningProvider(storedListening as AIProvider);
+          document.cookie = `listening_provider=${storedListening}; path=/; max-age=31536000; SameSite=Lax`;
+        } else {
+          const initial = "Gemini";
+          setListeningProvider(initial);
+          window.localStorage.setItem("listeningProvider", initial);
+          document.cookie = `listening_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
+        }
+
+        const storedFluency = window.localStorage.getItem("fluencyProvider");
+        if (storedFluency === "Claude" || storedFluency === "Gemini" || storedFluency === "DeepSeek") {
+          setFluencyProvider(storedFluency as AIProvider);
+          document.cookie = `fluency_provider=${storedFluency}; path=/; max-age=31536000; SameSite=Lax`;
+        } else {
+          const initial = "DeepSeek";
+          setFluencyProvider(initial);
+          window.localStorage.setItem("fluencyProvider", initial);
+          document.cookie = `fluency_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
         }
       }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
-  const handleDefaultAiProviderChange = (provider: AIProvider) => {
-    setAiProvider(provider);
+  const handlePodchatProviderChange = (provider: AIProvider) => {
+    setPodchatProvider(provider);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("defaultAiProvider", provider);
+      window.localStorage.setItem("podchatProvider", provider);
+      document.cookie = `podchat_provider=${provider}; path=/; max-age=31536000; SameSite=Lax`;
+    }
+  };
+
+  const handleListeningProviderChange = (provider: AIProvider) => {
+    setListeningProvider(provider);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("listeningProvider", provider);
+      document.cookie = `listening_provider=${provider}; path=/; max-age=31536000; SameSite=Lax`;
+    }
+  };
+
+  const handleFluencyProviderChange = (provider: AIProvider) => {
+    setFluencyProvider(provider);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("fluencyProvider", provider);
+      document.cookie = `fluency_provider=${provider}; path=/; max-age=31536000; SameSite=Lax`;
     }
   };
 
@@ -1759,7 +1799,7 @@ export default function Home() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          provider: aiProvider,
+          provider: fluencyProvider,
           level: item.level,
           targetVocabulary: item.word,
           meaning: item.meaning,
@@ -1811,7 +1851,7 @@ export default function Home() {
         {
           ...result,
           checkedAt: new Date().toISOString(),
-          providerUsed: aiProvider,
+          providerUsed: fluencyProvider,
         },
       );
       persistVocabulary(nextItems);
@@ -2193,7 +2233,7 @@ export default function Home() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          provider: aiProvider,
+          provider: fluencyProvider,
           level,
           mode,
           focus,
@@ -2285,7 +2325,7 @@ export default function Home() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          provider: aiProvider,
+          provider: fluencyProvider,
           inputMode,
           ...(inputMode === "url"
             ? { url }
@@ -2569,7 +2609,7 @@ export default function Home() {
               key={`${mode}:${target}:${pendingArticleContext ? "article" : pendingCommonplaceContext ? "commonplace" : pendingCommonplaceMapContextRef ? "commonplace-map" : "generic"}`}
               sessionLevel={level}
               sessionMode={mode}
-              sessionProvider={aiProvider}
+              sessionProvider={podchatProvider}
               todayTarget={target}
               onSessionHistoryRecord={handleSessionHistoryRecord}
               onEvaluatedSessionForXp={handlePodchatEvaluatedSessionForXp}
@@ -2719,7 +2759,7 @@ export default function Home() {
           {/* ===================== Weekly Review ===================== */}
           {view === "weekly-review" && (
             <WeeklyReviewView
-              provider={aiProvider}
+              provider={fluencyProvider}
               weeklyReviewResult={weeklyReviewResult}
               weeklyReviewLoading={weeklyReviewLoading}
               weeklyReviewError={weeklyReviewError}
@@ -2738,7 +2778,7 @@ export default function Home() {
               preparedContextMarkdownError={preparedContextMarkdownError}
               articleFocus={articleFocus}
               focusPlaceholder={articleFocusPlaceholder}
-              provider={aiProvider}
+              provider={fluencyProvider}
               level={level}
               mode={mode}
               feedbackLanguage={
@@ -2840,8 +2880,12 @@ export default function Home() {
                   language,
                 });
               }}
-              defaultAiProvider={aiProvider}
-              onDefaultAiProviderChange={handleDefaultAiProviderChange}
+              podchatProvider={podchatProvider}
+              onPodchatProviderChange={handlePodchatProviderChange}
+              listeningProvider={listeningProvider}
+              onListeningProviderChange={handleListeningProviderChange}
+              fluencyProvider={fluencyProvider}
+              onFluencyProviderChange={handleFluencyProviderChange}
               defaultTtsProvider={ttsProvider}
               onDefaultTtsProviderChange={handleDefaultTtsProviderChange}
               defaultTtsVoiceProfile={ttsVoiceProfile}

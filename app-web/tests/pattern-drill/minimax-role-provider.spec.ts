@@ -10,23 +10,23 @@ test.describe("MiniMax M3 Provider Role Abstraction", () => {
     roleTestHooks.callMiniMaxM3 = null;
   });
 
-  test("resolves minimax_m3 for planning role when configured", () => {
+  test("resolves minimax_m3 for planning role when configured", async () => {
     process.env.AI_PLANNING_PROVIDER = "minimax_m3";
     process.env.MINIMAX_API_KEY = "mock-key";
     process.env.MINIMAX_MODEL = "custom-minimax-model";
 
-    const config = resolveProvider("planning");
+    const config = await resolveProvider("planning");
     expect(config.providerId).toBe("minimax_m3");
     expect(config.apiKey).toBe("mock-key");
     expect(config.modelName).toBe("custom-minimax-model");
   });
 
-  test("resolves minimax_m3 for execution role when configured", () => {
+  test("resolves minimax_m3 for execution role when configured", async () => {
     process.env.AI_EXECUTION_PROVIDER = "minimax_m3";
     process.env.MINIMAX_API_KEY = "mock-key-exec";
     delete process.env.MINIMAX_MODEL; // test default
 
-    const config = resolveProvider("execution");
+    const config = await resolveProvider("execution");
     expect(config.providerId).toBe("minimax_m3");
     expect(config.apiKey).toBe("mock-key-exec");
     expect(config.modelName).toBe("MiniMax-M3"); // default

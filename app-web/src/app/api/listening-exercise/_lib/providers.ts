@@ -1,38 +1,12 @@
 
+import { resolveFeatureProvider } from "../../../lib/ai-provider-resolver";
+
 export interface AIProviderResponse {
   text: string;
 }
 
-export function resolveListeningProvider(): { providerId: string; apiKey: string; modelName: string } {
-  // Support LISTENING_EXERCISE_PROVIDER first, fallback to AI_PLANNING_PROVIDER or gemini
-  const providerId = (
-    process.env.LISTENING_EXERCISE_PROVIDER ||
-    process.env.AI_PLANNING_PROVIDER ||
-    "gemini"
-  ).toLowerCase();
-
-  let apiKey = "";
-  let modelName = "";
-
-  if (providerId === "gemini") {
-    apiKey = process.env.GEMINI_API_KEY || "";
-    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  } else if (providerId === "claude") {
-    apiKey = process.env.CLAUDE_API_KEY || "";
-    modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
-  } else if (providerId === "deepseek") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "";
-    modelName = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  } else if (providerId === "minimax_m3" || providerId === "minimax") {
-    apiKey = process.env.MINIMAX_API_KEY || "";
-    modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
-  } else {
-    // Fallback to gemini config
-    apiKey = process.env.GEMINI_API_KEY || "";
-    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  }
-
-  return { providerId, apiKey, modelName };
+export async function resolveListeningProvider(): Promise<{ providerId: string; apiKey: string; modelName: string }> {
+  return resolveFeatureProvider("listening");
 }
 
 /**
@@ -204,7 +178,7 @@ export async function callListeningAI(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const { providerId, apiKey, modelName } = resolveListeningProvider();
+  const { providerId, apiKey, modelName } = await resolveListeningProvider();
 
   // If no API key is set, fall back to mock response generation logic based on the user prompt
   if (!apiKey) {

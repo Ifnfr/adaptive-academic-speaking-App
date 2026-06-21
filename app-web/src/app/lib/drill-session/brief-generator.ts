@@ -146,7 +146,7 @@ export async function generatePatternBriefContent(
   let apiKey = "__test__";
   if (!overrides?.callClaude) {
     try {
-      const providerConfig = resolveProvider("planning");
+      const providerConfig = await resolveProvider("planning");
       apiKey = providerConfig.apiKey;
     } catch (err) {
       if (err instanceof ProviderConfigError) {

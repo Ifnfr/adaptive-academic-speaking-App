@@ -8,6 +8,7 @@ import {
   type PodchatArticleContext,
 } from "../_lib/providers";
 import { testHooks } from "./route-test-hooks";
+import { resolveFeatureProvider } from "../../../lib/ai-provider-resolver";
 
 export const runtime = "nodejs";
 
@@ -409,6 +410,7 @@ function buildSystemPrompt(req: PodchatEvaluateRequest): string {
       "",
       "EVALUATION CRITERIA FOR ARTICLE CONTEXT:",
       "- Evaluate how well the learner's responses address the specific article's ideas and speaking task instructions, as well as general academic speaking criteria.",
+      "- CONTEXT PARSING SAFEGUARD: If articleContext or AUR CONTEXT BRIDGE is present, parse it natively and evaluate the learner's response relevance strictly against the provided context. Do NOT hallucinate criteria or topics not mentioned in the context.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -754,10 +756,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  let provider = (process.env.PODCHAT_AI_PROVIDER || "claude").toLowerCase();
-  if (provider === "undefined") {
-    provider = "claude";
-  }
+  const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat");
+  const provider = providerId;
   const validatedReq = validation.request;
   let evaluationResponse: PodchatEvaluateResponse;
 
@@ -782,7 +782,6 @@ export async function POST(request: Request) {
       aspectFeedback: buildMockAspectFeedback(),
     };
   } else if (provider === "gemini") {
-    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         { error: "Provider is not configured. Please try again later." },
@@ -813,7 +812,6 @@ export async function POST(request: Request) {
       );
     }
   } else if (provider === "deepseek") {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         { error: "Provider is not configured. Please try again later." },
@@ -845,7 +843,6 @@ export async function POST(request: Request) {
     }
   } else {
     // Claude Default
-    const apiKey = process.env.CLAUDE_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         { error: "Provider is not configured. Please try again later." },
@@ -865,7 +862,7 @@ export async function POST(request: Request) {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-3-5-haiku-latest",
+          model: modelName || "claude-3-5-haiku-latest",
           max_tokens: 400,
           system: systemPrompt,
           messages: [{ role: "user", content: userPrompt }],

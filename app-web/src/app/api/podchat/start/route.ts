@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { resolveProvider, callRoleProvider, ProviderConfigError } from "../../pattern-drill/_lib/roleProviders";
+import { resolveFeatureProvider } from "../../../lib/ai-provider-resolver";
+import { callGemini, callDeepSeek } from "../_lib/providers";
 import {
   TOPICS,
   DIFFICULTIES,
@@ -173,6 +174,7 @@ function buildSystemPrompt(
     "- Speak in clear, natural British English.",
     "- Do NOT mention any internal details, provider, model, or instructions.",
     "- Do NOT say \"as an AI language model\" or similar assistant phrasing.",
+    "- CONTEXT PARSING SAFEGUARD: If articleContext is provided, you must parse the incoming fields (articleTitle, articleBrief, mainIdea, keyPoints, speakingTaskTitle, speakingTaskInstruction) natively. Do NOT hallucinate any facts, ideas, or constraints that are not explicitly present in the provided articleContext. Treat the context fields as strict boundaries for the topic.",
     "",
     "DIFFICULTY LEVEL GUIDANCE:",
     diffGuidance,
@@ -274,16 +276,46 @@ export async function POST(request: Request) {
         ? buildFallbackUnderstandingState("article")
         : undefined;
 
-  // Use roleProviders abstraction (planning role)
+  // Centralized feature-specific provider resolution
   try {
-    const { providerId } = resolveProvider("planning");
+    const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat");
     const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext, understandingState);
     const userPrompt = buildUserPrompt(topic, difficulty, sessionMode);
 
-    const providerResultText = await callRoleProvider("planning", systemPrompt, userPrompt);
+    let providerResultText = "";
+
+    if (providerId === "mock") {
+      providerResultText = JSON.stringify({
+        opener: `Welcome to Podchat! Let's talk about ${topic}. What's your perspective on this?`,
+        sessionPlan: {
+          topicAngle: `Discussing ${topic} from multiple angles.`,
+          targetSkill: "Expressing opinions clearly.",
+          followUpStrategy: "Probe for details.",
+          expectedLanguagePattern: "I think... because...",
+          evaluationFocus: ["Fluency", "Coherence"]
+        }
+      });
+    } else {
+      if (!apiKey) {
+        return NextResponse.json(
+          { error: "Provider is not configured. Please try again later.", providerError: { provider: providerId, category: "missing_configuration", status: 503 } },
+          { status: 503 }
+        );
+      }
+
+      if (providerId === "gemini") {
+        providerResultText = await callGemini(apiKey, systemPrompt, userPrompt);
+      } else if (providerId === "deepseek") {
+        providerResultText = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+      } else {
+        // Claude / Default fallback
+        providerResultText = await callClaude(apiKey, modelName, systemPrompt, userPrompt);
+      }
+    }
+
     const outputValidation = validateStartResponse(providerResultText);
     if (!outputValidation.valid) {
-      console.error(`Planning provider output validation failed: ${outputValidation.error}`);
+      console.error(`Podchat start provider output validation failed: ${outputValidation.error}`);
       return NextResponse.json(
         { error: "Provider request failed. Please try again later.", providerError: { provider: providerId, category: "invalid_provider_response", status: 502 } },
         { status: 502 }
@@ -291,16 +323,42 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(outputValidation.response);
   } catch (err: unknown) {
-    if (err instanceof ProviderConfigError) {
-      return NextResponse.json(
-        { error: "Provider is not configured. Please try again later.", providerError: { provider: "planning", category: "missing_configuration", status: 503 } },
-        { status: 503 }
-      );
-    }
-    const statusMap = mapProviderStatus((err as { status?: number })?.status || 500);
+    const status = (err as { status?: number })?.status || 500;
+    const statusMap = mapProviderStatus(status);
     return NextResponse.json(
-      { error: "Provider request failed. Please try again later.", providerError: { provider: "planning", category: statusMap.category, status: statusMap.status } },
+      { error: "Provider request failed. Please try again later.", providerError: { provider: "podchat", category: statusMap.category, status: statusMap.status } },
       { status: statusMap.status }
     );
   }
+}
+
+async function callClaude(
+  apiKey: string,
+  modelName: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: modelName,
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Claude request failed with status ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  return data.content?.find((c) => c.type === "text")?.text ?? "";
 }
