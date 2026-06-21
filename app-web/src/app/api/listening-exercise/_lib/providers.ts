@@ -407,6 +407,7 @@ export function buildSection1SystemPrompt(): string {
     "",
     "PHASE 3: IMPLEMENTATION",
     "Generate the listening passage script (audio_script) for Section 1 (index 0). Extract a discrete array of key facts (fact_units) from the passage script. Finally, formulate the questions array. Each question must target a specific fact unit and map to it via testing_fact_unit_id.",
+    "The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure.",
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
@@ -484,7 +485,8 @@ export function buildSection1UserPrompt(
     `Requested CEFR Level: ${cefrLevel}`,
     `Section Count: ${sectionCount}`,
     `Is Placement Session: ${isPlacement}`,
-    historySummary ? `Previous Session History Summary:\n${historySummary}` : "No previous history available."
+    historySummary ? `Previous Session History Summary:\n${historySummary}` : "No previous history available.",
+    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure."
   ].join("\n");
 }
 
@@ -522,6 +524,7 @@ export function buildNextSectionSystemPrompt(questionType: string): string {
     "Your task is to generate the next section content based on the pre-approved session generation plan.",
     "",
     "You must execute Phase 3: Implementation for this section.",
+    "The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure.",
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
@@ -585,6 +588,7 @@ export function buildNextSectionUserPrompt(
     `Section Index: ${sectionIndex}`,
     `CEFR Level: ${cefrLevel}`,
     `Topic: ${topic}`,
-    `Question Types: ${questionTypes.join(", ")}`
+    `Question Types: ${questionTypes.join(", ")}`,
+    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure."
   ].join("\n");
 }
