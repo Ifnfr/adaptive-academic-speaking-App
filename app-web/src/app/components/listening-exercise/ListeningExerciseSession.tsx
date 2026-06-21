@@ -119,13 +119,6 @@ export function ListeningExerciseSession({
     };
   }, []);
 
-  // Ref that always holds the latest audioUrls — used by the unmount cleanup
-  // so revokeObjectURL is never triggered by a dependency change mid-playback
-  const audioUrlsRef = useRef<(string | null)[]>([]);
-  useEffect(() => {
-    audioUrlsRef.current = audioUrls;
-  }, [audioUrls]);
-
   // Section details
   const [sectionId, setSectionId] = useState<string>("");
   const [sectionIndex, setSectionIndex] = useState(0);
@@ -134,6 +127,13 @@ export function ListeningExerciseSession({
   const [audioUrls, setAudioUrls] = useState<(string | null)[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+
+  // Ref that always holds the latest audioUrls — used by the unmount cleanup
+  // so revokeObjectURL is never triggered by a dependency change mid-playback
+  const audioUrlsRef = useRef<(string | null)[]>([]);
+  useEffect(() => {
+    audioUrlsRef.current = audioUrls;
+  }, [audioUrls]);
 
   // Session results
   const [overallScore, setOverallScore] = useState<number | null>(null);
@@ -353,11 +353,12 @@ export function ListeningExerciseSession({
       const isFinalSection = sectionIndex + 1 >= sectionCount;
 
       if (!isFinalSection) {
-        // Increment section index for display during loading
-        setSectionIndex((prev) => prev + 1);
         setStep("generating");
 
-        // Request next section generation
+        // Request next section generation BEFORE incrementing sectionIndex.
+        // If this POST fails, errorPhase is set to "next" so handleRetry routes
+        // to handleTriggerNextSection — not back to handleSubmit (which would
+        // re-POST to /submit for an already-submitted section).
         const nextRes = await fetch("/api/listening-exercise/session/next", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -365,8 +366,14 @@ export function ListeningExerciseSession({
         });
 
         if (!nextRes.ok) {
+          // Set errorPhase BEFORE throwing so the outer catch does not
+          // overwrite it with "submit".
+          setErrorPhase("next");
           throw new Error("Failed to trigger next section generation.");
         }
+
+        // Only increment after /next is confirmed to have accepted the request
+        setSectionIndex((prev) => prev + 1);
 
         // Flush answers for the next section
         setAnswers({});
@@ -398,7 +405,7 @@ export function ListeningExerciseSession({
       console.error("Submission error:", err);
       setStep("error");
       setErrorMsg(err instanceof Error ? err.message : "Failed to submit answers.");
-      setErrorPhase("submit");
+      setErrorPhase((prev) => prev ?? "submit");
     }
   };
 
