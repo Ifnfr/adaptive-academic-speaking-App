@@ -11,8 +11,12 @@ async function resolveCurrentUserId(): Promise<string | null> {
   try {
     const { auth } = await import("@clerk/nextjs/server");
     const session = await auth();
+    console.log("[STT_AUTH_LOG] Raw auth() session object keys:", session ? Object.keys(session) : "null");
+    console.log("[STT_AUTH_LOG] userId:", session?.userId || "null");
+    console.log("[STT_AUTH_LOG] sessionClaims:", session?.sessionClaims ? JSON.stringify(session.sessionClaims) : "null");
     return session?.userId || null;
-  } catch {
+  } catch (err) {
+    console.error("[STT_AUTH_LOG] Error in resolveCurrentUserId:", err);
     return null;
   }
 }
