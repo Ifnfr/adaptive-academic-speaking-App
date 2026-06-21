@@ -135,7 +135,7 @@ export function ListeningExerciseLayout({
 
       {/* Audio Controller */}
       <AudioController
-        key={audioUrls?.[0]}
+        key={sectionIndex}
         audioUrls={audioUrls}
         replayCount={replayCount}
         onPlayStart={handlePlayStart}

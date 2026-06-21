@@ -215,7 +215,20 @@ export function ListeningExerciseSession({
                       });
                     }
                   } catch (prefetchErr) {
-                    console.error(`Prefetch failed for chunk ${i}:`, prefetchErr);
+                    console.error(`Prefetch failed for chunk ${i}, retrying once:`, prefetchErr);
+                    try {
+                      const retryUrl = await fetchTtsAudio(chunks[i]);
+                      if (isMountedRef.current) {
+                        setAudioUrls((prev) => {
+                          const updated = [...prev];
+                          updated[i] = retryUrl;
+                          return updated;
+                        });
+                      }
+                    } catch (retryErr) {
+                      console.error(`Prefetch retry also failed for chunk ${i}:`, retryErr);
+                      // slot remains null — onPlaybackError will handle it via AudioController
+                    }
                   }
                 }
               })();
