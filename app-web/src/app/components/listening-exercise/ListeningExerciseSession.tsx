@@ -124,16 +124,9 @@ export function ListeningExerciseSession({
   const [sectionIndex, setSectionIndex] = useState(0);
   const [sectionCount] = useState(initialSectionCount);
   const [topic, setTopic] = useState("");
-  const [audioUrls, setAudioUrls] = useState<(string | null)[]>([]);
+  const [audioUrl, setAudioUrl] = useState<string>("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-
-  // Ref that always holds the latest audioUrls — used by the unmount cleanup
-  // so revokeObjectURL is never triggered by a dependency change mid-playback
-  const audioUrlsRef = useRef<(string | null)[]>([]);
-  useEffect(() => {
-    audioUrlsRef.current = audioUrls;
-  }, [audioUrls]);
 
   // Session results
   const [overallScore, setOverallScore] = useState<number | null>(null);
@@ -190,48 +183,25 @@ export function ListeningExerciseSession({
           setStep("loading_audio");
           try {
             const scriptText = sectionData.audio_script || "";
-            const chunks = splitTextIntoChunks(scriptText);
-            
-            // Fetch chunk 0 immediately
-            const firstChunkUrl = await fetchTtsAudio(chunks[0] || "");
-            
-            if (isMountedRef.current) {
-              const initialUrls = new Array(chunks.length).fill(null);
-              initialUrls[0] = firstChunkUrl;
-              setAudioUrls(initialUrls);
-              setStep("ready");
+            const res = await fetch("/api/listening-exercise/audio/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionId,
+                sectionId: sectionData.id,
+                text: scriptText,
+              }),
+            });
 
-              // Asynchronously prefetch remaining chunks sequentially
-              (async () => {
-                for (let i = 1; i < chunks.length; i++) {
-                  if (!isMountedRef.current) break;
-                  try {
-                    const chunkUrl = await fetchTtsAudio(chunks[i]);
-                    if (isMountedRef.current) {
-                      setAudioUrls((prev) => {
-                        const updated = [...prev];
-                        updated[i] = chunkUrl;
-                        return updated;
-                      });
-                    }
-                  } catch (prefetchErr) {
-                    console.error(`Prefetch failed for chunk ${i}, retrying once:`, prefetchErr);
-                    try {
-                      const retryUrl = await fetchTtsAudio(chunks[i]);
-                      if (isMountedRef.current) {
-                        setAudioUrls((prev) => {
-                          const updated = [...prev];
-                          updated[i] = retryUrl;
-                          return updated;
-                        });
-                      }
-                    } catch (retryErr) {
-                      console.error(`Prefetch retry also failed for chunk ${i}:`, retryErr);
-                      // slot remains null — onPlaybackError will handle it via AudioController
-                    }
-                  }
-                }
-              })();
+            if (!res.ok) {
+              throw new Error("Failed to generate section audio.");
+            }
+
+            const { audioUrl } = await res.json();
+
+            if (isMountedRef.current) {
+              setAudioUrl(audioUrl);
+              setStep("ready");
             }
           } catch (audioErr) {
             console.error("Audio download error:", audioErr);
@@ -266,20 +236,7 @@ export function ListeningExerciseSession({
     };
   }, [step, sessionId, sectionIndex]);
 
-  // Revoke any remaining blob URLs only when the component truly unmounts.
-  // IMPORTANT: This must NOT use [audioUrls] as a dependency — doing so causes
-  // React to run the cleanup on every prefetch slot update, which revokes blob
-  // URLs that the <audio> element is still actively loading (ERR_FILE_NOT_FOUND).
-  // The audioUrlsRef above keeps this cleanup current without triggering it early.
-  useEffect(() => {
-    return () => {
-      audioUrlsRef.current.forEach((url) => {
-        if (url && url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    };
-  }, []); // empty deps = unmount only
+
 
   const handleStartSession = async () => {
     setStep("generating");
@@ -355,13 +312,7 @@ export function ListeningExerciseSession({
         throw new Error("Unable to submit section answers.");
       }
 
-      // Evict old Object URLs
-      audioUrls.forEach((url) => {
-        if (url && url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
-      });
-      setAudioUrls([]);
+      setAudioUrl("");
 
       const isFinalSection = sectionIndex + 1 >= sectionCount;
 
@@ -684,7 +635,7 @@ export function ListeningExerciseSession({
           sectionIndex={sectionIndex}
           sectionCount={sectionCount}
           topic={topic}
-          audioUrls={audioUrls}
+          audioUrl={audioUrl}
           questions={questions}
           onSubmit={handleSubmit}
           onPlaybackError={() => {
