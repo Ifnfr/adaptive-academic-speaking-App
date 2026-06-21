@@ -91,13 +91,13 @@ Do not use `NEXT_PUBLIC_` for server secrets. `SUPABASE_SERVICE_ROLE_KEY`, `CLER
    - `/api/podchat/evaluate`
    - `/api/weekly-review`
 
-## Clerk Auth and Proxy
+## Clerk Auth and Middleware
 
-API routes that save memory depend on Clerk server auth. The project uses `app-web/src/proxy.ts` with Clerk middleware. The matcher must cover API routes, including article, Podchat, and weekly review routes.
+API routes that save memory depend on Clerk server auth. The project uses `app-web/src/middleware.ts` with Clerk middleware. The matcher must cover API routes, including article, Podchat, and weekly review routes.
 
-If middleware/proxy is missing or does not cover API routes, `auth()` can return null in server routes and responses may show `memory.saved=false` even when the user appears signed in.
+If middleware is missing or does not cover API routes, `auth()` can return null in server routes and responses may show `memory.saved=false` even when the user appears signed in.
 
-The Clerk proxy fix was added in the commit named:
+The Clerk middleware fix was added in the commit named:
 
 ```text
 Fix Clerk middleware for memory routes

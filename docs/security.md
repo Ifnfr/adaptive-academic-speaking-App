@@ -61,7 +61,7 @@ Article Writing memory should store compact `article_context` only: title, brief
 
 ## Clerk Auth and API Routes
 
-API routes that save memory depend on Clerk server auth. The middleware/proxy must exist and cover API routes. If it does not, `auth()` can return null and the route can still return successful feedback with:
+API routes that save memory depend on Clerk server auth. The middleware must exist and cover API routes. If it does not, `auth()` can return null and the route can still return successful feedback with:
 
 ```json
 { "memory": { "saved": false } }

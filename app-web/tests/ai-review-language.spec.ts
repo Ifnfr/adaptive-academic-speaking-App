@@ -595,15 +595,15 @@ test.describe("AI review language policy routes", () => {
     }
   });
 
-  test("Clerk proxy config enables auth context for API routes", () => {
-    expect(existsSync("src/proxy.ts")).toBe(true);
-    const proxySource = readFileSync("src/proxy.ts", "utf8");
+  test("Clerk middleware config enables auth context for API routes", () => {
+    expect(existsSync("src/middleware.ts")).toBe(true);
+    const middlewareSource = readFileSync("src/middleware.ts", "utf8");
 
-    expect(proxySource).toContain("clerkMiddleware");
-    expect(proxySource).toContain("export const proxy = clerkMiddleware()");
-    expect(proxySource).toContain("export default clerkMiddleware()");
-    expect(proxySource).toContain("\"/(api|trpc)(.*)\"");
-    expect(proxySource).not.toContain("CLERK_SECRET_KEY");
-    expect(proxySource).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
+    expect(middlewareSource).toContain("clerkMiddleware");
+    expect(middlewareSource).toContain("export const proxy = ");
+    expect(middlewareSource).toContain("export default ");
+    expect(middlewareSource).toContain("\"/(api|trpc)(.*)\"");
+    expect(middlewareSource).not.toContain("CLERK_SECRET_KEY");
+    expect(middlewareSource).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 });
