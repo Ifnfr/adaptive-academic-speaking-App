@@ -5,6 +5,7 @@ export interface AudioControllerProps {
   replayCount: number;
   onPlayStart: () => void;
   onPlaybackComplete: () => void;
+  onPlaybackError: () => void;
 }
 
 export function AudioController({
@@ -12,6 +13,7 @@ export function AudioController({
   replayCount,
   onPlayStart,
   onPlaybackComplete,
+  onPlaybackError,
 }: AudioControllerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
@@ -19,6 +21,16 @@ export function AudioController({
   const [duration, setDuration] = useState(0);
   
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const handleAudioError = () => {
+    console.error(
+      "Audio element error on chunk:",
+      currentChunkIndex,
+      audioRef.current?.error
+    );
+    setIsPlaying(false);
+    onPlaybackError();
+  };
 
   const currentAudioUrl = audioUrls[currentChunkIndex] || "";
 
@@ -59,6 +71,12 @@ export function AudioController({
   };
 
   const handleEnded = () => {
+    // Revoke the blob URL for the chunk that just finished — it will not be needed again
+    const playedUrl = audioUrls[currentChunkIndex];
+    if (playedUrl && playedUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(playedUrl);
+    }
+
     if (currentChunkIndex < audioUrls.length - 1) {
       setCurrentTime(0);
       setDuration(0);
@@ -96,6 +114,7 @@ export function AudioController({
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleEnded}
+        onError={handleAudioError}
         className="hidden"
         preload="metadata"
       />

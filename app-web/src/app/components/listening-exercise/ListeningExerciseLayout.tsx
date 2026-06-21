@@ -10,6 +10,7 @@ export interface ListeningExerciseLayoutProps {
   audioUrls?: (string | null)[];
   questions: Question[];
   onSubmit: (answers: Record<string, string>) => void;
+  onPlaybackError?: () => void;
 }
 
 export function ListeningExerciseLayout({
@@ -20,6 +21,7 @@ export function ListeningExerciseLayout({
   audioUrls,
   questions,
   onSubmit,
+  onPlaybackError,
 }: ListeningExerciseLayoutProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [replayCount, setReplayCount] = useState(0);
@@ -138,6 +140,7 @@ export function ListeningExerciseLayout({
         replayCount={replayCount}
         onPlayStart={handlePlayStart}
         onPlaybackComplete={handlePlaybackComplete}
+        onPlaybackError={onPlaybackError ?? (() => {})}
       />
 
       {/* Question Blocks */}

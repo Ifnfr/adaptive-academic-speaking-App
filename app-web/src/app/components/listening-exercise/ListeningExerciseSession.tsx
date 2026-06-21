@@ -119,6 +119,13 @@ export function ListeningExerciseSession({
     };
   }, []);
 
+  // Ref that always holds the latest audioUrls — used by the unmount cleanup
+  // so revokeObjectURL is never triggered by a dependency change mid-playback
+  const audioUrlsRef = useRef<(string | null)[]>([]);
+  useEffect(() => {
+    audioUrlsRef.current = audioUrls;
+  }, [audioUrls]);
+
   // Section details
   const [sectionId, setSectionId] = useState<string>("");
   const [sectionIndex, setSectionIndex] = useState(0);
@@ -246,16 +253,20 @@ export function ListeningExerciseSession({
     };
   }, [step, sessionId, sectionIndex]);
 
-  // Clean up Blob URLs when unmounting
+  // Revoke any remaining blob URLs only when the component truly unmounts.
+  // IMPORTANT: This must NOT use [audioUrls] as a dependency — doing so causes
+  // React to run the cleanup on every prefetch slot update, which revokes blob
+  // URLs that the <audio> element is still actively loading (ERR_FILE_NOT_FOUND).
+  // The audioUrlsRef above keeps this cleanup current without triggering it early.
   useEffect(() => {
     return () => {
-      audioUrls.forEach((url) => {
+      audioUrlsRef.current.forEach((url) => {
         if (url && url.startsWith("blob:")) {
           URL.revokeObjectURL(url);
         }
       });
     };
-  }, [audioUrls]);
+  }, []); // empty deps = unmount only
 
   const handleStartSession = async () => {
     setStep("generating");
@@ -656,6 +667,11 @@ export function ListeningExerciseSession({
           audioUrls={audioUrls}
           questions={questions}
           onSubmit={handleSubmit}
+          onPlaybackError={() => {
+            setStep("error");
+            setErrorMsg("Audio playback failed. Please try again.");
+            setErrorPhase("audio");
+          }}
         />
       );
     default:
