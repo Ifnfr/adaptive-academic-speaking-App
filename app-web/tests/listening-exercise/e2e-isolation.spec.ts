@@ -118,17 +118,33 @@ test.describe("Listening Exercise - E2E Isolation & Production Hardening", () =>
             section_index: 0,
             section: {
               id: "section-0",
-              topic: "Section 1 Academic Passage",
+              topic: "Phase 1: Fill in the Blank",
               audio_script: "Standard sea-level pressure causes water to boil at one hundred degrees.",
               questions: [
                 {
                   id: "q_0",
-                  question_type: "true_false",
-                  question_text: "True or False: Water boils at 100 degrees Celsius under standard conditions.",
-                  options: ["True", "False"],
-                  answer: "True",
+                  question_type: "fill_blank",
+                  question_text: "Standard sea-level pressure causes water to boil at [blank] degrees.",
+                  answer: "100",
+                  accepted_variants: ["one hundred"],
                   testing_fact_unit_id: "fact_0"
-                },
+                }
+              ]
+            }
+          })
+        });
+      } else if (currentSectionIndex === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            generation_status: "ready",
+            section_index: 1,
+            section: {
+              id: "section-1",
+              topic: "Phase 2: Multiple Choice",
+              audio_script: "What is the primary topic of today's talk? Today we discuss Chemistry.",
+              questions: [
                 {
                   id: "q_1",
                   question_type: "multiple_choice",
@@ -147,18 +163,18 @@ test.describe("Listening Exercise - E2E Isolation & Production Hardening", () =>
           contentType: "application/json",
           body: JSON.stringify({
             generation_status: "ready",
-            section_index: 1,
+            section_index: 2,
             section: {
-              id: "section-1",
-              topic: "Section 2 Academic Passage",
-              audio_script: "Pressure decreases with altitude.",
+              id: "section-2",
+              topic: "Phase 3: True and False",
+              audio_script: "Water boils at a higher temperature at higher altitudes.",
               questions: [
                 {
                   id: "q_2",
-                  question_type: "fill_blank",
-                  question_text: "Pressure [blank] with altitude.",
-                  answer: "decreases",
-                  accepted_variants: ["drops"],
+                  question_type: "true_false",
+                  question_text: "True or False: Water boils at a higher temperature at higher altitudes.",
+                  options: ["True", "False"],
+                  answer: "True",
                   testing_fact_unit_id: "fact_2"
                 }
               ]
@@ -170,11 +186,11 @@ test.describe("Listening Exercise - E2E Isolation & Production Hardening", () =>
 
     // 4. Mock next section trigger endpoint
     await page.route("**/api/listening-exercise/session/next", async (route) => {
-      currentSectionIndex = 1;
+      currentSectionIndex++;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ success: true }),
+        body: JSON.stringify({ success: true, section_index: currentSectionIndex }),
       });
     });
 
@@ -241,27 +257,35 @@ test.describe("Listening Exercise - E2E Isolation & Production Hardening", () =>
     }
     await playButton.click();
 
-    // 4. Fill and submit Section 1 (true_false and multiple_choice mix)
-    const trueBtn = page.getByRole("button", { name: "True", exact: true });
-    await expect(trueBtn).toBeVisible();
-    await trueBtn.click();
-
-    const chemistryBtn = page.getByRole("button", { name: "Chemistry", exact: true });
-    await expect(chemistryBtn).toBeVisible();
-    await chemistryBtn.click();
+    // 4. Fill and submit Section 1 (fill_blank)
+    const inputField = page.locator('input[type="text"]');
+    await expect(inputField).toBeVisible();
+    await inputField.fill("100");
 
     const submitBtn = page.getByRole("button", { name: /Submit Answer/i });
     await expect(submitBtn).toBeVisible();
     await submitBtn.click();
 
-    // 5. Fill and submit Section 2 (fill_blank)
-    const inputField = page.locator('input[type="text"]');
-    await expect(inputField).toBeVisible();
-    await inputField.fill("decreases");
+    // 5. Fill and submit Section 2 (multiple_choice)
+    const chemistryBtn = page.getByRole("button", { name: "Chemistry", exact: true });
+    await expect(chemistryBtn).toBeVisible();
+    await chemistryBtn.click();
 
-    const replayButton = page.getByRole("button", { name: /Play Audio/i });
-    await expect(replayButton).toBeVisible();
-    await replayButton.click();
+    const replayButton1 = page.getByRole("button", { name: /Play Audio/i });
+    await expect(replayButton1).toBeVisible();
+    await replayButton1.click();
+
+    await expect(submitBtn).toBeVisible();
+    await submitBtn.click();
+
+    // 6. Fill and submit Section 3 (true_false)
+    const trueBtn = page.getByRole("button", { name: "True", exact: true });
+    await expect(trueBtn).toBeVisible();
+    await trueBtn.click();
+
+    const replayButton2 = page.getByRole("button", { name: /Play Audio/i });
+    await expect(replayButton2).toBeVisible();
+    await replayButton2.click();
 
     await expect(submitBtn).toBeVisible();
     await submitBtn.click();

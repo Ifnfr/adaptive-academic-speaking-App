@@ -162,6 +162,12 @@ export function ListeningExerciseSession({
         const data = await res.json();
         if (!isMountedRef.current) return;
 
+        // Ignore responses that are for a different section index (avoid race conditions)
+        if (data.section_index !== sectionIndex) {
+          timeoutId = setTimeout(pollStatus, 2000);
+          return;
+        }
+
         if (data.generation_status === "ready") {
           const sectionData = data.section;
           if (!sectionData) {
@@ -238,7 +244,7 @@ export function ListeningExerciseSession({
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [step, sessionId]);
+  }, [step, sessionId, sectionIndex]);
 
   // Clean up Blob URLs when unmounting
   useEffect(() => {
@@ -336,6 +342,10 @@ export function ListeningExerciseSession({
       const isFinalSection = sectionIndex + 1 >= sectionCount;
 
       if (!isFinalSection) {
+        // Increment section index for display during loading
+        setSectionIndex((prev) => prev + 1);
+        setStep("generating");
+
         // Request next section generation
         const nextRes = await fetch("/api/listening-exercise/session/next", {
           method: "POST",
@@ -349,7 +359,6 @@ export function ListeningExerciseSession({
 
         // Flush answers for the next section
         setAnswers({});
-        setStep("generating");
       } else {
         // Complete the session
         setStep("submitting");
@@ -434,7 +443,24 @@ export function ListeningExerciseSession({
     );
   };
 
+  const getPhaseName = (idx: number) => {
+    switch (idx) {
+      case 0:
+        return "Phase 1: Fill in the Blank";
+      case 1:
+        return "Phase 2: Multiple Choice";
+      case 2:
+        return "Phase 3: True/False";
+      default:
+        return `Phase ${idx + 1}`;
+    }
+  };
+
   const renderGenerating = (message: string) => {
+    const titleText = step === "generating" || step === "loading_audio"
+      ? `Preparing ${getPhaseName(sectionIndex)}`
+      : "Preparing Session";
+
     return (
       <div className="flex flex-col items-center justify-center gap-5 p-10 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-3xl shadow-sm max-w-md mx-auto text-center">
         <svg
@@ -458,7 +484,7 @@ export function ListeningExerciseSession({
         </svg>
         <div className="flex flex-col gap-1">
           <span className="text-sm font-bold text-[var(--brand-ink)]">
-            Preparing Session
+            {titleText}
           </span>
           <span className="text-xs text-[var(--brand-muted)]">{message}</span>
         </div>
@@ -604,8 +630,14 @@ export function ListeningExerciseSession({
   switch (step) {
     case "idle":
       return renderIdle();
-    case "generating":
-      return renderGenerating("Generating audio script and layout plans...");
+    case "generating": {
+      const messages = [
+        "Generating Fill-in-the-Blank passage and questions...",
+        "Generating Multiple Choice passage and questions...",
+        "Generating True/False passage and questions...",
+      ];
+      return renderGenerating(messages[sectionIndex] || "Generating passage and questions...");
+    }
     case "loading_audio":
       return renderGenerating("Downloading listening audio passage...");
     case "submitting":

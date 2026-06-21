@@ -75,13 +75,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const sectionCount = typeof sectionCountInput === "number" ? sectionCountInput : 3;
-  if (sectionCount <= 0) {
-    return NextResponse.json(
-      { error: "section_count must be a positive integer." },
-      { status: 400 }
-    );
-  }
+  // Always enforce exactly 3 sections representing the three phases (Fill-in-the-Blank, Multiple Choice, True/False)
+  const sectionCount = 3;
 
   const isPlacement = typeof isPlacementInput === "boolean" ? isPlacementInput : false;
 

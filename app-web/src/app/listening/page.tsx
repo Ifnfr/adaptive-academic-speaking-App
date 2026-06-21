@@ -19,7 +19,7 @@ export default function ListeningExercisePage() {
       </div>
       <ListeningExerciseSession
         initialCefrLevel="B2"
-        initialSectionCount={2}
+        initialSectionCount={3}
         initialIsPlacement={false}
       />
     </main>

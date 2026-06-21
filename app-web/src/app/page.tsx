@@ -2810,7 +2810,7 @@ export default function Home() {
             <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
               <ListeningExerciseSession
                 initialCefrLevel={mapLearnerLevelToCefr(level)}
-                initialSectionCount={2}
+                initialSectionCount={3}
                 initialIsPlacement={false}
               />
             </div>

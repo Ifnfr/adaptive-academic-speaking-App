@@ -38,18 +38,32 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
   return JSON.stringify({
     reasoning: {
       phase1_analysis: "Mock analysis: user has clean profile history.",
-      phase2_planning: `Mock planning: session will proceed with ${sectionCount} sections at CEFR level ${cefrLevel}.`,
-      phase3_implementation: "Mock implementation: designing Section 1 content."
+      phase2_planning: `Mock planning: session will proceed with 3 sections at CEFR level ${cefrLevel}.`,
+      phase3_implementation: "Mock implementation: designing Section 1 content (Fill-in-the-blank)."
     },
     plan: {
       cefr_level: cefrLevel,
-      section_count: sectionCount,
-      sections: Array.from({ length: sectionCount }, (_, i) => ({
-        section_index: i,
-        cefr_level: cefrLevel,
-        topic: i === 0 ? "Chemistry Basics" : `Academic Lecture Topic ${i + 1}`,
-        question_types: ["fill_blank", "true_false", "multiple_choice"]
-      }))
+      section_count: 3,
+      sections: [
+        {
+          section_index: 0,
+          cefr_level: cefrLevel,
+          topic: "Chemistry Basics",
+          question_types: ["fill_blank"]
+        },
+        {
+          section_index: 1,
+          cefr_level: cefrLevel,
+          topic: "Atmospheric Density",
+          question_types: ["multiple_choice"]
+        },
+        {
+          section_index: 2,
+          cefr_level: cefrLevel,
+          topic: "Water Properties",
+          question_types: ["true_false"]
+        }
+      ]
     },
     section: {
       topic: "Chemistry Basics",
@@ -72,18 +86,18 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
         },
         {
           id: "q_1",
-          question_type: "true_false",
-          question_text: "Water boils at a higher temperature at higher altitudes.",
-          options: ["True", "False"],
-          answer: "False",
+          question_type: "fill_blank",
+          question_text: "At higher altitudes where pressure is lower, water boils at [blank] temperatures.",
+          answer: "lower",
+          accepted_variants: ["colder"],
           testing_fact_unit_id: "fact_1"
         },
         {
           id: "q_2",
-          question_type: "multiple_choice",
-          question_text: "Which elements bind together to form water molecules?",
-          options: ["Oxygen and Carbon", "Oxygen and Hydrogen", "Hydrogen and Helium", "Nitrogen and Hydrogen"],
-          answer: "Oxygen and Hydrogen",
+          question_type: "fill_blank",
+          question_text: "Oxygen and [blank] bind together to form water molecules.",
+          answer: "hydrogen",
+          accepted_variants: ["H"],
           testing_fact_unit_id: "fact_2"
         },
         {
@@ -96,10 +110,10 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
         },
         {
           id: "q_4",
-          question_type: "multiple_choice",
-          question_text: "Why do water molecules exhibit polarity?",
-          options: ["Unequal electron sharing", "Equal electron sharing", "Ionic bonding", "None of the above"],
-          answer: "Unequal electron sharing",
+          question_type: "fill_blank",
+          question_text: "Water molecules exhibit polarity due to unequal [blank] sharing.",
+          answer: "electron",
+          accepted_variants: ["electrons"],
           testing_fact_unit_id: "fact_4"
         }
       ]
@@ -111,64 +125,125 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
  * Generates mock response for subsequent sections
  */
 export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: string, topic: string): string {
-  return JSON.stringify({
-    reasoning: {
-      phase3_implementation: `Mock implementation: generating section ${sectionIndex + 1} content at level ${cefrLevel}.`
-    },
-    section: {
-      topic: topic || `Academic Lecture Topic ${sectionIndex + 1}`,
-      audio_script: `This is the transcript for section ${sectionIndex + 1} covering ${topic || 'academic concepts'}. In this part, we examine how atmospheric pressure decreases with altitude, which is roughly one hectopascal per eight meters. Gravity pulls the air molecules closer to the surface, creating higher density. Warm air expands and rises, while cold air contracts and sinks.`,
-      fact_units: [
-        { id: `fact_${sectionIndex}_0`, text: `Pressure decreases with altitude at approximately one hectopascal per eight meters.` },
-        { id: `fact_${sectionIndex}_1`, text: `Gravity pulls air molecules closer to the Earth's surface.` },
-        { id: `fact_${sectionIndex}_2`, text: `Warm air expands and rises.` },
-        { id: `fact_${sectionIndex}_3`, text: `Cold air contracts and sinks.` },
-        { id: `fact_${sectionIndex}_4`, text: `Air pressure is measured using a barometer.` }
-      ],
-      questions: [
-        {
-          id: `q_${sectionIndex}_0`,
-          question_type: "fill_blank",
-          question_text: "Pressure decreases with altitude by one hectopascal every [blank] meters.",
-          answer: "eight",
-          accepted_variants: ["8", "8 meters"],
-          testing_fact_unit_id: `fact_${sectionIndex}_0`
-        },
-        {
-          id: `q_${sectionIndex}_1`,
-          question_type: "true_false",
-          question_text: "Gravity causes air density to be higher at higher altitudes.",
-          options: ["True", "False"],
-          answer: "False",
-          testing_fact_unit_id: `fact_${sectionIndex}_1`
-        },
-        {
-          id: `q_${sectionIndex}_2`,
-          question_type: "multiple_choice",
-          question_text: "What happens to warm air?",
-          options: ["It contracts and sinks", "It expands and rises", "It remains stable", "It turns into liquid"],
-          answer: "It expands and rises",
-          testing_fact_unit_id: `fact_${sectionIndex}_2`
-        },
-        {
-          id: `q_${sectionIndex}_3`,
-          question_type: "fill_blank",
-          question_text: "Cold air contracts and [blank].",
-          answer: "sinks",
-          accepted_variants: ["falls"],
-          testing_fact_unit_id: `fact_${sectionIndex}_3`
-        },
-        {
-          id: `q_${sectionIndex}_4`,
-          question_type: "multiple_choice",
-          question_text: "Which instrument is used to measure air pressure?",
-          options: ["Thermometer", "Hygrometer", "Barometer", "Anemometer"],
-          answer: "Barometer",
-          testing_fact_unit_id: `fact_${sectionIndex}_4`
-        }
-      ]
-    }
-  });
+  if (sectionIndex === 1) {
+    return JSON.stringify({
+      reasoning: {
+        phase3_implementation: `Mock implementation: generating section 2 (Multiple Choice) content at level ${cefrLevel}.`
+      },
+      section: {
+        topic: topic || "Atmospheric Density",
+        audio_script: "Warm air expands and rises, while cold air contracts and sinks. Gravity pulls the air molecules closer to the surface, creating higher density. Air pressure is measured using an instrument called a barometer.",
+        fact_units: [
+          { id: "fact_1_0", text: "Warm air expands and rises." },
+          { id: "fact_1_1", text: "Cold air contracts and sinks." },
+          { id: "fact_1_2", text: "Gravity pulls air molecules closer to the Earth's surface." },
+          { id: "fact_1_3", text: "A barometer is used to measure air pressure." },
+          { id: "fact_1_4", text: "Air density is higher closer to the surface." }
+        ],
+        questions: [
+          {
+            id: "q_1_0",
+            question_type: "multiple_choice",
+            question_text: "What happens to warm air?",
+            options: ["It contracts and sinks", "It expands and rises", "It remains stable", "It turns into liquid"],
+            answer: "It expands and rises",
+            testing_fact_unit_id: "fact_1_0"
+          },
+          {
+            id: "q_1_1",
+            question_type: "multiple_choice",
+            question_text: "What does cold air do?",
+            options: ["It expands and rises", "It contracts and sinks", "It evaporates", "It does not move"],
+            answer: "It contracts and sinks",
+            testing_fact_unit_id: "fact_1_1"
+          },
+          {
+            id: "q_1_2",
+            question_type: "multiple_choice",
+            question_text: "What force pulls air molecules closer to the surface?",
+            options: ["Friction", "Centrifugal force", "Gravity", "Magnetic force"],
+            answer: "Gravity",
+            testing_fact_unit_id: "fact_1_2"
+          },
+          {
+            id: "q_1_3",
+            question_type: "multiple_choice",
+            question_text: "Which instrument is used to measure air pressure?",
+            options: ["Thermometer", "Barometer", "Hygrometer", "Anemometer"],
+            answer: "Barometer",
+            testing_fact_unit_id: "fact_1_3"
+          },
+          {
+            id: "q_1_4",
+            question_type: "multiple_choice",
+            question_text: "Where is air density higher?",
+            options: ["Closer to the surface", "Higher in the atmosphere", "In outer space", "It is uniform everywhere"],
+            answer: "Closer to the surface",
+            testing_fact_unit_id: "fact_1_4"
+          }
+        ]
+      }
+    });
+  } else {
+    return JSON.stringify({
+      reasoning: {
+        phase3_implementation: `Mock implementation: generating section 3 (True/False) content at level ${cefrLevel}.`
+      },
+      section: {
+        topic: topic || "Water Properties",
+        audio_script: "Water has many unique features. It exists in three states of matter: solid, liquid, and gas. Liquid water is denser than solid ice, which is why ice floats. Water is also known as the universal solvent.",
+        fact_units: [
+          { id: "fact_2_0", text: "Water exists in three states of matter." },
+          { id: "fact_2_1", text: "Ice floats on water because liquid water is denser than ice." },
+          { id: "fact_2_2", text: "Water is known as the universal solvent." },
+          { id: "fact_2_3", text: "Pure water is odorless and tasteless." },
+          { id: "fact_2_4", text: "Water freezes at zero degrees Celsius." }
+        ],
+        questions: [
+          {
+            id: "q_2_0",
+            question_type: "true_false",
+            question_text: "Water exists in exactly two states of matter.",
+            options: ["True", "False"],
+            answer: "False",
+            testing_fact_unit_id: "fact_2_0"
+          },
+          {
+            id: "q_2_1",
+            question_type: "true_false",
+            question_text: "Ice floats on water because ice is denser than liquid water.",
+            options: ["True", "False"],
+            answer: "False",
+            testing_fact_unit_id: "fact_2_1"
+          },
+          {
+            id: "q_2_2",
+            question_type: "true_false",
+            question_text: "Water is commonly referred to as the universal solvent.",
+            options: ["True", "False"],
+            answer: "True",
+            testing_fact_unit_id: "fact_2_2"
+          },
+          {
+            id: "q_2_3",
+            question_type: "true_false",
+            question_text: "Pure water has a strong odor and sour taste.",
+            options: ["True", "False"],
+            answer: "False",
+            testing_fact_unit_id: "fact_2_3"
+          },
+          {
+            id: "q_2_4",
+            question_type: "true_false",
+            question_text: "Under standard conditions, pure water freezes at 0 degrees Celsius.",
+            options: ["True", "False"],
+            answer: "True",
+            testing_fact_unit_id: "fact_2_4"
+          }
+        ]
+      }
+    });
+  }
 }
 
 /**
@@ -324,7 +399,11 @@ export function buildSection1SystemPrompt(): string {
     "Analyze the learner's previous listening attempts history (if provided) to identify strengths and weaknesses. If no history is provided or is_placement is true, summarize that this is a new placement session.",
     "",
     "PHASE 2: PLANNING",
-    "Plan the overall CEFR level, topic progression across sections, and distribution of question types. The plan must match the requested number of sections and average CEFR level. Ensure question types include a variety of formats: true_false, multiple_choice, and fill_blank.",
+    "Plan the overall CEFR level and topic progression across exactly 3 sections. The plan must define a 3-phase session where:",
+    "  - Section index 0 is always Fill-in-the-blank ('fill_blank').",
+    "  - Section index 1 is always Multiple Choice ('multiple_choice').",
+    "  - Section index 2 is always True/False ('true_false').",
+    "The plan must match this exact layout. The CEFR level should match the requested average CEFR level.",
     "",
     "PHASE 3: IMPLEMENTATION",
     "Generate the listening passage script (audio_script) for Section 1 (index 0). Extract a discrete array of key facts (fact_units) from the passage script. Finally, formulate the questions array. Each question must target a specific fact unit and map to it via testing_fact_unit_id.",
@@ -336,7 +415,7 @@ export function buildSection1SystemPrompt(): string {
     "",
     "CRITICAL RULE: You MUST generate exactly 5 questions. Do not generate fewer.",
     "",
-    "FORMAT VARIETY: You MUST include at least one Multiple Choice, one True/False, and one Fill in the Blank question in every set. Do not use only one format.",
+    "FORMAT ENFORCEMENT: All 5 questions for this section (index 0) MUST be Fill-in-the-Blank ('fill_blank') format. Do not include any multiple choice or true/false questions in this section.",
     "",
     "DIFFICULTY SCALING: Analyze the user's past performance (if provided in context) or the target academic level. Increase vocabulary complexity and inferential reasoning requirements for each subsequent question.",
     "",
@@ -364,11 +443,13 @@ export function buildSection1SystemPrompt(): string {
     '    "cefr_level": "A1-C2",',
     '    "section_count": 3,',
     '    "sections": [',
-    '      { "section_index": 0, "cefr_level": "A1-C2", "topic": "topic name", "question_types": ["fill_blank", "true_false", "multiple_choice"] }',
-    "    ]",
+    '      { "section_index": 0, "cefr_level": "A1-C2", "topic": "topic name 1", "question_types": ["fill_blank"] },',
+    '      { "section_index": 1, "cefr_level": "A1-C2", "topic": "topic name 2", "question_types": ["multiple_choice"] },',
+    '      { "section_index": 2, "cefr_level": "A1-C2", "topic": "topic name 3", "question_types": ["true_false"] }',
+    '    ]',
     "  },",
     '  "section": {',
-    '    "topic": "topic name",',
+    '    "topic": "topic name 1",',
     '    "audio_script": "lecture text...",',
     '    "fact_units": [',
     '      { "id": "fact_0", "text": "fact statement 1" },',
@@ -379,10 +460,10 @@ export function buildSection1SystemPrompt(): string {
     "    ],",
     '    "questions": [',
     '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
-    '      { "id": "q_1", "question_type": "true_false", "question_text": "statement...", "options": ["True", "False"], "answer": "True", "testing_fact_unit_id": "fact_1" },',
-    '      { "id": "q_2", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_2" },',
+    '      { "id": "q_1", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "testing_fact_unit_id": "fact_1" },',
+    '      { "id": "q_2", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "testing_fact_unit_id": "fact_2" },',
     '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_3" },',
-    '      { "id": "q_4", "question_type": "multiple_choice", "question_text": "advanced question...", "options": ["c1", "c2", "c3", "c4"], "answer": "c1", "testing_fact_unit_id": "fact_4" }',
+    '      { "id": "q_4", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_4" }',
     "    ]",
     "  }",
     "}"
@@ -424,7 +505,10 @@ export function buildNextSectionSystemPrompt(): string {
     "",
     "CRITICAL RULE: You MUST generate exactly 5 questions. Do not generate fewer.",
     "",
-    "FORMAT VARIETY: You MUST include at least one Multiple Choice, one True/False, and one Fill in the Blank question in every set. Do not use only one format.",
+    "FORMAT ENFORCEMENT: You MUST generate ALL 5 questions matching the EXACT single question format specified in the user prompt. Do not mix question formats.",
+    "  - If the requested question type is 'fill_blank', all 5 questions must be 'fill_blank'.",
+    "  - If the requested question type is 'multiple_choice', all 5 questions must be 'multiple_choice'.",
+    "  - If the requested question type is 'true_false', all 5 questions must be 'true_false'.",
     "",
     "DIFFICULTY SCALING: Analyze the user's past performance (if provided in context) or the target academic level. Increase vocabulary complexity and inferential reasoning requirements for each subsequent question.",
     "",
@@ -457,14 +541,14 @@ export function buildNextSectionSystemPrompt(): string {
     '      { "id": "fact_4", "text": "fact statement 5" }',
     "    ],",
     '    "questions": [',
-    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
-    '      { "id": "q_1", "question_type": "true_false", "question_text": "statement...", "options": ["True", "False"], "answer": "True", "testing_fact_unit_id": "fact_1" },',
+    '      { "id": "q_0", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_0" },',
+    '      { "id": "q_1", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_1" },',
     '      { "id": "q_2", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_2" },',
-    '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_3" },',
-    '      { "id": "q_4", "question_type": "multiple_choice", "question_text": "advanced question...", "options": ["c1", "c2", "c3", "c4"], "answer": "c1", "testing_fact_unit_id": "fact_4" }',
-    "    ],",
-    "  },",
-    "}",
+    '      { "id": "q_3", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice2", "testing_fact_unit_id": "fact_3" },',
+    '      { "id": "q_4", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice3", "testing_fact_unit_id": "fact_4" }',
+    "    ]",
+    "  }",
+    "}"
   ].join("\n");
 }
 

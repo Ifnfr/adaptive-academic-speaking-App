@@ -53,6 +53,19 @@ export function ListeningExerciseLayout({
     onSubmit(answers);
   };
 
+  const getPhaseName = (idx: number) => {
+    switch (idx) {
+      case 0:
+        return "Phase 1: Fill in the Blank";
+      case 1:
+        return "Phase 2: Multiple Choice";
+      case 2:
+        return "Phase 3: True/False";
+      default:
+        return `Phase ${idx + 1}`;
+    }
+  };
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -61,15 +74,18 @@ export function ListeningExerciseLayout({
       {/* Session Progress Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--brand-border)] pb-4">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-[var(--brand-muted)] uppercase tracking-wider">
               Academic Listening
             </span>
             <span className="inline-flex items-center rounded-full bg-[var(--brand-teal-soft)] px-2.5 py-0.5 text-xs font-bold text-[var(--brand-teal-ink)] border border-[var(--brand-teal)]/10">
               {cefrLevel}
             </span>
+            <span className="inline-flex items-center rounded-full bg-[var(--brand-teal-soft)] px-2.5 py-0.5 text-xs font-bold text-[var(--brand-teal-ink)] border border-[var(--brand-teal)]/10">
+              {getPhaseName(sectionIndex)}
+            </span>
           </div>
-          <h1 className="text-xl font-bold text-[var(--brand-ink)] leading-tight">
+          <h1 className="text-xl font-bold text-[var(--brand-ink)] leading-tight mt-1">
             {topic}
           </h1>
         </div>
