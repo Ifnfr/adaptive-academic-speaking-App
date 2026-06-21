@@ -172,7 +172,8 @@ export async function POST(request: Request) {
   // Register background AI execution with the runtime lifecycle manager
   waitUntil((async () => {
     try {
-      const systemPrompt = buildNextSectionSystemPrompt();
+      const questionType = targetQuestionTypes[0] || "fill_blank";
+      const systemPrompt = buildNextSectionSystemPrompt(questionType);
       const userPrompt = buildNextSectionUserPrompt(
         nextIndex,
         targetLevel,

@@ -491,7 +491,32 @@ export function buildSection1UserPrompt(
 /**
  * Builds the system prompt for subsequent sections (index >= 1) generation.
  */
-export function buildNextSectionSystemPrompt(): string {
+export function buildNextSectionSystemPrompt(questionType: string): string {
+  let questionsExample = "";
+  if (questionType === "multiple_choice") {
+    questionsExample = [
+      '    "questions": [',
+      '      { "id": "q_0", "question_type": "multiple_choice", "question_text": "example multiple choice question", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_0" },',
+      '      { "id": "q_1", "question_type": "multiple_choice", "question_text": "another multiple choice question", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice2", "testing_fact_unit_id": "fact_1" }',
+      '    ]'
+    ].join("\n");
+  } else if (questionType === "true_false") {
+    questionsExample = [
+      '    "questions": [',
+      '      { "id": "q_0", "question_type": "true_false", "question_text": "example true statement.", "answer": "True", "testing_fact_unit_id": "fact_0" },',
+      '      { "id": "q_1", "question_type": "true_false", "question_text": "example false statement.", "answer": "False", "testing_fact_unit_id": "fact_1" }',
+      '    ]'
+    ].join("\n");
+  } else {
+    // default/fill_blank
+    questionsExample = [
+      '    "questions": [',
+      '      { "id": "q_0", "question_type": "fill_blank", "question_text": "example [blank] question.", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
+      '      { "id": "q_1", "question_type": "fill_blank", "question_text": "another [blank] question.", "answer": "correct_word", "accepted_variants": [], "testing_fact_unit_id": "fact_1" }',
+      '    ]'
+    ].join("\n");
+  }
+
   return [
     "You are an expert AI English academic listening content designer for the Fonetik application.",
     "Your task is to generate the next section content based on the pre-approved session generation plan.",
@@ -540,13 +565,7 @@ export function buildNextSectionSystemPrompt(): string {
     '      { "id": "fact_3", "text": "fact statement 4" },',
     '      { "id": "fact_4", "text": "fact statement 5" }',
     "    ],",
-    '    "questions": [',
-    '      { "id": "q_0", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_0" },',
-    '      { "id": "q_1", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_1" },',
-    '      { "id": "q_2", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_2" },',
-    '      { "id": "q_3", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice2", "testing_fact_unit_id": "fact_3" },',
-    '      { "id": "q_4", "question_type": "multiple_choice", "question_text": "question...", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice3", "testing_fact_unit_id": "fact_4" }',
-    "    ]",
+    questionsExample,
     "  }",
     "}"
   ].join("\n");

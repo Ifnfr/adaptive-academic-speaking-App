@@ -65,10 +65,10 @@ export async function POST(
     );
   }
 
-  // Fetch session parameters to determine target CEFR level
+  // Fetch session parameters to determine target CEFR level and total section count
   const { data: session, error: sessionError } = await supabase
     .from("listening_exercise_sessions")
-    .select("cefr_level")
+    .select("cefr_level, section_count")
     .eq("id", sessionId)
     .eq("owner_id", ownerId)
     .single();
@@ -81,18 +81,31 @@ export async function POST(
     );
   }
 
-  // Fetch all sections belonging to this session
+  // Fetch all sections belonging to this session and their scores
   const { data: sections, error: sectionsError } = await supabase
     .from("listening_exercise_sections")
-    .select("id")
+    .select("id, section_score")
     .eq("session_id", sessionId)
     .eq("owner_id", ownerId);
 
-  if (sectionsError || !sections || sections.length === 0) {
+  if (sectionsError || !sections) {
     console.error("Failed to query sections:", sectionsError);
     return NextResponse.json(
-      { error: "No active sections found for this session." },
-      { status: 404 }
+      { error: "Database operation failed when fetching sections." },
+      { status: 500 }
+    );
+  }
+
+  // Count how many sections have been submitted (section_score is non-null)
+  const submittedSectionsCount = sections.filter((s) => s.section_score !== null).length;
+
+  // Verify that all expected sections were submitted
+  if (submittedSectionsCount < session.section_count) {
+    return NextResponse.json(
+      {
+        error: `Not all sections have been submitted. Expected ${session.section_count}, found ${submittedSectionsCount} submitted.`,
+      },
+      { status: 400 }
     );
   }
 
