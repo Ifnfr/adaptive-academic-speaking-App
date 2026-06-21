@@ -7,7 +7,7 @@ import {
   extractJsonObject
 } from "../../_lib/providers";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 async function resolveCurrentUserId(): Promise<string | null> {
   try {

@@ -141,8 +141,18 @@ export function ListeningExerciseSession({
     if (step !== "generating" || !sessionId) return;
 
     let timeoutId: NodeJS.Timeout;
+    const startTime = Date.now();
 
     async function pollStatus() {
+      if (Date.now() - startTime > 45000) {
+        if (isMountedRef.current) {
+          setStep("error");
+          setErrorMsg("Generation timed out. Please try again.");
+          setErrorPhase("status");
+        }
+        return;
+      }
+
       try {
         const res = await fetch(`/api/listening-exercise/session/${sessionId}/status`);
         if (!res.ok) {
