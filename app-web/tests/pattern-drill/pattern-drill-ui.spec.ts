@@ -44,7 +44,7 @@ function makeSession(overrides: Partial<Record<string, unknown>> = {}) {
 
 async function openDrillMode(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Drill Mode" }).click();
+  await page.locator("main").getByRole("button", { name: "Drill Mode" }).click();
 }
 
 async function injectMediaMocks(page: Page) {
@@ -321,7 +321,7 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
     expect(weaknessCalled).toBe(false);
 
-    await page.getByRole("button", { name: "Drill Mode" }).click();
+    await page.locator("main").getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByTestId("weakness-empty")).toBeVisible();
     expect(weaknessCalled).toBe(true);
   });

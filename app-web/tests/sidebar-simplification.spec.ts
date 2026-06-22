@@ -78,6 +78,7 @@ test.describe("Sidebar Simplification Flows", () => {
     await expect(drawer).toContainText("Commonplace");
     await expect(drawer).toContainText("Settings");
 
+    await drawer.getByText("Analytics").click();
     await drawer.getByRole("button", { name: "Settings" }).click();
     await expect(drawer).toBeHidden();
     await expect(page.getByTestId("mobile-shell-bar")).toContainText(
@@ -111,10 +112,9 @@ test.describe("Sidebar Simplification Flows", () => {
     await gotoMockApp(page);
 
     await page.getByTestId("mobile-nav-toggle").click();
-    await page
-      .getByTestId("mobile-nav-drawer")
-      .getByRole("button", { name: "Commonplace" })
-      .click();
+    const drawer = page.getByTestId("mobile-nav-drawer");
+    await drawer.getByText("Tools").click();
+    await drawer.getByRole("button", { name: "Commonplace" }).click();
     await expect(page.getByTestId("mobile-shell-bar")).toContainText(
       "Commonplace",
     );

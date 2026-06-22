@@ -250,8 +250,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await page.goto("/");
 
     // Assert Mode Selector is visible and defaults to Podchat
-    const podchatModeBtn = page.getByRole("button", { name: "Podchat", exact: true });
-    const patternDrillModeBtn = page.getByRole("button", { name: "Drill Mode" });
+    const podchatModeBtn = page.locator("main").getByRole("button", { name: "Podchat", exact: true });
+    const patternDrillModeBtn = page.locator("main").getByRole("button", { name: "Drill Mode" });
     await expect(podchatModeBtn).toBeVisible();
     await expect(patternDrillModeBtn).toBeVisible();
     await expect(podchatModeBtn).toHaveAttribute("aria-pressed", "true");

@@ -269,7 +269,7 @@ test.describe("Weekly Mission Dashboard UI", () => {
 
     await page.getByRole("button", { name: "Open Drill Mode" }).click();
     await expect(page.getByRole("heading", { name: "Active Session" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Drill Mode" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("main").getByRole("button", { name: "Drill Mode" })).toHaveAttribute("aria-pressed", "true");
 
     await openWeeklyReview(page);
     await page.getByRole("button", { name: "Open Vocabulary" }).click();
@@ -281,7 +281,7 @@ test.describe("Weekly Mission Dashboard UI", () => {
 
     await openWeeklyReview(page);
     await page.getByRole("button", { name: "Start Podchat" }).click();
-    await expect(page.getByRole("button", { name: "Podchat", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("main").getByRole("button", { name: "Podchat", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
   });
 

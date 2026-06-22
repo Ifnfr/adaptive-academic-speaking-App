@@ -75,7 +75,7 @@ async function main() {
 
   // Run Playwright
   const playwrightCmd = isWin ? 'npx.cmd' : 'npx';
-  const playwright = spawn(playwrightCmd, ['playwright', 'test'], {
+  const playwright = spawn(playwrightCmd, ['playwright', 'test', ...process.argv.slice(2)], {
     stdio: 'inherit',
     shell: isWin,
     env: {

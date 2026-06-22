@@ -1271,6 +1271,15 @@ export default function Home() {
   const handleToggleMobileNav = () =>
     setIsMobileNavOpen((currentIsOpen) => !currentIsOpen);
   const handleSelectView = (nextView: SidebarView) => {
+    if (nextView === "drill") {
+      setActiveSessionPanel("patternDrill");
+      setView("active");
+      setIsMobileNavOpen(false);
+      return;
+    }
+    if (nextView === "active") {
+      setActiveSessionPanel("podchat");
+    }
     if (nextView === "commonplace" && view !== "commonplace") {
       window.sessionStorage.setItem(LAST_FONETIK_VIEW_SESSION_KEY, view);
     }
@@ -2490,6 +2499,7 @@ export default function Home() {
     gamificationReady,
     appLanguage,
     onSelectView: handleSelectView,
+    activeSessionPanel,
   };
   const currentViewTitle = viewTitle(view, homeT);
 

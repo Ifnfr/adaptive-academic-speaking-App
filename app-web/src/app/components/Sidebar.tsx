@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 
@@ -16,7 +16,8 @@ export type SidebarView =
   | "leaderboard"
   | "learning-path"
   | "profile"
-  | "listening";
+  | "listening"
+  | "drill";
 
 export type SidebarProps = {
   view: SidebarView;
@@ -31,20 +32,66 @@ export type SidebarProps = {
   gamificationReady: boolean;
   appLanguage?: AppLanguage | null;
   onSelectView: (view: SidebarView) => void;
+  activeSessionPanel?: "podchat" | "patternDrill";
 };
 
 type SidebarGroupProps = {
   label: string;
   children: ReactNode;
+  collapsible?: boolean;
+  isCollapsed?: boolean;
+  onToggle?: () => void;
 };
 
-function SidebarGroup({ label, children }: SidebarGroupProps) {
+function SidebarGroup({
+  label,
+  children,
+  collapsible = false,
+  isCollapsed = false,
+  onToggle,
+}: SidebarGroupProps) {
   return (
     <div className="px-2 py-2">
-      <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
-        {label}
-      </p>
-      <ul className="flex flex-col">{children}</ul>
+      <div
+        className={`flex items-center justify-between px-3 pb-1 ${
+          collapsible ? "cursor-pointer select-none" : ""
+        }`}
+        onClick={collapsible ? onToggle : undefined}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+          {label}
+        </p>
+        {collapsible && (
+          <button
+            type="button"
+            className="text-[var(--brand-muted)] hover:text-[var(--brand-ink)] focus:outline-none"
+            aria-label={isCollapsed ? "Expand group" : "Collapse group"}
+          >
+            <svg
+              className={`h-3.5 w-3.5 transform transition-transform duration-200 ${
+                isCollapsed ? "-rotate-90" : "rotate-0"
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+        )}
+      </div>
+      <ul
+        className={`flex flex-col transition-all duration-200 overflow-hidden ${
+          isCollapsed ? "max-h-0" : "max-h-[500px]"
+        }`}
+      >
+        {children}
+      </ul>
     </div>
   );
 }
@@ -88,9 +135,56 @@ export function Sidebar({
   gamificationReady,
   appLanguage,
   onSelectView,
+  activeSessionPanel,
 }: SidebarProps) {
   const { t } = useI18n(appLanguage);
   const card = "app-panel brand-grid";
+
+  // Viewport tracking for mobile collapsibility
+  const [isMobile, setIsMobile] = useState(false);
+  const [toolsExpanded, setToolsExpanded] = useState(true);
+  const [analyticsExpanded, setAnalyticsExpanded] = useState(true);
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 1023px)");
+    const onChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      setIsMobile(e.matches);
+    };
+    onChange(mql);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) {
+      const storedTools = window.localStorage.getItem("sidebar_tools_expanded");
+      setToolsExpanded(storedTools === "true"); // default to false if null/anything else
+
+      const storedAnalytics = window.localStorage.getItem("sidebar_analytics_expanded");
+      setAnalyticsExpanded(storedAnalytics === "true"); // default to false if null/anything else
+    } else {
+      setToolsExpanded(true);
+      setAnalyticsExpanded(true);
+    }
+  }, [isMobile]);
+
+  const toggleTools = () => {
+    if (!isMobile) return;
+    setToolsExpanded((prev) => {
+      const next = !prev;
+      window.localStorage.setItem("sidebar_tools_expanded", String(next));
+      return next;
+    });
+  };
+
+  const toggleAnalytics = () => {
+    if (!isMobile) return;
+    setAnalyticsExpanded((prev) => {
+      const next = !prev;
+      window.localStorage.setItem("sidebar_analytics_expanded", String(next));
+      return next;
+    });
+  };
 
   return (
     <aside className="lg:h-screen lg:w-[252px] lg:flex-shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-[var(--brand-border)] lg:bg-[var(--brand-bg)] lg:p-4 [scrollbar-width:thin]">
@@ -98,9 +192,6 @@ export function Sidebar({
         {/* Brand */}
         <div className={card}>
           <div className="flex flex-col items-start gap-3 p-5">
-            {/* Horizontal PNG wordmark. Width-based sizing keeps the
-                aspect ratio intact regardless of the file's pixel
-                dimensions. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/fonetik_logo.png"
@@ -175,12 +266,19 @@ export function Sidebar({
 
         {/* Grouped nav */}
         <nav className={card} aria-label="Sections">
+          {/* Group 1: PRACTICE */}
           <SidebarGroup label={t("sidebar.groupPractice")}>
             <SidebarItem
-              active={view === "active"}
+              active={view === "active" && activeSessionPanel !== "patternDrill"}
               onClick={() => onSelectView("active")}
             >
               {t("sidebar.viewActive")}
+            </SidebarItem>
+            <SidebarItem
+              active={view === "active" && activeSessionPanel === "patternDrill"}
+              onClick={() => onSelectView("drill")}
+            >
+              {t("sidebar.viewDrillMode" as any) || "Drill Mode"}
             </SidebarItem>
             <SidebarItem
               active={view === "listening"}
@@ -188,6 +286,15 @@ export function Sidebar({
             >
               {t("sidebar.viewListening") || "Listening"}
             </SidebarItem>
+          </SidebarGroup>
+
+          {/* Group 2: TOOLS */}
+          <SidebarGroup
+            label={t("sidebar.groupTools" as any) || "Tools"}
+            collapsible={isMobile}
+            isCollapsed={isMobile && !toolsExpanded}
+            onToggle={toggleTools}
+          >
             <SidebarItem
               active={view === "vocabulary"}
               onClick={() => onSelectView("vocabulary")}
@@ -206,15 +313,21 @@ export function Sidebar({
             >
               {t("sidebar.viewArticlePractice")}
             </SidebarItem>
+          </SidebarGroup>
+
+          {/* Group 3: ANALYTICS */}
+          <SidebarGroup
+            label={t("sidebar.groupAnalytics")}
+            collapsible={isMobile}
+            isCollapsed={isMobile && !analyticsExpanded}
+            onToggle={toggleAnalytics}
+          >
             <SidebarItem
               active={view === "session-log"}
               onClick={() => onSelectView("session-log")}
             >
               {t("sidebar.viewSessionLog")}
             </SidebarItem>
-          </SidebarGroup>
-
-          <SidebarGroup label={t("sidebar.groupAnalytics")}>
             <SidebarItem
               active={view === "progress"}
               onClick={() => onSelectView("progress")}
@@ -241,9 +354,6 @@ export function Sidebar({
             >
               {t("sidebar.viewLeaderboard")}
             </SidebarItem>
-          </SidebarGroup>
-
-          <SidebarGroup label={t("sidebar.groupSystem")}>
             <SidebarItem
               active={view === "settings"}
               onClick={() => onSelectView("settings")}
