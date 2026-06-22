@@ -1208,14 +1208,8 @@ export function PodchatView({
           formData.append("audio", audioBlob, `speech.${blobMimeType.split("/")[1] || "webm"}`);
           formData.append("durationMs", String(durationMs));
 
-          const internalKey =
-            process.env.NEXT_PUBLIC_INTERNAL_SPEECH_SECURITY_KEY || "test-internal-speech-key";
-
           const response = await fetch("/api/podchat/stt", {
             method: "POST",
-            headers: {
-              "X-Internal-Key": internalKey,
-            },
             body: formData,
             signal: controller.signal,
           });
