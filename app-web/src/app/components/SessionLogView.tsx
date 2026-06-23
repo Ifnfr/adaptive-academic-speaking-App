@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
 
@@ -53,6 +54,18 @@ export function SessionLogView({
   onGoToActiveSession,
 }: SessionLogViewProps) {
   const { t } = useI18n(appLanguage);
+  
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const isDesktop = window.innerWidth >= 1024;
+    if (isDesktop && sessions.length > 0 && !selectedSessionId) {
+      setSelectedSessionId(sessions[0].id);
+    }
+  }, [sessions, selectedSessionId]);
+
+  const selectedSession = sessions.find((s) => s.id === selectedSessionId) || null;
+
   const card =
     "rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm brand-grid";
   const cardHeader =
@@ -112,36 +125,105 @@ export function SessionLogView({
             </button>
           </div>
         ) : (
-          <ul className="flex flex-col gap-3">
-            {sessions.slice(0, 5).map((s) => (
-              <li
-                key={s.id}
-                className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
-              >
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-[var(--brand-ink-soft)]">
-                  <span className="font-mono text-[var(--brand-ink)]">
-                    {s.date}
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span>{s.level}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>{s.mode}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Session List (2/5 proportion -> lg:col-span-5) */}
+            <div className="lg:col-span-5 flex flex-col gap-3">
+              <ul className="flex flex-col gap-3">
+                {sessions.slice(0, 5).map((s) => (
+                  <li
+                    key={s.id}
+                    onClick={() => setSelectedSessionId(s.id)}
+                    className={`rounded-xl border p-4 transition-colors cursor-pointer ${
+                      selectedSessionId === s.id
+                        ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)]"
+                        : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] hover:bg-[var(--brand-surface-3)]"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-[var(--brand-ink-soft)]">
+                      <span className="font-mono text-[var(--brand-ink)]">
+                        {s.date}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>{s.level}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{s.mode}</span>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-1">
+                      <SummaryCell
+                        label={t("log.mainWeakness")}
+                        value={s.mainWeakness}
+                        multiline
+                      />
+                      <SummaryCell
+                        label={t("log.nextTarget")}
+                        value={s.retryTask}
+                        multiline
+                      />
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Right Column: Detail Panel (3/5 proportion -> lg:col-span-7) */}
+            {selectedSession && (
+              <div className="hidden lg:block lg:col-span-7 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 shadow-sm self-start">
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-teal)]">
+                      Session Details
+                    </p>
+                    <h3 className="mt-1.5 text-lg font-bold text-[var(--brand-ink)]">
+                      {selectedSession.date}
+                    </h3>
+                  </div>
+
+                  <div className="border-t border-[var(--brand-border)] pt-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-[var(--brand-ink-soft)] font-medium">Mode</span>
+                      <span className="font-semibold text-[var(--brand-ink)]">
+                        {selectedSession.mode}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-[var(--brand-ink-soft)] font-medium">Level</span>
+                      <span className="font-semibold text-[var(--brand-ink)]">
+                        {selectedSession.level}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[var(--brand-border)] pt-4 flex flex-col gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+                      {t("log.mainWeakness")}
+                    </p>
+                    <p className="text-sm text-[var(--brand-ink)] whitespace-pre-wrap leading-relaxed">
+                      {selectedSession.mainWeakness}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-[var(--brand-border)] pt-4 flex flex-col gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+                      {t("log.nextTarget")}
+                    </p>
+                    <p className="text-sm text-[var(--brand-ink)] whitespace-pre-wrap leading-relaxed">
+                      {selectedSession.retryTask}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-[var(--brand-border)] pt-6">
+                    <button
+                      type="button"
+                      onClick={onGoToActiveSession}
+                      className="w-full rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
+                    >
+                      Start drill on this weakness
+                    </button>
+                  </div>
                 </div>
-                <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-                  <SummaryCell
-                    label={t("log.mainWeakness")}
-                    value={s.mainWeakness}
-                    multiline
-                  />
-                  <SummaryCell
-                    label={t("log.nextTarget")}
-                    value={s.retryTask}
-                    multiline
-                  />
-                </dl>
-              </li>
-            ))}
-          </ul>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </section>
