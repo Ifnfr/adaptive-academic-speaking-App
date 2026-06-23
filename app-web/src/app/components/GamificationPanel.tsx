@@ -193,7 +193,7 @@ export function GamificationPanel({
   };
 
   return (
-    <div className="app-panel-muted border-l-4 border-l-[var(--brand-gold)] p-5">
+    <div className="app-panel-muted border-l-4 border-l-[var(--brand-gold)] p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
@@ -312,7 +312,7 @@ export function GamificationPanel({
                   <div className="mt-3 sm:mt-0 flex justify-end">
                     <button
                       onClick={() => onSelectView(quest.view as SidebarView)}
-                      className="app-button app-button-secondary min-h-9 px-3 py-1.5 text-xs"
+                      className="app-button app-button-secondary min-h-[44px] px-3 py-1.5 text-xs"
                     >
                       {t("progress.quests.go")} ➔
                     </button>

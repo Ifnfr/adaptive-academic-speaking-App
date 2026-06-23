@@ -34,8 +34,10 @@ export function ActiveSessionShell(
   const [weaknessText, setWeaknessText] = useState<string | null>(null);
   const [targetText, setTargetText] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [weaknessError, setWeaknessError] = useState<boolean>(false);
   const [tips, setTips] = useState<string[]>([]);
   const [tipsLoading, setTipsLoading] = useState<boolean>(false);
+  const [tipsError, setTipsError] = useState<boolean>(false);
 
   useEffect(() => {
     let active = true;
@@ -62,6 +64,7 @@ export function ActiveSessionShell(
         if (data.status === "found" && data.weakness) {
           setWeaknessText(data.weakness.title || null);
           setTargetText(data.weakness.practiceFocus || null);
+          setWeaknessError(false);
           setIsLoading(false);
         } else {
           if (latestSession) {
@@ -71,6 +74,7 @@ export function ActiveSessionShell(
             setWeaknessText(null);
             setTargetText(null);
           }
+          setWeaknessError(false);
           setIsLoading(false);
         }
       } catch (error) {
@@ -78,9 +82,11 @@ export function ActiveSessionShell(
         if (latestSession) {
           setWeaknessText(latestSession.mainWeakness || null);
           setTargetText(latestSession.retryTask || null);
+          setWeaknessError(false);
         } else {
           setWeaknessText(null);
           setTargetText(null);
+          setWeaknessError(true);
         }
         setIsLoading(false);
       }
@@ -98,12 +104,14 @@ export function ActiveSessionShell(
   useEffect(() => {
     if (!weaknessText) {
       setTips([]);
+      setTipsError(false);
       return;
     }
 
     let active = true;
     const controller = new AbortController();
     setTipsLoading(true);
+    setTipsError(false);
 
     async function fetchTips() {
       try {
@@ -119,9 +127,13 @@ export function ActiveSessionShell(
         const data = await res.json();
         if (active && data.tips) {
           setTips(data.tips);
+          setTipsError(false);
         }
       } catch (err) {
         console.error("Error fetching contextual tips:", err);
+        if (active) {
+          setTipsError(true);
+        }
       } finally {
         if (active) {
           setTipsLoading(false);
@@ -170,6 +182,12 @@ export function ActiveSessionShell(
               <div className="h-4 bg-[var(--brand-border-strong)]/30 rounded w-24"></div>
               <div className="h-6 bg-[var(--brand-border-strong)]/30 rounded w-3/4 sm:w-1/2"></div>
               <div className="h-4 bg-[var(--brand-border-strong)]/30 rounded w-full sm:w-2/3 mt-1"></div>
+            </div>
+          ) : weaknessError && !weaknessText ? (
+            <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 shadow-sm">
+              <p className="text-xs text-[var(--brand-ink-soft)]">
+                Could not load weakness data. Check your connection.
+              </p>
             </div>
           ) : (
             weaknessText && targetText && (
@@ -265,6 +283,17 @@ export function ActiveSessionShell(
                   <div className="h-3 bg-[var(--brand-border-strong)]/20 rounded w-full"></div>
                   <div className="h-3 bg-[var(--brand-border-strong)]/20 rounded w-11/12"></div>
                   <div className="h-3 bg-[var(--brand-border-strong)]/20 rounded w-4/5"></div>
+                </div>
+              </div>
+            ) : tipsError ? (
+              <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-5 shadow-sm flex flex-col gap-3">
+                <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                  AI Coach Tips
+                </h3>
+                <div className="border-t border-[var(--brand-border)] pt-3">
+                  <p className="text-xs text-[var(--brand-ink-soft)]">
+                    Could not load tips. Try refreshing.
+                  </p>
                 </div>
               </div>
             ) : (

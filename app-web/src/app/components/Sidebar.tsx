@@ -58,7 +58,7 @@ function SidebarGroup({
         }`}
         onClick={collapsible ? onToggle : undefined}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-muted)]">
           {label}
         </p>
         {collapsible && (
@@ -215,10 +215,10 @@ export function Sidebar({
           data-testid="sidebar-current-level-card"
         >
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/70">
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/70">
               {t("sidebar.currentLevel")}
             </p>
-            <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/80">
+            <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-white/80">
               {sessionsCount === 0 ? t("sidebar.day1") : `${sessionsCount} ${sessionsCount === 1 ? t("sidebar.sessionCount") : t("sidebar.sessionsCount")}`}
             </span>
           </div>
@@ -228,11 +228,11 @@ export function Sidebar({
               {levelPhase}
             </p>
             {nextLevel && (
-              <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-white/85">
+              <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/85">
                 {nextLevel}
               </p>
             )}
-            <p className="mt-3 text-[11px] text-white/60">
+            <p className="mt-3 text-xs text-white/60">
               {t("sidebar.adjustSetup")}
             </p>
           </div>
@@ -242,10 +242,10 @@ export function Sidebar({
         <div className={card}>
           <div className="px-5 py-4">
             <div className="flex items-baseline justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
                 {t("sidebar.speakerLevel")}
               </p>
-              <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
+              <span className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">
                 {t("sidebar.xp")}
               </span>
             </div>
@@ -258,7 +258,7 @@ export function Sidebar({
             <p className="mt-3 font-mono text-xs tabular-nums text-[var(--brand-muted)]">
               {gamificationReady ? `${totalXp} ${t("sidebar.totalXp")}` : `- ${t("sidebar.totalXp")}`}
             </p>
-            <p className="mt-2 text-[11px] text-[var(--brand-muted)]">
+            <p className="mt-2 text-xs text-[var(--brand-muted)]">
               {t("sidebar.separateLevel")}
             </p>
           </div>
@@ -367,10 +367,10 @@ export function Sidebar({
         <div className={card}>
           <div className="px-5 py-4">
             <div className="flex items-baseline justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-gold)]">
                 {t("sidebar.dayStreak")}
               </p>
-              <span className="text-[10px] uppercase tracking-wide text-[var(--brand-muted)]">
+              <span className="text-xs uppercase tracking-wide text-[var(--brand-muted)]">
                 {t("sidebar.local")}
               </span>
             </div>
@@ -387,7 +387,7 @@ export function Sidebar({
                 ? t("sidebar.streakStart")
                 : t("sidebar.streakKeep")}
             </p>
-            <p className="mt-3 text-[11px] text-[var(--brand-muted)]">
+            <p className="mt-3 text-xs text-[var(--brand-muted)]">
               {sessionsCount}{" "}
               {sessionsCount === 1 ? t("sidebar.sessionCount") : t("sidebar.sessionsCount")}{" "}
               {t("sidebar.storedLocally")} · {t("sidebar.max20")}

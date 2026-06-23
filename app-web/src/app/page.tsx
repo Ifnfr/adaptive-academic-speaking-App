@@ -2535,13 +2535,12 @@ export default function Home() {
             title={currentViewTitle}
             onToggle={handleToggleMobileNav}
           />
-          {isMobileNavOpen && (
-            <MobileNavigationDrawer
-              panelRef={mobileNavPanelRef}
-              sidebarProps={sidebarProps}
-              onClose={handleCloseMobileNav}
-            />
-          )}
+          <MobileNavigationDrawer
+            isOpen={isMobileNavOpen}
+            panelRef={mobileNavPanelRef}
+            sidebarProps={sidebarProps}
+            onClose={handleCloseMobileNav}
+          />
           <div
             className={`flex w-full flex-col lg:w-full lg:flex-1 lg:flex-row lg:gap-0 lg:px-0 lg:py-0 ${
               view === "commonplace"
@@ -3301,22 +3300,31 @@ function MobileShellBar({ isOpen, title, onToggle }: MobileShellBarProps) {
 }
 
 type MobileNavigationDrawerProps = {
+  isOpen: boolean;
   panelRef: MutableRefObject<HTMLDivElement | null>;
   sidebarProps: SidebarProps;
   onClose: () => void;
 };
 
 function MobileNavigationDrawer({
+  isOpen,
   panelRef,
   sidebarProps,
   onClose,
 }: MobileNavigationDrawerProps) {
   return (
-    <div className="fixed inset-0 z-50 lg:hidden" data-testid="mobile-nav-root">
+    <div
+      className={`fixed inset-0 z-50 lg:hidden overflow-hidden transition-all duration-300 ${
+        isOpen ? "visible pointer-events-auto" : "invisible pointer-events-none"
+      }`}
+      data-testid="mobile-nav-root"
+    >
       <button
         type="button"
         aria-label="Close navigation menu"
-        className="absolute inset-0 h-full w-full cursor-default bg-black/45"
+        className={`absolute inset-0 h-full w-full cursor-default bg-black/45 transition-opacity duration-300 ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
         data-testid="mobile-nav-backdrop"
         tabIndex={-1}
         onClick={onClose}
@@ -3328,7 +3336,9 @@ function MobileNavigationDrawer({
         aria-modal="true"
         aria-label="Navigation menu"
         tabIndex={-1}
-        className="relative h-[100svh] w-[min(21rem,calc(100%-2rem))] overflow-y-auto overscroll-contain border-r border-[var(--brand-border)] bg-[var(--brand-bg)] p-3 shadow-2xl focus:outline-none [scrollbar-width:thin]"
+        className={`relative h-[100svh] w-[min(21rem,calc(100%-2rem))] overflow-y-auto overscroll-contain border-r border-[var(--brand-border)] bg-[var(--brand-bg)] p-3 shadow-2xl focus:outline-none [scrollbar-width:thin] transition-all duration-300 ease-in-out transform ${
+          isOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0"
+        }`}
         data-testid="mobile-nav-drawer"
       >
         <div className="mb-3 flex min-h-11 items-center justify-between gap-3 px-1">
@@ -3348,7 +3358,7 @@ function MobileNavigationDrawer({
             Close
           </button>
         </div>
-        <Sidebar {...sidebarProps} />
+        {isOpen && <Sidebar {...sidebarProps} />}
       </div>
     </div>
   );

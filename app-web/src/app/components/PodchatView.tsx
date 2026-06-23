@@ -2023,7 +2023,7 @@ export function PodchatView({
           </p>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 relative overflow-hidden">
           {/* ── Step indicator ────────────────────────────────────────── */}
           <div className="mb-6 flex items-center gap-2 text-xs font-medium text-[var(--brand-ink-soft)]">
             <span
@@ -2055,7 +2055,6 @@ export function PodchatView({
                 ? "opacity-100 translate-x-0"
                 : "pointer-events-none absolute opacity-0 -translate-x-4")
             }
-            aria-hidden={setupStep !== "topic"}
           >
             <fieldset>
               <legend className={labelClass}>Choose a topic</legend>
@@ -2096,13 +2095,12 @@ export function PodchatView({
                 ? "opacity-100 translate-x-0"
                 : "pointer-events-none absolute opacity-0 translate-x-4")
             }
-            aria-hidden={setupStep !== "difficulty"}
           >
             {/* Back + breadcrumb */}
             <button
               type="button"
               onClick={() => setSetupStep("topic")}
-              className="mb-5 flex items-center gap-1.5 text-sm text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)] transition-colors"
+              className="mb-5 flex min-h-[44px] items-center gap-1.5 text-sm text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)] transition-colors"
               aria-label="Back to topic selection"
             >
               <svg

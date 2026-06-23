@@ -180,31 +180,33 @@ function Toggle({
         </label>
         <p className="app-helper mt-0.5">{description}</p>
       </div>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={[
-          "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent",
-          "transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          checked
-            ? "bg-[var(--brand-accent-fill)]"
-            : "bg-[var(--brand-border)]",
-        ].join(" ")}
-      >
-        <span
+      <div className="min-h-[44px] flex items-center">
+        <button
+          id={id}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-label={label}
+          disabled={disabled}
+          onClick={() => onChange(!checked)}
           className={[
-            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0",
-            "transition duration-200 ease-in-out",
-            checked ? "translate-x-5" : "translate-x-0",
+            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent",
+            "transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            checked
+              ? "bg-[var(--brand-accent-fill)]"
+              : "bg-[var(--brand-border)]",
           ].join(" ")}
-        />
-      </button>
+        >
+          <span
+            className={[
+              "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0",
+              "transition duration-200 ease-in-out",
+              checked ? "translate-x-5" : "translate-x-0",
+            ].join(" ")}
+          />
+        </button>
+      </div>
     </div>
   );
 }

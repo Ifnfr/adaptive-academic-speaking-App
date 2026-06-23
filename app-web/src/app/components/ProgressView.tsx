@@ -105,7 +105,7 @@ export function ProgressView({
               {t("progress.sessionsByMode")}
             </p>
             {sessions.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 text-sm text-[var(--brand-ink-soft)]">
+              <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 text-sm text-[var(--brand-ink-soft)]">
                 {t("progress.completeToSee")}
               </p>
             ) : (
@@ -134,7 +134,7 @@ export function ProgressView({
               {t("progress.sessionsByLevel")}
             </p>
             {sessions.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-5 text-sm text-[var(--brand-ink-soft)]">
+              <p className="rounded-xl border border-dashed border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-6 text-sm text-[var(--brand-ink-soft)]">
                 {t("progress.levelAppear")}
               </p>
             ) : (
