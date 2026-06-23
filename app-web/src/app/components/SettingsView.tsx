@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AuthStatus } from "./AuthStatus";
 import type {
   AppLanguage,
   FeedbackLanguage,
@@ -1163,6 +1164,23 @@ export function SettingsView({
           </div>
         </div>
       </div>
+
+      {/* Sign Out Card */}
+      {isSignedIn && (
+        <div className={card}>
+          <div className="p-5 sm:p-6 flex flex-col gap-4">
+            <h2 className="text-base font-semibold text-[var(--brand-ink)]">
+              Sign Out
+            </h2>
+            <div className="border-t border-[var(--brand-border)] pt-4 flex items-center justify-between">
+              <span className="text-sm text-[var(--brand-ink-soft)]">
+                Logged in as
+              </span>
+              <AuthStatus />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

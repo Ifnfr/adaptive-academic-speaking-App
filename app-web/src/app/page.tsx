@@ -2573,16 +2573,7 @@ export default function Home() {
               mode={mode}
               level={level}
               appLanguage={appLanguage}
-              authSlot={
-                <>
-                  <CloudSnapshotStatusBadge
-                    result={
-                      cloudAuthState.isSignedIn ? cloudSnapshotResult : null
-                    }
-                  />
-                  <AuthStatus />
-                </>
-              }
+              authSlot={<AuthStatus />}
             />
           )}
 

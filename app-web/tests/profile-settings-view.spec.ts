@@ -283,7 +283,7 @@ test.describe("Settings view — signed-out (local mode)", () => {
   }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(page.locator("h2").first()).toContainText(/Profile & Settings/i);
+    await expect(page.locator("h2").filter({ visible: true }).first()).toContainText(/Profile & Settings/i);
   });
 
   test("signed-out view shows local profile card with no cloud controls", async ({

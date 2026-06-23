@@ -28,7 +28,7 @@ export function Topbar({
 
   return (
     <header
-      className={`${card} sticky top-2 z-10 flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between`}
+      className={`${card} sticky top-2 z-10 hidden lg:flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between`}
     >
       <div>
         <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-teal)]">
@@ -42,16 +42,6 @@ export function Topbar({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="app-status app-status-info">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand-teal)]" />
-          {hasActiveSession ? t("topbar.sessionActive") : t("topbar.idle")}
-        </span>
-        <span className="app-status app-status-info">
-          {mode}
-        </span>
-        <span className="app-status app-status-info">
-          {level}
-        </span>
         {authSlot}
       </div>
     </header>
