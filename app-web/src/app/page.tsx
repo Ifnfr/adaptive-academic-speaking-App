@@ -2633,6 +2633,7 @@ export default function Home() {
               activePanel={activeSessionPanel}
               onActivePanelChange={setActiveSessionPanel}
               latestSession={sessions[0] ?? null}
+              dayStreak={dayStreak}
             />
           </div>
 

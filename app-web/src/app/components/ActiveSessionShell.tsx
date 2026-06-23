@@ -11,6 +11,7 @@ export function ActiveSessionShell(
     isActiveView?: boolean;
     onActivePanelChange?: (panel: ActiveSessionPanel) => void;
     latestSession?: StoredSessionRecord | null;
+    dayStreak?: number;
   },
 ) {
   const [internalPanel, setInternalPanel] = useState<ActiveSessionPanel>("podchat");
@@ -19,6 +20,7 @@ export function ActiveSessionShell(
     isActiveView = true,
     onActivePanelChange,
     latestSession = null,
+    dayStreak = 0,
     ...podchatProps
   } = props;
   const panel = activePanel ?? internalPanel;
@@ -32,6 +34,8 @@ export function ActiveSessionShell(
   const [weaknessText, setWeaknessText] = useState<string | null>(null);
   const [targetText, setTargetText] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [tips, setTips] = useState<string[]>([]);
+  const [tipsLoading, setTipsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     let active = true;
@@ -90,6 +94,48 @@ export function ActiveSessionShell(
       clearTimeout(timeoutId);
     };
   }, [latestSession]);
+
+  useEffect(() => {
+    if (!weaknessText) {
+      setTips([]);
+      return;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setTipsLoading(true);
+
+    async function fetchTips() {
+      try {
+        const res = await fetch("/api/active-session/contextual-tips", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ weaknessText }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error("Failed to fetch tips");
+        }
+        const data = await res.json();
+        if (active && data.tips) {
+          setTips(data.tips);
+        }
+      } catch (err) {
+        console.error("Error fetching contextual tips:", err);
+      } finally {
+        if (active) {
+          setTipsLoading(false);
+        }
+      }
+    }
+
+    fetchTips();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [weaknessText]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -160,27 +206,48 @@ export function ActiveSessionShell(
             )
           )}
 
-          {/* Session Info Card */}
-          <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-5 shadow-sm flex flex-col gap-3">
-            <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
-              Session Info
-            </h3>
-            <div className="border-t border-[var(--brand-border)] pt-3 flex flex-col gap-2.5">
+          {/* Recent Progress Snapshot Card */}
+          <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-5 shadow-sm flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                Recent Progress
+              </h3>
+              <span className="font-mono text-xs font-semibold text-[var(--brand-gold)] flex items-center gap-1">
+                🔥 {dayStreak} {dayStreak === 1 ? "day" : "days"}
+              </span>
+            </div>
+            
+            <div className="border-t border-[var(--brand-border)] pt-3 flex flex-col gap-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--brand-ink-soft)]">Level</span>
+                <span className="text-[var(--brand-ink-soft)]">Current Level</span>
                 <span className="font-medium text-[var(--brand-ink)]">
                   {podchatProps.sessionLevel || "Intermediate"}
                 </span>
               </div>
-              {podchatProps.sessionMode && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--brand-ink-soft)]">Mode</span>
-                  <span className="font-medium text-[var(--brand-ink)]">
-                    {podchatProps.sessionMode}
+
+              {latestSession && (
+                <div className="flex flex-col gap-1.5 border-t border-[var(--brand-border)] pt-2.5">
+                  <span className="text-[11px] font-medium text-[var(--brand-ink-soft)] uppercase tracking-wider">
+                    Last Session
                   </span>
+                  <div className="rounded-xl bg-[var(--brand-surface-2)] p-3 flex flex-col gap-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-[var(--brand-ink-soft)]">Date</span>
+                      <span className="font-medium text-[var(--brand-ink)]">
+                        {latestSession.date}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--brand-ink-soft)]">Mode</span>
+                      <span className="font-medium text-[var(--brand-ink)]">
+                        {latestSession.mode}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
-              <div className="flex items-center justify-between text-xs">
+
+              <div className="flex items-center justify-between text-xs border-t border-[var(--brand-border)] pt-2.5">
                 <span className="text-[var(--brand-ink-soft)]">Status</span>
                 <span className="app-status app-status-success font-medium">
                   Session active
@@ -188,6 +255,40 @@ export function ActiveSessionShell(
               </div>
             </div>
           </div>
+
+          {/* Contextual AI Tips Card */}
+          {weaknessText && (
+            tipsLoading ? (
+              <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-5 shadow-sm animate-pulse flex flex-col gap-3">
+                <div className="h-4 bg-[var(--brand-border-strong)]/20 rounded w-28"></div>
+                <div className="border-t border-[var(--brand-border)] pt-3 flex flex-col gap-2.5">
+                  <div className="h-3 bg-[var(--brand-border-strong)]/20 rounded w-full"></div>
+                  <div className="h-3 bg-[var(--brand-border-strong)]/20 rounded w-11/12"></div>
+                  <div className="h-3 bg-[var(--brand-border-strong)]/20 rounded w-4/5"></div>
+                </div>
+              </div>
+            ) : (
+              tips.length > 0 && (
+                <div className="rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-5 shadow-sm flex flex-col gap-3">
+                  <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                    AI Coach Tips
+                  </h3>
+                  <div className="border-t border-[var(--brand-border)] pt-3 flex flex-col gap-3">
+                    {tips.map((tip, idx) => (
+                      <div key={idx} className="flex gap-2.5 items-start">
+                        <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-[var(--brand-teal)]/10 text-[var(--brand-teal)] text-xs font-semibold">
+                          {idx + 1}
+                        </span>
+                        <p className="text-xs text-[var(--brand-ink-soft)] leading-relaxed">
+                          {tip}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            )
+          )}
         </div>
       </div>
     </div>

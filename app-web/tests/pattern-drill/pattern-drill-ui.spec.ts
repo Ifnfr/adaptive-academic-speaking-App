@@ -291,6 +291,20 @@ async function recordOneAttempt(page: Page) {
 
 test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
   test.beforeEach(async ({ page }) => {
+    await page.route("**/api/active-session/contextual-tips", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          tips: [
+            "Practice focus point 1.",
+            "Practice focus point 2.",
+            "Practice focus point 3."
+          ]
+        }),
+      });
+    });
+
     await page.route("**/*", async (route) => {
       const url = new URL(route.request().url());
       if (
@@ -317,8 +331,10 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
       });
     });
 
+    const requestPromise = page.waitForRequest("**/api/pattern-drill/latest-weakness");
     await page.goto("/");
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
+    await requestPromise;
     expect(weaknessCalled).toBe(true);
 
     await page.locator("nav").getByRole("button", { name: "Drill Mode" }).click();
