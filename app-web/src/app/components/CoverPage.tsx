@@ -177,7 +177,7 @@ function TypewriterEffect() {
 
   return (
     <span
-      className="text-teal-400 pr-2 sm:pr-4 relative inline-grid min-h-[1.15em] leading-[1.1] align-baseline"
+      className="text-[#10B981] pr-2 sm:pr-4 relative inline-grid min-h-[1.15em] leading-[1.1] align-baseline"
       data-testid="typewriter-slot"
     >
       <span
@@ -188,7 +188,7 @@ function TypewriterEffect() {
       </span>
       <span className="col-start-1 row-start-1 inline-flex min-h-[1.15em] items-center whitespace-nowrap">
         <span data-testid="typewriter-word">{currentText}</span>
-        <span className="bg-teal-400 w-[2px] h-[0.8em] ml-1 animate-blink-cursor" />
+        <span className="bg-[#10B981] w-[2px] h-[0.8em] ml-1 animate-blink-cursor" />
       </span>
     </span>
   );
@@ -535,7 +535,7 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
   const [view, setView] = useState<CoverPageViewMode>("landing");
 
   return (
-    <div className="min-h-[100dvh] bg-[#0a0a0a] text-white font-sans relative flex items-center justify-center p-4 sm:p-12 selection:bg-teal-500 selection:text-white overflow-x-hidden overflow-y-auto w-full">
+    <div className="min-h-[100dvh] bg-[#0a0a0a] text-white font-sans relative flex items-center justify-center p-4 sm:p-12 selection:bg-[#10B981] selection:text-white overflow-x-hidden overflow-y-auto w-full">
       {/* Dynamic styles tag to avoid global.css edits */}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes blink-cursor {
@@ -593,8 +593,8 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         <LiquidEther
           colors={["#10B981", "#10B981", "#10B981"]}
-          mouseForce={20}
-          cursorSize={100}
+          mouseForce={40}
+          cursorSize={120}
           isViscous
           viscous={30}
           iterationsViscous={32}
@@ -602,10 +602,10 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
           resolution={0.5}
           isBounce={false}
           autoDemo
-          autoSpeed={0.5}
-          autoIntensity={2.2}
+          autoSpeed={0.8}
+          autoIntensity={5.0}
           takeoverDuration={0.25}
-          autoResumeDelay={3000}
+          autoResumeDelay={1500}
           autoRampDuration={0.6}
         />
       </div>
@@ -626,7 +626,7 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
         >
           {/* Logo */}
           <div className="flex items-center gap-3 animate-branding opacity-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-teal-500 text-white shadow-xl shadow-teal-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#10B981] text-white shadow-xl shadow-[#10B981]/20 flex items-center justify-center">
               <MicIcon />
             </div>
             <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight text-white">
@@ -666,7 +666,7 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
             <button
               type="button"
               onClick={() => setView("login")}
-              className="mt-8 sm:mt-10 bg-teal-500 text-white rounded-full font-semibold px-8 sm:px-10 py-3.5 sm:py-4 transition-all duration-300 shadow-[0_4px_14px_rgba(20,184,166,0.3)] hover:bg-teal-400 hover:scale-105 hover:shadow-[0_6px_20px_rgba(20,184,166,0.4)] flex items-center gap-2 group cursor-pointer"
+              className="mt-8 sm:mt-10 bg-[#10B981] text-white rounded-full font-semibold px-8 sm:px-10 py-3.5 sm:py-4 transition-all duration-300 shadow-[0_4px_14px_rgba(16,185,129,0.3)] hover:bg-[#34D399] hover:scale-105 hover:shadow-[0_6px_20px_rgba(16,185,129,0.4)] flex items-center gap-2 group cursor-pointer"
             >
               Start
               <ArrowRightIcon />
