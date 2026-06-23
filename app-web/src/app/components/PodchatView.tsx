@@ -366,6 +366,7 @@ export function PodchatView({
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
   const [difficulty, setDifficulty] =
     useState<PodchatDifficulty>("Intermediate");
+  const [setupStep, setSetupStep] = useState<"topic" | "difficulty">("topic");
   const [difficultyEstimate, setDifficultyEstimate] =
     useState<PodchatDifficultyEstimate | null>(null);
   const [manualDifficultyOverride, setManualDifficultyOverride] =
@@ -1120,6 +1121,7 @@ export function PodchatView({
     cleanupAudio();
     cleanupMedia();
     setPhase("setup");
+    setSetupStep("topic");
     setStatus("host_turn");
     setTurns([]);
     setSubmittedUserTurns(0);
@@ -2006,6 +2008,7 @@ export function PodchatView({
 
     return (
       <section className={card} data-testid="podchat-setup">
+        {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
             Podchat Phase 1
@@ -2019,80 +2022,154 @@ export function PodchatView({
             transcribed for the conversation and evaluation flow.
           </p>
         </div>
+
         <div className="p-6">
-          <fieldset>
-            <legend className={labelClass}>Topic</legend>
-            <div
-              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-              role="radiogroup"
-              aria-label="Podchat topic"
+          {/* ── Step indicator ────────────────────────────────────────── */}
+          <div className="mb-6 flex items-center gap-2 text-xs font-medium text-[var(--brand-ink-soft)]">
+            <span
+              className={
+                setupStep === "topic"
+                  ? "font-semibold text-[var(--brand-teal)]"
+                  : ""
+              }
             >
-              {TOPICS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="radio"
-                  aria-checked={topic === option}
-                  onClick={() => setTopic(option)}
-                  className={
-                    optionButtonBase + " " +
-                    (topic === option
-                      ? selectedOptionClass
-                      : idleOptionClass)
-                  }
-                >
-                  <span className="text-sm font-semibold">{option}</span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
+              1 · Topic
+            </span>
+            <span className="text-[var(--brand-border-strong)]">›</span>
+            <span
+              className={
+                setupStep === "difficulty"
+                  ? "font-semibold text-[var(--brand-teal)]"
+                  : ""
+              }
+            >
+              2 · Difficulty
+            </span>
+          </div>
 
-          <fieldset className="mt-6">
-            <legend className={labelClass}>Difficulty</legend>
-            <div
-              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-              role="radiogroup"
-              aria-label="Podchat difficulty"
-            >
-              {DIFFICULTIES.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="radio"
-                  aria-checked={difficulty === option}
-                  onClick={() => handleDifficultySelect(option)}
-                  className={
-                    optionButtonBase + " " +
-                    (difficulty === option
-                      ? selectedOptionClass
-                      : idleOptionClass)
-                  }
-                >
-                  <span className="text-sm font-semibold">{option}</span>
-                  <span
+          {/* ── Step 1: Topic ─────────────────────────────────────────── */}
+          <div
+            className={
+              "transition-all duration-200 " +
+              (setupStep === "topic"
+                ? "opacity-100 translate-x-0"
+                : "pointer-events-none absolute opacity-0 -translate-x-4")
+            }
+            aria-hidden={setupStep !== "topic"}
+          >
+            <fieldset>
+              <legend className={labelClass}>Choose a topic</legend>
+              <div
+                className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+                role="radiogroup"
+                aria-label="Podchat topic"
+              >
+                {TOPICS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={topic === option}
+                    onClick={() => {
+                      setTopic(option);
+                      setSetupStep("difficulty");
+                    }}
                     className={
-                      "mt-1 block text-xs " +
-                      (difficulty === option
-                        ? "text-[var(--brand-accent-fill-ink)]"
-                        : "text-[var(--brand-ink-soft)]")
+                      optionButtonBase + " " +
+                      (topic === option
+                        ? selectedOptionClass
+                        : idleOptionClass)
                     }
-                    data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
                   >
-                    {DIFFICULTY_LABEL[option]}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
+                    <span className="text-sm font-semibold">{option}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
 
-          <div className="mt-8 flex justify-center">
+          {/* ── Step 2: Difficulty ────────────────────────────────────── */}
+          <div
+            className={
+              "transition-all duration-200 " +
+              (setupStep === "difficulty"
+                ? "opacity-100 translate-x-0"
+                : "pointer-events-none absolute opacity-0 translate-x-4")
+            }
+            aria-hidden={setupStep !== "difficulty"}
+          >
+            {/* Back + breadcrumb */}
             <button
               type="button"
-              onClick={startPodchat}
-              className={buttonPrimary}
+              onClick={() => setSetupStep("topic")}
+              className="mb-5 flex items-center gap-1.5 text-sm text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)] transition-colors"
+              aria-label="Back to topic selection"
             >
-              Start a Podchat
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="font-semibold text-[var(--brand-ink)]">{topic}</span>
             </button>
+
+            {/* Difficulty pills */}
+            <fieldset>
+              <legend className={labelClass}>Choose a difficulty</legend>
+              <div
+                className="flex flex-wrap gap-3"
+                role="radiogroup"
+                aria-label="Podchat difficulty"
+              >
+                {DIFFICULTIES.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={difficulty === option}
+                    onClick={() => handleDifficultySelect(option)}
+                    className={
+                      "flex flex-col items-start rounded-xl border px-5 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] " +
+                      (difficulty === option
+                        ? selectedOptionClass
+                        : idleOptionClass)
+                    }
+                  >
+                    <span className="font-semibold">{option}</span>
+                    <span
+                      className={
+                        "mt-0.5 text-xs " +
+                        (difficulty === option
+                          ? "text-[var(--brand-accent-fill-ink)]"
+                          : "text-[var(--brand-ink-soft)]")
+                      }
+                      data-testid={`podchat-difficulty-duration-${option.toLowerCase()}`}
+                    >
+                      {DIFFICULTY_LABEL[option]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            {/* Start button */}
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={startPodchat}
+                className={buttonPrimary}
+              >
+                Start a Podchat
+              </button>
+            </div>
           </div>
         </div>
       </section>
