@@ -593,8 +593,8 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         <LiquidEther
           colors={["#10B981", "#10B981", "#10B981"]}
-          mouseForce={40}
-          cursorSize={120}
+          mouseForce={20}
+          cursorSize={100}
           isViscous
           viscous={30}
           iterationsViscous={32}
@@ -602,10 +602,10 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
           resolution={0.5}
           isBounce={false}
           autoDemo
-          autoSpeed={0.8}
-          autoIntensity={5.0}
+          autoSpeed={0.5}
+          autoIntensity={2.2}
           takeoverDuration={0.25}
-          autoResumeDelay={1500}
+          autoResumeDelay={3000}
           autoRampDuration={0.6}
         />
       </div>
