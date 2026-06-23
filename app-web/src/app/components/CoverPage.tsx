@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { SignInButton } from "@clerk/nextjs";
 import { useSignIn } from "@clerk/nextjs/legacy";
+import dynamic from "next/dynamic";
+
+const LiquidEther = dynamic(() => import("./LiquidEther"), { ssr: false });
 
 // --- Inline SVGs ---
 
@@ -586,18 +589,25 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
         }
       ` }} />
 
-      {/* Aurora borealis background */}
+      {/* Interactive liquid ether background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        {/* Blob 1 — large teal, top-left drift */}
-        <div className="animate-aurora-1 absolute -top-[20%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-teal-500/15 blur-[120px]" />
-        {/* Blob 2 — emerald, center-right drift */}
-        <div className="animate-aurora-2 absolute top-[10%] right-[-15%] w-[50vw] h-[50vw] rounded-full bg-emerald-400/10 blur-[140px]" />
-        {/* Blob 3 — cyan accent, mid-left */}
-        <div className="animate-aurora-3 absolute top-[30%] left-[5%] w-[35vw] h-[35vw] rounded-full bg-cyan-400/10 blur-[100px]" />
-        {/* Blob 4 — deep teal, bottom sweep */}
-        <div className="animate-aurora-4 absolute bottom-[-10%] left-[20%] w-[55vw] h-[40vw] rounded-full bg-teal-700/15 blur-[130px]" />
-        {/* Blob 5 — green whisper, top-right */}
-        <div className="animate-aurora-5 absolute -top-[5%] right-[10%] w-[40vw] h-[30vw] rounded-full bg-green-500/8 blur-[110px]" />
+        <LiquidEther
+          colors={["#10B981", "#10B981", "#10B981"]}
+          mouseForce={20}
+          cursorSize={100}
+          isViscous
+          viscous={30}
+          iterationsViscous={32}
+          iterationsPoisson={32}
+          resolution={0.5}
+          isBounce={false}
+          autoDemo
+          autoSpeed={0.5}
+          autoIntensity={2.2}
+          takeoverDuration={0.25}
+          autoResumeDelay={3000}
+          autoRampDuration={0.6}
+        />
       </div>
 
       {/* Main Layout wrapper */}
