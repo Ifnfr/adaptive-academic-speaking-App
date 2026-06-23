@@ -249,12 +249,8 @@ test.describe("Podchat Phase 1 connected UI", () => {
   test("setup selected topic and difficulty use strong readable accent styling", async ({ page }) => {
     await page.goto("/");
 
-    // Assert Mode Selector is visible and defaults to Podchat
-    const podchatModeBtn = page.locator("main").getByRole("button", { name: "Podchat", exact: true });
-    const patternDrillModeBtn = page.locator("main").getByRole("button", { name: "Drill Mode" });
-    await expect(podchatModeBtn).toBeVisible();
-    await expect(patternDrillModeBtn).toBeVisible();
-    await expect(podchatModeBtn).toHaveAttribute("aria-pressed", "true");
+    // Assert Podchat setup is visible
+    await expect(page.getByTestId("podchat-setup")).toBeVisible();
 
     // Verify all 8 topics are rendered
     const topics = [
@@ -281,13 +277,12 @@ test.describe("Podchat Phase 1 connected UI", () => {
     await expect(advancedDifficulty).toBeVisible();
     await expect(page.getByText("10-minute session")).toBeVisible();
 
-    // Toggle Drill Mode
-    await patternDrillModeBtn.click();
-    await expect(patternDrillModeBtn).toHaveAttribute("aria-pressed", "true");
+    // Toggle Drill Mode via Sidebar
+    await page.locator("nav").getByRole("button", { name: "Drill Mode" }).click();
     await expect(page.getByRole("heading", { name: "Latest Weakness Check" })).toBeVisible();
 
-    // Switch back
-    await podchatModeBtn.click();
+    // Switch back via Sidebar
+    await page.locator("nav").getByRole("button", { name: "Active Session" }).click();
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
 
     const selectedTopic = page.getByRole("radio", { name: "Technology" });

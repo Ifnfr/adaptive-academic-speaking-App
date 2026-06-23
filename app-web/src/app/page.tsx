@@ -2641,6 +2641,7 @@ export default function Home() {
               isActiveView={view === "active"}
               activePanel={activeSessionPanel}
               onActivePanelChange={setActiveSessionPanel}
+              latestSession={sessions[0] ?? null}
             />
           </div>
 

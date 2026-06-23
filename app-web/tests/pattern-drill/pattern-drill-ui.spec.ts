@@ -44,7 +44,7 @@ function makeSession(overrides: Partial<Record<string, unknown>> = {}) {
 
 async function openDrillMode(page: Page) {
   await page.goto("/");
-  await page.locator("main").getByRole("button", { name: "Drill Mode" }).click();
+  await page.locator("nav").getByRole("button", { name: "Drill Mode" }).click();
 }
 
 async function injectMediaMocks(page: Page) {
@@ -306,7 +306,7 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
     });
   });
 
-  test("does not fetch latest weakness until Drill Mode is opened", async ({ page }) => {
+  test("fetches latest weakness on mount for context banner and opens Drill Mode", async ({ page }) => {
     let weaknessCalled = false;
     await page.route("**/api/pattern-drill/latest-weakness", async (route) => {
       weaknessCalled = true;
@@ -319,11 +319,10 @@ test.describe("Big-2 Drill Mode single-flow spoken UI", () => {
 
     await page.goto("/");
     await expect(page.getByTestId("podchat-setup")).toBeVisible();
-    expect(weaknessCalled).toBe(false);
-
-    await page.locator("main").getByRole("button", { name: "Drill Mode" }).click();
-    await expect(page.getByTestId("weakness-empty")).toBeVisible();
     expect(weaknessCalled).toBe(true);
+
+    await page.locator("nav").getByRole("button", { name: "Drill Mode" }).click();
+    await expect(page.getByTestId("weakness-empty")).toBeVisible();
   });
 
   test("generates Phase 0 through drill-session start and not legacy Pattern Brief route", async ({ page }) => {
