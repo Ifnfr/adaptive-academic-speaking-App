@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkRateLimit } from "@/lib/word-builder/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -33,12 +34,76 @@ function getSupabaseClient() {
   }
 }
 
+// Helper to call DeepSeek with retry logic on 5xx or timeout
+async function callDeepSeekWithRetry(
+  apiKey: string,
+  systemPrompt: string,
+  userMessage: string,
+  maxRetries = 2
+): Promise<{ ok: boolean; data?: any; status?: number }> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          temperature: 0,
+          max_tokens: 1000,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        return { ok: true, data };
+      }
+
+      // Retry on 5xx
+      if (response.status >= 500 && attempt < maxRetries - 1) {
+        continue;
+      }
+
+      return { ok: false, status: response.status };
+    } catch (err: any) {
+      // Retry on abort/timeout
+      if (err.name === "AbortError" && attempt < maxRetries - 1) {
+        continue;
+      }
+      return { ok: false, status: 503 };
+    }
+  }
+  return { ok: false, status: 503 };
+}
+
 export async function POST(req: Request) {
   try {
     // 1. Authentication
     const userId = await resolveCurrentUserId();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Rate Limit Check
+    const { allowed } = checkRateLimit(userId);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "rate_limit_exceeded" },
+        { status: 429 }
+      );
     }
 
     // 2. Parse and validate body
@@ -55,6 +120,11 @@ export async function POST(req: Request) {
         { error: "Missing required fields: sentence, promptId, or promptText" },
         { status: 400 }
       );
+    }
+
+    // Guard 1 — Sentence too short
+    if (sentence.trim().split(/\s+/).filter(Boolean).length < 3) {
+      return NextResponse.json({ error: "sentence_too_short" }, { status: 400 });
     }
 
     // 3. Fetch prompt metadata (implied structures) from Supabase
@@ -124,34 +194,17 @@ Now evaluate this sentence:
 Prompt: ${promptText}
 Sentence: ${sentence}`;
 
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        temperature: 0,
-        max_tokens: 1000,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-      }),
-    });
+    // Call DeepSeek with retry
+    const result = await callDeepSeekWithRetry(apiKey, systemPrompt, userMessage);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`DeepSeek API error ${response.status}: ${errText}`);
+    if (!result.ok || !result.data) {
       return NextResponse.json(
-        { error: `DeepSeek API request failed with status ${response.status}` },
+        { error: `DeepSeek API request failed with status ${result.status}` },
         { status: 502 }
       );
     }
 
-    const responseData = (await response.json()) as {
+    const responseData = result.data as {
       choices?: Array<{ message?: { content?: string } }>;
     };
 

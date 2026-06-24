@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import RuleCard from "@/components/word-builder/RuleCard";
 
 type PageState =
   | "PROMPT"
@@ -54,6 +56,10 @@ export default function WordBuilderPractice() {
   const [promptsCorrectFirstTry, setPromptsCorrectFirstTry] = useState(0);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
 
+  // Rule card integration states
+  const [ruleCardCategories, setRuleCardCategories] = useState<string[]>([]);
+  const [showRuleCard, setShowRuleCard] = useState(false);
+
   // Session initialization
   useEffect(() => {
     const initSession = async () => {
@@ -66,6 +72,10 @@ export default function WordBuilderPractice() {
         const data = await res.json();
         setSessionId(data.sessionId);
         setPromptQueue(data.prompts);
+        if (data.decisions?.ruleCardCategories?.length > 0) {
+          setRuleCardCategories(data.decisions.ruleCardCategories);
+          setShowRuleCard(true);
+        }
       } catch (error) {
         console.error("Session init error:", error);
       } finally {
@@ -124,7 +134,24 @@ export default function WordBuilderPractice() {
     }
   }, [pageState, isEchoAttempt, currentPromptIndex, promptQueue.length, sessionId, promptsCorrectFirstTry]);
 
-  if (isSessionLoading || !currentPrompt) {
+  if (isSessionLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500">
+        Loading...
+      </div>
+    );
+  }
+
+  if (showRuleCard) {
+    return (
+      <RuleCard
+        categories={ruleCardCategories}
+        onDismiss={() => setShowRuleCard(false)}
+      />
+    );
+  }
+
+  if (!currentPrompt) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500">
         Loading...
@@ -240,7 +267,7 @@ export default function WordBuilderPractice() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100 p-4 font-sans">
-      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl p-6 md:p-8 space-y-6">
+      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl p-6 md:p-8 pb-8 space-y-6">
         
         {/* Progress Indicator */}
         {pageState !== "SESSION_COMPLETE" && (
@@ -256,7 +283,7 @@ export default function WordBuilderPractice() {
             <textarea
               value={userSentence}
               onChange={(e) => setUserSentence(e.target.value)}
-              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-755 resize-none text-base leading-relaxed"
+              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-600 resize-none text-base leading-relaxed"
               required
             />
             <button
@@ -327,7 +354,7 @@ export default function WordBuilderPractice() {
             <textarea
               value={userSentence}
               onChange={(e) => setUserSentence(e.target.value)}
-              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-755 resize-none text-base leading-relaxed"
+              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-600 resize-none text-base leading-relaxed"
               required
             />
             
@@ -362,7 +389,7 @@ export default function WordBuilderPractice() {
             <textarea
               value={userSentence}
               onChange={(e) => setUserSentence(e.target.value)}
-              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-755 resize-none text-base leading-relaxed"
+              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-600 resize-none text-base leading-relaxed"
               required
             />
             <button
@@ -376,8 +403,25 @@ export default function WordBuilderPractice() {
 
         {/* SESSION_COMPLETE State */}
         {pageState === "SESSION_COMPLETE" && (
-          <div className="py-6 text-center">
+          <div className="py-6 text-center space-y-4">
             <p className="text-2xl font-bold text-zinc-100">Session complete.</p>
+            <p className="text-sm text-zinc-500">
+              Ready to practice speaking? Take these prompts to Drill Mode.
+            </p>
+            <Link
+              href="/drill"
+              className="inline-block px-6 py-2.5 bg-zinc-100 text-zinc-900 font-semibold rounded-lg hover:bg-zinc-200 transition-colors text-sm"
+            >
+              Go to Drill Mode →
+            </Link>
+            <div>
+              <Link
+                href="/word-builder/practice"
+                className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors"
+              >
+                Start another session
+              </Link>
+            </div>
           </div>
         )}
 
