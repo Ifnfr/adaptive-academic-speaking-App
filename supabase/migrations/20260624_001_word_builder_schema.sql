@@ -16,7 +16,7 @@ create table word_builder_prompts (
 -- Table: word_builder_sessions
 create table word_builder_sessions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id text not null,
   started_at timestamptz not null default now(),
   completed_at timestamptz,
   prompts_attempted integer not null default 0,
@@ -67,66 +67,23 @@ create policy "word_builder_prompts_select_authenticated"
   to authenticated
   using (true);
 
--- Policies for word_builder_sessions: SELECT, INSERT, UPDATE for auth.uid() = user_id only
-create policy "word_builder_sessions_select"
-  on word_builder_sessions for select
-  to authenticated
-  using (auth.uid() = user_id);
+-- Policies for word_builder_sessions: service role only
+create policy "service_role_only"
+  on word_builder_sessions as restrictive
+  to anon
+  using (false);
 
-create policy "word_builder_sessions_insert"
-  on word_builder_sessions for insert
-  to authenticated
-  with check (auth.uid() = user_id);
+-- Policies for word_builder_attempts: service role only
+create policy "service_role_only"
+  on word_builder_attempts as restrictive
+  to anon
+  using (false);
 
-create policy "word_builder_sessions_update"
-  on word_builder_sessions for update
-  to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
--- Policies for word_builder_attempts: SELECT, INSERT for sessions owned by auth.uid()
-create policy "word_builder_attempts_select"
-  on word_builder_attempts for select
-  to authenticated
-  using (
-    exists (
-      select 1 from word_builder_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
-    )
-  );
-
-create policy "word_builder_attempts_insert"
-  on word_builder_attempts for insert
-  to authenticated
-  with check (
-    exists (
-      select 1 from word_builder_sessions s
-      where s.id = session_id and s.user_id = auth.uid()
-    )
-  );
-
--- Policies for word_builder_errors: SELECT, INSERT for attempts owned by auth.uid()
-create policy "word_builder_errors_select"
-  on word_builder_errors for select
-  to authenticated
-  using (
-    exists (
-      select 1 from word_builder_attempts a
-      join word_builder_sessions s on s.id = a.session_id
-      where a.id = attempt_id and s.user_id = auth.uid()
-    )
-  );
-
-create policy "word_builder_errors_insert"
-  on word_builder_errors for insert
-  to authenticated
-  with check (
-    exists (
-      select 1 from word_builder_attempts a
-      join word_builder_sessions s on s.id = a.session_id
-      where a.id = attempt_id and s.user_id = auth.uid()
-    )
-  );
+-- Policies for word_builder_errors: service role only
+create policy "service_role_only"
+  on word_builder_errors as restrictive
+  to anon
+  using (false);
 
 -- Indexes for performance
 create index word_builder_sessions_user_id_idx on word_builder_sessions (user_id);

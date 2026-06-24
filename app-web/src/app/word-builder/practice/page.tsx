@@ -28,11 +28,12 @@ interface EvaluationResult {
   echoPrompt: string;
 }
 
-const HARDCODED_PROMPT = {
-  id: "test-prompt-id",
-  text: "Describe how a technology you use every day has changed the way people work or communicate.",
-  mode: "guided",
-};
+interface PromptItem {
+  id: string;
+  text: string;
+  mode: string;
+  implied_structures?: string[] | string | unknown;
+}
 
 export default function WordBuilderPractice() {
   const [pageState, setPageState] = useState<PageState>("PROMPT");
@@ -44,21 +45,92 @@ export default function WordBuilderPractice() {
   const [isEchoAttempt, setIsEchoAttempt] = useState(false);
   const [isHintLoading, setIsHintLoading] = useState(false);
 
+  // Session state variables
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [promptQueue, setPromptQueue] = useState<PromptItem[]>([]);
+  const [currentPromptIndex, setCurrentPromptIndex] = useState(0);
+  const [currentAttemptNumber, setCurrentAttemptNumber] = useState(1);
+  const [hintsUsedThisAttempt, setHintsUsedThisAttempt] = useState(0);
+  const [promptsCorrectFirstTry, setPromptsCorrectFirstTry] = useState(0);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
+
+  // Session initialization
+  useEffect(() => {
+    const initSession = async () => {
+      try {
+        const res = await fetch("/api/word-builder/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create" }),
+        });
+        const data = await res.json();
+        setSessionId(data.sessionId);
+        setPromptQueue(data.prompts);
+      } catch (error) {
+        console.error("Session init error:", error);
+      } finally {
+        setIsSessionLoading(false);
+      }
+    };
+    initSession();
+  }, []);
+
+  const currentPrompt = promptQueue[currentPromptIndex];
+
   // Auto-advance logic for CORRECT state
   useEffect(() => {
     if (pageState === "CORRECT") {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         if (isEchoAttempt) {
-          setPageState("SESSION_COMPLETE");
+          // End of cycle — advance to next prompt or complete session
+          const nextIndex = currentPromptIndex + 1;
+          if (nextIndex >= promptQueue.length) {
+            // Complete session
+            if (sessionId) {
+              await fetch("/api/word-builder/session", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "complete",
+                  sessionId,
+                  promptsAttempted: promptQueue.length,
+                  promptsCorrectFirstTry,
+                }),
+              });
+            }
+            setPageState("SESSION_COMPLETE");
+          } else {
+            // Advance to next prompt
+            setCurrentPromptIndex(nextIndex);
+            setIsEchoAttempt(false);
+            setUserSentence("");
+            setCurrentAttemptNumber(1);
+            setHintsUsedThisAttempt(0);
+            setCurrentHintLevel(0);
+            setCurrentHintText("");
+            setEvaluationResult(null);
+            setPageState("PROMPT");
+          }
         } else {
+          // Move to echo
           setIsEchoAttempt(true);
           setUserSentence("");
+          setCurrentAttemptNumber(1);
+          setHintsUsedThisAttempt(0);
           setPageState("ECHO");
         }
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [pageState, isEchoAttempt]);
+  }, [pageState, isEchoAttempt, currentPromptIndex, promptQueue.length, sessionId, promptsCorrectFirstTry]);
+
+  if (isSessionLoading || !currentPrompt) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500">
+        Loading...
+      </div>
+    );
+  }
 
   // Handle evaluation submissions
   const handleEvaluate = async (e: React.FormEvent) => {
@@ -68,10 +140,10 @@ export default function WordBuilderPractice() {
     setPageState("EVALUATING");
 
     try {
-      const activePromptText = isEchoAttempt ? echoPromptText : HARDCODED_PROMPT.text;
+      const activePromptText = isEchoAttempt ? echoPromptText : currentPrompt.text;
       const activePromptId = isEchoAttempt
         ? "00000000-0000-0000-0000-000000000000"
-        : HARDCODED_PROMPT.id;
+        : currentPrompt.id;
 
       const res = await fetch("/api/word-builder/evaluate", {
         method: "POST",
@@ -90,13 +162,39 @@ export default function WordBuilderPractice() {
       const data = await res.json();
       setEvaluationResult(data);
 
+      // Log attempt to database (fire and forget — do not await, do not block UI)
+      fetch("/api/word-builder/attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          promptId: currentPrompt.id,
+          promptMode: currentPrompt.mode,
+          attemptText: userSentence,
+          isCorrect: data.isCorrect,
+          attemptNumber: currentAttemptNumber,
+          hintsUsed: hintsUsedThisAttempt,
+          isEchoAttempt,
+          errors: data.errors?.map((err: EvaluationError) => ({
+            category: err.category,
+            severity: err.severity,
+            resolved: false,
+            hintsUsedForError: 0,
+          })) ?? [],
+        }),
+      });
+
       if (data.isCorrect) {
         if (!isEchoAttempt) {
           setEchoPromptText(data.echoPrompt || "");
         }
+        if (currentAttemptNumber === 1 && !isEchoAttempt) {
+          setPromptsCorrectFirstTry((prev) => prev + 1);
+        }
         setPageState("CORRECT");
       } else {
         setPageState("ERROR");
+        setCurrentAttemptNumber((prev) => prev + 1);
         setCurrentHintLevel(0);
       }
     } catch (error) {
@@ -129,6 +227,7 @@ export default function WordBuilderPractice() {
       const data = await res.json();
       setCurrentHintText(data.hintText || "");
       setCurrentHintLevel(level);
+      setHintsUsedThisAttempt((prev) => prev + 1);
       setPageState("HINT_REQUESTED");
     } catch (error) {
       console.error("Hint error:", error);
@@ -137,12 +236,19 @@ export default function WordBuilderPractice() {
     }
   };
 
-  const activePromptText = isEchoAttempt ? echoPromptText : HARDCODED_PROMPT.text;
+  const activePromptText = isEchoAttempt ? echoPromptText : currentPrompt.text;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100 p-4 font-sans">
       <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl p-6 md:p-8 space-y-6">
         
+        {/* Progress Indicator */}
+        {pageState !== "SESSION_COMPLETE" && (
+          <div className="text-xs text-zinc-500 font-medium">
+            {currentPromptIndex + 1} / {promptQueue.length}
+          </div>
+        )}
+
         {/* PROMPT State */}
         {pageState === "PROMPT" && (
           <form onSubmit={handleEvaluate} className="space-y-4">
@@ -150,7 +256,7 @@ export default function WordBuilderPractice() {
             <textarea
               value={userSentence}
               onChange={(e) => setUserSentence(e.target.value)}
-              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-750 resize-none text-base leading-relaxed"
+              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-755 resize-none text-base leading-relaxed"
               required
             />
             <button
@@ -221,7 +327,7 @@ export default function WordBuilderPractice() {
             <textarea
               value={userSentence}
               onChange={(e) => setUserSentence(e.target.value)}
-              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-750 resize-none text-base leading-relaxed"
+              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-755 resize-none text-base leading-relaxed"
               required
             />
             
@@ -256,7 +362,7 @@ export default function WordBuilderPractice() {
             <textarea
               value={userSentence}
               onChange={(e) => setUserSentence(e.target.value)}
-              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-750 resize-none text-base leading-relaxed"
+              className="w-full min-h-[120px] p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-zinc-755 resize-none text-base leading-relaxed"
               required
             />
             <button
