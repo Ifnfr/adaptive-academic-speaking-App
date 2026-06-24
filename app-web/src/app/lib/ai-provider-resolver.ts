@@ -65,7 +65,7 @@ export async function resolveFeatureProvider(
         process.env.DEFAULT_LISTENING_AI ||
         process.env.LISTENING_EXERCISE_PROVIDER ||
         process.env.AI_PLANNING_PROVIDER ||
-        "gemini"
+        "deepseek"
       ).toLowerCase().trim();
     }
   } else if (feature === "fluency") {
@@ -85,21 +85,21 @@ export async function resolveFeatureProvider(
 
   // Map providerId to API key and model name
   if (providerId === "gemini") {
-    apiKey = process.env.GEMINI_API_KEY || "";
-    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else if (providerId === "claude") {
     apiKey = process.env.CLAUDE_API_KEY || "";
     modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
   } else if (providerId === "deepseek") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "";
-    modelName = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else if (providerId === "minimax_m3" || providerId === "minimax") {
     apiKey = process.env.MINIMAX_API_KEY || "";
     modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
   } else {
-    // Default fallback to gemini config
-    apiKey = process.env.GEMINI_API_KEY || "";
-    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    // Default fallback to deepseek config
+    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   }
 
   return { providerId, apiKey, modelName };

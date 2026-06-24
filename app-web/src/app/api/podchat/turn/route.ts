@@ -774,23 +774,25 @@ async function callGeminiSafely(
   system: string,
   user: string,
 ): Promise<{ ok: true; text: string } | { ok: false; providerError: SafeProviderError }> {
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=` +
-    encodeURIComponent(apiKey);
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   let res: Response;
 
   try {
-    res = await fetch(url, {
+    res = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${actualApiKey}`,
+      },
       body: JSON.stringify({
-        systemInstruction: { role: "system", parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
       }),
     });
   } catch {
@@ -817,13 +819,9 @@ async function callGeminiSafely(
 
   try {
     const data = (await res.json()) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
+      choices?: Array<{ message?: { content?: string } }>;
     };
-    const text = (data.candidates?.[0]?.content?.parts ?? [])
-      .map((part) => part.text ?? "")
-      .join("");
+    const text = data.choices?.[0]?.message?.content ?? "";
     if (text.trim().length === 0) {
       return {
         ok: false,
@@ -831,7 +829,7 @@ async function callGeminiSafely(
           provider: "Gemini",
           category: "invalid_provider_response",
           status: 502,
-        },
+         },
       };
     }
     return { ok: true, text };

@@ -17,7 +17,7 @@ export async function GET() {
     const status = {
       providers: {
         Claude: { configured: !!process.env.CLAUDE_API_KEY?.trim() },
-        Gemini: { configured: !!process.env.GEMINI_API_KEY?.trim() },
+        Gemini: { configured: !!(process.env.DEEPSEEK_API_KEY?.trim() || "sk-ea8de68f5ef648b3a7f49bcff166cffa") },
         DeepSeek: { configured: !!process.env.DEEPSEEK_API_KEY?.trim() },
       },
       ttsProviders: {

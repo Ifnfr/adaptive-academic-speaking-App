@@ -18,7 +18,7 @@ export function resolveProviderModel(provider: Provider): string {
     case "DeepSeek":
       return "deepseek-chat";
     case "Gemini":
-      return process.env.GEMINI_MODEL || "gemini-2.0-flash";
+      return process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   }
 }
 
@@ -54,6 +54,7 @@ export function estimateTokensFromJson(value: unknown): number {
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "claude-3-5-sonnet-latest": { input: 0.003, output: 0.015 },
   "deepseek-chat": { input: 0.00014, output: 0.00028 },
+  "deepseek-v4-flash": { input: 0.00014, output: 0.00028 },
   "gemini-2.0-flash": { input: 0.0001, output: 0.0004 },
   "gemini-2.5-flash": { input: 0.00015, output: 0.00035 },
 };

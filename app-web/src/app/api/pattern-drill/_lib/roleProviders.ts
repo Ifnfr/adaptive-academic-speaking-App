@@ -59,14 +59,14 @@ export async function resolveProvider(role: AiProviderRole): Promise<{ providerI
     apiKey = process.env.MINIMAX_API_KEY || "";
     modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
   } else if (providerId === "deepseek") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "";
-    modelName = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else if (providerId === "claude") {
     apiKey = process.env.CLAUDE_API_KEY || "";
     modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
   } else if (providerId === "gemini") {
-    apiKey = process.env.GEMINI_API_KEY || "";
-    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else {
     // Default fallback to Claude config
     providerId = "claude";
@@ -254,40 +254,7 @@ async function callGemini(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=` +
-    encodeURIComponent(apiKey);
-
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-        },
-      }),
-    });
-  } catch (err) {
-    console.error(`Gemini request connection error:`, err);
-    throw new ProviderUnavailableError(`Gemini request connection failed.`);
-  }
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error(`Gemini API error ${res.status}: ${errText.slice(0, 500)}`);
-    throw new ProviderUnavailableError(`Gemini request failed with status ${res.status}`);
-  }
-
-  const data = (await res.json()) as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
-  };
-
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const actualModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  return callDeepSeek(actualApiKey, actualModel, systemPrompt, userPrompt);
 }
