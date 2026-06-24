@@ -59,7 +59,7 @@ const dictionaries = {
     "sidebar.viewVocabulary": "Vocabulary Notebook",
     "sidebar.viewCommonplace": "Commonplace",
     "sidebar.viewArticlePractice": "Article Practice",
-    "sidebar.viewSessionLog": "Session Log",
+    "sidebar.viewSessionLog": "History",
     "sidebar.viewProgress": "Progress & Quest",
     "sidebar.viewWeeklyReview": "Weekly Review",
     "sidebar.viewMentalModel": "Speaking Pattern Lab",
@@ -78,7 +78,7 @@ const dictionaries = {
     "topbar.titleCommonplace": "Commonplace",
     "topbar.titleArticlePractice": "Article Practice",
     "topbar.titleListening": "Academic Listening",
-    "topbar.titleSessionLog": "Session Log",
+    "topbar.titleSessionLog": "History",
     "topbar.titleProgress": "Progress & Quest",
     "topbar.titleWeeklyReview": "Weekly Review",
     "topbar.titleMentalModel": "Speaking Pattern Lab",
@@ -250,7 +250,7 @@ const dictionaries = {
 
     // Session Log
     "log.history": "History",
-    "log.title": "Session Log",
+    "log.title": "History",
     "log.taglineEmpty": "No sessions stored yet. Complete one from Active Session to populate this log.",
     "log.taglineShowing": "Showing the most recent",
     "log.taglineOf": "of",
@@ -348,7 +348,7 @@ const dictionaries = {
     "sidebar.viewVocabulary": "Buku Kosakata",
     "sidebar.viewCommonplace": "Commonplace",
     "sidebar.viewArticlePractice": "Latihan Artikel",
-    "sidebar.viewSessionLog": "Log Sesi",
+    "sidebar.viewSessionLog": "Riwayat",
     "sidebar.viewProgress": "Progres & Quest",
     "sidebar.viewWeeklyReview": "Tinjauan Mingguan",
     "sidebar.viewMentalModel": "Lab Pola Bicara",
@@ -367,7 +367,7 @@ const dictionaries = {
     "topbar.titleCommonplace": "Commonplace",
     "topbar.titleArticlePractice": "Latihan Artikel",
     "topbar.titleListening": "Mendengarkan Akademik",
-    "topbar.titleSessionLog": "Log Sesi",
+    "topbar.titleSessionLog": "Riwayat",
     "topbar.titleProgress": "Progres & Quest",
     "topbar.titleWeeklyReview": "Tinjauan Mingguan",
     "topbar.titleMentalModel": "Lab Pola Bicara",
@@ -539,7 +539,7 @@ const dictionaries = {
 
     // Session Log
     "log.history": "Riwayat",
-    "log.title": "Log Sesi",
+    "log.title": "Riwayat",
     "log.taglineEmpty": "Belum ada sesi yang disimpan. Selesaikan satu dari Sesi Aktif untuk mengisi log ini.",
     "log.taglineShowing": "Menampilkan yang paling baru",
     "log.taglineOf": "dari",

@@ -329,19 +329,17 @@ export function Sidebar({
               {t("sidebar.viewSessionLog")}
             </SidebarItem>
             <SidebarItem
-              active={view === "progress"}
-              onClick={() => onSelectView("progress")}
-            >
-              {t("sidebar.viewProgress")}
-            </SidebarItem>
-            {/*
-            <SidebarItem
               active={view === "weekly-review"}
               onClick={() => onSelectView("weekly-review")}
             >
               {t("sidebar.viewWeeklyReview")}
             </SidebarItem>
-            */}
+            <SidebarItem
+              active={view === "progress"}
+              onClick={() => onSelectView("progress")}
+            >
+              {t("sidebar.viewProgress")}
+            </SidebarItem>
             <SidebarItem
               active={view === "profile"}
               onClick={() => onSelectView("profile")}
