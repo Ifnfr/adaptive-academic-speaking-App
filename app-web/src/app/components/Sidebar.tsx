@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ReactNode, useState, useEffect } from "react";
 import type { AppLanguage } from "../lib/i18n";
 import { useI18n } from "../lib/i18n";
@@ -98,16 +99,31 @@ function SidebarGroup({
 
 type SidebarItemProps = {
   active?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
+  href?: string;
   children: ReactNode;
 };
 
-function SidebarItem({ active = false, onClick, children }: SidebarItemProps) {
+function SidebarItem({ active = false, onClick, href, children }: SidebarItemProps) {
   const base =
     "app-button w-full justify-start px-3 py-2 text-left";
   const activeClass =
     "bg-[var(--brand-teal-soft)] text-[var(--brand-teal-ink)] font-medium";
   const idleClass = "app-button-ghost text-[var(--brand-ink-soft)]";
+
+  if (href) {
+    return (
+      <li>
+        <Link
+          href={href}
+          className={`${base} ${active ? activeClass : idleClass}`}
+        >
+          {children}
+        </Link>
+      </li>
+    );
+  }
+
   return (
     <li>
       <button
@@ -313,6 +329,9 @@ export function Sidebar({
             >
               {t("sidebar.viewArticlePractice")}
             </SidebarItem>
+            <SidebarItem href="/word-builder/practice">
+              Word Builder
+            </SidebarItem>
           </SidebarGroup>
 
           {/* Group 3: ANALYTICS */}
@@ -322,6 +341,9 @@ export function Sidebar({
             isCollapsed={isMobile && !analyticsExpanded}
             onToggle={toggleAnalytics}
           >
+            <SidebarItem href="/word-builder/dashboard">
+              Word Builder Stats
+            </SidebarItem>
             <SidebarItem
               active={view === "session-log"}
               onClick={() => onSelectView("session-log")}
