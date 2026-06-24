@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { calculateUserMetrics } from "@/lib/word-builder/metrics";
+import { evaluateThresholds } from "@/lib/word-builder/thresholds";
+import { selectPromptsForSession } from "@/lib/word-builder/prompt-selector";
 
 export const runtime = "nodejs";
 
@@ -69,24 +72,54 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to create session" }, { status: 500 });
     }
 
-    // Fetch and select 8 prompts
-    const { data: prompts, error: promptsError } = await supabase
-      .from("word_builder_prompts")
-      .select("id, prompt_text, mode, implied_structures")
-      .eq("mode", "guided");
+    // Get recent prompt IDs (last 3 sessions) for deduplication
+    const { data: recentSessions } = await supabase
+      .from("word_builder_sessions")
+      .select("id")
+      .eq("user_id", userId)
+      .order("started_at", { ascending: false })
+      .limit(3);
 
-    if (promptsError || !prompts) {
-      console.error("Failed to fetch prompts from DB:", promptsError);
-      return NextResponse.json({ error: "Failed to fetch prompts" }, { status: 500 });
+    const recentSessionIds = (recentSessions ?? []).map((s: any) => s.id);
+
+    let recentPromptIds: string[] = [];
+    if (recentSessionIds.length > 0) {
+      const { data: recentAttempts } = await supabase
+        .from("word_builder_attempts")
+        .select("prompt_id")
+        .in("session_id", recentSessionIds);
+      recentPromptIds = [...new Set(
+        (recentAttempts ?? []).map((a: any) => a.prompt_id).filter(Boolean)
+      )];
     }
 
-    // Shuffle and limit to 8
-    const shuffled = [...prompts].sort(() => 0.5 - Math.random());
-    const selectedPrompts = shuffled.slice(0, 8);
+    // Calculate user metrics and evaluate thresholds
+    const metrics = await calculateUserMetrics(supabase, userId);
+    const decisions = evaluateThresholds(metrics);
+
+    // Select prompts adaptively
+    const selectionResult = await selectPromptsForSession(
+      supabase,
+      userId,
+      decisions,
+      recentPromptIds
+    );
+
+    const selectedPrompts = selectionResult.prompts;
+
+    if (selectedPrompts.length === 0) {
+      return NextResponse.json({ error: "Failed to fetch prompts" }, { status: 500 });
+    }
 
     return NextResponse.json({
       sessionId: sessionData.id,
       prompts: selectedPrompts,
+      decisions: {
+        ruleCardCategories: decisions.ruleCardCategories,
+        deteriorationBoostActive: decisions.deteriorationBoostActive,
+        semiFreeModeUnlocked: decisions.semiFreeModeUnlocked,
+        transferTestModeUnlocked: decisions.transferTestModeUnlocked,
+      },
     });
   } catch (error: any) {
     console.error("Word Builder Session POST Error:", error);
