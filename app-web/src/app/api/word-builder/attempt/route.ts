@@ -57,6 +57,10 @@ export async function POST(req: Request) {
       hintsUsed,
       isEchoAttempt,
       errors,
+      promptText,
+      correctedSentence,
+      userAnalysis,
+      analysisFeedback,
     } = body;
 
     // Validate fields
@@ -103,6 +107,10 @@ export async function POST(req: Request) {
         attempt_number: attemptNumber,
         hints_used: hintsUsed,
         is_echo_attempt: isEchoAttempt,
+        prompt_text: promptText ?? null,
+        corrected_sentence: correctedSentence ?? null,
+        user_analysis: userAnalysis ?? null,
+        analysis_feedback: analysisFeedback ?? null,
       })
       .select("id")
       .single();
