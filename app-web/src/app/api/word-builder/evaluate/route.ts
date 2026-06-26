@@ -176,7 +176,13 @@ CRITICAL RULES:
 8. correctedSentence must be the fully corrected version of the learner's input — not a model answer, but the learner's own sentence with all errors fixed.
 
 RESPONSE FORMAT:
-{"isCorrect":boolean,"errors":[{"errorId":"err_1","category":"auxiliary_verb|subject_verb_agreement|tense|article|preposition|word_order|verb_form","severity":"critical|minor","locationHint":"string","ruleReference":"string","guidedCompletion":"string","resolved":false}],"correctedSentence":"string","echoPrompt":"string"}`;
+{"isCorrect":boolean,"errors":[{"errorId":"err_1","category":"auxiliary_verb|subject_verb_agreement|tense|article|preposition|word_order|verb_form","severity":"critical|minor","locationHint":"string","ruleReference":"string","guidedCompletion":"string","resolved":false}],"correctedSentence":"string","echoPrompt":"string","highlightedWords":[{"word":"string","rule":"string"}]}
+
+Rules for highlightedWords:
+- Include every word or short phrase in the user sentence that contains an error
+- "word" must be the exact token as it appears in the user sentence
+- "rule" must be a general grammatical rule statement — not specific to this sentence, not revealing the correction. Example: "Third-person singular subjects require the verb to end in -s in simple present tense." NOT "Change 'happen' to 'happens'."
+- If isCorrect is true, highlightedWords must be an empty array`;
 
     const userMessage = `EXAMPLES OF CORRECT EVALUATION:
 
@@ -223,6 +229,9 @@ Sentence: ${sentence}`;
       }
 
       const evaluationData = JSON.parse(cleanText);
+      if (!Array.isArray(evaluationData.highlightedWords)) {
+        evaluationData.highlightedWords = [];
+      }
       return NextResponse.json(evaluationData);
     } catch (parseError) {
       console.error("Failed to parse DeepSeek evaluation response:", textResponse, parseError);
