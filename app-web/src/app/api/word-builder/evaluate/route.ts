@@ -174,9 +174,17 @@ CRITICAL RULES:
 6. For echoPrompt: generate a new prompt on a different topic that would naturally require the same grammar structures as the errors found. If no errors, generate a prompt on a related topic.
 7. If the sentence is correct, return isCorrect: true, errors: [], correctedSentence as the original sentence, and a new echoPrompt anyway.
 8. correctedSentence must be the fully corrected version of the learner's input — not a model answer, but the learner's own sentence with all errors fixed.
+9. CRITICAL: The correctedSentence field MUST contain ALL sentences from the user's input. Never remove, omit, or merge sentences. Only fix grammatical errors. If the user wrote 2 sentences, correctedSentence must have 2 sentences. If the user wrote 3 sentences, correctedSentence must have 3 sentences. Sentence count must match exactly.
 
 RESPONSE FORMAT:
-{"isCorrect":boolean,"errors":[{"errorId":"err_1","category":"auxiliary_verb|subject_verb_agreement|tense|article|preposition|word_order|verb_form","severity":"critical|minor","locationHint":"string","ruleReference":"string","guidedCompletion":"string","resolved":false}],"correctedSentence":"string","echoPrompt":"string","highlightedWords":[{"word":"string","rule":"string"}]}
+{"isCorrect":boolean,"errors":[{"errorId":"err_1","category":"auxiliary_verb|subject_verb_agreement|tense|article|preposition|word_order|verb_form","severity":"critical|minor","locationHint":"string","ruleReference":"string","guidedCompletion":"string","resolved":false}],"correctedSentence":"string","recommendedSentences":["string"],"echoPrompt":"string","highlightedWords":[{"word":"string","rule":"string"}]}
+
+Rules for recommendedSentences:
+- An array of 1-3 alternative versions of the corrected sentence that sound more natural in academic English.
+- Each alternative must be grammatically correct AND more natural/idiomatic than the correctedSentence.
+- If the correctedSentence is already very natural, return 1 alternative only. Never return more than 3.
+- Each alternative must preserve the original meaning.
+- Do NOT add praise or explanations — return only the sentence strings.
 
 Rules for highlightedWords:
 - Include every word or short phrase in the user sentence that contains an error
