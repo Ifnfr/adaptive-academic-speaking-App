@@ -3,9 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { SignInButton } from "@clerk/nextjs";
 import { useSignIn } from "@clerk/nextjs/legacy";
-import dynamic from "next/dynamic";
-
-const LiquidEther = dynamic(() => import("./LiquidEther"), { ssr: false });
 
 // --- Inline SVGs ---
 
@@ -591,23 +588,11 @@ export function CoverPage({ CLERK_ENABLED, onLoginSuccess }: CoverPageProps) {
 
       {/* Interactive liquid ether background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <LiquidEther
-          colors={["#10B981", "#10B981", "#10B981"]}
-          mouseForce={20}
-          cursorSize={100}
-          isViscous
-          viscous={30}
-          iterationsViscous={32}
-          iterationsPoisson={32}
-          resolution={0.5}
-          isBounce={false}
-          autoDemo
-          autoSpeed={0.5}
-          autoIntensity={2.2}
-          takeoverDuration={0.25}
-          autoResumeDelay={3000}
-          autoRampDuration={0.6}
-        />
+        <div className="absolute -top-32 -left-32 w-[600px] h-[400px] bg-emerald-500/25 rounded-full blur-[140px] animate-aurora-1" />
+        <div className="absolute -top-20 left-1/3 w-[400px] h-[300px] bg-teal-400/20 rounded-full blur-[120px] animate-aurora-2" />
+        <div className="absolute top-1/4 -right-40 w-[500px] h-[350px] bg-green-600/20 rounded-full blur-[160px] animate-aurora-3" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[300px] h-[200px] bg-teal-600/15 rounded-full blur-[100px] animate-aurora-1" style={{ animationDelay: "4s" }} />
+        <div className="absolute -bottom-20 -right-20 w-[400px] h-[300px] bg-teal-800/20 rounded-full blur-[120px] animate-aurora-2" style={{ animationDelay: "8s" }} />
       </div>
 
       {/* Main Layout wrapper */}

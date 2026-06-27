@@ -8,6 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import dynamic from "next/dynamic";
 import type { MutableRefObject } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { buildLevelUpCheck } from "./lib/level-up";
@@ -47,12 +48,7 @@ import {
   WeeklyReviewView,
   type WeeklyReviewResult,
 } from "./components/WeeklyReviewView";
-import {
-  MentalModelView,
-  type MentalModelResult,
-} from "./components/MentalModelView";
-import { SessionLogView } from "./components/SessionLogView";
-import { LeaderboardView } from "./components/LeaderboardView";
+import type { MentalModelResult } from "./components/MentalModelView";
 import {
   Sidebar,
   type SidebarProps,
@@ -70,13 +66,7 @@ import type {
   PodchatCommonplaceMapContextRef,
   PodchatEvaluatedSessionXpContext,
 } from "./components/PodchatView";
-import { VocabularyNotebookView } from "./components/VocabularyNotebookView";
-import { CommonplaceView } from "./components/CommonplaceView";
-import { ListeningExerciseSession } from "./components/listening-exercise/ListeningExerciseSession";
-import {
-  ArticlePracticeView,
-  type ArticlePracticeResult,
-} from "./components/ArticlePracticeView";
+import type { ArticlePracticeResult } from "./components/ArticlePracticeView";
 import { CoverPage } from "./components/CoverPage";
 import {
   CloudSyncStatusPanel,
@@ -427,6 +417,83 @@ function clearStoredCommonplacePodchatContext(): void {
     // Session storage is optional; direct state handoff remains primary.
   }
 }
+
+const CommonplaceView = dynamic(
+  () => import("./components/CommonplaceView")
+    .then(m => ({ default: m.CommonplaceView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
+
+const VocabularyNotebookView = dynamic(
+  () => import("./components/VocabularyNotebookView")
+    .then(m => ({ default: m.VocabularyNotebookView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
+
+const ArticlePracticeView = dynamic(
+  () => import("./components/ArticlePracticeView")
+    .then(m => ({ default: m.ArticlePracticeView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
+
+const ListeningExerciseSession = dynamic(
+  () => import("./components/listening-exercise/ListeningExerciseSession")
+    .then(m => ({ default: m.ListeningExerciseSession })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
+
+const LeaderboardView = dynamic(
+  () => import("./components/LeaderboardView")
+    .then(m => ({ default: m.LeaderboardView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
+
+const SessionLogView = dynamic(
+  () => import("./components/SessionLogView")
+    .then(m => ({ default: m.SessionLogView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
+
+const MentalModelView = dynamic(
+  () => import("./components/MentalModelView")
+    .then(m => ({ default: m.MentalModelView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 animate-pulse bg-[var(--brand-surface-2)] rounded-2xl" />
+    )
+  }
+);
 
 export default function Home() {
   const sessionCloudAuthRef = useRef<SessionCloudAuthState>(
@@ -852,23 +919,26 @@ export default function Home() {
     cloudSnapshotCheckKeyRef.current = checkKey;
 
     let cancelled = false;
-    void loadCloudSnapshotPlan({
-      auth: cloudAuthState,
-      local: {
-        sessions,
-        vocabulary: vocabularyItems,
-        xpProfile,
-        xpEvents,
-        badges,
-      },
-    }).then((result) => {
-      if (!cancelled) {
-        setCloudSnapshotResult(result);
-      }
-    });
+    const timer = setTimeout(() => {
+      void loadCloudSnapshotPlan({
+        auth: cloudAuthState,
+        local: {
+          sessions,
+          vocabulary: vocabularyItems,
+          xpProfile,
+          xpEvents,
+          badges,
+        },
+      }).then((result) => {
+        if (!cancelled) {
+          setCloudSnapshotResult(result);
+        }
+      });
+    }, 2000);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [
     badges,
@@ -895,22 +965,25 @@ export default function Home() {
     sessionHistoryCloudLoadKeyRef.current = loadKey;
 
     let cancelled = false;
-    void loadCompletedSessionsFromCloud({ auth: cloudAuthState }).then((result) => {
-      if (cancelled) return;
-      if (result.status === "loaded") {
-        replaceSessionsFromCloud(result.sessions as SessionRecord[]);
-        setSessionHistorySaveError(null);
-        return;
-      }
-      if (result.status === "failed") {
-        setSessionHistorySaveError(
-          "Could not load cloud session history. Local fallback remains available.",
-        );
-      }
-    });
+    const timer = setTimeout(() => {
+      void loadCompletedSessionsFromCloud({ auth: cloudAuthState }).then((result) => {
+        if (cancelled) return;
+        if (result.status === "loaded") {
+          replaceSessionsFromCloud(result.sessions as SessionRecord[]);
+          setSessionHistorySaveError(null);
+          return;
+        }
+        if (result.status === "failed") {
+          setSessionHistorySaveError(
+            "Could not load cloud session history. Local fallback remains available.",
+          );
+        }
+      });
+    }, 2000);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [cloudAuthState]);
 
@@ -931,22 +1004,25 @@ export default function Home() {
     vocabularyCloudLoadKeyRef.current = loadKey;
 
     let cancelled = false;
-    void loadVocabularyFromCloud({ auth: cloudAuthState }).then((result) => {
-      if (cancelled) return;
-      if (result.status === "loaded") {
-        setVocabularyItems(result.vocabulary);
-        setVocabCloudError(null);
-        return;
-      }
-      if (result.status === "failed") {
-        setVocabCloudError(
-          "Could not load cloud vocabulary notebook. Local fallback remains available.",
-        );
-      }
-    });
+    const timer = setTimeout(() => {
+      void loadVocabularyFromCloud({ auth: cloudAuthState }).then((result) => {
+        if (cancelled) return;
+        if (result.status === "loaded") {
+          setVocabularyItems(result.vocabulary);
+          setVocabCloudError(null);
+          return;
+        }
+        if (result.status === "failed") {
+          setVocabCloudError(
+            "Could not load cloud vocabulary notebook. Local fallback remains available.",
+          );
+        }
+      });
+    }, 2000);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [cloudAuthState]);
 
@@ -969,24 +1045,27 @@ export default function Home() {
     gamificationCloudLoadKeyRef.current = loadKey;
 
     let cancelled = false;
-    void loadGamificationFromCloud({ auth: cloudAuthState }).then((result) => {
-      if (cancelled) return;
-      if (result.status === "loaded") {
-        setXpProfile(result.profile);
-        setXpEvents(result.events);
-        setBadges(result.badges);
-        setGamificationCloudError(null);
-        return;
-      }
-      if (result.status === "failed") {
-        setGamificationCloudError(
-          "Could not load cloud progress data. Local fallback remains available.",
-        );
-      }
-    });
+    const timer = setTimeout(() => {
+      void loadGamificationFromCloud({ auth: cloudAuthState }).then((result) => {
+        if (cancelled) return;
+        if (result.status === "loaded") {
+          setXpProfile(result.profile);
+          setXpEvents(result.events);
+          setBadges(result.badges);
+          setGamificationCloudError(null);
+          return;
+        }
+        if (result.status === "failed") {
+          setGamificationCloudError(
+            "Could not load cloud progress data. Local fallback remains available.",
+          );
+        }
+      });
+    }, 2000);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [cloudAuthState]);
 
