@@ -1115,7 +1115,11 @@ export default function WordBuilderPractice() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`grid gap-4 grid-cols-1 ${
+                  recommendedSentences && recommendedSentences.length > 0
+                    ? "lg:grid-cols-3"
+                    : "lg:grid-cols-2"
+                }`}>
                   {/* Left: user sentence */}
                   <div
                     className="bg-zinc-900 border border-zinc-800 rounded-xl p-5"
@@ -1143,6 +1147,27 @@ export default function WordBuilderPractice() {
                       {currentState.evaluationResult?.correctedSentence}
                     </p>
                   </div>
+
+                  {/* More Natural / Recommended Sentences Panel */}
+                  {recommendedSentences && recommendedSentences.length > 0 && (
+                    <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-5 text-left">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+                        More Natural
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {recommendedSentences.map((rec, i) => (
+                          <div key={i} className="text-sm text-zinc-300 leading-relaxed">
+                            {recommendedSentences.length > 1 && (
+                              <span className="text-xs font-semibold text-zinc-500 block mb-0.5">
+                                {i + 1}.
+                              </span>
+                            )}
+                            {rec}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="max-w-2xl mx-auto space-y-4">
@@ -1175,55 +1200,23 @@ export default function WordBuilderPractice() {
                     }}
                     className="space-y-3"
                   >
-                    <div className="flex lg:flex-row flex-col gap-4 items-start w-full">
-                      {/* Textarea side — flex-1 */}
-                      <div className="flex-1 w-full flex flex-col gap-3">
-                        <textarea
-                          value={currentState.userAnalysis}
-                          onChange={(e) => updateCurrentState({ userAnalysis: e.target.value })}
-                          placeholder="Explain why the corrected sentence is right..."
-                          className="w-full min-h-[80px] p-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-teal-500/50 resize-none text-base leading-relaxed transition-colors"
-                          required
-                        />
-                        <button
-                          type="submit"
-                          disabled={
-                            isAnalysisSubmitting ||
-                            currentState.userAnalysis.trim().length < 10
-                          }
-                          className="w-full py-2.5 bg-teal-500 hover:bg-teal-400 text-zinc-950 font-semibold rounded-lg transition-colors text-base disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Submit analysis
-                        </button>
-                      </div>
-
-                      {/* Recommendation sidebar */}
-                      {recommendedSentences &&
-                        recommendedSentences.length > 0 && (
-                          <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 text-left">
-                            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                              More Natural
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {recommendedSentences.map(
-                                (rec, i) => (
-                                  <div
-                                    key={i}
-                                    className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-sm text-zinc-300 leading-relaxed"
-                                  >
-                                    {recommendedSentences.length > 1 && (
-                                      <span className="text-xs font-semibold text-zinc-500 block mb-1">
-                                        {i + 1}.
-                                      </span>
-                                    )}
-                                    {rec}
-                                  </div>
-                                )
-                              )}
-                            </div>
-                          </div>
-                        )}
-                    </div>
+                    <textarea
+                      value={currentState.userAnalysis}
+                      onChange={(e) => updateCurrentState({ userAnalysis: e.target.value })}
+                      placeholder="Explain why the corrected sentence is right..."
+                      className="w-full min-h-[120px] p-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-teal-500/50 resize-none text-base leading-relaxed transition-colors"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={
+                        isAnalysisSubmitting ||
+                        currentState.userAnalysis.trim().length < 10
+                      }
+                      className="w-full py-2.5 bg-teal-500 hover:bg-teal-400 text-zinc-950 font-semibold rounded-lg transition-colors text-base disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Submit analysis
+                    </button>
                   </form>
                 </div>
               </>
