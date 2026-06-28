@@ -504,6 +504,7 @@ export default function Home() {
   );
   const [cloudSnapshotResult, setCloudSnapshotResult] =
     useState<CloudSnapshotRuntimeResult | null>(null);
+  const autoImportAttemptedRef = useRef(false);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
   const sessionHistoryCloudLoadKeyRef = useRef<string | null>(null);
   const vocabularyCloudLoadKeyRef = useRef<string | null>(null);
@@ -1287,6 +1288,27 @@ export default function Home() {
     }
   };
 
+  function isSafeToAutoImport(
+    result: CloudSnapshotRuntimeResult
+  ): boolean {
+    if (result.status !== "loaded") return false;
+    if (result.plan.status !== "import-available") return false;
+    
+    const domains = [
+      "sessions",
+      "vocabulary", 
+      "xpEvents",
+      "xpProfile",
+      "badges",
+    ] as const;
+    
+    return domains.every(
+      (domain) =>
+        result.plan.counts[domain].merged >= 
+        result.plan.counts[domain].local
+    );
+  }
+
   const handleConfirmCloudImport = async (): Promise<CloudImportActionResult> => {
     if (
       !cloudSnapshotResult ||
@@ -1335,6 +1357,16 @@ export default function Home() {
       }, CLOUD_WRITE_SUPPRESSION_RELEASE_MS);
     }
   };
+  
+  useEffect(() => {
+    if (!cloudSnapshotResult) return;
+    if (autoImportAttemptedRef.current) return;
+    
+    if (isSafeToAutoImport(cloudSnapshotResult)) {
+      autoImportAttemptedRef.current = true;
+      void handleConfirmCloudImport();
+    }
+  }, [cloudSnapshotResult]);
 
   // --- Sidebar navigation view ---
   // Lightweight local view state. No router, no real new routes. The Active
