@@ -34,13 +34,56 @@ export function AudioController({
   useEffect(() => {
     if (isPlaying && audioRef.current && audioUrl) {
       audioRef.current.load();
-      audioRef.current.play().catch((err) => {
+      audioRef.current.play().then(() => {
+        // Fallback: if duration still 0 after play starts,
+        // try reading it directly from the audio element
+        if (audioRef.current && duration === 0) {
+          const d = audioRef.current.duration;
+          if (d && isFinite(d) && d > 0) {
+            setDuration(d);
+          }
+        }
+      }).catch((err) => {
         console.error("Playback failed:", err);
         setIsPlaying(false);
         onPlaybackError();
       });
     }
   }, [audioUrl, isPlaying]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    const handleDurationChange = () => {
+      if (audio.duration && isFinite(audio.duration) 
+          && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+    };
+    
+    audio.addEventListener("durationchange", handleDurationChange);
+    return () => {
+      audio.removeEventListener("durationchange", handleDurationChange);
+    };
+  }, [audioUrl]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    const handleCanPlay = () => {
+      if (audio.duration && isFinite(audio.duration) 
+          && audio.duration > 0 && duration === 0) {
+        setDuration(audio.duration);
+      }
+    };
+    
+    audio.addEventListener("canplay", handleCanPlay);
+    return () => {
+      audio.removeEventListener("canplay", handleCanPlay);
+    };
+  }, [audioUrl, duration]);
 
   const handlePlayClick = () => {
     if (replayCount >= 3 || isPlaying) return;
