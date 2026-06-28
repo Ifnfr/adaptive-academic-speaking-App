@@ -16,7 +16,7 @@ import {
 import type { PodchatArticleContext } from "../_lib/providers";
 import type { ContextUnderstandingState } from "../../../lib/podchat-aur/types";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 type PodchatStartResponse = {
   opener: string;
