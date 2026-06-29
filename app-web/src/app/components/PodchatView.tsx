@@ -377,6 +377,7 @@ export function PodchatView({
   const [turns, setTurns] = useState<PodchatTurn[]>([]);
   const [openerLoading, setOpenerLoading] = useState(false);
   const [sessionPlan, setSessionPlan] = useState<{ topicAngle: string; targetSkill: string; followUpStrategy: string; expectedLanguagePattern: string; evaluationFocus: string[] } | null>(null);
+  const [resolvedProvider, setResolvedProvider] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionPlan) {
@@ -1092,6 +1093,7 @@ export function PodchatView({
           };
           setTurns([finalOpener]);
           setSessionPlan(data.sessionPlan);
+          setResolvedProvider(data.resolvedProvider || null);
           setOpenerLoading(false);
           setStatus("user_turn");
           if (!isContextOpenEnded) startTimer();
@@ -1358,7 +1360,7 @@ export function PodchatView({
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildTurnPayload(turns, submittedUserTurns)),
+        body: JSON.stringify({ ...buildTurnPayload(turns, submittedUserTurns), provider: resolvedProvider }),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
@@ -1403,7 +1405,7 @@ export function PodchatView({
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildTurnPayload(updatedTurns, submittedUserTurns)),
+        body: JSON.stringify({ ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider }),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
@@ -1450,7 +1452,7 @@ export function PodchatView({
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildTurnPayload(updatedTurns, submittedUserTurns)),
+        body: JSON.stringify({ ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider }),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;

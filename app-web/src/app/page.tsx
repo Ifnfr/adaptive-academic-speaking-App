@@ -616,12 +616,12 @@ export default function Home() {
         const storedPodchat = window.localStorage.getItem("podchatProvider");
         if (storedPodchat === "Claude" || storedPodchat === "Gemini" || storedPodchat === "DeepSeek") {
           setPodchatProvider(storedPodchat as AIProvider);
-          document.cookie = `podchat_provider=${storedPodchat}; path=/; max-age=31536000; SameSite=Lax`;
+          // document.cookie = `podchat_provider=${storedPodchat}; path=/; max-age=31536000; SameSite=Lax`;
         } else {
           const initial = "Claude";
           setPodchatProvider(initial);
           window.localStorage.setItem("podchatProvider", initial);
-          document.cookie = `podchat_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
+          // document.cookie = `podchat_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
         }
 
         const storedListening = window.localStorage.getItem("listeningProvider");

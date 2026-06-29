@@ -27,6 +27,7 @@ type PodchatStartResponse = {
     expectedLanguagePattern: string;
     evaluationFocus: string[];
   };
+  resolvedProvider?: string;
 };
 
 function mapProviderStatus(status: number): { category: string; status: number } {
@@ -321,7 +322,10 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-    return NextResponse.json(outputValidation.response);
+    return NextResponse.json({
+      ...outputValidation.response,
+      resolvedProvider: providerId,
+    });
   } catch (err: unknown) {
     const status = (err as { status?: number })?.status || 500;
     const statusMap = mapProviderStatus(status);

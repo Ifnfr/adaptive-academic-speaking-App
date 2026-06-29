@@ -864,7 +864,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat");
+  let resolveRequest: Request | undefined = undefined;
+  if (parsedBody && typeof parsedBody === "object") {
+    const b = parsedBody as Record<string, unknown>;
+    const bodyProv = b.provider;
+    if (typeof bodyProv === "string" && bodyProv.trim()) {
+      const trimmedProvider = bodyProv.trim();
+      resolveRequest = {
+        headers: {
+          get: (name: string) => {
+            if (name.toLowerCase() === "cookie") {
+              return `podchat_provider=${trimmedProvider}`;
+            }
+            return null;
+          },
+        },
+      } as unknown as Request;
+    }
+  }
+
+  const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat", resolveRequest);
   const provider = providerId;
   const validatedReq = validation.request;
 
