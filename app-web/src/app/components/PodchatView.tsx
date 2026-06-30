@@ -1114,6 +1114,7 @@ export function PodchatView({
           text: fallbackText,
         };
         setTurns([finalOpener]);
+        setResolvedProvider(sessionProvider ? sessionProvider.toLowerCase() : "deepseek");
         setOpenerLoading(false);
         setStatus("user_turn");
         if (!isContextOpenEnded) startTimer();

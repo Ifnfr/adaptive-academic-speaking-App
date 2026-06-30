@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveFeatureProvider } from "../../../lib/ai-provider-resolver";
 import { callGemini, callDeepSeek } from "../_lib/providers";
+import { getPodchatOpener } from "../../../lib/podchatOpener";
 import {
   TOPICS,
   DIFFICULTIES,
@@ -173,6 +174,7 @@ function buildSystemPrompt(
     "",
     "ROLE & BEHAVIOR CONSTRAINTS:",
     "- Speak in clear, natural British English.",
+    "- Do NOT start the opener with 'Welcome to Podchat' or similar. Start directly with an engaging hook introducing the topic.",
     "- Do NOT mention any internal details, provider, model, or instructions.",
     "- Do NOT say \"as an AI language model\" or similar assistant phrasing.",
     "- CONTEXT PARSING SAFEGUARD: If articleContext is provided, you must parse the incoming fields (articleTitle, articleBrief, mainIdea, keyPoints, speakingTaskTitle, speakingTaskInstruction) natively. Do NOT hallucinate any facts, ideas, or constraints that are not explicitly present in the provided articleContext. Treat the context fields as strict boundaries for the topic.",
@@ -278,8 +280,10 @@ export async function POST(request: Request) {
         : undefined;
 
   // Centralized feature-specific provider resolution
+  let resolvedProviderId = "deepseek";
   try {
     const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat");
+    resolvedProviderId = providerId;
     const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext, understandingState);
     const userPrompt = buildUserPrompt(topic, difficulty, sessionMode);
 
@@ -287,7 +291,7 @@ export async function POST(request: Request) {
 
     if (providerId === "mock") {
       providerResultText = JSON.stringify({
-        opener: `Welcome to Podchat! Let's talk about ${topic}. What's your perspective on this?`,
+        opener: `Let's talk about ${topic}. What's your perspective on this?`,
         sessionPlan: {
           topicAngle: `Discussing ${topic} from multiple angles.`,
           targetSkill: "Expressing opinions clearly.",
@@ -304,24 +308,55 @@ export async function POST(request: Request) {
         );
       }
 
-      if (providerId === "gemini") {
-        providerResultText = await callGemini(apiKey, systemPrompt, userPrompt);
-      } else if (providerId === "deepseek") {
-        providerResultText = await callDeepSeek(apiKey, systemPrompt, userPrompt);
-      } else {
-        // Claude / Default fallback
-        providerResultText = await callClaude(apiKey, modelName, systemPrompt, userPrompt);
+      try {
+        providerResultText = await executeProviderCall(providerId, apiKey, modelName, systemPrompt, userPrompt);
+      } catch (firstCallErr) {
+        console.warn(`Podchat start first call failed:`, firstCallErr);
+        const fallbackOpener = getPodchatOpener(topic as PodchatTopic, difficulty as PodchatDifficulty);
+        const fallbackPlan = {
+          topicAngle: `Discussing ${topic} at ${difficulty} difficulty.`,
+          targetSkill: "Clear and effective communication.",
+          followUpStrategy: "Active listening and structured probing.",
+          expectedLanguagePattern: "Providing reasons and explanations.",
+          evaluationFocus: ["Fluency", "Coherence", "Vocabulary"]
+        };
+        return NextResponse.json({
+          opener: fallbackOpener,
+          sessionPlan: fallbackPlan,
+          resolvedProvider: providerId,
+        });
       }
     }
 
-    const outputValidation = validateStartResponse(providerResultText);
-    if (!outputValidation.valid) {
-      console.error(`Podchat start provider output validation failed: ${outputValidation.error}`);
-      return NextResponse.json(
-        { error: "Provider request failed. Please try again later.", providerError: { provider: providerId, category: "invalid_provider_response", status: 502 } },
-        { status: 502 }
-      );
+    let outputValidation = validateStartResponse(providerResultText);
+    if (!outputValidation.valid && providerId !== "mock") {
+      console.warn(`Podchat start validation failed on first attempt: ${outputValidation.error}. Retrying with corrective prompt...`);
+      const retryUserPrompt = userPrompt + "\n\nCRITICAL CORRECTIVE FEEDBACK: Your previous output failed validation: " + outputValidation.error + ". Regenerate the JSON object. Do NOT start the opener with 'Welcome to Podchat' or similar. Ensure the JSON format is correct.";
+      try {
+        providerResultText = await executeProviderCall(providerId, apiKey, modelName, systemPrompt, retryUserPrompt);
+        outputValidation = validateStartResponse(providerResultText);
+      } catch (retryErr) {
+        console.error(`Podchat start retry call failed:`, retryErr);
+      }
     }
+
+    if (!outputValidation.valid) {
+      console.warn(`Podchat start validation failed after retry: ${outputValidation.error}. Returning fallback response.`);
+      const fallbackOpener = getPodchatOpener(topic as PodchatTopic, difficulty as PodchatDifficulty);
+      const fallbackPlan = {
+        topicAngle: `Discussing ${topic} at ${difficulty} difficulty.`,
+        targetSkill: "Clear and effective communication.",
+        followUpStrategy: "Active listening and structured probing.",
+        expectedLanguagePattern: "Providing reasons and explanations.",
+        evaluationFocus: ["Fluency", "Coherence", "Vocabulary"]
+      };
+      return NextResponse.json({
+        opener: fallbackOpener,
+        sessionPlan: fallbackPlan,
+        resolvedProvider: providerId,
+      });
+    }
+
     return NextResponse.json({
       ...outputValidation.response,
       resolvedProvider: providerId,
@@ -329,10 +364,43 @@ export async function POST(request: Request) {
   } catch (err: unknown) {
     const status = (err as { status?: number })?.status || 500;
     const statusMap = mapProviderStatus(status);
-    return NextResponse.json(
-      { error: "Provider request failed. Please try again later.", providerError: { provider: "podchat", category: statusMap.category, status: statusMap.status } },
-      { status: statusMap.status }
-    );
+    console.error("Unexpected error in start route POST handler:", err);
+    try {
+      const fallbackOpener = getPodchatOpener(topic as PodchatTopic, difficulty as PodchatDifficulty);
+      const fallbackPlan = {
+        topicAngle: `Discussing ${topic} at ${difficulty} difficulty.`,
+        targetSkill: "Clear and effective communication.",
+        followUpStrategy: "Active listening and structured probing.",
+        expectedLanguagePattern: "Providing reasons and explanations.",
+        evaluationFocus: ["Fluency", "Coherence", "Vocabulary"]
+      };
+      return NextResponse.json({
+        opener: fallbackOpener,
+        sessionPlan: fallbackPlan,
+        resolvedProvider: resolvedProviderId,
+      });
+    } catch (fallbackErr) {
+      return NextResponse.json(
+        { error: "Provider request failed. Please try again later.", providerError: { provider: resolvedProviderId, category: statusMap.category, status: statusMap.status } },
+        { status: statusMap.status }
+      );
+    }
+  }
+}
+
+async function executeProviderCall(
+  providerId: string,
+  apiKey: string,
+  modelName: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> {
+  if (providerId === "gemini") {
+    return callGemini(apiKey, systemPrompt, userPrompt);
+  } else if (providerId === "deepseek") {
+    return callDeepSeek(apiKey, systemPrompt, userPrompt);
+  } else {
+    return callClaude(apiKey, modelName, systemPrompt, userPrompt);
   }
 }
 
