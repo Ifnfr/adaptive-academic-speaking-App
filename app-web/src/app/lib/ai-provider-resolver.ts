@@ -109,6 +109,7 @@ export async function resolveFeatureProvider(
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   }
 
-  console.log(`[PODCHAT_DEBUG] resolveFeatureProvider - source used: ${sourceUsed} | resolved provider: ${providerId} | apiKey present: ${!!apiKey}`);
+  console.log("[PODCHAT_DEBUG] resolveFeatureProvider input source:", sourceUsed);
+  console.log("[PODCHAT_DEBUG] resolveFeatureProvider resolved to:", providerId, "| apiKey present:", !!apiKey);
   return { providerId, apiKey, modelName };
 }

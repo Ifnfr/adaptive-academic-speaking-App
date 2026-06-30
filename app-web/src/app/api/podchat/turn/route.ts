@@ -846,10 +846,14 @@ async function callGeminiSafely(
 }
 
 export async function POST(request: Request) {
+  console.log("[PODCHAT_DEBUG] Turn2 request headers:", JSON.stringify(Object.fromEntries(request.headers)));
   let parsedBody: unknown;
   try {
     parsedBody = await request.json();
-    console.log("[PODCHAT_DEBUG] Turn2 raw body received:", JSON.stringify(parsedBody));
+    console.log("[PODCHAT_DEBUG] Turn2 raw body:", JSON.stringify(parsedBody));
+    const nextReq = request as any;
+    const requestCookies = typeof nextReq.cookies?.getAll === "function" ? nextReq.cookies.getAll() : [];
+    console.log("[PODCHAT_DEBUG] Turn2 cookies received server-side:", requestCookies);
   } catch {
     return NextResponse.json(
       { error: "Request body must be valid JSON." },
@@ -869,7 +873,7 @@ export async function POST(request: Request) {
   if (parsedBody && typeof parsedBody === "object") {
     const b = parsedBody as Record<string, unknown>;
     const bodyProv = b.provider;
-    console.log("[PODCHAT_DEBUG] body.provider value:", bodyProv, "| typeof:", typeof bodyProv);
+    console.log("[PODCHAT_DEBUG] body.provider:", (parsedBody as any).provider, "| typeof:", typeof (parsedBody as any).provider);
     if (typeof bodyProv === "string" && bodyProv.trim()) {
       const trimmedProvider = bodyProv.trim();
       resolveRequest = {

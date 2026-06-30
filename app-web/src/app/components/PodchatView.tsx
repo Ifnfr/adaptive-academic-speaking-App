@@ -1103,6 +1103,9 @@ export function PodchatView({
           throw new Error("Invalid response format.");
         }
       } catch (err: unknown) {
+        console.log("[PODCHAT_DEBUG] Turn1 FALLBACK triggered. resolvedProvider state after fallback:", resolvedProvider);
+        console.log("[PODCHAT_DEBUG] User agent:", navigator.userAgent);
+        console.log("[PODCHAT_DEBUG] Viewport width:", window.innerWidth);
         const errMsg = err instanceof Error ? err.message : String(err);
         console.warn("Opener generation failed, falling back to static opener:", errMsg);
         const finalOpener: PodchatTurn = {
@@ -1359,7 +1362,8 @@ export function PodchatView({
     setStatus("submitting");
     try {
       const payload = { ...buildTurnPayload(turns, submittedUserTurns), provider: resolvedProvider };
-      console.log("[PODCHAT_DEBUG] Turn2 payload being sent:", JSON.stringify(payload));
+      console.log("[PODCHAT_DEBUG] Turn2 about to send. Payload:", JSON.stringify(payload));
+      console.log("[PODCHAT_DEBUG] Turn2 cookies at send time:", document.cookie);
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1406,7 +1410,8 @@ export function PodchatView({
 
     try {
       const payload = { ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider };
-      console.log("[PODCHAT_DEBUG] Turn2 payload being sent:", JSON.stringify(payload));
+      console.log("[PODCHAT_DEBUG] Turn2 about to send. Payload:", JSON.stringify(payload));
+      console.log("[PODCHAT_DEBUG] Turn2 cookies at send time:", document.cookie);
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1455,7 +1460,8 @@ export function PodchatView({
 
     try {
       const payload = { ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider };
-      console.log("[PODCHAT_DEBUG] Turn2 payload being sent:", JSON.stringify(payload));
+      console.log("[PODCHAT_DEBUG] Turn2 about to send. Payload:", JSON.stringify(payload));
+      console.log("[PODCHAT_DEBUG] Turn2 cookies at send time:", document.cookie);
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
