@@ -19,11 +19,15 @@ export async function resolveFeatureProvider(
   request?: Request
 ): Promise<{ providerId: string; apiKey: string; modelName: string }> {
   let userPreference: string | undefined;
+  let sourceUsed: "body" | "cookie" | "env_fallback" = "env_fallback";
 
   // 1. Try reading from Request cookies if request is provided
   if (request) {
     const cookieHeader = request.headers.get("cookie");
     userPreference = parseCookie(cookieHeader, `${feature}_provider`);
+    if (userPreference) {
+      sourceUsed = "body";
+    }
   }
 
   // 2. Try reading from next/headers cookies
@@ -31,6 +35,9 @@ export async function resolveFeatureProvider(
     try {
       const cookieStore = await cookies();
       userPreference = cookieStore.get(`${feature}_provider`)?.value;
+      if (userPreference) {
+        sourceUsed = "cookie";
+      }
     } catch {
       // ignore outside request context (e.g., static build/tests)
     }
@@ -102,5 +109,6 @@ export async function resolveFeatureProvider(
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   }
 
+  console.log(`[PODCHAT_DEBUG] resolveFeatureProvider - source used: ${sourceUsed} | resolved provider: ${providerId} | apiKey present: ${!!apiKey}`);
   return { providerId, apiKey, modelName };
 }

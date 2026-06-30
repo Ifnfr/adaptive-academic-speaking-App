@@ -849,6 +849,7 @@ export async function POST(request: Request) {
   let parsedBody: unknown;
   try {
     parsedBody = await request.json();
+    console.log("[PODCHAT_DEBUG] Turn2 raw body received:", JSON.stringify(parsedBody));
   } catch {
     return NextResponse.json(
       { error: "Request body must be valid JSON." },
@@ -868,6 +869,7 @@ export async function POST(request: Request) {
   if (parsedBody && typeof parsedBody === "object") {
     const b = parsedBody as Record<string, unknown>;
     const bodyProv = b.provider;
+    console.log("[PODCHAT_DEBUG] body.provider value:", bodyProv, "| typeof:", typeof bodyProv);
     if (typeof bodyProv === "string" && bodyProv.trim()) {
       const trimmedProvider = bodyProv.trim();
       resolveRequest = {
@@ -883,6 +885,7 @@ export async function POST(request: Request) {
     }
   }
 
+  console.log("[PODCHAT_DEBUG] Final input to resolveFeatureProvider:", resolveRequest ? "mock Request with cookie" : "undefined");
   const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat", resolveRequest);
   const provider = providerId;
   const validatedReq = validation.request;

@@ -1094,6 +1094,7 @@ export function PodchatView({
           setTurns([finalOpener]);
           setSessionPlan(data.sessionPlan);
           setResolvedProvider(data.resolvedProvider || null);
+          console.log("[PODCHAT_DEBUG] Turn1 success - resolvedProvider from response:", data.resolvedProvider);
           setOpenerLoading(false);
           setStatus("user_turn");
           if (!isContextOpenEnded) startTimer();
@@ -1357,10 +1358,12 @@ export function PodchatView({
     setTurnError(null);
     setStatus("submitting");
     try {
+      const payload = { ...buildTurnPayload(turns, submittedUserTurns), provider: resolvedProvider };
+      console.log("[PODCHAT_DEBUG] Turn2 payload being sent:", JSON.stringify(payload));
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...buildTurnPayload(turns, submittedUserTurns), provider: resolvedProvider }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
@@ -1402,10 +1405,12 @@ export function PodchatView({
     setStatus("submitting");
 
     try {
+      const payload = { ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider };
+      console.log("[PODCHAT_DEBUG] Turn2 payload being sent:", JSON.stringify(payload));
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
@@ -1449,10 +1454,12 @@ export function PodchatView({
     setStatus("submitting");
 
     try {
+      const payload = { ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider };
+      console.log("[PODCHAT_DEBUG] Turn2 payload being sent:", JSON.stringify(payload));
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
