@@ -8,6 +8,7 @@ import {
   type PodchatTopic,
   type PodchatDifficulty,
   type PodchatSessionMode,
+  type DebateConfig,
 } from "../../../lib/podchat";
 import {
   buildFallbackUnderstandingState,
@@ -139,6 +140,7 @@ function buildSystemPrompt(
   sessionMode: PodchatSessionMode,
   articleContext?: PodchatArticleContext,
   understandingState?: ContextUnderstandingState,
+  debateConfig?: DebateConfig,
 ): string {
   let diffGuidance = "";
   if (difficulty === "Beginner") {
@@ -159,7 +161,24 @@ function buildSystemPrompt(
   }
 
   return [
-    "You are a friendly British podcast host for a show called Podchat.",
+    sessionMode === "debate" && debateConfig
+      ? [
+          "You are a sharp, intellectually rigorous debate opponent.",
+          `The debate topic is: "${debateConfig.debateTopic}"`,
+          `The user has taken the ${debateConfig.userStance.toUpperCase()} stance. You MUST argue the ${debateConfig.userStance === "pro" ? "CON" : "PRO"} side for the entire session without exception.`,
+          debateConfig.debateStyle === "adversarial"
+            ? "Debate style: ADVERSARIAL. Challenge every claim aggressively. Expose logical gaps, weak evidence, and unsupported assumptions without mercy. Do not soften your counterarguments."
+            : "Debate style: GENTLE. Challenge the user's arguments thoughtfully and constructively. Point out weaknesses, but remain respectful and give credit where it is due.",
+          debateConfig.debateContext
+            ? `Background context provided by the user: ${debateConfig.debateContext}`
+            : "",
+          "DEBATE BEHAVIOR RULES:",
+          "- Never switch sides or validate the user's stance directly.",
+          "- Never say you agree with the user's position.",
+          "- Your opener must immediately introduce a challenge or counterpoint related to the debate topic.",
+          "- Keep the opener to 1-2 sentences maximum — sharp and direct.",
+        ].filter(Boolean).join("\n")
+      : "You are a friendly British podcast host for a show called Podchat.",
     "Your task is to plan the podcast session start and write the opening turn.",
     articleContext
       ? `The podcast conversation is based on the article: "${articleContext.articleTitle}" (Domain: ${articleContext.sourceDomain || "unknown"}).`
@@ -254,7 +273,15 @@ export async function POST(request: Request) {
   }
   const requestedSessionMode = b.sessionMode;
   const sessionMode: PodchatSessionMode =
-    requestedSessionMode === "context_open_ended" ? "context_open_ended" : "normal_timed";
+    requestedSessionMode === "context_open_ended"
+      ? "context_open_ended"
+      : requestedSessionMode === "debate"
+        ? "debate"
+        : "normal_timed";
+  const debateConfig =
+    sessionMode === "debate" && b.debateConfig && typeof b.debateConfig === "object"
+      ? (b.debateConfig as DebateConfig)
+      : undefined;
   const articleContext =
     b.articleContext && typeof b.articleContext === "object"
       ? (b.articleContext as PodchatArticleContext)
@@ -284,7 +311,7 @@ export async function POST(request: Request) {
   try {
     const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat");
     resolvedProviderId = providerId;
-    const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext, understandingState);
+    const systemPrompt = buildSystemPrompt(topic, difficulty, sessionMode, articleContext, understandingState, debateConfig);
     const userPrompt = buildUserPrompt(topic, difficulty, sessionMode);
 
     let providerResultText = "";
