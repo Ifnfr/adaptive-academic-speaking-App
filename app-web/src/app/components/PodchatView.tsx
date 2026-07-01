@@ -133,6 +133,13 @@ const LEARNER_REPLIES: Record<PodchatTopic, readonly string[]> = {
   "Daily Life & Casual Conversation": [
     "I've been trying to balance my work and personal life more effectively recently.",
   ],
+  "Debate Me": [
+    "I believe this position is justified because it leads to better outcomes for most people.",
+    "One strong argument for my stance is that the evidence consistently supports this conclusion.",
+    "I understand the opposing view, but I think it overlooks some key factors.",
+    "My position is based on both practical experience and logical reasoning.",
+    "Even if there are exceptions, the general principle still holds in most cases.",
+  ],
 };
 
 const ASPECT_FEEDBACK_LABELS: Array<{

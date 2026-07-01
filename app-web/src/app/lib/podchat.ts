@@ -6,7 +6,8 @@ export type PodchatTopic =
   | "Education & Learning"
   | "Society & Culture"
   | "Global Issues & Environment"
-  | "Daily Life & Casual Conversation";
+  | "Daily Life & Casual Conversation"
+  | "Debate Me";
 
 export type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced" | "Expert";
 export type PodchatSessionMode = "normal_timed" | "context_open_ended";
@@ -27,6 +28,7 @@ export const TOPICS: readonly PodchatTopic[] = [
   "Society & Culture",
   "Global Issues & Environment",
   "Daily Life & Casual Conversation",
+  "Debate Me",
 ];
 
 export const DIFFICULTIES: readonly PodchatDifficulty[] = [

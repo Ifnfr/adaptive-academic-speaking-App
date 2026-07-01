@@ -96,6 +96,10 @@ const TOPIC_OPENERS: Record<PodchatTopic, string[]> = {
     "Welcome to Podchat! Today we're looking at local communities and neighborhoods. How involved are you in your local community, and what is your favorite spot in your town?",
     "Welcome to Podchat! Let's talk about books and reading habits. Do you prefer physical books, e-readers, or audiobooks, and what is a book that has had a significant impact on you?",
     "Welcome to Podchat! Let's discuss your personal goals and future aspirations. Where do you see yourself in five years, and what steps are you currently taking to get there?"
+  ],
+  "Debate Me": [
+    "A good debate starts with a clear position. What is the topic you want to debate today, and which side are you on?",
+    "Debating helps us think more clearly. What is your main argument for the position you have chosen?",
   ]
 };
 
@@ -163,6 +167,10 @@ const EXPERT_OPENERS: Record<PodchatTopic, string[]> = {
     "Welcome to Podchat. Today we are evaluating the role of professional sports as a modern form of civic ritual. How do corporate sponsorships and athletic performance metrics reflect broader capitalist ideologies of optimization?",
     "Welcome to Podchat. Let us dissect the concept of social capital, specifically the distinction between bonding and bridging social capital in modern friendships. How have digital communication platforms altered the density of these networks?",
     "Welcome to Podchat. Let's analyze the concept of the third place, as defined by Ray Oldenburg. How does the decline of accessible, non-commercial public spaces impact the social cohesion and political engagement of a local neighborhood?"
+  ],
+  "Debate Me": [
+    "A rigorous debate requires anticipating counterarguments. What is the strongest objection to your position, and how do you respond to it?",
+    "Effective argumentation depends on evidence and logical structure. What is the core premise of your argument, and what evidence supports it?",
   ]
 };
 
