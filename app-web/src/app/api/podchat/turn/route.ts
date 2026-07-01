@@ -14,6 +14,7 @@ import {
   type PodchatTopic,
   type PodchatDifficulty,
   type PodchatSessionMode,
+  type DebateConfig,
 } from "../../../lib/podchat";
 import {
   formatAurPromptBlock,
@@ -50,6 +51,7 @@ type PodchatTurnRequest = {
     expectedLanguagePattern: string;
     evaluationFocus: string[];
   };
+  debateConfig?: DebateConfig;
 };
 
 type ProviderErrorCategory =

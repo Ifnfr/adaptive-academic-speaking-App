@@ -10,7 +10,17 @@ export type PodchatTopic =
   | "Debate Me";
 
 export type PodchatDifficulty = "Beginner" | "Intermediate" | "Advanced" | "Expert";
-export type PodchatSessionMode = "normal_timed" | "context_open_ended";
+export type PodchatSessionMode = "normal_timed" | "context_open_ended" | "debate";
+
+export type DebateStance = "pro" | "con";
+export type DebateStyle = "gentle" | "adversarial";
+
+export interface DebateConfig {
+  debateTopic: string;
+  userStance: DebateStance;
+  debateStyle: DebateStyle;
+  debateContext?: string;
+}
 
 export const DIFFICULTY_DURATION: Record<PodchatDifficulty, number> = {
   Beginner: 180,

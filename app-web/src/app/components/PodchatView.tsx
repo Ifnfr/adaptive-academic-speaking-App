@@ -373,7 +373,11 @@ export function PodchatView({
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
   const [difficulty, setDifficulty] =
     useState<PodchatDifficulty>("Intermediate");
-  const [setupStep, setSetupStep] = useState<"topic" | "difficulty">("topic");
+  const [setupStep, setSetupStep] = useState<"topic" | "difficulty" | "debate-setup">("topic");
+  const [debateTopic, setDebateTopic] = useState<string>("");
+  const [debateUserStance, setDebateUserStance] = useState<"pro" | "con">("pro");
+  const [debateStyle, setDebateStyle] = useState<"gentle" | "adversarial">("gentle");
+  const [debateContext, setDebateContext] = useState<string>("");
   const [difficultyEstimate, setDifficultyEstimate] =
     useState<PodchatDifficultyEstimate | null>(null);
   const [manualDifficultyOverride, setManualDifficultyOverride] =
@@ -1086,9 +1090,17 @@ export function PodchatView({
           body: JSON.stringify({
             topic,
             difficulty,
-            sessionMode: podchatSessionMode,
+            sessionMode: topic === "Debate Me" ? "debate" : podchatSessionMode,
             ...(articleContext ? { articleContext } : {}),
             ...(startingAurState ? { aurUnderstandingState: startingAurState } : {}),
+            ...(topic === "Debate Me" ? {
+              debateConfig: {
+                debateTopic: debateTopic.trim(),
+                userStance: debateUserStance,
+                debateStyle,
+                ...(debateContext.trim() ? { debateContext: debateContext.trim() } : {}),
+              },
+            } : {}),
           }),
         });
 
@@ -2100,7 +2112,11 @@ export function PodchatView({
                     aria-checked={topic === option}
                     onClick={() => {
                       setTopic(option);
-                      setSetupStep("difficulty");
+                      if (option === "Debate Me") {
+                        setSetupStep("debate-setup");
+                      } else {
+                        setSetupStep("difficulty");
+                      }
                     }}
                     className={
                       optionButtonBase + " " +
@@ -2195,6 +2211,164 @@ export function PodchatView({
                 className={buttonPrimary}
               >
                 Start a Podchat
+              </button>
+            </div>
+          </div>
+
+          {/* ── Step 3: Debate Setup ──────────────────────────────────── */}
+          <div
+            className={
+              "transition-all duration-200 " +
+              (setupStep === "debate-setup"
+                ? "opacity-100 translate-x-0"
+                : "pointer-events-none absolute opacity-0 translate-x-4")
+            }
+          >
+            {/* Back button */}
+            <button
+              type="button"
+              onClick={() => setSetupStep("topic")}
+              className="mb-5 flex min-h-[44px] items-center gap-1.5 text-sm text-[var(--brand-ink-soft)] hover:text-[var(--brand-ink)] transition-colors"
+              aria-label="Back to topic selection"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="font-semibold text-[var(--brand-ink)]">Debate Me</span>
+            </button>
+
+            <fieldset className="flex flex-col gap-6">
+              <legend className="sr-only">Debate Setup</legend>
+
+              {/* Debate Topic */}
+              <div className="flex flex-col gap-2">
+                <label className={labelClass} htmlFor="debate-topic-input">
+                  What do you want to debate?
+                </label>
+                <input
+                  id="debate-topic-input"
+                  type="text"
+                  value={debateTopic}
+                  onChange={(e) => setDebateTopic(e.target.value)}
+                  placeholder="e.g. Social media does more harm than good"
+                  className="w-full rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-3 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)]"
+                />
+                <p className="text-xs text-[var(--brand-ink-soft)]">
+                  Examples: &quot;Remote work is better than office work&quot; · &quot;English should be taught from primary school in Indonesia&quot; · &quot;Online learning is more effective than classroom learning&quot;
+                </p>
+              </div>
+
+              {/* Stance */}
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>Your stance</span>
+                <div className="flex gap-3" role="radiogroup" aria-label="Debate stance">
+                  {(["pro", "con"] as const).map((stance) => (
+                    <button
+                      key={stance}
+                      type="button"
+                      role="radio"
+                      aria-checked={debateUserStance === stance}
+                      onClick={() => setDebateUserStance(stance)}
+                      className={
+                        optionButtonBase + " " +
+                        (debateUserStance === stance ? selectedOptionClass : idleOptionClass)
+                      }
+                    >
+                      <span className="text-sm font-semibold capitalize">{stance}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Difficulty */}
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>Difficulty</span>
+                <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Debate difficulty">
+                  {DIFFICULTIES.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      role="radio"
+                      aria-checked={difficulty === option}
+                      onClick={() => handleDifficultySelect(option)}
+                      className={
+                        "flex flex-col items-start rounded-xl border px-5 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-teal)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-bg)] " +
+                        (difficulty === option ? selectedOptionClass : idleOptionClass)
+                      }
+                    >
+                      <span className="font-semibold">{option}</span>
+                      <span
+                        className={
+                          "mt-0.5 text-xs " +
+                          (difficulty === option
+                            ? "text-[var(--brand-accent-fill-ink)]"
+                            : "text-[var(--brand-ink-soft)]")
+                        }
+                      >
+                        {DIFFICULTY_LABEL[option]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Debate Style */}
+              <div className="flex flex-col gap-2">
+                <span className={labelClass}>Debate style</span>
+                <div className="flex gap-3" role="radiogroup" aria-label="Debate style">
+                  {(["gentle", "adversarial"] as const).map((style) => (
+                    <button
+                      key={style}
+                      type="button"
+                      role="radio"
+                      aria-checked={debateStyle === style}
+                      onClick={() => setDebateStyle(style)}
+                      className={
+                        optionButtonBase + " " +
+                        (debateStyle === style ? selectedOptionClass : idleOptionClass)
+                      }
+                    >
+                      <span className="text-sm font-semibold capitalize">{style}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Context (optional) */}
+              <div className="flex flex-col gap-2">
+                <label className={labelClass} htmlFor="debate-context-input">
+                  Background context <span className="font-normal text-[var(--brand-ink-soft)]">(optional)</span>
+                </label>
+                <textarea
+                  id="debate-context-input"
+                  value={debateContext}
+                  onChange={(e) => setDebateContext(e.target.value)}
+                  placeholder="Add any background information that might help the AI argue more accurately..."
+                  rows={3}
+                  className="w-full rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-4 py-3 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] resize-none"
+                />
+              </div>
+            </fieldset>
+
+            {/* Start button */}
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={startPodchat}
+                disabled={debateTopic.trim().length === 0}
+                className={buttonPrimary}
+              >
+                Start Debate
               </button>
             </div>
           </div>
