@@ -12,7 +12,6 @@ import { resolveFeatureProvider } from "../../../lib/ai-provider-resolver";
 
 export const runtime = "nodejs";
 
-const MAX_TURNS = 16;
 const MAX_TURN_TEXT_LENGTH = 1200;
 const MAX_TRANSCRIPT_LENGTH = 8000;
 
@@ -270,10 +269,10 @@ function validateRequest(body: unknown): ValidationResult {
     b.sessionMode === "context_open_ended" ? "context_open_ended" : "normal_timed";
 
   const turns = b.turns;
-  if (!Array.isArray(turns) || turns.length === 0 || turns.length > MAX_TURNS) {
+  if (!Array.isArray(turns) || turns.length === 0) {
     return {
       valid: false,
-      error: "turns must be a non-empty array with max length 16.",
+      error: "turns must be a non-empty array.",
     };
   }
 
