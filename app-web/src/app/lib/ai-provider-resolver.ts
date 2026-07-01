@@ -63,7 +63,7 @@ export async function resolveFeatureProvider(
       providerId = (
         process.env.DEFAULT_PODCHAT_AI ||
         process.env.PODCHAT_AI_PROVIDER ||
-        "claude"
+        "deepseek"
       ).toLowerCase().trim();
     }
   } else if (feature === "listening") {
@@ -92,21 +92,48 @@ export async function resolveFeatureProvider(
 
   // Map providerId to API key and model name
   if (providerId === "gemini") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
-    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+    apiKey = process.env.GEMINI_API_KEY || "";
+    modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   } else if (providerId === "claude") {
     apiKey = process.env.CLAUDE_API_KEY || "";
     modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
   } else if (providerId === "deepseek") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    apiKey = process.env.DEEPSEEK_API_KEY || "";
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else if (providerId === "minimax_m3" || providerId === "minimax") {
     apiKey = process.env.MINIMAX_API_KEY || "";
     modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
   } else {
     // Default fallback to deepseek config
-    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    apiKey = process.env.DEEPSEEK_API_KEY || "";
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  }
+
+  // Fallback chain: if resolved provider has no API key, try next in priority order
+  if (!apiKey) {
+    const fallbackOrder = ["deepseek", "gemini", "claude"];
+    const fallbacks = fallbackOrder.filter(p => p !== providerId);
+    for (const fallback of fallbacks) {
+      let fallbackKey = "";
+      let fallbackModel = "";
+      if (fallback === "deepseek") {
+        fallbackKey = process.env.DEEPSEEK_API_KEY || "";
+        fallbackModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+      } else if (fallback === "gemini") {
+        fallbackKey = process.env.GEMINI_API_KEY || "";
+        fallbackModel = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+      } else if (fallback === "claude") {
+        fallbackKey = process.env.CLAUDE_API_KEY || "";
+        fallbackModel = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
+      }
+      if (fallbackKey) {
+        console.log("[PODCHAT_DEBUG] resolveFeatureProvider: primary provider has no key, falling back to:", fallback);
+        providerId = fallback;
+        apiKey = fallbackKey;
+        modelName = fallbackModel;
+        break;
+      }
+    }
   }
 
   console.log("[PODCHAT_DEBUG] resolveFeatureProvider input source:", sourceUsed);
