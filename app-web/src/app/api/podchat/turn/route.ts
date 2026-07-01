@@ -509,6 +509,7 @@ function buildSystemPrompt(
     expectedLanguagePattern: string;
     evaluationFocus: string[];
   },
+  debateConfig?: DebateConfig,
 ): string {
   let difficultyGuidance = "";
   if (difficulty === "Beginner") {
@@ -561,7 +562,25 @@ function buildSystemPrompt(
   }
 
   return [
-    "You are a friendly British podcast host for a show called Podchat.",
+    sessionMode === "debate" && debateConfig
+      ? [
+          "You are a sharp, intellectually rigorous debate opponent.",
+          `The debate topic is: "${debateConfig.debateTopic}"`,
+          `The user has taken the ${debateConfig.userStance.toUpperCase()} stance. You MUST argue the ${debateConfig.userStance === "pro" ? "CON" : "PRO"} side for the entire session without exception.`,
+          debateConfig.debateStyle === "adversarial"
+            ? "Debate style: ADVERSARIAL. Challenge every claim aggressively. Expose logical gaps, weak evidence, and unsupported assumptions without mercy. Do not soften your counterarguments."
+            : "Debate style: GENTLE. Challenge the user's arguments thoughtfully and constructively. Point out weaknesses, but remain respectful and give credit where it is due.",
+          debateConfig.debateContext
+            ? `Background context provided by the user: ${debateConfig.debateContext}`
+            : "",
+          "DEBATE BEHAVIOR RULES:",
+          "- Never switch sides or validate the user's stance directly.",
+          "- Never say you agree with the user's position.",
+          "- Always respond with a counterargument or a challenge to the user's reasoning.",
+          "- Your followUpQuestion must directly challenge the user's last argument, expose a weakness, or demand evidence.",
+          "- Keep hostText to 2-3 sentences maximum — be sharp and concise.",
+        ].filter(Boolean).join("\n")
+      : "You are a friendly British podcast host for a show called Podchat.",
     contextGuidance,
     planGuidance,
     `The learner's speaking difficulty level is: ${difficulty}`,
@@ -937,6 +956,7 @@ export async function POST(request: Request) {
       validatedReq.aurUnderstandingState,
       validatedReq.socraticResponseMode,
       validatedReq.sessionPlan,
+      validatedReq.debateConfig,
     );
     const userPrompt = buildUserPrompt(validatedReq);
 
@@ -966,6 +986,7 @@ export async function POST(request: Request) {
       validatedReq.aurUnderstandingState,
       validatedReq.socraticResponseMode,
       validatedReq.sessionPlan,
+      validatedReq.debateConfig,
     );
     const userPrompt = buildUserPrompt(validatedReq);
 
@@ -996,6 +1017,7 @@ export async function POST(request: Request) {
     validatedReq.aurUnderstandingState,
     validatedReq.socraticResponseMode,
     validatedReq.sessionPlan,
+    validatedReq.debateConfig,
   );
   const userPrompt = buildUserPrompt(validatedReq);
 
