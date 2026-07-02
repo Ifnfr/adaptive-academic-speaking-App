@@ -69,6 +69,8 @@ type PodchatAspectFeedback = {
   grammar: PodchatAspectFeedbackItem;
   coherence: PodchatAspectFeedbackItem;
   topicRelevance: PodchatAspectFeedbackItem;
+  ideaDevelopment: PodchatAspectFeedbackItem;
+  conversationalResponsiveness: PodchatAspectFeedbackItem;
 };
 
 type PodchatEvaluateResponse = {
@@ -80,6 +82,22 @@ type PodchatEvaluateResponse = {
   nextPracticeFocus: string;
   aspectFeedback?: PodchatAspectFeedback;
 };
+
+type PodchatQuizMCQ = {
+  type: "mcq";
+  question: string;
+  options: [string, string, string, string];
+  correctIndex: number;
+  explanation: string;
+};
+
+type PodchatQuizEssay = {
+  type: "essay";
+  question: string;
+  guidancePoints: string[];
+};
+
+type PodchatQuizQuestion = PodchatQuizMCQ | PodchatQuizEssay;
 
 type ProviderErrorCategory =
   | "unauthorized"
@@ -150,6 +168,8 @@ const ASPECT_FEEDBACK_LABELS: Array<{
   { key: "grammar", label: "Grammar" },
   { key: "coherence", label: "Coherence" },
   { key: "topicRelevance", label: "Topic Relevance / Substance" },
+  { key: "ideaDevelopment", label: "Idea Development" },
+  { key: "conversationalResponsiveness", label: "Conversational Responsiveness" },
 ];
 
 function speakerLabel(speaker: PodchatSpeaker): string {
@@ -410,6 +430,11 @@ export function PodchatView({
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [evalData, setEvalData] = useState<PodchatEvaluateResponse | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizData, setQuizData] = useState<PodchatQuizQuestion[] | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number | string>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [commonplaceMapContext, setCommonplaceMapContext] =
     useState<PodchatCommonplaceMapDiscussionContext | null>(null);
   const [commonplaceMapContextLoading, setCommonplaceMapContextLoading] =
@@ -1161,6 +1186,11 @@ export function PodchatView({
     setTurnError(null);
     setEvalError(null);
     setEvalData(null);
+    setQuizData(null);
+    setQuizError(null);
+    setQuizLoading(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
     setRecordingState("idle");
     setLockedTranscript(null);
     if (onClearArticleContext) {
@@ -1356,6 +1386,36 @@ export function PodchatView({
       setEvalError(msg || "An error occurred during evaluation.");
     } finally {
       setEvalLoading(false);
+    }
+  }
+
+  async function triggerQuiz(evaluation: PodchatEvaluateResponse) {
+    setQuizLoading(true);
+    setQuizError(null);
+    setQuizData(null);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    try {
+      const response = await fetch("/api/podchat/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ evaluation }),
+      });
+      if (!response.ok) {
+        const errText = await response.json().catch(() => ({}));
+        throw new Error((errText as { error?: string }).error || "Failed to generate quiz.");
+      }
+      const data = await response.json();
+      if (Array.isArray(data.questions)) {
+        setQuizData(data.questions as PodchatQuizQuestion[]);
+      } else {
+        throw new Error("Invalid quiz response.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setQuizError(msg || "An error occurred generating the quiz.");
+    } finally {
+      setQuizLoading(false);
     }
   }
 
@@ -2529,7 +2589,7 @@ export function PodchatView({
                 <p className="text-sm leading-6 text-[var(--brand-ink-soft)]">{evalData.nextPracticeFocus}</p>
               </div>
             </div>
-            <div className="border-t border-[var(--brand-border)] px-6 py-5">
+            <div className="border-t border-[var(--brand-border)] px-6 py-5 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={resetPodchat}
@@ -2537,6 +2597,152 @@ export function PodchatView({
               >
                 Start New Podchat
               </button>
+              {!quizData && !quizLoading && (
+                <button
+                  type="button"
+                  onClick={() => triggerQuiz(evalData)}
+                  className={buttonPrimary}
+                  data-testid="podchat-start-quiz"
+                >
+                  Start Quiz
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {quizLoading && (
+          <section className={`${card} p-6 flex flex-col items-center justify-center min-h-[160px]`} data-testid="podchat-quiz-loading">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--brand-teal)]"></div>
+            <p className="mt-4 text-sm text-[var(--brand-ink-soft)]">Generating quiz...</p>
+          </section>
+        )}
+
+        {quizError && (
+          <section className={`${card} p-6`} data-testid="podchat-quiz-error">
+            <div className="app-message app-message-error">
+              <h3 className="text-sm font-semibold">Quiz Error</h3>
+              <p className="mt-2 text-sm">{quizError}</p>
+              {evalData && (
+                <button
+                  type="button"
+                  onClick={() => triggerQuiz(evalData)}
+                  className={`${buttonPrimary} mt-4`}
+                >
+                  Retry Quiz
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {quizData && (
+          <section className={card} data-testid="podchat-quiz">
+            <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                Comprehension Quiz
+              </p>
+              <h2 className="mt-1 text-xl font-semibold text-[var(--brand-ink)]">
+                Review what you learned
+              </h2>
+              <p className="mt-2 text-sm text-[var(--brand-ink-soft)]">
+                5 questions based on your session feedback. Answer all, then submit.
+              </p>
+            </div>
+            <div className="p-6 flex flex-col gap-8">
+              {quizData.map((q, i) => (
+                <div key={i} data-testid={`podchat-quiz-question-${i}`}>
+                  <p className="text-sm font-semibold text-[var(--brand-ink)]">
+                    {i + 1}. {q.question}
+                  </p>
+
+                  {q.type === "mcq" && (
+                    <div className="mt-3 flex flex-col gap-2">
+                      {q.options.map((opt, oi) => {
+                        const isSelected = quizAnswers[i] === oi;
+                        const isCorrect = oi === q.correctIndex;
+                        let optionClass =
+                          "rounded-lg border p-3 text-sm cursor-pointer transition-colors text-left ";
+                        if (!quizSubmitted) {
+                          optionClass += isSelected
+                            ? "border-[var(--brand-teal)] bg-[var(--brand-teal-soft)] text-[var(--brand-ink)]"
+                            : "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink)] hover:border-[var(--brand-border-strong)]";
+                        } else {
+                          if (isCorrect) {
+                            optionClass += "border-[var(--brand-success)] bg-[var(--brand-success-soft)] text-[var(--brand-success-ink)]";
+                          } else if (isSelected && !isCorrect) {
+                            optionClass += "border-[var(--brand-coral)] bg-[var(--brand-error-soft)] text-[var(--brand-ink)]";
+                          } else {
+                            optionClass += "border-[var(--brand-border)] bg-[var(--brand-surface-2)] text-[var(--brand-ink-soft)]";
+                          }
+                        }
+                        return (
+                          <button
+                            key={oi}
+                            type="button"
+                            disabled={quizSubmitted}
+                            onClick={() => setQuizAnswers((prev) => ({ ...prev, [i]: oi }))}
+                            className={optionClass}
+                          >
+                            {opt}
+                          </button>
+                        );
+                      })}
+                      {quizSubmitted && (
+                        <p className="mt-2 text-xs text-[var(--brand-ink-soft)] italic">
+                          {q.explanation}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {q.type === "essay" && (
+                    <div className="mt-3">
+                      <textarea
+                        disabled={quizSubmitted}
+                        value={typeof quizAnswers[i] === "string" ? (quizAnswers[i] as string) : ""}
+                        onChange={(e) => setQuizAnswers((prev) => ({ ...prev, [i]: e.target.value }))}
+                        rows={4}
+                        placeholder="Type your answer here..."
+                        className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3 text-sm text-[var(--brand-ink)] placeholder:text-[var(--brand-muted)] focus:border-[var(--brand-teal)] focus:outline-none disabled:opacity-60"
+                        data-testid={`podchat-quiz-essay-${i}`}
+                      />
+                      {quizSubmitted && (
+                        <div className="mt-2 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">A strong answer should include:</p>
+                          <ul className="mt-2 list-disc pl-4 text-xs text-[var(--brand-ink-soft)] space-y-1">
+                            {q.guidancePoints.map((gp, gi) => (
+                              <li key={gi}>{gp}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {!quizSubmitted && (
+                <button
+                  type="button"
+                  onClick={() => setQuizSubmitted(true)}
+                  className={buttonPrimary}
+                  data-testid="podchat-quiz-submit"
+                  disabled={quizData.some((q, i) =>
+                    q.type === "mcq"
+                      ? quizAnswers[i] === undefined
+                      : typeof quizAnswers[i] !== "string" || (quizAnswers[i] as string).trim().length === 0
+                  )}
+                >
+                  Submit Answers
+                </button>
+              )}
+
+              {quizSubmitted && (
+                <div className="app-message app-message-info text-sm">
+                  Quiz complete! Review the explanations and guidance above. Then start a new Podchat to keep practising.
+                </div>
+              )}
             </div>
           </section>
         )}
