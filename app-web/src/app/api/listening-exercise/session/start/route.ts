@@ -148,6 +148,7 @@ export async function POST(request: Request) {
 
   // Register background AI execution with the runtime lifecycle manager
   waitUntil((async () => {
+    let aiResponseText: string | undefined;
     try {
       let historySummary = "";
       if (!isPlacement) {
@@ -178,8 +179,8 @@ export async function POST(request: Request) {
         historySummary
       );
 
-      const aiResponse = await callListeningAI(systemPrompt, userPrompt);
-      const jsonText = extractJsonObject(aiResponse);
+      aiResponseText = await callListeningAI(systemPrompt, userPrompt);
+      const jsonText = extractJsonObject(aiResponseText);
 
       if (!jsonText) {
         throw new Error("AI provider returned invalid JSON formatting.");
@@ -233,6 +234,8 @@ export async function POST(request: Request) {
         .from("listening_exercise_sections")
         .update({
           generation_status: "error",
+          generation_error: err instanceof Error ? err.message : String(err),
+          generation_error_raw_response: aiResponseText ?? null,
         })
         .eq("id", sectionId);
     }

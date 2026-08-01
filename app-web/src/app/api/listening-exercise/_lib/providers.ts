@@ -283,6 +283,7 @@ export async function callListeningAI(
     body: JSON.stringify({
       model: modelName,
       temperature: 0.2,
+      max_tokens: 4096,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
@@ -296,9 +297,18 @@ export async function callListeningAI(
   }
 
   const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
   };
-  return data.choices?.[0]?.message?.content ?? "";
+  const finishReason = data.choices?.[0]?.finish_reason;
+  const content = data.choices?.[0]?.message?.content ?? "";
+
+  if (finishReason === "length") {
+    throw new Error(
+      `TRUNCATED_RESPONSE: DeepSeek response was cut off by the max_tokens limit (finish_reason=length). Partial content: ${content.slice(0, 1000)}`
+    );
+  }
+
+  return content;
 }
 
 /**
