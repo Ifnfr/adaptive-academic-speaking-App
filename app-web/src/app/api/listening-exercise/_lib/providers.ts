@@ -322,6 +322,10 @@ export function buildSection1SystemPrompt(): string {
     "PHASE 3: IMPLEMENTATION",
     "Generate the listening passage script (audio_script) for Section 1 (index 0). Extract a discrete array of key facts (fact_units) from the passage script. Finally, formulate the questions array. Each question must target a specific fact unit and map to it via testing_fact_unit_id.",
     "The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure.",
+    "The audio script MUST sound like natural spoken discourse, not an essay read aloud:",
+    "  - Use discourse markers naturally and non-repetitively (e.g., 'you know', 'actually', 'I mean', 'so', 'well', 'anyway'). Vary them throughout the passage without reusing the same marker repeatedly.",
+    "  - Incorporate mild redundancy by occasionally restating or rephrasing a point in slightly different words (self-paraphrase) as natural speech does, rather than stating each fact exactly once in perfectly dense prose.",
+    "  - Maintain a conversational sentence rhythm using a mix of shorter and longer sentences, with occasional self-corrections (e.g., 'or rather', 'what I mean is'), while remaining fully grammatical, clear, and suitable for a listening exercise.",
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
@@ -400,7 +404,7 @@ export function buildSection1UserPrompt(
     `Section Count: ${sectionCount}`,
     `Is Placement Session: ${isPlacement}`,
     historySummary ? `Previous Session History Summary:\n${historySummary}` : "No previous history available.",
-    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure."
+    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections)."
   ].join("\n");
 }
 
@@ -439,6 +443,10 @@ export function buildNextSectionSystemPrompt(questionType: string): string {
     "",
     "You must execute Phase 3: Implementation for this section.",
     "The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure.",
+    "The audio script MUST sound like natural spoken discourse, not an essay read aloud:",
+    "  - Use discourse markers naturally and non-repetitively (e.g., 'you know', 'actually', 'I mean', 'so', 'well', 'anyway'). Vary them throughout the passage without reusing the same marker repeatedly.",
+    "  - Incorporate mild redundancy by occasionally restating or rephrasing a point in slightly different words (self-paraphrase) as natural speech does, rather than stating each fact exactly once in perfectly dense prose.",
+    "  - Maintain a conversational sentence rhythm using a mix of shorter and longer sentences, with occasional self-corrections (e.g., 'or rather', 'what I mean is'), while remaining fully grammatical, clear, and suitable for a listening exercise.",
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
@@ -503,6 +511,6 @@ export function buildNextSectionUserPrompt(
     `CEFR Level: ${cefrLevel}`,
     `Topic: ${topic}`,
     `Question Types: ${questionTypes.join(", ")}`,
-    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure."
+    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections)."
   ].join("\n");
 }
