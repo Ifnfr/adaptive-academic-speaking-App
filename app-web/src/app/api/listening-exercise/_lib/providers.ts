@@ -82,6 +82,7 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
           question_text: "Standard sea-level pressure causes water to boil at [blank] degrees Celsius.",
           answer: "100",
           accepted_variants: ["one hundred", "100c"],
+          sub_skill: "detail",
           testing_fact_unit_id: "fact_0"
         },
         {
@@ -90,6 +91,7 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
           question_text: "At higher altitudes where pressure is lower, water boils at [blank] temperatures.",
           answer: "lower",
           accepted_variants: ["colder"],
+          sub_skill: "detail",
           testing_fact_unit_id: "fact_1"
         },
         {
@@ -98,6 +100,7 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
           question_text: "Oxygen and [blank] bind together to form water molecules.",
           answer: "hydrogen",
           accepted_variants: ["H"],
+          sub_skill: "detail",
           testing_fact_unit_id: "fact_2"
         },
         {
@@ -106,6 +109,7 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
           question_text: "The lightest element on the periodic table is [blank].",
           answer: "hydrogen",
           accepted_variants: ["H"],
+          sub_skill: "paraphrase-recognition",
           testing_fact_unit_id: "fact_3"
         },
         {
@@ -114,6 +118,7 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
           question_text: "Water molecules exhibit polarity due to unequal [blank] sharing.",
           answer: "electron",
           accepted_variants: ["electrons"],
+          sub_skill: "detail",
           testing_fact_unit_id: "fact_4"
         }
       ]
@@ -147,6 +152,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "What happens to warm air?",
             options: ["It contracts and sinks", "It expands and rises", "It remains stable", "It turns into liquid"],
             answer: "It expands and rises",
+            sub_skill: "detail",
             testing_fact_unit_id: "fact_1_0"
           },
           {
@@ -155,6 +161,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "What does cold air do?",
             options: ["It expands and rises", "It contracts and sinks", "It evaporates", "It does not move"],
             answer: "It contracts and sinks",
+            sub_skill: "detail",
             testing_fact_unit_id: "fact_1_1"
           },
           {
@@ -163,6 +170,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "What force pulls air molecules closer to the surface?",
             options: ["Friction", "Centrifugal force", "Gravity", "Magnetic force"],
             answer: "Gravity",
+            sub_skill: "detail",
             testing_fact_unit_id: "fact_1_2"
           },
           {
@@ -171,6 +179,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Which instrument is used to measure air pressure?",
             options: ["Thermometer", "Barometer", "Hygrometer", "Anemometer"],
             answer: "Barometer",
+            sub_skill: "detail",
             testing_fact_unit_id: "fact_1_3"
           },
           {
@@ -179,6 +188,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Where is air density higher?",
             options: ["Closer to the surface", "Higher in the atmosphere", "In outer space", "It is uniform everywhere"],
             answer: "Closer to the surface",
+            sub_skill: "inference",
             testing_fact_unit_id: "fact_1_4"
           }
         ]
@@ -206,6 +216,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Water exists in exactly two states of matter.",
             options: ["True", "False"],
             answer: "False",
+            sub_skill: "gist",
             testing_fact_unit_id: "fact_2_0"
           },
           {
@@ -214,6 +225,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Ice floats on water because ice is denser than liquid water.",
             options: ["True", "False"],
             answer: "False",
+            sub_skill: "inference",
             testing_fact_unit_id: "fact_2_1"
           },
           {
@@ -222,6 +234,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Water is commonly referred to as the universal solvent.",
             options: ["True", "False"],
             answer: "True",
+            sub_skill: "gist",
             testing_fact_unit_id: "fact_2_2"
           },
           {
@@ -230,6 +243,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Pure water has a strong odor and sour taste.",
             options: ["True", "False"],
             answer: "False",
+            sub_skill: "inference",
             testing_fact_unit_id: "fact_2_3"
           },
           {
@@ -238,6 +252,7 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             question_text: "Under standard conditions, pure water freezes at 0 degrees Celsius.",
             options: ["True", "False"],
             answer: "True",
+            sub_skill: "inference",
             testing_fact_unit_id: "fact_2_4"
           }
         ]
@@ -361,6 +376,12 @@ export function buildSection1SystemPrompt(): string {
     "   - The 'options' array MUST contain exactly 4 distinct choices.",
     "   - The 'answer' MUST be the exact string of the correct choice from the options array.",
     "",
+    "SUB-SKILL TAGGING:",
+    "Every question MUST include a \"sub_skill\" string property. Since all questions in this section are fill_blank, the \"sub_skill\" value MUST be either:",
+    "  - \"detail\": The blank tests recall of a fact stated directly/literally in the audio passage.",
+    "  - \"paraphrase-recognition\": Answering the blank requires recognizing a reworded/synonymous version of what was said, rather than the literal phrase.",
+    "No other sub_skill value is allowed for fill_blank questions.",
+    "",
     "JSON ENFORCEMENT: Return strictly valid JSON matching the schema.",
     "{",
     '  "reasoning": {',
@@ -388,11 +409,11 @@ export function buildSection1SystemPrompt(): string {
     '      { "id": "fact_4", "text": "fact statement 5" }',
     "    ],",
     '    "questions": [',
-    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
-    '      { "id": "q_1", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "testing_fact_unit_id": "fact_1" },',
-    '      { "id": "q_2", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "testing_fact_unit_id": "fact_2" },',
-    '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_3" },',
-    '      { "id": "q_4", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "testing_fact_unit_id": "fact_4" }',
+    '      { "id": "q_0", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": ["variant1"], "sub_skill": "detail", "testing_fact_unit_id": "fact_0" },',
+    '      { "id": "q_1", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "sub_skill": "paraphrase-recognition", "testing_fact_unit_id": "fact_1" },',
+    '      { "id": "q_2", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "sub_skill": "detail", "testing_fact_unit_id": "fact_2" },',
+    '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "sub_skill": "detail", "testing_fact_unit_id": "fact_3" },',
+    '      { "id": "q_4", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "sub_skill": "paraphrase-recognition", "testing_fact_unit_id": "fact_4" }',
     "    ]",
     "  }",
     "}"
@@ -423,27 +444,52 @@ export function buildSection1UserPrompt(
  */
 export function buildNextSectionSystemPrompt(questionType: string): string {
   let questionsExample = "";
+  let subSkillInstruction = "";
+
   if (questionType === "multiple_choice") {
     questionsExample = [
       '    "questions": [',
-      '      { "id": "q_0", "question_type": "multiple_choice", "question_text": "example multiple choice question", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "testing_fact_unit_id": "fact_0" },',
-      '      { "id": "q_1", "question_type": "multiple_choice", "question_text": "another multiple choice question", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice2", "testing_fact_unit_id": "fact_1" }',
+      '      { "id": "q_0", "question_type": "multiple_choice", "question_text": "example multiple choice question", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice1", "sub_skill": "detail", "testing_fact_unit_id": "fact_0" },',
+      '      { "id": "q_1", "question_type": "multiple_choice", "question_text": "another multiple choice question", "options": ["choice1", "choice2", "choice3", "choice4"], "answer": "choice2", "sub_skill": "inference", "testing_fact_unit_id": "fact_1" }',
       '    ]'
+    ].join("\n");
+    subSkillInstruction = [
+      "SUB-SKILL TAGGING:",
+      "Every question MUST include a \"sub_skill\" string property. For multiple_choice questions, the value MUST be one of:",
+      "  - \"detail\": Tests recall of a specific fact stated directly in the audio.",
+      "  - \"inference\": Requires reasoning beyond what is explicitly stated in the audio.",
+      "  - \"paraphrase-recognition\": Requires recognizing reworded language rather than the literal phrase.",
+      "  - \"speaker-attitude\": Tests understanding of the speaker's opinion, tone, or stance toward the topic. Only use this tag if the audio_script actually contains a moment of opinion or stance; do not force it onto a purely factual question.",
+      "No other sub_skill value is allowed for multiple_choice questions."
     ].join("\n");
   } else if (questionType === "true_false") {
     questionsExample = [
       '    "questions": [',
-      '      { "id": "q_0", "question_type": "true_false", "question_text": "example true statement.", "answer": "True", "testing_fact_unit_id": "fact_0" },',
-      '      { "id": "q_1", "question_type": "true_false", "question_text": "example false statement.", "answer": "False", "testing_fact_unit_id": "fact_1" }',
+      '      { "id": "q_0", "question_type": "true_false", "question_text": "example true statement.", "answer": "True", "sub_skill": "gist", "testing_fact_unit_id": "fact_0" },',
+      '      { "id": "q_1", "question_type": "true_false", "question_text": "example false statement.", "answer": "False", "sub_skill": "inference", "testing_fact_unit_id": "fact_1" }',
       '    ]'
+    ].join("\n");
+    subSkillInstruction = [
+      "SUB-SKILL TAGGING:",
+      "Every question MUST include a \"sub_skill\" string property. For true_false questions, the value MUST be one of:",
+      "  - \"gist\": Tests overall or general understanding of the main message or theme of the passage.",
+      "  - \"inference\": Requires reasoning beyond what is explicitly stated in the audio.",
+      "No other sub_skill value is allowed for true_false questions."
     ].join("\n");
   } else {
     // default/fill_blank
     questionsExample = [
       '    "questions": [',
-      '      { "id": "q_0", "question_type": "fill_blank", "question_text": "example [blank] question.", "answer": "correct_word", "accepted_variants": ["variant1"], "testing_fact_unit_id": "fact_0" },',
-      '      { "id": "q_1", "question_type": "fill_blank", "question_text": "another [blank] question.", "answer": "correct_word", "accepted_variants": [], "testing_fact_unit_id": "fact_1" }',
+      '      { "id": "q_0", "question_type": "fill_blank", "question_text": "example [blank] question.", "answer": "correct_word", "accepted_variants": ["variant1"], "sub_skill": "detail", "testing_fact_unit_id": "fact_0" },',
+      '      { "id": "q_1", "question_type": "fill_blank", "question_text": "another [blank] question.", "answer": "correct_word", "accepted_variants": [], "sub_skill": "paraphrase-recognition", "testing_fact_unit_id": "fact_1" }',
       '    ]'
+    ].join("\n");
+    subSkillInstruction = [
+      "SUB-SKILL TAGGING:",
+      "Every question MUST include a \"sub_skill\" string property. For fill_blank questions, the value MUST be one of:",
+      "  - \"detail\": The blank tests recall of a fact stated directly/literally in the audio passage.",
+      "  - \"paraphrase-recognition\": Answering the blank requires recognizing a reworded/synonymous version of what was said, rather than the literal phrase.",
+      "No other sub_skill value is allowed for fill_blank questions."
     ].join("\n");
   }
 
@@ -484,6 +530,8 @@ export function buildNextSectionSystemPrompt(questionType: string): string {
     "   - The question_text MUST be a clear question or incomplete statement.",
     "   - The 'options' array MUST contain exactly 4 distinct choices.",
     "   - The 'answer' MUST be the exact string of the correct choice from the options array.",
+    "",
+    subSkillInstruction,
     "",
     "JSON ENFORCEMENT: Return strictly valid JSON matching the schema.",
     "{",
