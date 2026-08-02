@@ -12,6 +12,7 @@ interface SubmitQuestion {
   answer: string;
   accepted_variants?: string[];
   cefr_level?: string;
+  sub_skill?: string;
 }
 
 async function resolveCurrentUserId(): Promise<string | null> {
@@ -40,6 +41,14 @@ function getSupabaseClient() {
     return null;
   }
 }
+
+const VALID_SUB_SKILLS = new Set([
+  "gist",
+  "detail",
+  "inference",
+  "speaker-attitude",
+  "paraphrase-recognition",
+]);
 
 export async function POST(
   request: Request,
@@ -139,6 +148,7 @@ export async function POST(
       question_id: q.id,
       question_type: q.question_type,
       cefr_level: q.cefr_level || section.cefr_level,
+      sub_skill: q.sub_skill && VALID_SUB_SKILLS.has(q.sub_skill) ? q.sub_skill : null,
       is_correct: isCorrect,
       raw_answer: userAnswerRaw,
     });
