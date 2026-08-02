@@ -124,6 +124,7 @@ export function ListeningExerciseSession({
   const [sectionIndex, setSectionIndex] = useState(0);
   const [sectionCount] = useState(initialSectionCount);
   const [topic, setTopic] = useState("");
+  const [preListeningPrompt, setPreListeningPrompt] = useState<string>("");
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -177,6 +178,7 @@ export function ListeningExerciseSession({
           setSectionId(sectionData.id);
           setTopic(sectionData.topic);
           setQuestions(sectionData.questions || []);
+          setPreListeningPrompt(sectionData.pre_listening_prompt || "");
           setSectionIndex(data.section_index);
 
           // Retrieve and cache passage audio
@@ -635,6 +637,7 @@ export function ListeningExerciseSession({
           sectionIndex={sectionIndex}
           sectionCount={sectionCount}
           topic={topic}
+          preListeningPrompt={preListeningPrompt}
           audioUrl={audioUrl}
           questions={questions}
           onSubmit={handleSubmit}

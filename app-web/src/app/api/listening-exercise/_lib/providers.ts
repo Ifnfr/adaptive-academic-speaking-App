@@ -121,7 +121,8 @@ export function getMockSection1Response(cefrLevel: string, sectionCount: number)
           sub_skill: "detail",
           testing_fact_unit_id: "fact_4"
         }
-      ]
+      ],
+      pre_listening_prompt: "As you listen, pay close attention to the specific temperature values and atomic components mentioned in the lecture."
     }
   });
 }
@@ -191,7 +192,8 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             sub_skill: "inference",
             testing_fact_unit_id: "fact_1_4"
           }
-        ]
+        ],
+        pre_listening_prompt: "Focus on how air temperature and gravity affect atmospheric density as the speaker explains these relationships."
       }
     });
   } else {
@@ -255,7 +257,8 @@ export function getMockNextSectionResponse(sectionIndex: number, cefrLevel: stri
             sub_skill: "inference",
             testing_fact_unit_id: "fact_2_4"
           }
-        ]
+        ],
+        pre_listening_prompt: "Listen carefully for the key characteristics of water and why ice behaves differently from liquid water."
       }
     });
   }
@@ -382,6 +385,9 @@ export function buildSection1SystemPrompt(): string {
     "  - \"paraphrase-recognition\": Answering the blank requires recognizing a reworded/synonymous version of what was said, rather than the literal phrase.",
     "No other sub_skill value is allowed for fill_blank questions.",
     "",
+    "PRE-LISTENING PROMPT:",
+    "After you have finalized the questions array (including each question's sub_skill tag), write one additional field: \"pre_listening_prompt\" — a single natural sentence (not a list, not a technical explanation) that gives the listener a natural, implicit cue about what to pay attention to while listening, based on the sub_skill(s) most represented among this section's 5 questions. Do NOT use the words 'detail', 'inference', 'gist', 'paraphrase', 'paraphrase-recognition', 'speaker-attitude', or 'sub-skill' anywhere in this sentence — it must read like something a friendly instructor would casually say before playing the audio, not a technical hint. Reference the section's actual topic naturally rather than staying generic. Keep it to exactly one sentence.",
+    "",
     "JSON ENFORCEMENT: Return strictly valid JSON matching the schema.",
     "{",
     '  "reasoning": {',
@@ -414,7 +420,8 @@ export function buildSection1SystemPrompt(): string {
     '      { "id": "q_2", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "correct_word", "accepted_variants": [], "sub_skill": "detail", "testing_fact_unit_id": "fact_2" },',
     '      { "id": "q_3", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "sub_skill": "detail", "testing_fact_unit_id": "fact_3" },',
     '      { "id": "q_4", "question_type": "fill_blank", "question_text": "text containing [blank]", "answer": "word", "accepted_variants": [], "sub_skill": "paraphrase-recognition", "testing_fact_unit_id": "fact_4" }',
-    "    ]",
+    "    ],",
+    '    "pre_listening_prompt": "one natural sentence here"',
     "  }",
     "}"
   ].join("\n");
@@ -533,6 +540,9 @@ export function buildNextSectionSystemPrompt(questionType: string): string {
     "",
     subSkillInstruction,
     "",
+    "PRE-LISTENING PROMPT:",
+    "After you have finalized the questions array (including each question's sub_skill tag), write one additional field: \"pre_listening_prompt\" — a single natural sentence (not a list, not a technical explanation) that gives the listener a natural, implicit cue about what to pay attention to while listening, based on the sub_skill(s) most represented among this section's 5 questions. Do NOT use the words 'detail', 'inference', 'gist', 'paraphrase', 'paraphrase-recognition', 'speaker-attitude', or 'sub-skill' anywhere in this sentence — it must read like something a friendly instructor would casually say before playing the audio, not a technical hint. Reference the section's actual topic naturally rather than staying generic. Keep it to exactly one sentence.",
+    "",
     "JSON ENFORCEMENT: Return strictly valid JSON matching the schema.",
     "{",
     '  "reasoning": {',
@@ -548,7 +558,8 @@ export function buildNextSectionSystemPrompt(questionType: string): string {
     '      { "id": "fact_3", "text": "fact statement 4" },',
     '      { "id": "fact_4", "text": "fact statement 5" }',
     "    ],",
-    questionsExample,
+    questionsExample + ",",
+    '    "pre_listening_prompt": "one natural sentence here"',
     "  }",
     "}"
   ].join("\n");

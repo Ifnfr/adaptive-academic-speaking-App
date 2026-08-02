@@ -193,6 +193,7 @@ export async function POST(request: Request) {
           audio_script?: string;
           fact_units?: unknown[];
           questions?: unknown[];
+          pre_listening_prompt?: string;
         };
       };
 
@@ -220,6 +221,7 @@ export async function POST(request: Request) {
           audio_script: payload.section.audio_script,
           fact_units: payload.section.fact_units,
           questions: payload.section.questions,
+          pre_listening_prompt: payload.section.pre_listening_prompt,
           generation_status: "ready",
         })
         .eq("id", sectionId);

@@ -7,6 +7,7 @@ export interface ListeningExerciseLayoutProps {
   sectionIndex: number;
   sectionCount: number;
   topic: string;
+  preListeningPrompt?: string;
   audioUrl?: string;
   questions: Question[];
   onSubmit: (answers: Record<string, string>) => void;
@@ -18,6 +19,7 @@ export function ListeningExerciseLayout({
   sectionIndex,
   sectionCount,
   topic,
+  preListeningPrompt,
   audioUrl,
   questions,
   onSubmit,
@@ -132,6 +134,18 @@ export function ListeningExerciseLayout({
           </span>
         </div>
       </div>
+
+      {/* Pre-Listening Focus Notice */}
+      {preListeningPrompt && preListeningPrompt.trim().length > 0 && (
+        <div className="p-4 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-2xl flex flex-col gap-1 shadow-inner">
+          <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider">
+            Before You Listen
+          </span>
+          <p className="text-xs text-[var(--brand-ink-soft)] leading-relaxed">
+            {preListeningPrompt}
+          </p>
+        </div>
+      )}
 
       {/* Audio Controller */}
       <AudioController
