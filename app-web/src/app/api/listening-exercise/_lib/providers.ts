@@ -427,6 +427,22 @@ export function buildSection1SystemPrompt(): string {
   ].join("\n");
 }
 
+const SUB_SKILLS_BY_QUESTION_TYPE: Record<string, string[]> = {
+  fill_blank: ["detail", "paraphrase-recognition"],
+  multiple_choice: ["detail", "inference", "paraphrase-recognition", "speaker-attitude"],
+  true_false: ["gist", "inference"],
+};
+
+function buildWeakSubSkillLine(
+  weakSubSkill: string | null | undefined,
+  questionType: string
+): string | null {
+  if (!weakSubSkill) return null;
+  const validForType = SUB_SKILLS_BY_QUESTION_TYPE[questionType] || [];
+  if (!validForType.includes(weakSubSkill)) return null;
+  return `The learner has recently shown comparatively weaker performance on "${weakSubSkill}"-type questions. Where it fits naturally with the section's content and the SUB-SKILL TAGGING rules above, lean toward tagging more of this section's questions as "${weakSubSkill}" — but do not force it onto content where it doesn't genuinely apply, and do not sacrifice question quality or natural phrasing to hit this preference.`;
+}
+
 /**
  * Builds the user prompt for Section 1 generation.
  */
@@ -434,16 +450,20 @@ export function buildSection1UserPrompt(
   cefrLevel: string,
   sectionCount: number,
   isPlacement: boolean,
-  historySummary?: string
+  historySummary?: string,
+  weakSubSkill?: string | null
 ): string {
-  return [
+  const weakSubSkillLine = buildWeakSubSkillLine(weakSubSkill, "fill_blank");
+  const lines = [
     "Generate Listening Exercise StartSession.",
     `Requested CEFR Level: ${cefrLevel}`,
     `Section Count: ${sectionCount}`,
     `Is Placement Session: ${isPlacement}`,
     historySummary ? `Previous Session History Summary:\n${historySummary}` : "No previous history available.",
-    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections)."
-  ].join("\n");
+    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections).",
+  ];
+  if (weakSubSkillLine) lines.push(weakSubSkillLine);
+  return lines.join("\n");
 }
 
 /**
@@ -572,14 +592,19 @@ export function buildNextSectionUserPrompt(
   sectionIndex: number,
   cefrLevel: string,
   topic: string,
-  questionTypes: string[]
+  questionTypes: string[],
+  weakSubSkill?: string | null
 ): string {
-  return [
+  const questionType = questionTypes[0] || "fill_blank";
+  const weakSubSkillLine = buildWeakSubSkillLine(weakSubSkill, questionType);
+  const lines = [
     "Generate next section content for the session.",
     `Section Index: ${sectionIndex}`,
     `CEFR Level: ${cefrLevel}`,
     `Topic: ${topic}`,
     `Question Types: ${questionTypes.join(", ")}`,
-    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections)."
-  ].join("\n");
+    "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections).",
+  ];
+  if (weakSubSkillLine) lines.push(weakSubSkillLine);
+  return lines.join("\n");
 }

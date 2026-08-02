@@ -7,6 +7,7 @@ import {
   extractJsonObject
 } from "../../_lib/providers";
 import { waitUntil } from "@vercel/functions";
+import { getWeakestEligibleSubSkill } from "../../../../lib/listening-exercise/metrics";
 
 export const runtime = "nodejs";
 
@@ -171,12 +172,18 @@ export async function POST(request: Request) {
         }
       }
 
+      let weakSubSkill: string | null = null;
+      if (!isPlacement) {
+        weakSubSkill = await getWeakestEligibleSubSkill(supabase, ownerId);
+      }
+
       const systemPrompt = buildSection1SystemPrompt();
       const userPrompt = buildSection1UserPrompt(
         cefrLevel,
         sectionCount,
         isPlacement,
-        historySummary
+        historySummary,
+        weakSubSkill
       );
 
       aiResponseText = await callListeningAI(systemPrompt, userPrompt);

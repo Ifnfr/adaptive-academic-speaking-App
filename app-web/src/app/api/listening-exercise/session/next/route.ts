@@ -7,6 +7,7 @@ import {
   extractJsonObject
 } from "../../_lib/providers";
 import { waitUntil } from "@vercel/functions";
+import { getWeakestEligibleSubSkill } from "../../../../lib/listening-exercise/metrics";
 
 export const runtime = "nodejs";
 
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
   // Fetch session to check ownership and retrieve the plan
   const { data: sessionData, error: sessionError } = await supabase
     .from("listening_exercise_sessions")
-    .select("generation_plan, section_count, cefr_level, status")
+    .select("generation_plan, section_count, cefr_level, status, is_placement")
     .eq("id", sessionId)
     .eq("owner_id", ownerId)
     .single();
@@ -173,13 +174,19 @@ export async function POST(request: Request) {
   waitUntil((async () => {
     let aiResponseText: string | undefined;
     try {
+      let weakSubSkill: string | null = null;
+      if (!sessionData.is_placement) {
+        weakSubSkill = await getWeakestEligibleSubSkill(supabase, ownerId);
+      }
+
       const questionType = targetQuestionTypes[0] || "fill_blank";
       const systemPrompt = buildNextSectionSystemPrompt(questionType);
       const userPrompt = buildNextSectionUserPrompt(
         nextIndex,
         targetLevel,
         targetTopic,
-        targetQuestionTypes
+        targetQuestionTypes,
+        weakSubSkill
       );
 
       aiResponseText = await callListeningAI(systemPrompt, userPrompt);
