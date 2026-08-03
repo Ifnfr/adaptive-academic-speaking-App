@@ -60,7 +60,7 @@ export const TOPIC_DOMAINS: TopicDomain[] = [
       "The Biology of Human Sleep Cycles",
       "Targeted Drug Delivery Systems in Oncology",
       "Cardiovascular Fitness and Metabolic Health",
-      "Vaccine Development and mRNA Technology",
+      "Robotic-Assisted Surgery Techniques",
       "Nutritional Biochemistry and Gut Microbiota",
       "Telemedicine Innovations in Rural Healthcare",
     ],
@@ -173,6 +173,11 @@ export function selectSessionDomains(
     }
   }
 
+  const tieBreakPriority = new Map<string, number>();
+  for (const domain of TOPIC_DOMAINS) {
+    tieBreakPriority.set(domain.id, Math.random());
+  }
+
   const sortedDomains = [...TOPIC_DOMAINS].sort((a, b) => {
     const lastUsedA = domainLastUsedMap.get(a.id) ?? -1;
     const lastUsedB = domainLastUsedMap.get(b.id) ?? -1;
@@ -181,7 +186,7 @@ export function selectSessionDomains(
       return lastUsedA - lastUsedB;
     }
 
-    return TOPIC_DOMAINS.indexOf(a) - TOPIC_DOMAINS.indexOf(b);
+    return (tieBreakPriority.get(a.id) ?? 0) - (tieBreakPriority.get(b.id) ?? 0);
   });
 
   const selected = sortedDomains.slice(0, Math.min(count, sortedDomains.length));
