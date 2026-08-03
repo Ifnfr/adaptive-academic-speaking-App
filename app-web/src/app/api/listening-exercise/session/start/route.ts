@@ -6,6 +6,7 @@ import {
   buildSection1UserPrompt,
   extractJsonObject
 } from "../../_lib/providers";
+import { selectSessionDomains } from "../../_lib/topic-domains";
 import { waitUntil } from "@vercel/functions";
 import { getWeakestEligibleSubSkill } from "../../../../lib/listening-exercise/metrics";
 
@@ -152,39 +153,45 @@ export async function POST(request: Request) {
     let aiResponseText: string | undefined;
     try {
       let historySummary = "";
-      let recentTopics: string[] = [];
+      const recentSessionDomains: Array<{ createdAt: string; domains: string[] }> = [];
+
       if (!isPlacement) {
-        // Fetch up to 3 previous completed sessions
+        // Fetch up to 30 previous completed sessions to analyze domain history
         const { data: history } = await supabase
           .from("listening_exercise_sessions")
-          .select("cefr_level, overall_score, estimated_band, generation_plan")
+          .select("cefr_level, overall_score, estimated_band, generation_plan, created_at")
           .eq("owner_id", ownerId)
           .eq("status", "completed")
           .order("created_at", { ascending: false })
-          .limit(3);
+          .limit(30);
 
         if (history && history.length > 0) {
           historySummary = history
+            .slice(0, 3)
             .map(
               (h, i) =>
                 `Attempt ${i + 1}: CEFR Level = ${h.cefr_level}, Overall Score = ${h.overall_score}%, Estimated Band = ${h.estimated_band}`
             )
             .join("\n");
 
-          const topicsSet = new Set<string>();
           for (const row of history) {
-            const plan = row.generation_plan as { sections?: Array<{ topic?: string }> } | null;
+            const plan = row.generation_plan as { sections?: Array<{ topic?: string; domain?: string }> } | null;
+            const domains: string[] = [];
             if (plan?.sections && Array.isArray(plan.sections)) {
               for (const s of plan.sections) {
-                if (s?.topic && typeof s.topic === "string" && s.topic.trim().length > 0) {
-                  topicsSet.add(s.topic.trim());
+                if (s?.domain && typeof s.domain === "string" && s.domain.trim().length > 0) {
+                  domains.push(s.domain.trim());
                 }
               }
             }
+            if (row.created_at) {
+              recentSessionDomains.push({ createdAt: row.created_at, domains });
+            }
           }
-          recentTopics = Array.from(topicsSet);
         }
       }
+
+      const assignedTopics = selectSessionDomains(recentSessionDomains, 3);
 
       let weakSubSkill: string | null = null;
       if (!isPlacement) {
@@ -198,7 +205,7 @@ export async function POST(request: Request) {
         isPlacement,
         historySummary,
         weakSubSkill,
-        recentTopics
+        assignedTopics
       );
 
       aiResponseText = await callListeningAI(systemPrompt, userPrompt);
@@ -209,7 +216,16 @@ export async function POST(request: Request) {
       }
 
       const payload = JSON.parse(jsonText) as {
-        plan?: Record<string, unknown>;
+        plan?: {
+          sections?: Array<{
+            section_index?: number;
+            cefr_level?: string;
+            topic?: string;
+            domain?: string;
+            question_types?: string[];
+          }>;
+          [key: string]: unknown;
+        };
         section?: {
           topic?: string;
           audio_script?: string;
@@ -221,6 +237,23 @@ export async function POST(request: Request) {
 
       if (!payload.plan || !payload.section) {
         throw new Error("AI provider JSON missing 'plan' or 'section' fields.");
+      }
+
+      // Override each entry in payload.plan.sections so topic and domain come from assignedTopics
+      if (payload.plan.sections && Array.isArray(payload.plan.sections)) {
+        payload.plan.sections = payload.plan.sections.map((s, idx) => {
+          const targetIndex = typeof s.section_index === "number" ? s.section_index : idx;
+          const assigned = assignedTopics[targetIndex] || assignedTopics[idx];
+          return {
+            ...s,
+            topic: assigned ? assigned.topic : s.topic,
+            domain: assigned ? assigned.domainId : s.domain,
+          };
+        });
+      }
+
+      if (assignedTopics[0] && payload.section) {
+        payload.section.topic = assignedTopics[0].topic;
       }
 
       // Update session with approved plan

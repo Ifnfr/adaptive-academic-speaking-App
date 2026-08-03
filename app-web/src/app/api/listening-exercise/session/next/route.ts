@@ -137,6 +137,7 @@ export async function POST(request: Request) {
       section_index: number;
       cefr_level?: string;
       topic?: string;
+      domain?: string;
       question_types?: string[];
     }>;
   };
