@@ -208,14 +208,7 @@ export async function POST(request: Request) {
         assignedTopics
       );
 
-      aiResponseText = await callListeningAI(systemPrompt, userPrompt);
-      const jsonText = extractJsonObject(aiResponseText);
-
-      if (!jsonText) {
-        throw new Error("AI provider returned invalid JSON formatting.");
-      }
-
-      const payload = JSON.parse(jsonText) as {
+      let payload: {
         plan?: {
           sections?: Array<{
             section_index?: number;
@@ -233,9 +226,53 @@ export async function POST(request: Request) {
           questions?: unknown[];
           pre_listening_prompt?: string;
         };
-      };
+      } | undefined;
 
-      if (!payload.plan || !payload.section) {
+      const maxAttempts = 3;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          aiResponseText = await callListeningAI(systemPrompt, userPrompt);
+          const jsonText = extractJsonObject(aiResponseText);
+
+          if (!jsonText) {
+            throw new Error("AI provider returned invalid JSON formatting.");
+          }
+
+          const parsedPayload = JSON.parse(jsonText) as {
+            plan?: {
+              sections?: Array<{
+                section_index?: number;
+                cefr_level?: string;
+                topic?: string;
+                domain?: string;
+                question_types?: string[];
+              }>;
+              [key: string]: unknown;
+            };
+            section?: {
+              topic?: string;
+              audio_script?: string;
+              fact_units?: unknown[];
+              questions?: unknown[];
+              pre_listening_prompt?: string;
+            };
+          };
+
+          if (!parsedPayload.plan || !parsedPayload.section) {
+            throw new Error("AI provider JSON missing 'plan' or 'section' fields.");
+          }
+
+          payload = parsedPayload;
+          break;
+        } catch (err) {
+          console.warn(`AI generation attempt ${attempt}/${maxAttempts} failed:`, err);
+          if (attempt === maxAttempts) {
+            throw err;
+          }
+        }
+      }
+
+      if (!payload || !payload.plan || !payload.section) {
         throw new Error("AI provider JSON missing 'plan' or 'section' fields.");
       }
 
