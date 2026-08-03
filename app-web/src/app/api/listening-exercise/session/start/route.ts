@@ -153,7 +153,10 @@ export async function POST(request: Request) {
     let aiResponseText: string | undefined;
     try {
       let historySummary = "";
-      const recentSessionDomains: Array<{ createdAt: string; domains: string[] }> = [];
+      const recentSessions: Array<{
+        createdAt: string;
+        sections: Array<{ domainId: string; topic: string }>;
+      }> = [];
 
       if (!isPlacement) {
         // Fetch up to 30 previous completed sessions to analyze domain history
@@ -176,22 +179,32 @@ export async function POST(request: Request) {
 
           for (const row of history) {
             const plan = row.generation_plan as { sections?: Array<{ topic?: string; domain?: string }> } | null;
-            const domains: string[] = [];
+            const sections: Array<{ domainId: string; topic: string }> = [];
             if (plan?.sections && Array.isArray(plan.sections)) {
               for (const s of plan.sections) {
-                if (s?.domain && typeof s.domain === "string" && s.domain.trim().length > 0) {
-                  domains.push(s.domain.trim());
+                if (
+                  s?.domain &&
+                  typeof s.domain === "string" &&
+                  s.domain.trim().length > 0 &&
+                  s?.topic &&
+                  typeof s.topic === "string" &&
+                  s.topic.trim().length > 0
+                ) {
+                  sections.push({
+                    domainId: s.domain.trim(),
+                    topic: s.topic.trim(),
+                  });
                 }
               }
             }
             if (row.created_at) {
-              recentSessionDomains.push({ createdAt: row.created_at, domains });
+              recentSessions.push({ createdAt: row.created_at, sections });
             }
           }
         }
       }
 
-      const assignedTopics = selectSessionDomains(recentSessionDomains, 3);
+      const assignedTopics = selectSessionDomains(recentSessions, 3);
 
       let weakSubSkill: string | null = null;
       if (!isPlacement) {
