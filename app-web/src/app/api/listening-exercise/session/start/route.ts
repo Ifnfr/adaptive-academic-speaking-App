@@ -152,11 +152,12 @@ export async function POST(request: Request) {
     let aiResponseText: string | undefined;
     try {
       let historySummary = "";
+      let recentTopics: string[] = [];
       if (!isPlacement) {
         // Fetch up to 3 previous completed sessions
         const { data: history } = await supabase
           .from("listening_exercise_sessions")
-          .select("cefr_level, overall_score, estimated_band")
+          .select("cefr_level, overall_score, estimated_band, generation_plan")
           .eq("owner_id", ownerId)
           .eq("status", "completed")
           .order("created_at", { ascending: false })
@@ -169,6 +170,19 @@ export async function POST(request: Request) {
                 `Attempt ${i + 1}: CEFR Level = ${h.cefr_level}, Overall Score = ${h.overall_score}%, Estimated Band = ${h.estimated_band}`
             )
             .join("\n");
+
+          const topicsSet = new Set<string>();
+          for (const row of history) {
+            const plan = row.generation_plan as { sections?: Array<{ topic?: string }> } | null;
+            if (plan?.sections && Array.isArray(plan.sections)) {
+              for (const s of plan.sections) {
+                if (s?.topic && typeof s.topic === "string" && s.topic.trim().length > 0) {
+                  topicsSet.add(s.topic.trim());
+                }
+              }
+            }
+          }
+          recentTopics = Array.from(topicsSet);
         }
       }
 
@@ -183,7 +197,8 @@ export async function POST(request: Request) {
         sectionCount,
         isPlacement,
         historySummary,
-        weakSubSkill
+        weakSubSkill,
+        recentTopics
       );
 
       aiResponseText = await callListeningAI(systemPrompt, userPrompt);

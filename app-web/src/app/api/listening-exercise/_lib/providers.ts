@@ -346,6 +346,7 @@ export function buildSection1SystemPrompt(): string {
     "  - Section index 1 is always Multiple Choice ('multiple_choice').",
     "  - Section index 2 is always True/False ('true_false').",
     "The plan must match this exact layout. The CEFR level should match the requested average CEFR level.",
+    "If the user prompt lists recently-used topics for this learner, you MUST choose 3 NEW topics for this session that are clearly different from every topic in that list — do not reuse or lightly reword them.",
     "",
     "PHASE 3: IMPLEMENTATION",
     "Generate the listening passage script (audio_script) for Section 1 (index 0). Extract a discrete array of key facts (fact_units) from the passage script. Finally, formulate the questions array. Each question must target a specific fact unit and map to it via testing_fact_unit_id.",
@@ -451,9 +452,14 @@ export function buildSection1UserPrompt(
   sectionCount: number,
   isPlacement: boolean,
   historySummary?: string,
-  weakSubSkill?: string | null
+  weakSubSkill?: string | null,
+  recentTopics?: string[]
 ): string {
   const weakSubSkillLine = buildWeakSubSkillLine(weakSubSkill, "fill_blank");
+  const recentTopicsLine =
+    recentTopics && recentTopics.length > 0
+      ? `Recently used topics for this learner — do NOT reuse any of these, choose different topics for every section in this new session: ${recentTopics.join(", ")}.`
+      : null;
   const lines = [
     "Generate Listening Exercise StartSession.",
     `Requested CEFR Level: ${cefrLevel}`,
@@ -463,6 +469,7 @@ export function buildSection1UserPrompt(
     "Note on audio_script format: The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure. Make the audio script sound like natural spoken discourse (varied discourse markers like 'you know' or 'actually', mild self-paraphrasing/redundancy, and conversational sentence rhythm with occasional self-corrections).",
   ];
   if (weakSubSkillLine) lines.push(weakSubSkillLine);
+  if (recentTopicsLine) lines.push(recentTopicsLine);
   return lines.join("\n");
 }
 
