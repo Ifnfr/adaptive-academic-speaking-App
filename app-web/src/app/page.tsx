@@ -68,11 +68,16 @@ import type {
 } from "./components/PodchatView";
 import type { ArticlePracticeResult } from "./components/ArticlePracticeView";
 import { CoverPage } from "./components/CoverPage";
-import {
-  CloudSyncStatusPanel,
-  type CloudImportActionResult,
-  type CloudRestoreActionResult,
-} from "./components/CloudSyncStatusPanel";
+export type CloudRestoreActionResult =
+  | { status: "restored" }
+  | { status: "aborted-local-not-empty" }
+  | { status: "failed" };
+
+export type CloudImportActionResult =
+  | { status: "imported" }
+  | { status: "aborted-active-session" }
+  | { status: "aborted-local-changed" }
+  | { status: "failed" };
 import { storage, type StoredSessionRecord } from "./lib/storage";
 import {
   DISABLED_SESSION_CLOUD_AUTH,
@@ -504,7 +509,8 @@ export default function Home() {
   );
   const [cloudSnapshotResult, setCloudSnapshotResult] =
     useState<CloudSnapshotRuntimeResult | null>(null);
-  const autoImportAttemptedRef = useRef(false);
+  const autoImportAttemptedKeyRef = useRef<string | null>(null);
+  const autoRestoreAttemptedKeyRef = useRef<string | null>(null);
   const cloudSnapshotCheckKeyRef = useRef<string | null>(null);
   const sessionHistoryCloudLoadKeyRef = useRef<string | null>(null);
   const vocabularyCloudLoadKeyRef = useRef<string | null>(null);
@@ -1359,14 +1365,52 @@ export default function Home() {
   };
   
   useEffect(() => {
-    if (!cloudSnapshotResult) return;
-    if (autoImportAttemptedRef.current) return;
-    
-    if (isSafeToAutoImport(cloudSnapshotResult)) {
-      autoImportAttemptedRef.current = true;
-      void handleConfirmCloudImport();
+    if (!cloudSnapshotResult || cloudSnapshotResult.status !== "loaded") return;
+
+    if (cloudSnapshotResult.plan.status === "import-available") {
+      if (autoImportAttemptedKeyRef.current === cloudSnapshotLocalKey) return;
+
+      if (isSafeToAutoImport(cloudSnapshotResult)) {
+        autoImportAttemptedKeyRef.current = cloudSnapshotLocalKey;
+        handleConfirmCloudImport()
+          .then((res) => {
+            if (res.status === "imported") {
+              console.info("[CloudSync] Auto-import completed successfully.", res);
+            } else {
+              console.warn("[CloudSync] Auto-import did not complete:", res.status);
+            }
+          })
+          .catch((err) => {
+            console.error("[CloudSync] Auto-import failed with error:", err);
+          });
+      } else {
+        console.info(
+          "[CloudSync] Cloud import available but skipped due to count conflict (isSafeToAutoImport returned false).",
+        );
+      }
     }
-  }, [cloudSnapshotResult]);
+  }, [cloudSnapshotResult, cloudSnapshotLocalKey]);
+
+  useEffect(() => {
+    if (!cloudSnapshotResult || cloudSnapshotResult.status !== "loaded") return;
+
+    if (cloudSnapshotResult.plan.status === "restore-available") {
+      if (autoRestoreAttemptedKeyRef.current === cloudSnapshotLocalKey) return;
+
+      autoRestoreAttemptedKeyRef.current = cloudSnapshotLocalKey;
+      handleConfirmCloudRestore()
+        .then((res) => {
+          if (res.status === "restored") {
+            console.info("[CloudSync] Auto-restore completed successfully.", res);
+          } else {
+            console.warn("[CloudSync] Auto-restore did not complete:", res.status);
+          }
+        })
+        .catch((err) => {
+          console.error("[CloudSync] Auto-restore failed with error:", err);
+        });
+    }
+  }, [cloudSnapshotResult, cloudSnapshotLocalKey]);
 
   // --- Sidebar navigation view ---
   // Lightweight local view state. No router, no real new routes. The Active
@@ -2695,11 +2739,7 @@ export default function Home() {
                 : "block space-y-6 lg:pb-10 lg:pr-1 lg:overflow-y-auto lg:overscroll-contain"
             }`}
           >
-          <CloudSyncStatusPanel
-            result={cloudAuthState.isSignedIn ? cloudSnapshotResult : null}
-            onConfirmRestore={handleConfirmCloudRestore}
-            onConfirmImport={handleConfirmCloudImport}
-          />
+
           {sessionHistorySaveError && (
             <p className="app-message app-message-warning">
               {sessionHistorySaveError}
