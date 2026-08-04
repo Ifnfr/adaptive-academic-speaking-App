@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { ListeningExerciseLayout } from "./ListeningExerciseLayout";
+import {
+  ListeningExerciseEvaluationView,
+  type ReviewData,
+} from "./ListeningExerciseEvaluationView";
 import { type Question } from "./QuestionList";
 import type { TtsVoiceProfile } from "../../lib/tts/voiceProfiles";
 
@@ -135,10 +139,44 @@ export function ListeningExerciseSession({
   // Session results
   const [overallScore, setOverallScore] = useState<number | null>(null);
   const [estimatedBand, setEstimatedBand] = useState<string | null>(null);
+  const [reviewData, setReviewData] = useState<ReviewData | null>(null);
+  const [isReviewLoading, setIsReviewLoading] = useState<boolean>(false);
+  const [reviewError, setReviewError] = useState<boolean>(false);
   
   // Error state and retry target tracking
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorPhase, setErrorPhase] = useState<"start" | "next" | "submit" | "complete" | "status" | "audio" | null>(null);
+
+  // Fetch per-question evaluation review data when session completes
+  useEffect(() => {
+    if (step !== "completed" || !sessionId) return;
+    let isMounted = true;
+    setIsReviewLoading(true);
+    setReviewError(false);
+
+    fetch(`/api/listening-exercise/session/${sessionId}/review`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch evaluation review");
+        return res.json();
+      })
+      .then((data: ReviewData) => {
+        if (isMounted) {
+          setReviewData(data);
+          setIsReviewLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load evaluation review:", err);
+        if (isMounted) {
+          setReviewError(true);
+          setIsReviewLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [step, sessionId]);
 
   // Polling loop for active section generation status
   useEffect(() => {
@@ -479,7 +517,105 @@ export function ListeningExerciseSession({
     );
   };
 
+  const handleTakeAnother = () => {
+    setStep("idle");
+    setSessionId(null);
+    setAnswers({});
+    setOverallScore(null);
+    setEstimatedBand(null);
+    setReviewData(null);
+    setIsReviewLoading(false);
+    setReviewError(false);
+  };
+
   const renderCompleted = () => {
+    if (reviewData) {
+      return (
+        <ListeningExerciseEvaluationView
+          overallScore={overallScore}
+          estimatedBand={estimatedBand}
+          reviewData={reviewData}
+          onTakeAnother={handleTakeAnother}
+        />
+      );
+    }
+
+    if (isReviewLoading) {
+      return (
+        <div className="flex flex-col gap-6 max-w-2xl mx-auto p-6 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-3xl shadow-sm">
+          {/* Summary Score Card */}
+          <div className="flex flex-col items-center text-center gap-4 border-b border-[var(--brand-border)] pb-6">
+            <div className="w-16 h-16 rounded-full bg-[var(--brand-success-soft)] flex items-center justify-center text-[var(--brand-success-ink)] border border-[var(--brand-success)]/10 shadow-inner">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="w-8 h-8"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.748-5.25z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-xl font-bold text-[var(--brand-ink)]">
+                Exercise Complete
+              </h2>
+              <span className="text-xs text-[var(--brand-muted)]">
+                Loading detailed question evaluations...
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 p-4 bg-[var(--brand-surface-2)] border border-[var(--brand-border)] rounded-2xl w-full max-w-md">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider">
+                  Overall Score
+                </span>
+                <span className="text-2xl font-black text-[var(--brand-ink)]">
+                  {overallScore}%
+                </span>
+              </div>
+              <div className="flex flex-col border-l border-[var(--brand-border)]">
+                <span className="text-[10px] font-bold text-[var(--brand-muted)] uppercase tracking-wider">
+                  Estimated Band
+                </span>
+                <span className="text-2xl font-black text-[var(--brand-teal)]">
+                  {estimatedBand}
+                </span>
+              </div>
+            </div>
+          </div>
+          {/* Spinner for review data loading */}
+          <div className="flex flex-col items-center justify-center p-8 gap-3">
+            <svg
+              className="animate-spin h-8 w-8 text-[var(--brand-teal)]"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <span className="text-xs font-semibold text-[var(--brand-muted)]">
+              Retrieving answer breakdown...
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback: If review fetch fails or yields no data, show original summary card alone
     return (
       <div className="flex flex-col gap-5 p-8 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-3xl shadow-sm max-w-md mx-auto text-center">
         <div className="mx-auto w-16 h-16 rounded-full bg-[var(--brand-success-soft)] flex items-center justify-center text-[var(--brand-success-ink)] border border-[var(--brand-success)]/10 shadow-inner">
@@ -550,13 +686,7 @@ export function ListeningExerciseSession({
 
         <button
           type="button"
-          onClick={() => {
-            setStep("idle");
-            setSessionId(null);
-            setAnswers({});
-            setOverallScore(null);
-            setEstimatedBand(null);
-          }}
+          onClick={handleTakeAnother}
           className="w-full py-3 border border-[var(--brand-border)] hover:bg-[var(--brand-surface-2)] text-[var(--brand-ink-soft)] font-bold rounded-xl transition-all"
         >
           Take Another Exercise
