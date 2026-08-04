@@ -49,6 +49,7 @@ const baseProfile: UserProfile = {
   commonplaceCanvasColor: "default",
   commonplaceCardColor: "default",
   appearanceMode: "system",
+  preferredTtsVoiceProfile: null,
   createdAt: "2026-05-27T00:00:00.000Z",
   updatedAt: "2026-05-27T00:00:00.000Z",
 };

@@ -718,6 +718,39 @@ export default function Home() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("defaultTtsVoiceProfile", profile);
     }
+
+    if (
+      cloudAuthState.isSignedIn &&
+      cloudAuthState.userId &&
+      cloudAuthState.getToken &&
+      isSupabaseConfigured()
+    ) {
+      const userId = cloudAuthState.userId;
+      const getToken = cloudAuthState.getToken;
+      void (async () => {
+        try {
+          const token = await getSupabaseAccessToken(getToken);
+          if (!token) return;
+          const supabaseClient = createBrowserSupabaseClient({
+            accessToken: createSupabaseAccessTokenProvider(getToken, token),
+          });
+          if (!supabaseClient) return;
+          await updateSupabaseProfilePreferences(
+            userId,
+            { preferredTtsVoiceProfile: profile },
+            supabaseClient,
+          );
+          setOwnerProfile((prev): UserProfile | null => {
+            if (!prev) return prev;
+            return applyProfilePreferencesPatchToProfile(prev, {
+              preferredTtsVoiceProfile: profile,
+            });
+          });
+        } catch {
+          // Ignore background sync errors; local state & localStorage are already updated
+        }
+      })();
+    }
   };
 
   // --- ElevenLabs Model Setting ---
@@ -1152,7 +1185,18 @@ export default function Home() {
           };
           if (testWindow.__MOCK_PROFILE_ADAPTER__?.loadProfile) {
             const p = await testWindow.__MOCK_PROFILE_ADAPTER__.loadProfile(cloudAuthState.userId);
-            if (!cancelled) setOwnerProfile(p);
+            if (!cancelled) {
+              setOwnerProfile(p);
+              if (p?.preferredTtsVoiceProfile) {
+                setTtsVoiceProfile(p.preferredTtsVoiceProfile);
+                if (typeof window !== "undefined") {
+                  window.localStorage.setItem(
+                    "defaultTtsVoiceProfile",
+                    p.preferredTtsVoiceProfile,
+                  );
+                }
+              }
+            }
             return;
           }
         }
@@ -1169,7 +1213,18 @@ export default function Home() {
         });
         if (!supabaseClient || cancelled) return;
         const p = await loadSupabaseProfile(cloudAuthState.userId, supabaseClient);
-        if (!cancelled) setOwnerProfile(p);
+        if (!cancelled) {
+          setOwnerProfile(p);
+          if (p?.preferredTtsVoiceProfile) {
+            setTtsVoiceProfile(p.preferredTtsVoiceProfile);
+            if (typeof window !== "undefined") {
+              window.localStorage.setItem(
+                "defaultTtsVoiceProfile",
+                p.preferredTtsVoiceProfile,
+              );
+            }
+          }
+        }
       } catch {
         if (!cancelled) setProfileLoadError("Could not load profile.");
       }
@@ -2965,6 +3020,7 @@ export default function Home() {
                 initialCefrLevel={mapLearnerLevelToCefr(level)}
                 initialSectionCount={3}
                 initialIsPlacement={false}
+                ttsVoiceProfile={ttsVoiceProfile}
               />
             </div>
           )}

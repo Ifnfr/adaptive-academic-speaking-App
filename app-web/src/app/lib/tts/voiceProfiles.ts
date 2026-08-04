@@ -2,7 +2,9 @@ export type TtsVoiceProfile =
   | "british_female"
   | "british_male"
   | "american_female"
-  | "american_male";
+  | "american_male"
+  | "british_female_generative"
+  | "american_male_generative";
 
 export type TtsProvider = "amazon-polly" | "elevenlabs";
 
@@ -31,13 +33,25 @@ export const AMAZON_POLLY_VOICE_PROFILES = {
     voiceId: "Stephen",
     engine: "neural",
   },
+  british_female_generative: {
+    label: "British Female (Generative)",
+    languageCode: "en-GB",
+    voiceId: "Amy",
+    engine: "generative",
+  },
+  american_male_generative: {
+    label: "American Male (Generative)",
+    languageCode: "en-US",
+    voiceId: "Matthew",
+    engine: "generative",
+  },
 } as const satisfies Record<
   TtsVoiceProfile,
   {
     label: string;
     languageCode: "en-GB" | "en-US";
     voiceId: string;
-    engine: "neural";
+    engine: "neural" | "generative";
   }
 >;
 
@@ -48,7 +62,9 @@ export function isTtsVoiceProfile(value: unknown): value is TtsVoiceProfile {
     value === "british_female" ||
     value === "british_male" ||
     value === "american_female" ||
-    value === "american_male"
+    value === "american_male" ||
+    value === "british_female_generative" ||
+    value === "american_male_generative"
   );
 }
 

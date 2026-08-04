@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { ListeningExerciseLayout } from "./ListeningExerciseLayout";
 import { type Question } from "./QuestionList";
+import type { TtsVoiceProfile } from "../../lib/tts/voiceProfiles";
 
 export interface ListeningExerciseSessionProps {
   initialCefrLevel?: string;
   initialSectionCount?: number;
   initialIsPlacement?: boolean;
   onSessionComplete?: (result: { overallScore: number; estimatedBand: string }) => void;
+  ttsVoiceProfile?: TtsVoiceProfile;
 }
 
 type StepType =
@@ -18,7 +20,7 @@ type StepType =
   | "completed"
   | "error";
 
-async function fetchTtsAudio(text: string): Promise<string> {
+async function fetchTtsAudio(text: string, voiceProfile?: TtsVoiceProfile): Promise<string> {
   const internalKey =
     process.env.NEXT_PUBLIC_INTERNAL_SPEECH_SECURITY_KEY || "test-internal-speech-key";
 
@@ -28,7 +30,7 @@ async function fetchTtsAudio(text: string): Promise<string> {
       "Content-Type": "application/json",
       "X-Internal-Key": internalKey,
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, voiceProfile }),
   });
 
   if (!res.ok) {
@@ -107,6 +109,7 @@ export function ListeningExerciseSession({
   initialSectionCount = 3,
   initialIsPlacement = false,
   onSessionComplete,
+  ttsVoiceProfile,
 }: ListeningExerciseSessionProps) {
   const [step, setStep] = useState<StepType>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);

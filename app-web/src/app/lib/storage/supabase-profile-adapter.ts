@@ -12,6 +12,10 @@ import {
   normalizeCommonplaceThemeColorId,
   type CommonplaceThemeColorId,
 } from "../commonplace-theme";
+import {
+  isTtsVoiceProfile,
+  type TtsVoiceProfile,
+} from "../tts/voiceProfiles";
 
 export type AppAppearanceMode = "light" | "dark" | "system";
 
@@ -46,6 +50,7 @@ export type SupabaseProfileRow = {
   commonplace_canvas_color?: string | null;
   commonplace_card_color?: string | null;
   appearance_mode?: string | null;
+  preferred_tts_voice_profile?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -67,6 +72,7 @@ export type UserProfile = {
   commonplaceCanvasColor: CommonplaceThemeColorId;
   commonplaceCardColor: CommonplaceThemeColorId;
   appearanceMode: AppAppearanceMode;
+  preferredTtsVoiceProfile: TtsVoiceProfile | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -90,6 +96,7 @@ export type UserProfilePatch = ClerkProfileSeed & {
   commonplaceCanvasColor?: CommonplaceThemeColorId;
   commonplaceCardColor?: CommonplaceThemeColorId;
   appearanceMode?: AppAppearanceMode;
+  preferredTtsVoiceProfile?: TtsVoiceProfile | null;
 };
 
 export type UserProfilePreferencesPatch = Omit<UserProfilePatch, "email">;
@@ -111,6 +118,7 @@ export type SupabaseProfileUpsert = {
   commonplace_canvas_color?: CommonplaceThemeColorId;
   commonplace_card_color?: CommonplaceThemeColorId;
   appearance_mode?: AppAppearanceMode;
+  preferred_tts_voice_profile?: string | null;
 };
 
 export type SupabaseProfileUpdate = Omit<SupabaseProfileUpsert, "owner_id">;
@@ -162,6 +170,9 @@ function assignAppAppearanceMode(
 export function mapSupabaseRowToUserProfile(
   row: SupabaseProfileRow,
 ): UserProfile {
+  const rawVoiceProfile = normalizeNullableString(
+    row.preferred_tts_voice_profile,
+  );
   return {
     ownerId: row.owner_id,
     email: normalizeNullableString(row.email),
@@ -183,6 +194,10 @@ export function mapSupabaseRowToUserProfile(
       row.commonplace_card_color,
     ),
     appearanceMode: normalizeAppAppearanceMode(row.appearance_mode),
+    preferredTtsVoiceProfile:
+      rawVoiceProfile && isTtsVoiceProfile(rawVoiceProfile)
+        ? rawVoiceProfile
+        : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -219,6 +234,11 @@ export function mapProfilePatchToSupabaseUpsert(
     patch.commonplaceCardColor,
   );
   assignAppAppearanceMode(row, "appearance_mode", patch.appearanceMode);
+  assignNullableString(
+    row,
+    "preferred_tts_voice_profile",
+    patch.preferredTtsVoiceProfile,
+  );
   assignBoolean(row, "public_profile_enabled", patch.publicProfileEnabled);
   assignBoolean(row, "leaderboard_opt_in", patch.leaderboardOptIn);
 
@@ -281,6 +301,12 @@ export function applyProfilePreferencesPatchToProfile(
       patch.appearanceMode === undefined
         ? profile.appearanceMode
         : assertAppAppearanceMode(patch.appearanceMode),
+    preferredTtsVoiceProfile:
+      patch.preferredTtsVoiceProfile === undefined
+        ? profile.preferredTtsVoiceProfile
+        : patch.preferredTtsVoiceProfile && isTtsVoiceProfile(patch.preferredTtsVoiceProfile)
+          ? patch.preferredTtsVoiceProfile
+          : null,
   };
 }
 

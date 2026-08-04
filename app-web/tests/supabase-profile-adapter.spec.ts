@@ -36,6 +36,7 @@ const profileRow: SupabaseProfileRow = {
   commonplace_canvas_color: "sage",
   commonplace_card_color: "paper",
   appearance_mode: "dark",
+  preferred_tts_voice_profile: "british_female",
   created_at: "2026-05-27T00:00:00.000Z",
   updated_at: "2026-05-27T01:00:00.000Z",
 };
@@ -267,6 +268,7 @@ test.describe("Supabase profile adapter mapping", () => {
       commonplaceCanvasColor: "sage",
       commonplaceCardColor: "paper",
       appearanceMode: "dark",
+      preferredTtsVoiceProfile: "british_female",
       createdAt: "2026-05-27T00:00:00.000Z",
       updatedAt: "2026-05-27T01:00:00.000Z",
     });

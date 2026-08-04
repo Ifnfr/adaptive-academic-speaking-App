@@ -5,6 +5,7 @@ import {
   AMAZON_POLLY_VOICE_PROFILES,
   DEFAULT_TTS_VOICE_PROFILE,
   isTtsVoiceProfile,
+  type TtsVoiceProfile,
 } from "../../../../lib/tts/voiceProfiles";
 
 export const runtime = "nodejs";
@@ -132,17 +133,42 @@ function buildAuthorizationHeader(params: {
   return `${SIGNING_ALGORITHM} Credential=${params.config.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 }
 
+async function resolveVoiceProfileForUser(
+  ownerId: string | null,
+  supabase: any,
+): Promise<TtsVoiceProfile> {
+  if (ownerId && supabase) {
+    try {
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("preferred_tts_voice_profile")
+        .eq("owner_id", ownerId)
+        .maybeSingle();
+
+      const dbProfile = profileRow?.preferred_tts_voice_profile;
+      if (isTtsVoiceProfile(dbProfile)) {
+        return dbProfile;
+      }
+    } catch {
+      // Fall through to env var fallback
+    }
+  }
+
+  const voiceProfileEnv = process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE;
+  if (isTtsVoiceProfile(voiceProfileEnv)) {
+    return voiceProfileEnv;
+  }
+
+  return DEFAULT_TTS_VOICE_PROFILE;
+}
+
 async function synthesizeSpeech(
   text: string,
   config: AwsConfig,
+  voiceProfile: TtsVoiceProfile,
 ): Promise<ArrayBuffer> {
   const host = `polly.${config.region}.amazonaws.com`;
   
-  const voiceProfileEnv = process.env.AMAZON_POLLY_DEFAULT_VOICE_PROFILE;
-  const voiceProfile = isTtsVoiceProfile(voiceProfileEnv)
-    ? voiceProfileEnv
-    : DEFAULT_TTS_VOICE_PROFILE;
-
   const profile = AMAZON_POLLY_VOICE_PROFILES[voiceProfile];
   const body = JSON.stringify({
     Engine: profile.engine,
@@ -254,9 +280,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const voiceProfile = await resolveVoiceProfileForUser(ownerId, supabase);
+
   let audioBytes: ArrayBuffer;
   try {
-    audioBytes = await synthesizeSpeech(text, awsConfig);
+    audioBytes = await synthesizeSpeech(text, awsConfig, voiceProfile);
   } catch (err: any) {
     console.error("Polly speech synthesis error:", err);
     return NextResponse.json(
