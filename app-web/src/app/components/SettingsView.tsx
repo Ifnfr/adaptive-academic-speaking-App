@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AuthStatus } from "./AuthStatus";
 import type {
   AppLanguage,
@@ -1183,6 +1183,232 @@ export function SettingsView({
           </div>
         </div>
       )}
+
+      {/* Danger Zone Card */}
+      {isSignedIn && <ResetUsageDataSection />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Danger Zone — Reset All Usage Data
+// ---------------------------------------------------------------------------
+const RESET_LOCAL_STORAGE_KEYS = [
+  "adaptive-speaking-app:sessions",
+  "adaptive-speaking-app:vocabulary",
+  "adaptive-speaking-app:xp-profile",
+  "adaptive-speaking-app:xp-events",
+  "adaptive-speaking-app:badges",
+  "fonetik:learning-path-progress:v1",
+] as const;
+
+const CONFIRM_PHRASE = "DELETE";
+
+function ResetUsageDataSection() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const isConfirmed = confirmText.trim() === CONFIRM_PHRASE;
+
+  const openDialog = useCallback(() => {
+    setConfirmText("");
+    setResetError(null);
+    setDialogOpen(true);
+    // Focus input after animation frame
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  const closeDialog = useCallback(() => {
+    if (isResetting) return; // Block dismiss while request is in-flight
+    setDialogOpen(false);
+    setConfirmText("");
+    setResetError(null);
+  }, [isResetting]);
+
+  const handleReset = useCallback(async () => {
+    if (!isConfirmed || isResetting) return;
+    setIsResetting(true);
+    setResetError(null);
+
+    try {
+      const res = await fetch("/api/account/reset-usage-data", {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        let detail = `Request failed with status ${res.status}.`;
+        try {
+          const body = await res.json();
+          if (body?.detail) detail = body.detail;
+          else if (body?.error) detail = body.error;
+        } catch {
+          // ignore JSON parse error
+        }
+        throw new Error(detail);
+      }
+
+      // Backend succeeded — now clear the local browser data
+      if (typeof window !== "undefined") {
+        for (const key of RESET_LOCAL_STORAGE_KEYS) {
+          window.localStorage.removeItem(key);
+        }
+        window.location.reload();
+      }
+    } catch (err) {
+      setResetError(
+        err instanceof Error ? err.message : "An unexpected error occurred. Please try again."
+      );
+      setIsResetting(false);
+    }
+  }, [isConfirmed, isResetting]);
+
+  return (
+    <>
+      {/* Danger Zone card */}
+      <div className="app-panel border border-[var(--brand-coral)]/40 bg-[var(--brand-coral-soft)]/30">
+        <div className="border-b border-[var(--brand-coral)]/20 bg-[var(--brand-coral-soft)]/50 px-5 py-4 sm:px-6">
+          <p className="app-label text-[var(--brand-coral)]">
+            Danger Zone
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+            Reset All Usage Data
+          </h2>
+          <p className="app-helper mt-1">
+            Permanently and irreversibly delete all your learning history from this account.
+            Your account settings — profile, language, theme, TTS voice, and provider choices — are not affected.
+          </p>
+        </div>
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium text-[var(--brand-ink)]">What gets deleted:</p>
+              <ul className="mt-1 space-y-0.5 text-xs text-[var(--brand-ink-soft)] list-none">
+                {[
+                  "Speaking sessions & feedback",
+                  "XP, badges & progress",
+                  "Vocabulary notebook",
+                  "Listening exercise history & audio files",
+                  "Podchat & article writing history",
+                  "Pattern drill sessions",
+                  "Commonplace notes & mind maps",
+                  "Weekly reviews & mission logs",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-1.5">
+                    <span className="text-[var(--brand-coral)] font-bold">×</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button
+              id="reset-usage-data-open-btn"
+              type="button"
+              onClick={openDialog}
+              className="shrink-0 rounded-xl border border-[var(--brand-coral)]/60 bg-white px-4 py-2.5 text-sm font-semibold text-[var(--brand-coral)] shadow-sm transition-all hover:bg-[var(--brand-coral-soft)] active:scale-[0.97]"
+            >
+              Reset All Data…
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Dialog */}
+      {dialogOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeDialog}
+            aria-hidden="true"
+          />
+
+          {/* Panel */}
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--brand-coral)]/40 bg-[var(--brand-surface)] shadow-2xl">
+            {/* Header */}
+            <div className="border-b border-[var(--brand-border)] bg-[var(--brand-coral-soft)]/40 px-6 py-5 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-coral)] text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                </span>
+                <div>
+                  <h3 id="reset-dialog-title" className="text-base font-semibold text-[var(--brand-ink)]">
+                    Delete All Usage Data
+                  </h3>
+                  <p className="text-xs text-[var(--brand-ink-soft)] mt-0.5">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 flex flex-col gap-4">
+              <p className="text-sm text-[var(--brand-ink-soft)] leading-relaxed">
+                This will permanently delete your <strong className="text-[var(--brand-ink)]">speaking sessions, XP, vocabulary, badges, listening/podchat/writing/pattern-drill history, commonplace notes and mind maps, weekly reviews,</strong> and all <strong className="text-[var(--brand-ink)]">generated listening audio files</strong>.
+              </p>
+              <p className="text-sm text-[var(--brand-ink-soft)] leading-relaxed">
+                Your <strong className="text-[var(--brand-ink)]">account settings</strong> — profile, language preferences, theme, TTS voice, and AI provider choices — <strong className="text-[var(--brand-ink)]">will not be affected</strong>.
+              </p>
+
+              <div className="rounded-xl bg-[var(--brand-coral-soft)]/60 border border-[var(--brand-coral)]/30 p-3">
+                <p className="text-xs font-semibold text-[var(--brand-coral)] uppercase tracking-wide mb-2">
+                  Type <span className="font-mono">{CONFIRM_PHRASE}</span> to confirm
+                </p>
+                <input
+                  ref={inputRef}
+                  id="reset-confirm-input"
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={CONFIRM_PHRASE}
+                  disabled={isResetting}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface)] px-3 py-2 text-sm font-mono text-[var(--brand-ink)] placeholder-[var(--brand-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-coral)]/50 disabled:opacity-50"
+                />
+              </div>
+
+              {resetError && (
+                <p className="app-message app-message-error text-xs">
+                  {resetError}
+                </p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-[var(--brand-border)] px-6 py-4 flex items-center justify-end gap-3 rounded-b-2xl">
+              <button
+                id="reset-dialog-cancel-btn"
+                type="button"
+                onClick={closeDialog}
+                disabled={isResetting}
+                className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] px-4 py-2 text-sm font-semibold text-[var(--brand-ink-soft)] transition-all hover:bg-[var(--brand-surface-2)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                id="reset-dialog-confirm-btn"
+                type="button"
+                onClick={handleReset}
+                disabled={!isConfirmed || isResetting}
+                className="rounded-xl bg-[var(--brand-coral)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isResetting ? "Deleting…" : "Delete Permanently"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
