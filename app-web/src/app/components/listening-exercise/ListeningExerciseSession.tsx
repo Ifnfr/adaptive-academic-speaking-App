@@ -7,8 +7,9 @@ import {
 import { type Question } from "./QuestionList";
 import type { TtsVoiceProfile } from "../../lib/tts/voiceProfiles";
 import {
-  DEFAULT_LISTENING_DIFFICULTY,
+  LISTENING_DIFFICULTY_OPTIONS,
   loadListeningDifficulty,
+  saveListeningDifficulty,
   type ListeningDifficulty,
 } from "../../lib/listening-exercise/difficulty";
 
@@ -18,7 +19,6 @@ export interface ListeningExerciseSessionProps {
   initialIsPlacement?: boolean;
   onSessionComplete?: (result: { overallScore: number; estimatedBand: string }) => void;
   ttsVoiceProfile?: TtsVoiceProfile;
-  difficulty?: ListeningDifficulty;
 }
 
 type StepType =
@@ -120,10 +120,18 @@ export function ListeningExerciseSession({
   initialIsPlacement = false,
   onSessionComplete,
   ttsVoiceProfile,
-  difficulty,
 }: ListeningExerciseSessionProps) {
   const [step, setStep] = useState<StepType>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // Difficulty is chosen on this screen before the session starts and persisted in localStorage.
+  const [difficulty, setDifficulty] = useState<ListeningDifficulty>(() =>
+    loadListeningDifficulty()
+  );
+  const handleDifficultyChange = (value: ListeningDifficulty) => {
+    setDifficulty(value);
+    saveListeningDifficulty(value);
+  };
   
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -289,9 +297,6 @@ export function ListeningExerciseSession({
     setErrorPhase(null);
 
     try {
-      // Resolve target difficulty at session start: an explicit prop wins; otherwise fall back to the persisted Setting.
-      const resolvedDifficulty = difficulty ?? loadListeningDifficulty() ?? DEFAULT_LISTENING_DIFFICULTY;
-
       const res = await fetch("/api/listening-exercise/session/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -299,7 +304,7 @@ export function ListeningExerciseSession({
           cefr_level: initialCefrLevel,
           section_count: initialSectionCount,
           is_placement: initialIsPlacement,
-          difficulty: resolvedDifficulty,
+          difficulty,
         }),
       });
 
@@ -461,6 +466,38 @@ export function ListeningExerciseSession({
           <p className="text-xs text-[var(--brand-ink-soft)] leading-relaxed">
             Test your academic listening ability. You will listen to passages
             and answer True/False, Multiple Choice, and Fill-in-the-Blank items.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5 text-left w-full">
+          <span className="text-xs font-semibold text-[var(--brand-ink-soft)]">
+            Difficulty
+          </span>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Listening difficulty">
+            {LISTENING_DIFFICULTY_OPTIONS.map((option) => {
+              const isSelected = difficulty === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  data-testid={`listening-difficulty-${option.value}`}
+                  onClick={() => handleDifficultyChange(option.value)}
+                  className={`px-3 py-2.5 rounded-xl text-sm font-bold border transition-all active:scale-[0.98] ${
+                    isSelected
+                      ? "bg-[var(--brand-teal)] border-[var(--brand-teal)] text-white shadow-sm"
+                      : "bg-[var(--brand-surface-2)] border-[var(--brand-border)] text-[var(--brand-ink-soft)] hover:border-[var(--brand-teal)]/40"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-[var(--brand-muted)] leading-relaxed">
+            {LISTENING_DIFFICULTY_OPTIONS.find(
+              (option) => option.value === difficulty
+            )?.description}
           </p>
         </div>
         <button

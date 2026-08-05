@@ -35,10 +35,6 @@ import {
   type TtsProvider,
   type TtsVoiceProfile,
 } from "../lib/tts/voiceProfiles";
-import {
-  LISTENING_DIFFICULTY_OPTIONS,
-  type ListeningDifficulty,
-} from "../lib/listening-exercise/difficulty";
 
 // Shared visual primitives from globals.css, scoped here for Settings.
 const card = "app-panel brand-grid";
@@ -70,8 +66,6 @@ export type SettingsViewProps = {
   onDefaultTtsVoiceProfileChange?: (profile: TtsVoiceProfile) => void;
   defaultElevenLabsModel?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
   onDefaultElevenLabsModelChange?: (model: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "") => void;
-  listeningDifficulty?: ListeningDifficulty;
-  onListeningDifficultyChange?: (difficulty: ListeningDifficulty) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -873,8 +867,6 @@ export function SettingsView({
   onDefaultTtsVoiceProfileChange,
   defaultElevenLabsModel = "",
   onDefaultElevenLabsModelChange,
-  listeningDifficulty = "medium",
-  onListeningDifficultyChange,
 }: SettingsViewProps) {
   const { t } = useI18n(appLanguage);
 
@@ -1171,49 +1163,6 @@ export function SettingsView({
                 Click Check Status above to verify server credentials.
               </p>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Listening Exercise Difficulty Card */}
-      <div className={card}>
-        <div className={cardHeader}>
-          <p className="app-label text-[var(--brand-teal)]">
-            Listening Exercise
-          </p>
-          <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-            Content Difficulty
-          </h2>
-          <p className="app-helper mt-1">
-            Choose how hard the vocabulary in generated listening sessions should be. The setting is applied when a new session starts.
-          </p>
-        </div>
-        <div className={cardBody}>
-          <div className="max-w-xs">
-            <label className="flex flex-col gap-1.5 font-sans">
-              <span className="app-label">
-                Difficulty Level
-              </span>
-              <select
-                id="listening-difficulty-select"
-                value={listeningDifficulty}
-                onChange={(e) =>
-                  onListeningDifficultyChange?.(e.target.value as ListeningDifficulty)
-                }
-                className="app-field"
-              >
-                {LISTENING_DIFFICULTY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="app-helper mt-2">
-              {LISTENING_DIFFICULTY_OPTIONS.find(
-                (option) => option.value === listeningDifficulty
-              )?.description ?? ""}
-            </p>
           </div>
         </div>
       </div>
