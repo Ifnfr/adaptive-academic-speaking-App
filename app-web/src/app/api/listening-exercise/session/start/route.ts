@@ -275,6 +275,15 @@ export async function POST(request: Request) {
             throw new Error("AI provider JSON missing 'plan' or 'section' fields.");
           }
 
+          const qs = parsedPayload.section.questions;
+          const fu = parsedPayload.section.fact_units;
+          if (!Array.isArray(qs) || qs.length === 0) {
+            throw new Error("AI provider JSON missing or empty 'questions' array.");
+          }
+          if (!Array.isArray(fu) || fu.length === 0) {
+            throw new Error("AI provider JSON missing or empty 'fact_units' array.");
+          }
+
           payload = parsedPayload;
           break;
         } catch (err) {
