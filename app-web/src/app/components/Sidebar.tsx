@@ -34,6 +34,7 @@ export type SidebarProps = {
   appLanguage?: AppLanguage | null;
   onSelectView: (view: SidebarView) => void;
   activeSessionPanel?: "podchat" | "patternDrill";
+  collapsed?: boolean;
 };
 
 type SidebarGroupProps = {
@@ -152,6 +153,7 @@ export function Sidebar({
   appLanguage,
   onSelectView,
   activeSessionPanel,
+  collapsed = false,
 }: SidebarProps) {
   const { t } = useI18n(appLanguage);
   const card = "app-panel brand-grid";
@@ -203,7 +205,15 @@ export function Sidebar({
   };
 
   return (
-    <aside className="lg:h-screen lg:w-[252px] lg:flex-shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-[var(--brand-border)] lg:bg-[var(--brand-bg)] lg:p-4 [scrollbar-width:thin]">
+    <aside
+      inert={collapsed || undefined}
+      aria-hidden={collapsed || undefined}
+      className={`lg:h-screen lg:flex-shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-[var(--brand-border)] lg:bg-[var(--brand-bg)] lg:p-4 [scrollbar-width:thin] transition-[width] duration-200 ease-out ${
+        collapsed
+          ? "lg:w-0 lg:overflow-hidden lg:border-r-0 lg:p-0 lg:opacity-0"
+          : "lg:w-[252px] lg:opacity-100"
+      }`}
+    >
       <div className="flex flex-col gap-4">
         {/* Brand */}
         <div className={card}>

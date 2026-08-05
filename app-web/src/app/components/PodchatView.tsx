@@ -26,6 +26,7 @@ import type {
   PodchatAurInput,
 } from "../lib/podchat-aur/types";
 import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
+import { TtsChunker } from "../lib/podchat/ttsChunker";
 
 type PodchatPhase =
   | "setup"
@@ -312,6 +313,8 @@ export interface PodchatViewProps {
   ttsVoiceProfile?: TtsVoiceProfile;
   elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
   isActiveView?: boolean;
+  stopAIOnSpeech?: boolean;
+  autoSendOnPause?: boolean;
 }
 
 function buildAurInputFromContext(
@@ -388,6 +391,8 @@ export function PodchatView({
   ttsVoiceProfile = "british_male",
   elevenLabsModelId = "",
   isActiveView = true,
+  stopAIOnSpeech = true,
+  autoSendOnPause = true,
 }: PodchatViewProps) {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
@@ -419,6 +424,8 @@ export function PodchatView({
   const [submittedUserTurns, setSubmittedUserTurns] = useState(0);
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [lockedTranscript, setLockedTranscript] = useState<string | null>(null);
+  const [micState, setMicState] = useState<"off" | "listening" | "processing">("off");
+  const [liveSttText, setLiveSttText] = useState<string>("");
 
   // Duration-based session state
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -457,6 +464,35 @@ export function PodchatView({
   const [ttsError, setTtsError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+
+  // Streaming host reply (SSE) state
+  const [streamingHostText, setStreamingHostText] = useState<string | null>(null);
+  const turnAbortRef = useRef<AbortController | null>(null);
+  const pendingTurnsRef = useRef<string[]>([]);
+
+  // Live TTS queue (chunked, FIFO)
+  const ttsChunkerRef = useRef<TtsChunker | null>(null);
+  const ttsFetchChainRef = useRef<Promise<void>>(Promise.resolve());
+  const ttsAudioQueueRef = useRef<string[]>([]);
+  const ttsPlayingRef = useRef(false);
+  const ttsStopRequestedRef = useRef(false);
+  const ttsGenerationRef = useRef(0);
+
+  // Live STT (WebSocket) handle
+  const liveSttRef = useRef<{
+    ws: WebSocket | null;
+    context: AudioContext | null;
+    source: MediaStreamAudioSourceNode | null;
+    processor: ScriptProcessorNode | null;
+    stream: MediaStream | null;
+    startedAt: number;
+  } | null>(null);
+  const liveSttFinalRef = useRef<string>("");
+  const liveSttOnFinalRef = useRef<(() => void) | null>(null);
+
+  // Transcript autoscroll
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  const pinnedToBottomRef = useRef(true);
 
   // MediaRecorder and microphone audio refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -906,6 +942,7 @@ export function PodchatView({
     if (!isActiveView) {
       cleanupAudio();
       cleanupMedia();
+      turnAbortRef.current?.abort();
       if (recordingState === "recording" || recordingState === "transcribing") {
         setTimeout(() => {
           setRecordingState("idle");
@@ -915,6 +952,25 @@ export function PodchatView({
   }, [isActiveView, recordingState]);
 
   function cleanupAudio() {
+    stopTtsPlayback();
+  }
+
+  function autoScrollToBottom() {
+    if (!pinnedToBottomRef.current) return;
+    const el = transcriptScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  /**
+   * Stop everything audio: pause the current chunk, revoke object URLs, clear
+   * the FIFO queue and abort pending synthesis. Used on session end, reset,
+   * turn handover and barge-in.
+   */
+  function stopTtsPlayback() {
+    ttsStopRequestedRef.current = true;
+    ttsGenerationRef.current += 1;
+    ttsPlayingRef.current = false;
+    ttsChunkerRef.current = null;
     setIsTtsSpeaking(false);
     if (audioRef.current) {
       try {
@@ -932,9 +988,19 @@ export function PodchatView({
       }
       objectUrlRef.current = null;
     }
+    for (const url of ttsAudioQueueRef.current) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    }
+    ttsAudioQueueRef.current = [];
+    ttsFetchChainRef.current = Promise.resolve();
   }
 
   function cleanupMedia() {
+    teardownLiveStt();
     if (mediaRecorderRef.current) {
       if (mediaRecorderRef.current.state !== "inactive") {
         try {
@@ -945,7 +1011,6 @@ export function PodchatView({
       }
       mediaRecorderRef.current = null;
     }
-
     if (mediaStreamRef.current) {
       try {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -958,17 +1023,40 @@ export function PodchatView({
     audioChunksRef.current = [];
   }
 
-  async function playTts(text: string) {
-    cleanupAudio();
+  /**
+   * Start a fresh TTS pipeline for a new host utterance. Any previously
+   * playing/queued audio is stopped first (a new reply supersedes the old one).
+   */
+  function beginHostSpeech() {
+    stopTtsPlayback();
     setTtsError(null);
-    setIsTtsSpeaking(true);
+    ttsStopRequestedRef.current = false;
+    ttsChunkerRef.current = new TtsChunker((chunk) => enqueueTtsChunk(chunk));
+  }
 
+  /** Feed streamed host text into the TTS chunker (SSE delta path). */
+  function appendHostSpeech(text: string) {
+    ttsChunkerRef.current?.append(text);
+  }
+
+  /** Flush the remaining host text as the final TTS chunk. */
+  function finishHostSpeech() {
+    ttsChunkerRef.current?.finish();
+    ttsChunkerRef.current = null;
+  }
+
+  /** Speak a complete host utterance (non-streaming path). */
+  function speakHostText(text: string) {
+    beginHostSpeech();
+    appendHostSpeech(text);
+    finishHostSpeech();
+  }
+
+  async function synthChunk(text: string): Promise<string | null> {
     if (ttsProvider === "elevenlabs" && !elevenLabsModelId) {
-      setIsTtsSpeaking(false);
       setTtsError("Voice playback unavailable. Host text will still appear.");
-      return;
+      return null;
     }
-
     try {
       const requestBody = ttsProvider === "elevenlabs"
         ? { text, ttsProvider, elevenLabsModelId }
@@ -986,46 +1074,110 @@ export function PodchatView({
         body: JSON.stringify(requestBody),
       });
       if (!response.ok) {
-        throw new Error("TTS request failed");
+        setTtsError("Voice playback unavailable. Host text will still appear.");
+        return null;
       }
       const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      objectUrlRef.current = objectUrl;
-
-      const audio = new Audio(objectUrl);
-      audioRef.current = audio;
-
-      audio.addEventListener("ended", () => {
-        setIsTtsSpeaking(false);
-        if (objectUrlRef.current === objectUrl) {
-          URL.revokeObjectURL(objectUrl);
-          objectUrlRef.current = null;
-        }
-      });
-
-      audio.addEventListener("error", () => {
-        setIsTtsSpeaking(false);
-        setTtsError("Voice playback unavailable. Host text will still appear.");
-        if (objectUrlRef.current === objectUrl) {
-          URL.revokeObjectURL(objectUrl);
-          objectUrlRef.current = null;
-        }
-      });
-
-      await audio.play();
+      return URL.createObjectURL(blob);
     } catch {
-      setIsTtsSpeaking(false);
       setTtsError("Voice playback unavailable. Host text will still appear.");
-      if (objectUrlRef.current) {
+      return null;
+    }
+  }
+
+  /**
+   * Queue a chunk for synthesis + playback. Chunks are synthesized strictly in
+   * order; the next chunk's synthesis is fired right after the current one's
+   * fetch resolves (pipelined) while playback stays strictly FIFO.
+   */
+  function enqueueTtsChunk(chunk: string) {
+    ttsFetchChainRef.current = ttsFetchChainRef.current
+      .catch(() => {
+        // previous chunk failed; keep the chain alive
+      })
+      .then(async () => {
+        if (ttsStopRequestedRef.current) return;
+        const url = await synthChunk(chunk);
+        if (url) {
+          ttsAudioQueueRef.current.push(url);
+          kickTtsPlayback();
+        }
+      });
+  }
+
+  function kickTtsPlayback() {
+    if (ttsPlayingRef.current || ttsStopRequestedRef.current) return;
+    const gen = ttsGenerationRef.current;
+    ttsPlayingRef.current = true;
+    setIsTtsSpeaking(true);
+    void (async () => {
+      while (
+        ttsAudioQueueRef.current.length > 0 &&
+        ttsGenerationRef.current === gen
+      ) {
+        const url = ttsAudioQueueRef.current.shift();
+        if (!url) break;
+        const ok = await playChunk(url);
+        if (!ok) break;
+      }
+      if (ttsGenerationRef.current === gen) {
+        ttsPlayingRef.current = false;
+        setIsTtsSpeaking(false);
+      }
+    })();
+  }
+
+  function playChunk(url: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (ttsStopRequestedRef.current) {
         try {
-          URL.revokeObjectURL(objectUrlRef.current);
+          URL.revokeObjectURL(url);
         } catch {
           // ignore
         }
-        objectUrlRef.current = null;
+        resolve(false);
+        return;
       }
-    }
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      objectUrlRef.current = url;
+      let settled = false;
+      const cleanup = () => {
+        if (objectUrlRef.current === url) {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // ignore
+          }
+          objectUrlRef.current = null;
+        }
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+        }
+      };
+      audio.addEventListener("ended", () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(true);
+      });
+      audio.addEventListener("error", () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        setTtsError("Voice playback unavailable. Host text will still appear.");
+        resolve(false);
+      });
+      audio.play().catch(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        setTtsError("Voice playback unavailable. Host text will still appear.");
+        resolve(false);
+      });
+    });
   }
+
 
   // Clean up timer and audio on unmount
   useEffect(() => {
@@ -1033,6 +1185,7 @@ export function PodchatView({
       stopTimer();
       cleanupAudio();
       cleanupMedia();
+      turnAbortRef.current?.abort();
     };
   }, []);
 
@@ -1096,7 +1249,7 @@ export function PodchatView({
       setStatus("user_turn");
       setPhase("speaking");
       if (!isContextOpenEnded) startTimer();
-      playTts(fallbackText);
+      speakHostText(fallbackText);
     } else {
       const dummyOpener: PodchatTurn = {
         id: "podchat-turn-1",
@@ -1148,7 +1301,7 @@ export function PodchatView({
           setOpenerLoading(false);
           setStatus("user_turn");
           if (!isContextOpenEnded) startTimer();
-          playTts(data.opener);
+          speakHostText(data.opener);
         } else {
           throw new Error("Invalid response format.");
         }
@@ -1168,7 +1321,7 @@ export function PodchatView({
         setOpenerLoading(false);
         setStatus("user_turn");
         if (!isContextOpenEnded) startTimer();
-        playTts(fallbackText);
+        speakHostText(fallbackText);
       }
     }
   }
@@ -1177,6 +1330,7 @@ export function PodchatView({
     stopTimer();
     cleanupAudio();
     cleanupMedia();
+    turnAbortRef.current?.abort();
     setPhase("setup");
     setSetupStep("topic");
     setStatus("host_turn");
@@ -1210,6 +1364,15 @@ export function PodchatView({
     audioChunksRef.current = [];
 
     const startTime = Date.now();
+
+    // Barge-in: stop host audio when the learner starts speaking (Task C).
+    if (stopAIOnSpeech) {
+      stopTtsPlayback();
+    }
+
+    // Try the live WebSocket STT path first; fall back to batch recording.
+    const liveStarted = await startLiveSttRecording();
+    if (liveStarted) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -1324,18 +1487,7 @@ export function PodchatView({
 
           const data = await response.json();
           if (data.transcript && typeof data.transcript === "string") {
-            const { checkTranscriptQuality } = await import("../lib/podchat/transcriptQuality");
-            const metrics = checkTranscriptQuality(data.transcript, durationMs);
-            if (metrics.isRejected) {
-              setLockedTranscript(null);
-              setRecordingState("idle");
-              setTurnError("Speech transcript looked unreliable. Please record again.");
-              return;
-            }
-
-            setLockedTranscript(data.transcript);
-            setRecordingState("ready");
-            await autoSubmitTurn(data.transcript);
+            await acceptFinalTranscript(data.transcript, durationMs);
           } else {
             throw new Error("Speech transcription failed. Please record again.");
           }
@@ -1374,6 +1526,10 @@ export function PodchatView({
   }
 
   function stopRecording() {
+    if (liveSttRef.current?.ws) {
+      stopLiveSttRecording();
+      return;
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       try {
         mediaRecorderRef.current.stop();
@@ -1381,6 +1537,256 @@ export function PodchatView({
         console.error("Error stopping MediaRecorder:", e);
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Live STT (WebSocket) — interim transcripts while recording
+  // -------------------------------------------------------------------------
+
+  function teardownLiveStt() {
+    const live = liveSttRef.current;
+    if (!live) return;
+    liveSttRef.current = null;
+    liveSttOnFinalRef.current = null;
+    try {
+      live.ws?.close();
+    } catch {
+      // ignore
+    }
+    if (live.processor) {
+      try {
+        live.processor.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    if (live.source) {
+      try {
+        live.source.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    if (live.context && live.context.state !== "closed") {
+      try {
+        void live.context.close();
+      } catch {
+        // ignore
+      }
+    }
+    if (live.stream) {
+      try {
+        live.stream.getTracks().forEach((track) => track.stop());
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
+   * Start live WebSocket transcription. Returns true when the stream started
+   * (token fetched + WS opened + mic captured), false to fall back to the
+   * batch MediaRecorder path (test env, missing keys, unsupported browser).
+   */
+  async function startLiveSttRecording(): Promise<boolean> {
+    try {
+      const tokenResponse = await fetch("/api/podchat/stt-token", {
+        headers: { Accept: "application/json" },
+      });
+      if (!tokenResponse.ok) return false;
+      const tokenData = (await tokenResponse.json()) as {
+        wsUrl?: unknown;
+        sampleRate?: unknown;
+      };
+      if (typeof tokenData.wsUrl !== "string" || !tokenData.wsUrl) return false;
+      const sampleRate =
+        typeof tokenData.sampleRate === "number" ? tokenData.sampleRate : 16000;
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      const context = new AudioContext({ sampleRate });
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      processor.connect(context.destination);
+
+      const ws = new WebSocket(tokenData.wsUrl);
+      const opened = await new Promise<boolean>((resolve) => {
+        const timeoutId = window.setTimeout(() => resolve(false), 5000);
+        ws.onopen = () => {
+          window.clearTimeout(timeoutId);
+          resolve(true);
+        };
+        ws.onerror = () => {
+          window.clearTimeout(timeoutId);
+          resolve(false);
+        };
+      });
+      if (!opened) {
+        try {
+          ws.close();
+        } catch {
+          // ignore
+        }
+        source.disconnect();
+        processor.disconnect();
+        void context.close();
+        stream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
+
+      liveSttRef.current = {
+        ws,
+        context,
+        source,
+        processor,
+        stream,
+        startedAt: Date.now(),
+      };
+      liveSttFinalRef.current = "";
+      setLiveSttText("");
+
+      ws.onmessage = (event) => {
+        let message: {
+          type?: string;
+          is_final?: boolean;
+          speech_final?: boolean;
+          channel?: {
+            alternatives?: Array<{ transcript?: string }>;
+          };
+        };
+        try {
+          message = JSON.parse(String(event.data)) as typeof message;
+        } catch {
+          return;
+        }
+        if (message.type !== "Results") return;
+        const transcript =
+          message.channel?.alternatives?.[0]?.transcript ?? "";
+        if (message.is_final && transcript) {
+          liveSttFinalRef.current = liveSttFinalRef.current
+            ? `${liveSttFinalRef.current} ${transcript}`
+            : transcript;
+          setLiveSttText(liveSttFinalRef.current);
+          if (message.speech_final) {
+            liveSttOnFinalRef.current?.();
+            liveSttOnFinalRef.current = null;
+          }
+        } else {
+          setLiveSttText(
+            liveSttFinalRef.current
+              ? `${liveSttFinalRef.current} ${transcript}`.trim()
+              : transcript,
+          );
+        }
+      };
+      ws.onerror = () => {
+        setLiveSttText("");
+      };
+      ws.onclose = () => {
+        if (liveSttRef.current?.ws === ws) {
+          liveSttOnFinalRef.current?.();
+          liveSttOnFinalRef.current = null;
+        }
+      };
+
+      processor.onaudioprocess = (event) => {
+        if (liveSttRef.current?.ws !== ws) return;
+        if (ws.readyState !== WebSocket.OPEN) return;
+        const floatData = event.inputBuffer.getChannelData(0);
+        const pcmData = new Int16Array(floatData.length);
+        for (let i = 0; i < floatData.length; i++) {
+          const sample = Math.max(-1, Math.min(1, floatData[i]));
+          pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        ws.send(pcmData.buffer);
+      };
+
+      setRecordingState("recording");
+      setMicState("listening");
+      return true;
+    } catch {
+      teardownLiveStt();
+      return false;
+    }
+  }
+
+  /**
+   * Quality-check a finished transcript, lock it into the UI, then submit it
+   * automatically (or queue it while the host is still talking). When
+   * `autoSendOnPause` is disabled the transcript stays locked and the learner
+   * sends it manually via the visible Submit button.
+   */
+  async function acceptFinalTranscript(transcript: string, durationMs: number) {
+    const { checkTranscriptQuality } = await import("../lib/podchat/transcriptQuality");
+    const metrics = checkTranscriptQuality(transcript, durationMs);
+    if (metrics.isRejected) {
+      setLockedTranscript(null);
+      setRecordingState("idle");
+      setTurnError("Speech transcript looked unreliable. Please record again.");
+      return;
+    }
+
+    setLockedTranscript(transcript);
+    setRecordingState("ready");
+    if (!autoSendOnPause) return;
+
+    if (isTtsSpeaking && pendingTurnsRef.current.length === 0) {
+      // Host is still talking; queue this turn and auto-submit it
+      // once the current host reply finishes (pending queue-on-done).
+      pendingTurnsRef.current = [...pendingTurnsRef.current, transcript];
+    } else {
+      await autoSubmitTurn(transcript);
+    }
+  }
+
+  /** Stop live STT: request the final transcript, then submit it. */
+  async function stopLiveSttRecording() {
+    const live = liveSttRef.current;
+    if (!live || !live.ws) return;
+    setMicState("processing");
+    const durationMs = Date.now() - live.startedAt;
+
+    const finalPromise = new Promise<void>((resolve) => {
+      liveSttOnFinalRef.current = () => {
+        liveSttOnFinalRef.current = null;
+        resolve();
+      };
+    });
+    try {
+      live.ws.send(JSON.stringify({ type: "CloseStream" }));
+    } catch {
+      liveSttOnFinalRef.current?.();
+      liveSttOnFinalRef.current = null;
+    }
+    const settled = await Promise.race([
+      finalPromise,
+      new Promise<void>((resolve) =>
+        window.setTimeout(() => {
+          liveSttOnFinalRef.current = null;
+          resolve();
+        }, 6000),
+      ),
+    ]);
+    void settled;
+
+    const finalTranscript = liveSttFinalRef.current.trim().slice(0, 3000);
+    teardownLiveStt();
+    setLiveSttText("");
+
+    if (!finalTranscript) {
+      setTurnError("No speech was detected. Please speak closer to the microphone and record again.");
+      setRecordingState("idle");
+      setMicState("off");
+      return;
+    }
+
+    await acceptFinalTranscript(finalTranscript, durationMs);
+    setMicState("off");
   }
 
   async function triggerEvaluation(finalTurns: PodchatTurn[]) {
@@ -1481,92 +1887,211 @@ export function PodchatView({
     return payload;
   }
 
-  async function retryLastTurn() {
-    setTurnError(null);
-    setStatus("submitting");
+  /**
+   * Read a streaming (SSE) turn response. Emits deltas via onDelta and
+   * resolves with the validated host reply from the `done` event.
+   */
+  async function readSseTurn(
+    response: Response,
+    onDelta: (delta: string) => void,
+  ): Promise<{ hostText: string; followUpQuestion: string }> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("An error occurred. Please try again.");
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let frameIndex = buffer.indexOf("\n\n");
+      while (frameIndex !== -1) {
+        const frame = buffer.slice(0, frameIndex);
+        buffer = buffer.slice(frameIndex + 2);
+        const dataLine = frame
+          .split("\n")
+          .find((line) => line.startsWith("data:"));
+        const payload = dataLine ? dataLine.slice(5).trim() : "";
+        if (!payload) {
+          frameIndex = buffer.indexOf("\n\n");
+          continue;
+        }
+        let event: Record<string, unknown>;
+        try {
+          event = JSON.parse(payload) as Record<string, unknown>;
+        } catch {
+          frameIndex = buffer.indexOf("\n\n");
+          continue;
+        }
+        if (event.type === "delta" && typeof event.text === "string") {
+          onDelta(event.text);
+        } else if (event.type === "done") {
+          if (
+            typeof event.hostText === "string" &&
+            typeof event.followUpQuestion === "string"
+          ) {
+            return {
+              hostText: event.hostText,
+              followUpQuestion: event.followUpQuestion,
+            };
+          }
+          throw new Error("Invalid provider response format. Please try again.");
+        } else if (event.type === "error") {
+          const message =
+            typeof event.error === "string"
+              ? event.error
+              : "An error occurred. Please try again.";
+          throw new Error(message);
+        }
+        frameIndex = buffer.indexOf("\n\n");
+      }
+    }
+    throw new Error("Host response ended unexpectedly. Please try again.");
+  }
+
+  /**
+   * Request a host turn from the server. Handles BOTH formats:
+   * - SSE stream (`application/event-stream` reply) when the server streams,
+   * - plain JSON (existing Playwright mocks / mock provider / non-streaming).
+   */
+  async function requestHostTurn(
+    payload: Record<string, unknown>,
+    onDelta: (delta: string) => void,
+  ): Promise<{ hostText: string; followUpQuestion: string }> {
+    const controller = new AbortController();
+    turnAbortRef.current = controller;
     try {
-      const payload = { ...buildTurnPayload(turns, submittedUserTurns), provider: resolvedProvider };
-      console.log("[PODCHAT_DEBUG] Turn2 about to send. Payload:", JSON.stringify(payload));
-      console.log("[PODCHAT_DEBUG] Turn2 cookies at send time:", document.cookie);
       const response = await fetch("/api/podchat/turn", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
       if (!response.ok) {
-        const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
+        let errJson: ProviderErrorResponse = {};
+        try {
+          errJson = (await response.json()) as ProviderErrorResponse;
+        } catch {
+          // ignore non-JSON error bodies
+        }
         throw new Error(turnResponseErrorMessage(errJson));
       }
-      const data = await response.json();
-      const hostTurn: PodchatTurn = {
-        id: `podchat-turn-${turns.length + 1}`,
-        speaker: "host",
-        text: `${data.hostText} ${data.followUpQuestion}`,
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream")) {
+        return readSseTurn(response, onDelta);
+      }
+      const data = (await response.json()) as {
+        hostText?: unknown;
+        followUpQuestion?: unknown;
       };
-      const updatedTurns = [...turns, hostTurn];
-      setTurns(updatedTurns);
-      const nextSubmittedCount = submittedUserTurns + 1;
-      setSubmittedUserTurns(nextSubmittedCount);
-      setStatus("user_turn");
+      if (
+        typeof data.hostText !== "string" ||
+        typeof data.followUpQuestion !== "string"
+      ) {
+        throw new Error("Invalid provider response format. Please try again.");
+      }
+      return { hostText: data.hostText, followUpQuestion: data.followUpQuestion };
+    } finally {
+      turnAbortRef.current = null;
+    }
+  }
 
-      // Reset recording state after successful host response
-      setLockedTranscript(null);
-      setRecordingState("idle");
+  /**
+   * Commit a finalized host turn (streaming `done` or legacy JSON), reset the
+   * turn state exactly as before, start chunked TTS, and flush any queued
+   * learner turns that were recorded while the host was still speaking.
+   */
+  function commitHostTurn(
+    hostText: string,
+    followUpQuestion: string,
+    baseTurns: PodchatTurn[],
+  ) {
+    const hostTurn: PodchatTurn = {
+      id: `podchat-turn-${baseTurns.length + 1}`,
+      speaker: "host",
+      text: `${hostText} ${followUpQuestion}`,
+    };
+    const finalTurns = [...baseTurns, hostTurn];
+    setTurns(finalTurns);
+    const nextSubmittedCount = submittedUserTurns + 1;
+    setSubmittedUserTurns(nextSubmittedCount);
+    setStatus("user_turn");
 
-      playTts(`${data.hostText} ${data.followUpQuestion}`);
+    // Reset recording state after successful host response
+    setLockedTranscript(null);
+    setRecordingState("idle");
+    setStreamingHostText(null);
+    finishHostSpeech();
+
+    autoScrollToBottom();
+
+    const pending = pendingTurnsRef.current;
+    if (pending.length > 0) {
+      pendingTurnsRef.current = pending.slice(1);
+      void autoSubmitTurn(pending[0], finalTurns);
+    }
+  }
+
+  /**
+   * Shared request path for all three turn call sites. Streams deltas into
+   * the live bubble + TTS chunker, then commits on `done`.
+   */
+  async function requestHostTurnAndCommit(
+    baseTurns: PodchatTurn[],
+  ): Promise<void> {
+    const payload = { ...buildTurnPayload(baseTurns, submittedUserTurns), provider: resolvedProvider };
+    setStreamingHostText("");
+    beginHostSpeech();
+    try {
+      const { hostText, followUpQuestion } = await requestHostTurn(
+        payload,
+        (delta) => {
+          setStreamingHostText((prev) => (prev === null ? delta : prev + delta));
+          appendHostSpeech(delta);
+          autoScrollToBottom();
+        },
+      );
+      commitHostTurn(hostText, followUpQuestion, baseTurns);
     } catch (err: unknown) {
+      const aborted =
+        err instanceof DOMException && err.name === "AbortError";
+      if (aborted) {
+        // Session was torn down (end/eval/unmount); discard the partial bubble
+        // without touching status (already moved to complete/setup).
+        setStreamingHostText(null);
+        setRecordingState("idle");
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       setTurnError(msg || "An error occurred. Please try again.");
+      // Keep any partial streamed text visible in the bubble; offer Retry.
+      setStreamingHostText(null);
       setStatus("user_turn");
     }
   }
 
-  async function autoSubmitTurn(transcriptText: string) {
+  async function retryLastTurn() {
+    setTurnError(null);
+    setStreamingHostText("");
+    setStatus("submitting");
+    await requestHostTurnAndCommit(turns);
+  }
+
+  async function autoSubmitTurn(transcriptText: string, baseTurns: PodchatTurn[] = turns) {
     const learnerTurn: PodchatTurn = {
-      id: nextTurnId(turns),
+      id: nextTurnId(baseTurns),
       speaker: "learner",
       text: transcriptText,
     };
-    const updatedTurns = [...turns, learnerTurn];
+    const updatedTurns = [...baseTurns, learnerTurn];
     setTurns(updatedTurns);
     setTurnError(null);
     setStatus("submitting");
-
-    try {
-      const payload = { ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider };
-      console.log("[PODCHAT_DEBUG] Turn2 about to send. Payload:", JSON.stringify(payload));
-      console.log("[PODCHAT_DEBUG] Turn2 cookies at send time:", document.cookie);
-      const response = await fetch("/api/podchat/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
-        throw new Error(turnResponseErrorMessage(errJson));
-      }
-      const data = await response.json();
-      const hostTurn: PodchatTurn = {
-        id: `podchat-turn-${updatedTurns.length + 1}`,
-        speaker: "host",
-        text: `${data.hostText} ${data.followUpQuestion}`,
-      };
-      const finalTurns = [...updatedTurns, hostTurn];
-      setTurns(finalTurns);
-      const nextSubmittedCount = submittedUserTurns + 1;
-      setSubmittedUserTurns(nextSubmittedCount);
-      setStatus("user_turn");
-
-      // Reset recording state after successful host response
-      setLockedTranscript(null);
-      setRecordingState("idle");
-
-      playTts(`${data.hostText} ${data.followUpQuestion}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setTurnError(msg || "An error occurred. Please try again.");
-      setStatus("user_turn");
-    }
+    await requestHostTurnAndCommit(updatedTurns);
   }
 
   async function submitTurn() {
@@ -1581,42 +2106,7 @@ export function PodchatView({
     setTurns(updatedTurns);
     setTurnError(null);
     setStatus("submitting");
-
-    try {
-      const payload = { ...buildTurnPayload(updatedTurns, submittedUserTurns), provider: resolvedProvider };
-      console.log("[PODCHAT_DEBUG] Turn2 about to send. Payload:", JSON.stringify(payload));
-      console.log("[PODCHAT_DEBUG] Turn2 cookies at send time:", document.cookie);
-      const response = await fetch("/api/podchat/turn", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const errJson = (await response.json().catch(() => ({}))) as ProviderErrorResponse;
-        throw new Error(turnResponseErrorMessage(errJson));
-      }
-      const data = await response.json();
-      const hostTurn: PodchatTurn = {
-        id: `podchat-turn-${updatedTurns.length + 1}`,
-        speaker: "host",
-        text: `${data.hostText} ${data.followUpQuestion}`,
-      };
-      const finalTurns = [...updatedTurns, hostTurn];
-      setTurns(finalTurns);
-      const nextSubmittedCount = submittedUserTurns + 1;
-      setSubmittedUserTurns(nextSubmittedCount);
-      setStatus("user_turn");
-
-      // Reset recording state after successful host response
-      setLockedTranscript(null);
-      setRecordingState("idle");
-
-      playTts(`${data.hostText} ${data.followUpQuestion}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setTurnError(msg || "An error occurred. Please try again.");
-      setStatus("user_turn");
-    }
+    await requestHostTurnAndCommit(updatedTurns);
   }
 
   function endSession() {
@@ -1627,6 +2117,7 @@ export function PodchatView({
     }
     stopTimer();
     cleanupAudio();
+    turnAbortRef.current?.abort();
     setStatus("complete");
     setPhase("evaluation");
     triggerEvaluation(turns);
@@ -2845,8 +3336,15 @@ export function PodchatView({
         <div className="p-6">
           <div
             aria-live="polite"
-            className="flex flex-col gap-3"
+            className="max-h-[480px] overflow-y-auto pr-1"
             data-testid="podchat-rolling-transcript"
+            ref={transcriptScrollRef}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              const pinned =
+                el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+              pinnedToBottomRef.current = pinned;
+            }}
           >
             {rollingTurns.map((turn, index) => {
               const isCurrent = index === rollingTurns.length - 1;
@@ -2883,6 +3381,21 @@ export function PodchatView({
                 </article>
               );
             })}
+
+            {streamingHostText !== null && streamingHostText !== "" && (
+              <article
+                className="rounded-xl border border-[var(--brand-teal)] bg-[var(--brand-teal-soft)] p-4"
+                data-testid="podchat-streaming-host-bubble"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+                  AI host
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[var(--brand-ink)]">
+                  {streamingHostText}
+                  <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-[var(--brand-teal)] align-middle"></span>
+                </p>
+              </article>
+            )}
 
             {status === "submitting" && (
               <div className="app-message app-message-info flex items-center gap-2" data-testid="podchat-loading-turn">
@@ -2922,7 +3435,20 @@ export function PodchatView({
                   <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--brand-coral)] opacity-30"></span>
                   <span className="relative inline-flex h-3 w-3 rounded-full bg-[var(--brand-coral)]"></span>
                 </span>
-                <span className="text-sm font-medium">Recording spoken response...</span>
+                <span className="text-sm font-medium">
+                  {micState === "listening"
+                    ? "Listening… live transcription"
+                    : "Recording spoken response..."}
+                </span>
+              </div>
+            )}
+
+            {recordingState === "recording" && liveSttText && (
+              <div
+                className="mt-3 rounded-lg border border-[var(--brand-teal)]/40 bg-[var(--brand-surface)] p-3 text-sm leading-6 text-[var(--brand-ink-soft)] italic"
+                data-testid="podchat-live-stt-text"
+              >
+                {liveSttText}
               </div>
             )}
 
@@ -2978,6 +3504,20 @@ export function PodchatView({
                   Stop Recording
                 </button>
               )}
+
+              {!autoSendOnPause &&
+                status === "user_turn" &&
+                recordingState === "ready" &&
+                lockedTranscript && (
+                  <button
+                    type="button"
+                    onClick={submitTurn}
+                    className={buttonPrimary}
+                    data-testid="podchat-submit-locked-answer"
+                  >
+                    Submit Answer
+                  </button>
+                )}
 
               {/* Keep podchat-submit-turn in DOM for test suite compatibility but hidden */}
               <button

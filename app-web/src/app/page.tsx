@@ -713,6 +713,40 @@ export default function Home() {
     }
   };
 
+  // --- Podchat Live Mode Settings (localStorage only; no Supabase schema) ---
+  const [stopAIOnSpeech, setStopAIOnSpeech] = useState(true);
+  const [autoSendOnPause, setAutoSendOnPause] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const storedStop = window.localStorage.getItem("fonetik.podchat.stopAIOnSpeech");
+        if (storedStop !== null) {
+          setStopAIOnSpeech(storedStop === "1" || storedStop === "true");
+        }
+        const storedAuto = window.localStorage.getItem("fonetik.podchat.autoSendOnPause");
+        if (storedAuto !== null) {
+          setAutoSendOnPause(storedAuto === "1" || storedAuto === "true");
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleStopAiOnSpeechChange = (enabled: boolean) => {
+    setStopAIOnSpeech(enabled);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("fonetik.podchat.stopAIOnSpeech", String(enabled));
+    }
+  };
+
+  const handleAutoSendOnPauseChange = (enabled: boolean) => {
+    setAutoSendOnPause(enabled);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("fonetik.podchat.autoSendOnPause", String(enabled));
+    }
+  };
+
   const handleDefaultTtsVoiceProfileChange = (profile: TtsVoiceProfile) => {    setTtsVoiceProfile(profile);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("defaultTtsVoiceProfile", profile);
@@ -1476,9 +1510,33 @@ export default function Home() {
     useState<ActiveSessionPanel>("podchat");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const mobileNavPanelRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const handleCloseMobileNav = () => setIsMobileNavOpen(false);
   const handleToggleMobileNav = () =>
     setIsMobileNavOpen((currentIsOpen) => !currentIsOpen);
+
+  // Desktop sidebar collapse preference (UI-only, persisted locally).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window === "undefined") return;
+      const stored = window.localStorage.getItem("fonetik.sidebar.collapsed");
+      if (stored === "true") {
+        setSidebarCollapsed(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleToggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("fonetik.sidebar.collapsed", String(next));
+      }
+      return next;
+    });
+  };
+
   const handleSelectView = (nextView: SidebarView) => {
     if (nextView === "drill") {
       setActiveSessionPanel("patternDrill");
@@ -2759,8 +2817,14 @@ export default function Home() {
           >
         {/* Sidebar */}
         {view !== "commonplace" && (
-          <div className="hidden lg:block">
-            <Sidebar {...sidebarProps} />
+          <div
+            className={`hidden lg:block lg:flex-shrink-0 transition-[width] duration-200 ease-out ${
+              sidebarCollapsed
+                ? "lg:w-0 lg:overflow-hidden"
+                : "lg:w-[252px]"
+            }`}
+          >
+            <Sidebar {...sidebarProps} collapsed={sidebarCollapsed} />
           </div>
         )}
         {/* Main */}
@@ -2782,6 +2846,20 @@ export default function Home() {
               level={level}
               appLanguage={appLanguage}
               authSlot={<AuthStatus />}
+              leadingSlot={
+                <button
+                  type="button"
+                  onClick={handleToggleSidebar}
+                  aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                  aria-expanded={!sidebarCollapsed}
+                  title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                  className="app-button-ghost flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--brand-ink-soft)]"
+                >
+                  <span aria-hidden="true" className="text-base leading-none">
+                    {sidebarCollapsed ? "\u203A" : "\u2039"}
+                  </span>
+                </button>
+              }
             />
           )}
 
@@ -2833,6 +2911,8 @@ export default function Home() {
               ttsProvider={ttsProvider}
               ttsVoiceProfile={ttsVoiceProfile}
               elevenLabsModelId={elevenLabsModel}
+              stopAIOnSpeech={stopAIOnSpeech}
+              autoSendOnPause={autoSendOnPause}
               isActiveView={view === "active"}
               activePanel={activeSessionPanel}
               onActivePanelChange={setActiveSessionPanel}
@@ -3100,6 +3180,10 @@ export default function Home() {
               onDefaultTtsVoiceProfileChange={handleDefaultTtsVoiceProfileChange}
               defaultElevenLabsModel={elevenLabsModel}
               onDefaultElevenLabsModelChange={handleDefaultElevenLabsModelChange}
+              stopAiOnSpeechEnabled={stopAIOnSpeech}
+              onStopAiOnSpeechEnabledChange={handleStopAiOnSpeechChange}
+              autoSendOnPauseEnabled={autoSendOnPause}
+              onAutoSendOnPauseEnabledChange={handleAutoSendOnPauseChange}
             />
           )}
 

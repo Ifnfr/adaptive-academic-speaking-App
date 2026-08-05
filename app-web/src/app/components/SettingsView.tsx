@@ -66,6 +66,10 @@ export type SettingsViewProps = {
   onDefaultTtsVoiceProfileChange?: (profile: TtsVoiceProfile) => void;
   defaultElevenLabsModel?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
   onDefaultElevenLabsModelChange?: (model: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "") => void;
+  stopAiOnSpeechEnabled?: boolean;
+  onStopAiOnSpeechEnabledChange?: (enabled: boolean) => void;
+  autoSendOnPauseEnabled?: boolean;
+  onAutoSendOnPauseEnabledChange?: (enabled: boolean) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -867,6 +871,10 @@ export function SettingsView({
   onDefaultTtsVoiceProfileChange,
   defaultElevenLabsModel = "",
   onDefaultElevenLabsModelChange,
+  stopAiOnSpeechEnabled = true,
+  onStopAiOnSpeechEnabledChange,
+  autoSendOnPauseEnabled = true,
+  onAutoSendOnPauseEnabledChange,
 }: SettingsViewProps) {
   const { t } = useI18n(appLanguage);
 
@@ -1164,6 +1172,37 @@ export function SettingsView({
               </p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Podchat Live Mode Card */}
+      <div className={card}>
+        <div className={cardHeader}>
+          <p className="app-label text-[var(--brand-teal)]">
+            Podchat Live Mode
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+            Speaking Session Behavior
+          </h2>
+          <p className="app-helper mt-1">
+            Tune how live Podchat speaking sessions behave. These preferences are stored only in this browser.
+          </p>
+        </div>
+        <div className={cardBody}>
+          <Toggle
+            id="toggle-stop-ai-on-speech"
+            label="Stop AI host when I start speaking"
+            description="Stops host voice playback the moment you begin recording, so you can speak without waiting for the host to finish."
+            checked={stopAiOnSpeechEnabled}
+            onChange={(v) => onStopAiOnSpeechEnabledChange?.(v)}
+          />
+          <Toggle
+            id="toggle-auto-send-on-pause"
+            label="Auto-send my answer when I stop recording"
+            description="Automatically submits your transcript for a host reply when you stop recording, instead of requiring a manual send."
+            checked={autoSendOnPauseEnabled}
+            onChange={(v) => onAutoSendOnPauseEnabledChange?.(v)}
+          />
         </div>
       </div>
 

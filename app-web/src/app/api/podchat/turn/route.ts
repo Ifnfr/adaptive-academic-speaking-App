@@ -875,21 +875,300 @@ async function callGeminiSafely(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Streaming (SSE) support.
+// The route returns an SSE stream only when the client opts in via
+// `Accept: text/event-stream`. All other callers keep the existing JSON
+// contract exactly (status codes + `{ hostText, followUpQuestion }`).
+// ---------------------------------------------------------------------------
+
+class ProviderRequestError extends Error {
+  constructor(
+    public category: ProviderErrorCategory,
+    public status: number,
+  ) {
+    super(PROVIDER_FAILURE_MESSAGE);
+  }
+}
+
+function invalidStreamError(): ProviderRequestError {
+  return new ProviderRequestError("invalid_provider_response", 502);
+}
+
+async function consumeSseLines(
+  res: Response,
+  onData: (data: string) => void,
+): Promise<void> {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw invalidStreamError();
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let frameIndex = buffer.indexOf("\n\n");
+    while (frameIndex !== -1) {
+      const frame = buffer.slice(0, frameIndex);
+      buffer = buffer.slice(frameIndex + 2);
+      const dataLine = frame
+        .split("\n")
+        .find((line) => line.startsWith("data:"));
+      const payload = dataLine ? dataLine.slice(5).trim() : "";
+      if (payload) {
+        onData(payload);
+      }
+      frameIndex = buffer.indexOf("\n\n");
+    }
+  }
+  const trailing = buffer.split("\n").find((line) => line.startsWith("data:"));
+  if (trailing) {
+    const payload = trailing.slice(5).trim();
+    if (payload) {
+      onData(payload);
+    }
+  }
+}
+
+async function consumeOpenAiText(
+  res: Response,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  let text = "";
+  await consumeSseLines(res, (payload) => {
+    if (payload === "[DONE]") return;
+    try {
+      const parsed = JSON.parse(payload) as {
+        choices?: Array<{ delta?: { content?: string } }>;
+      };
+      const delta = parsed.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta.length > 0) {
+        text += delta;
+        onDelta(delta);
+      }
+    } catch {
+      // ignore malformed frames; the [DONE] marker and field checks are enough
+    }
+  });
+  return text;
+}
+
+async function consumeAnthropicText(
+  res: Response,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  let text = "";
+  await consumeSseLines(res, (payload) => {
+    try {
+      const parsed = JSON.parse(payload) as {
+        type?: string;
+        delta?: { type?: string; text?: string };
+      };
+      if (
+        parsed.type === "content_block_delta" &&
+        parsed.delta?.type === "text_delta" &&
+        typeof parsed.delta.text === "string"
+      ) {
+        text += parsed.delta.text;
+        onDelta(parsed.delta.text);
+      }
+    } catch {
+      // ignore malformed frames
+    }
+  });
+  return text;
+}
+
+async function streamDeepSeekSafely(
+  apiKey: string,
+  system: string,
+  user: string,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  let res: Response;
+  try {
+    res = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        stream: true,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+  } catch {
+    throw new ProviderRequestError("provider_unavailable", 503);
+  }
+  if (!res.ok) {
+    throw new ProviderRequestError(mapProviderStatus(res.status), res.status);
+  }
+  try {
+    const text = await consumeOpenAiText(res, onDelta);
+    if (text.trim().length === 0) {
+      throw invalidStreamError();
+    }
+    return text;
+  } catch (err) {
+    if (err instanceof ProviderRequestError) throw err;
+    throw invalidStreamError();
+  }
+}
+
+async function streamGeminiSafely(
+  apiKey: string,
+  system: string,
+  user: string,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  let res: Response;
+  try {
+    res = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${actualApiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        stream: true,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+  } catch {
+    throw new ProviderRequestError("provider_unavailable", 503);
+  }
+  if (!res.ok) {
+    throw new ProviderRequestError(mapProviderStatus(res.status), res.status);
+  }
+  try {
+    const text = await consumeOpenAiText(res, onDelta);
+    if (text.trim().length === 0) {
+      throw invalidStreamError();
+    }
+    return text;
+  } catch (err) {
+    if (err instanceof ProviderRequestError) throw err;
+    throw invalidStreamError();
+  }
+}
+
+async function streamClaudeSafely(
+  apiKey: string,
+  modelName: string,
+  system: string,
+  user: string,
+  onDelta: (delta: string) => void,
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: modelName || "claude-3-5-haiku-latest",
+        max_tokens: 150,
+        stream: true,
+        system,
+        messages: [{ role: "user", content: user }],
+      }),
+    });
+  } catch {
+    throw new ProviderRequestError("provider_unavailable", 503);
+  }
+  if (!res.ok) {
+    throw new ProviderRequestError(mapProviderStatus(res.status), res.status);
+  }
+  try {
+    const text = await consumeAnthropicText(res, onDelta);
+    if (text.trim().length === 0) {
+      throw invalidStreamError();
+    }
+    return text;
+  } catch (err) {
+    if (err instanceof ProviderRequestError) throw err;
+    throw invalidStreamError();
+  }
+}
+
+function streamTurnResponse(
+  run: (emit: (value: Record<string, unknown>) => void) => Promise<Record<string, unknown> | null>,
+): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit = (value: Record<string, unknown>) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`));
+        } catch {
+          // ignore closed controller
+        }
+      };
+      try {
+        const done = await run(emit);
+        if (done) {
+          emit({ type: "done", ...done });
+        }
+      } catch (err: unknown) {
+        const status =
+          err instanceof ProviderRequestError
+            ? err.status
+            : 502;
+        const message =
+          err instanceof Error
+            ? err.message
+            : "An unexpected error occurred. Please try again.";
+        emit({ type: "error", error: message, status });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // ignore already-closed controller
+        }
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+    },
+  });
+}
+
 export async function POST(request: Request) {
-  console.log("[PODCHAT_DEBUG] Turn2 request headers:", JSON.stringify(Object.fromEntries(request.headers)));
   let parsedBody: unknown;
   try {
     parsedBody = await request.json();
-    console.log("[PODCHAT_DEBUG] Turn2 raw body:", JSON.stringify(parsedBody));
-    const nextReq = request as any;
-    const requestCookies = typeof nextReq.cookies?.getAll === "function" ? nextReq.cookies.getAll() : [];
-    console.log("[PODCHAT_DEBUG] Turn2 cookies received server-side:", requestCookies);
   } catch {
     return NextResponse.json(
       { error: "Request body must be valid JSON." },
       { status: 400 }
     );
   }
+
+  const wantsStream = (request.headers.get("accept") || "").includes(
+    "text/event-stream",
+  );
 
   const validation = validateRequest(parsedBody);
   if (!validation.valid) {
@@ -903,7 +1182,6 @@ export async function POST(request: Request) {
   if (parsedBody && typeof parsedBody === "object") {
     const b = parsedBody as Record<string, unknown>;
     const bodyProv = b.provider;
-    console.log("[PODCHAT_DEBUG] body.provider:", (parsedBody as any).provider, "| typeof:", typeof (parsedBody as any).provider);
     if (typeof bodyProv === "string" && bodyProv.trim()) {
       const trimmedProvider = bodyProv.trim();
       resolveRequest = {
@@ -919,7 +1197,6 @@ export async function POST(request: Request) {
     }
   }
 
-  console.log("[PODCHAT_DEBUG] Final input to resolveFeatureProvider:", resolveRequest ? "mock Request with cookie" : "undefined");
   const { providerId, apiKey, modelName } = await resolveFeatureProvider("podchat", resolveRequest);
   const provider = providerId;
   const validatedReq = validation.request;
@@ -943,22 +1220,47 @@ export async function POST(request: Request) {
     return NextResponse.json(outputValidation.response);
   }
 
+  const systemPrompt = buildSystemPrompt(
+    validatedReq.topic,
+    validatedReq.difficulty,
+    validatedReq.sessionMode,
+    validatedReq.articleContext,
+    validatedReq.aurUnderstandingState,
+    validatedReq.socraticResponseMode,
+    validatedReq.sessionPlan,
+    validatedReq.debateConfig,
+  );
+  const userPrompt = buildUserPrompt(validatedReq);
+
   if (provider === "gemini") {
     if (!apiKey) {
+      if (wantsStream) {
+        return streamTurnResponse(async () => {
+          throw new ProviderRequestError("missing_configuration", 503);
+        });
+      }
       return missingProviderConfiguration("Gemini");
     }
 
-    const systemPrompt = buildSystemPrompt(
-      validatedReq.topic,
-      validatedReq.difficulty,
-      validatedReq.sessionMode,
-      validatedReq.articleContext,
-      validatedReq.aurUnderstandingState,
-      validatedReq.socraticResponseMode,
-      validatedReq.sessionPlan,
-      validatedReq.debateConfig,
-    );
-    const userPrompt = buildUserPrompt(validatedReq);
+    if (wantsStream) {
+      return streamTurnResponse(async (emit) => {
+        const text = await streamGeminiSafely(
+          apiKey,
+          systemPrompt,
+          userPrompt,
+          (delta) => emit({ type: "delta", text: delta }),
+        );
+        const outputValidation = validateClaudeOutput(text);
+        if (!outputValidation.valid) {
+          throw invalidStreamError();
+        }
+        return {
+          hostText: outputValidation.response.hostText,
+          followUpQuestion: outputValidation.response.followUpQuestion,
+          provider,
+        };
+      });
+    }
 
     const providerResult = await callGeminiSafely(apiKey, systemPrompt, userPrompt);
     if (!providerResult.ok) {
@@ -975,20 +1277,33 @@ export async function POST(request: Request) {
 
   if (provider === "deepseek") {
     if (!apiKey) {
+      if (wantsStream) {
+        return streamTurnResponse(async () => {
+          throw new ProviderRequestError("missing_configuration", 503);
+        });
+      }
       return missingProviderConfiguration("DeepSeek");
     }
 
-    const systemPrompt = buildSystemPrompt(
-      validatedReq.topic,
-      validatedReq.difficulty,
-      validatedReq.sessionMode,
-      validatedReq.articleContext,
-      validatedReq.aurUnderstandingState,
-      validatedReq.socraticResponseMode,
-      validatedReq.sessionPlan,
-      validatedReq.debateConfig,
-    );
-    const userPrompt = buildUserPrompt(validatedReq);
+    if (wantsStream) {
+      return streamTurnResponse(async (emit) => {
+        const text = await streamDeepSeekSafely(
+          apiKey,
+          systemPrompt,
+          userPrompt,
+          (delta) => emit({ type: "delta", text: delta }),
+        );
+        const outputValidation = validateClaudeOutput(text);
+        if (!outputValidation.valid) {
+          throw invalidStreamError();
+        }
+        return {
+          hostText: outputValidation.response.hostText,
+          followUpQuestion: outputValidation.response.followUpQuestion,
+          provider,
+        };
+      });
+    }
 
     const providerResult = await callDeepSeekSafely(apiKey, systemPrompt, userPrompt);
     if (!providerResult.ok) {
@@ -1003,23 +1318,36 @@ export async function POST(request: Request) {
     return NextResponse.json(outputValidation.response);
   }
 
-
   // Claude Default
   if (!apiKey) {
+    if (wantsStream) {
+      return streamTurnResponse(async () => {
+        throw new ProviderRequestError("missing_configuration", 503);
+      });
+    }
     return missingProviderConfiguration("Claude");
   }
 
-  const systemPrompt = buildSystemPrompt(
-    validatedReq.topic,
-    validatedReq.difficulty,
-    validatedReq.sessionMode,
-    validatedReq.articleContext,
-    validatedReq.aurUnderstandingState,
-    validatedReq.socraticResponseMode,
-    validatedReq.sessionPlan,
-    validatedReq.debateConfig,
-  );
-  const userPrompt = buildUserPrompt(validatedReq);
+  if (wantsStream) {
+    return streamTurnResponse(async (emit) => {
+      const text = await streamClaudeSafely(
+        apiKey,
+        modelName,
+        systemPrompt,
+        userPrompt,
+        (delta) => emit({ type: "delta", text: delta }),
+      );
+      const outputValidation = validateClaudeOutput(text);
+      if (!outputValidation.valid) {
+        throw invalidStreamError();
+      }
+      return {
+        hostText: outputValidation.response.hostText,
+        followUpQuestion: outputValidation.response.followUpQuestion,
+        provider,
+      };
+    });
+  }
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {

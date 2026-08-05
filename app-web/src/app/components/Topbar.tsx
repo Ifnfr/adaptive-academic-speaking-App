@@ -10,6 +10,7 @@ type TopbarProps = {
   mode: string;
   level: string;
   authSlot?: ReactNode;
+  leadingSlot?: ReactNode;
   appLanguage?: AppLanguage | null;
 };
 
@@ -21,6 +22,7 @@ export function Topbar({
   mode,
   level,
   authSlot,
+  leadingSlot,
   appLanguage,
 }: TopbarProps) {
   const { t } = useI18n(appLanguage);
@@ -30,16 +32,19 @@ export function Topbar({
     <header
       className={`${card} sticky top-2 z-10 hidden lg:flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between`}
     >
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-          fonetik · {subtitle}
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
-          {title}
-        </h1>
-        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
-          {description}
-        </p>
+      <div className="flex min-w-0 items-center gap-3">
+        {leadingSlot}
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+            fonetik · {subtitle}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--brand-ink)]">
+            {title}
+          </h1>
+          <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">
+            {description}
+          </p>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {authSlot}
