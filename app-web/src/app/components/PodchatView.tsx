@@ -1212,7 +1212,13 @@ export function PodchatView({
     const startTime = Date.now();
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
       mediaStreamRef.current = stream;
 
       let mimeType = "audio/webm";
@@ -1228,7 +1234,10 @@ export function PodchatView({
         }
       }
 
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 32000,
+      });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -1265,7 +1274,7 @@ export function PodchatView({
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
           controller.abort();
-        }, 30000);
+        }, Math.max(60000, durationMs + 30000));
 
         try {
           const formData = new FormData();
@@ -1281,7 +1290,36 @@ export function PodchatView({
 
           if (!response.ok) {
             const errJson = await response.json().catch(() => ({}));
-            throw new Error(errJson.error || "Speech transcription failed. Please record again.");
+            const errText =
+              typeof errJson.error === "string"
+                ? errJson.error
+                : "Speech transcription failed. Please record again.";
+            const reasonCode =
+              typeof errJson.reasonCode === "string"
+                ? errJson.reasonCode
+                : "";
+            let message = errText;
+            if (
+              reasonCode === "repeated_words" ||
+              reasonCode === "ngram_loop" ||
+              reasonCode === "low_unique_ratio"
+            ) {
+              message =
+                "Speech transcript looked unclear (repeated words). Please speak a bit slower and clearer, then record again.";
+            } else if (reasonCode === "impossible_speed") {
+              message =
+                "You were speaking too fast. Please speak a bit slower and record again.";
+            } else if (reasonCode === "empty") {
+              message =
+                "No speech was detected. Please speak closer to the microphone and record again.";
+            } else if (errText.toLowerCase().includes("2 mb") || errText.toLowerCase().includes("10 mb")) {
+              message =
+                "Recording was too long. Please keep each turn shorter and record again.";
+            } else if (errText.toLowerCase().includes("no speech")) {
+              message =
+                "No speech was detected. Please speak closer to the microphone and record again.";
+            }
+            throw new Error(message);
           }
 
           const data = await response.json();

@@ -17,7 +17,7 @@ async function resolveCurrentUserId(): Promise<string | null> {
   }
 }
 
-const MAX_AUDIO_SIZE = 2 * 1024 * 1024; // 2 MB
+const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10 MB
 const VALID_MIME_TYPES = [
   "audio/webm",
   "audio/mp4",
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
   if (audio.size > MAX_AUDIO_SIZE) {
     return NextResponse.json(
-      { error: "audio file must not exceed 2 MB." },
+      { error: "audio file must not exceed 10 MB." },
       { status: 400 }
     );
   }
