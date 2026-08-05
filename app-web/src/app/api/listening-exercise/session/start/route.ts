@@ -61,6 +61,7 @@ export async function POST(request: Request) {
   const cefrLevelInput = b.cefr_level as string;
   const sectionCountInput = b.section_count;
   const isPlacementInput = b.is_placement;
+  const difficultyInput = b.difficulty as string | undefined;
 
   if (!cefrLevelInput || typeof cefrLevelInput !== "string") {
     return NextResponse.json(
@@ -82,6 +83,8 @@ export async function POST(request: Request) {
   const sectionCount = 3;
 
   const isPlacement = typeof isPlacementInput === "boolean" ? isPlacementInput : false;
+  const resolvedDifficulty: "easy" | "medium" | "hard" =
+    difficultyInput === "easy" || difficultyInput === "hard" ? difficultyInput : "medium";
 
   const ownerId = await resolveCurrentUserId();
   if (!ownerId) {
@@ -211,7 +214,7 @@ export async function POST(request: Request) {
         weakSubSkill = await getWeakestEligibleSubSkill(supabase, ownerId);
       }
 
-      const systemPrompt = buildSection1SystemPrompt();
+      const systemPrompt = buildSection1SystemPrompt(resolvedDifficulty);
       const userPrompt = buildSection1UserPrompt(
         cefrLevel,
         sectionCount,
@@ -223,6 +226,7 @@ export async function POST(request: Request) {
 
       let payload: {
         plan?: {
+          difficulty?: "easy" | "medium" | "hard";
           sections?: Array<{
             section_index?: number;
             cefr_level?: string;
@@ -253,6 +257,7 @@ export async function POST(request: Request) {
 
           const parsedPayload = JSON.parse(jsonText) as {
             plan?: {
+              difficulty?: "easy" | "medium" | "hard";
               sections?: Array<{
                 section_index?: number;
                 cefr_level?: string;
@@ -310,6 +315,8 @@ export async function POST(request: Request) {
           };
         });
       }
+
+      payload.plan.difficulty = resolvedDifficulty;
 
       if (assignedTopics[0] && payload.section) {
         payload.section.topic = assignedTopics[0].topic;

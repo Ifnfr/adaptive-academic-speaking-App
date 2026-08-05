@@ -6,6 +6,11 @@ import {
 } from "./ListeningExerciseEvaluationView";
 import { type Question } from "./QuestionList";
 import type { TtsVoiceProfile } from "../../lib/tts/voiceProfiles";
+import {
+  DEFAULT_LISTENING_DIFFICULTY,
+  loadListeningDifficulty,
+  type ListeningDifficulty,
+} from "../../lib/listening-exercise/difficulty";
 
 export interface ListeningExerciseSessionProps {
   initialCefrLevel?: string;
@@ -13,6 +18,7 @@ export interface ListeningExerciseSessionProps {
   initialIsPlacement?: boolean;
   onSessionComplete?: (result: { overallScore: number; estimatedBand: string }) => void;
   ttsVoiceProfile?: TtsVoiceProfile;
+  difficulty?: ListeningDifficulty;
 }
 
 type StepType =
@@ -114,6 +120,7 @@ export function ListeningExerciseSession({
   initialIsPlacement = false,
   onSessionComplete,
   ttsVoiceProfile,
+  difficulty,
 }: ListeningExerciseSessionProps) {
   const [step, setStep] = useState<StepType>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -140,7 +147,6 @@ export function ListeningExerciseSession({
   const [overallScore, setOverallScore] = useState<number | null>(null);
   const [estimatedBand, setEstimatedBand] = useState<string | null>(null);
   const [reviewData, setReviewData] = useState<ReviewData | null>(null);
-  const [isReviewLoading, setIsReviewLoading] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<boolean>(false);
   
   // Error state and retry target tracking
@@ -151,8 +157,6 @@ export function ListeningExerciseSession({
   useEffect(() => {
     if (step !== "completed" || !sessionId) return;
     let isMounted = true;
-    setIsReviewLoading(true);
-    setReviewError(false);
 
     fetch(`/api/listening-exercise/session/${sessionId}/review`)
       .then((res) => {
@@ -162,14 +166,12 @@ export function ListeningExerciseSession({
       .then((data: ReviewData) => {
         if (isMounted) {
           setReviewData(data);
-          setIsReviewLoading(false);
         }
       })
       .catch((err) => {
         console.error("Failed to load evaluation review:", err);
         if (isMounted) {
           setReviewError(true);
-          setIsReviewLoading(false);
         }
       });
 
@@ -287,6 +289,9 @@ export function ListeningExerciseSession({
     setErrorPhase(null);
 
     try {
+      // Resolve target difficulty at session start: an explicit prop wins; otherwise fall back to the persisted Setting.
+      const resolvedDifficulty = difficulty ?? loadListeningDifficulty() ?? DEFAULT_LISTENING_DIFFICULTY;
+
       const res = await fetch("/api/listening-exercise/session/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -294,6 +299,7 @@ export function ListeningExerciseSession({
           cefr_level: initialCefrLevel,
           section_count: initialSectionCount,
           is_placement: initialIsPlacement,
+          difficulty: resolvedDifficulty,
         }),
       });
 
@@ -524,7 +530,6 @@ export function ListeningExerciseSession({
     setOverallScore(null);
     setEstimatedBand(null);
     setReviewData(null);
-    setIsReviewLoading(false);
     setReviewError(false);
   };
 
@@ -540,7 +545,7 @@ export function ListeningExerciseSession({
       );
     }
 
-    if (isReviewLoading) {
+    if (!reviewError) {
       return (
         <div className="flex flex-col gap-6 max-w-2xl mx-auto p-6 bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-3xl shadow-sm">
           {/* Summary Score Card */}

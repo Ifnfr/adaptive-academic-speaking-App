@@ -133,6 +133,12 @@ import {
   type TtsProvider,
   type TtsVoiceProfile,
 } from "./lib/tts/voiceProfiles";
+import {
+  DEFAULT_LISTENING_DIFFICULTY,
+  normalizeListeningDifficulty,
+  saveListeningDifficulty,
+  type ListeningDifficulty,
+} from "./lib/listening-exercise/difficulty";
 
 type ClerkUserType = ReturnType<typeof useUser>["user"];
 
@@ -713,8 +719,7 @@ export default function Home() {
     }
   };
 
-  const handleDefaultTtsVoiceProfileChange = (profile: TtsVoiceProfile) => {
-    setTtsVoiceProfile(profile);
+  const handleDefaultTtsVoiceProfileChange = (profile: TtsVoiceProfile) => {    setTtsVoiceProfile(profile);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("defaultTtsVoiceProfile", profile);
     }
@@ -782,6 +787,29 @@ export default function Home() {
         window.localStorage.removeItem("defaultElevenLabsModel");
       }
     }
+  };
+
+  // --- Listening Exercise Difficulty Setting ---
+  const [listeningDifficulty, setListeningDifficulty] =
+    useState<ListeningDifficulty>(DEFAULT_LISTENING_DIFFICULTY);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem("listeningDifficulty");
+        const normalized = normalizeListeningDifficulty(stored);
+        setListeningDifficulty(normalized);
+        if (stored !== normalized) {
+          window.localStorage.setItem("listeningDifficulty", normalized);
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleListeningDifficultyChange = (difficulty: ListeningDifficulty) => {
+    setListeningDifficulty(difficulty);
+    saveListeningDifficulty(difficulty);
   };
 
   // --- Weekly Review Agent state ---
@@ -3021,6 +3049,7 @@ export default function Home() {
                 initialSectionCount={3}
                 initialIsPlacement={false}
                 ttsVoiceProfile={ttsVoiceProfile}
+                difficulty={listeningDifficulty}
               />
             </div>
           )}
@@ -3101,6 +3130,8 @@ export default function Home() {
               onDefaultTtsVoiceProfileChange={handleDefaultTtsVoiceProfileChange}
               defaultElevenLabsModel={elevenLabsModel}
               onDefaultElevenLabsModelChange={handleDefaultElevenLabsModelChange}
+              listeningDifficulty={listeningDifficulty}
+              onListeningDifficultyChange={handleListeningDifficultyChange}
             />
           )}
 

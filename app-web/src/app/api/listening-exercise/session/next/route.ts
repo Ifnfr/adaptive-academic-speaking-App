@@ -133,6 +133,7 @@ export async function POST(request: Request) {
 
   // Parse planned details for this index
   const plan = sessionData.generation_plan as {
+    difficulty?: "easy" | "medium" | "hard";
     sections?: Array<{
       section_index: number;
       cefr_level?: string;
@@ -146,6 +147,7 @@ export async function POST(request: Request) {
   const targetLevel = planSection?.cefr_level || sessionData.cefr_level;
   const targetTopic = planSection?.topic || `Section ${nextIndex + 1}`;
   const targetQuestionTypes = planSection?.question_types || ["fill_blank"];
+  const targetDifficulty = plan?.difficulty ?? "medium";
 
   // Insert next section in generating state
   const { data: newSectionData, error: newSectionError } = await supabase
@@ -181,7 +183,7 @@ export async function POST(request: Request) {
       }
 
       const questionType = targetQuestionTypes[0] || "fill_blank";
-      const systemPrompt = buildNextSectionSystemPrompt(questionType);
+      const systemPrompt = buildNextSectionSystemPrompt(questionType, targetDifficulty);
       const userPrompt = buildNextSectionUserPrompt(
         nextIndex,
         targetLevel,

@@ -329,10 +329,23 @@ export async function callListeningAI(
   return content;
 }
 
+function buildDifficultyInstruction(targetDifficulty: "easy" | "medium" | "hard"): string {
+  if (targetDifficulty === "easy") {
+    return "DIFFICULTY SCALING \u2014 EASY tier: Use only high-frequency, everyday vocabulary (roughly the top 1000\u20131500 most common English words; CEFR A1\u2013A2). No idioms, no phrasal verbs, no academic or technical jargon. Keep sentences short and simple \u2014 mostly present simple and simple past, minimal subordinate clauses \u2014 and explain any abstract idea in the simplest everyday terms. You may still let vocabulary and sentence complexity increase gradually from the first question toward the last, analyzing the user's past performance if provided in context, but every question must stay within these Easy-tier bounds \u2014 never introduce idioms, jargon, or complex clause structures even for later questions.";
+  }
+  if (targetDifficulty === "hard") {
+    return "DIFFICULTY SCALING \u2014 HARD tier: Use a wide vocabulary range including abstract, academic, and domain-specific or technical terms appropriate to the topic (CEFR C1). Idiomatic expressions and less-common phrasal verbs are allowed. Use complex sentence structures \u2014 multiple clauses, passive voice, varied tenses, nuanced argumentation \u2014 and do not simplify domain concepts. You may still let vocabulary and sentence complexity increase gradually from the first question toward the last, analyzing the user's past performance if provided in context, but stay within this Hard-tier (C1) ceiling throughout \u2014 do not reach for highly specialized C2-level jargon unless the topic has no simpler equivalent term.";
+  }
+  // "medium" default
+  return "DIFFICULTY SCALING \u2014 MEDIUM tier: Use broader everyday vocabulary plus common topic-related words (CEFR B1\u2013B2). Occasional common idioms or phrasal verbs are allowed. Use moderate sentence complexity \u2014 some subordinate clauses, a mix of tenses including present perfect, simple future, and basic conditionals \u2014 and introduce domain-specific terms naturally, briefly explaining them if unusual. You may still let vocabulary and sentence complexity increase gradually from the first question toward the last, analyzing the user's past performance if provided in context, but stay within these Medium-tier bounds throughout \u2014 do not drop to Easy-tier simplicity or reach into Hard-tier academic/idiomatic territory.";
+}
+
 /**
  * Builds the Phase 1, Phase 2, Phase 3 system prompt for Section 1 generation.
  */
-export function buildSection1SystemPrompt(): string {
+export function buildSection1SystemPrompt(
+  targetDifficulty: "easy" | "medium" | "hard"
+): string {
   return [
     "You are an expert AI English academic listening content designer for the Fonetik application.",
     "You must execute a strict Single-Call Three-Phase Reasoning Model:",
@@ -365,7 +378,7 @@ export function buildSection1SystemPrompt(): string {
     "",
     "FORMAT ENFORCEMENT: All 5 questions for this section (index 0) MUST be Fill-in-the-Blank ('fill_blank') format. Do not include any multiple choice or true/false questions in this section.",
     "",
-    "DIFFICULTY SCALING: Analyze the user's past performance (if provided in context) or the target academic level. Increase vocabulary complexity and inferential reasoning requirements for each subsequent question.",
+    buildDifficultyInstruction(targetDifficulty),
     "",
     "QUESTION FORMAT RULES:",
     "1. fill_blank:",
@@ -478,7 +491,10 @@ export function buildSection1UserPrompt(
 /**
  * Builds the system prompt for subsequent sections (index >= 1) generation.
  */
-export function buildNextSectionSystemPrompt(questionType: string): string {
+export function buildNextSectionSystemPrompt(
+  questionType: string,
+  targetDifficulty: "easy" | "medium" | "hard"
+): string {
   let questionsExample = "";
   let subSkillInstruction = "";
 
@@ -552,7 +568,7 @@ export function buildNextSectionSystemPrompt(questionType: string): string {
     "  - If the requested question type is 'multiple_choice', all 5 questions must be 'multiple_choice'.",
     "  - If the requested question type is 'true_false', all 5 questions must be 'true_false'.",
     "",
-    "DIFFICULTY SCALING: Analyze the user's past performance (if provided in context) or the target academic level. Increase vocabulary complexity and inferential reasoning requirements for each subsequent question.",
+    buildDifficultyInstruction(targetDifficulty),
     "",
     "QUESTION FORMAT RULES:",
     "1. fill_blank:",
