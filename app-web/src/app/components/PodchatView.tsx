@@ -27,6 +27,10 @@ import type {
 } from "../lib/podchat-aur/types";
 import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
 import { TtsChunker } from "../lib/podchat/ttsChunker";
+import {
+  BubbleEvaluationCard,
+} from "./BubbleEvaluationCard";
+import type { PodchatBubbleEvaluation } from "../api/podchat/evaluate-bubbles/route";
 
 type PodchatPhase =
   | "setup"
@@ -437,6 +441,11 @@ export function PodchatView({
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalError, setEvalError] = useState<string | null>(null);
   const [evalData, setEvalData] = useState<PodchatEvaluateResponse | null>(null);
+  const [bubbleEvals, setBubbleEvals] = useState<
+    Record<string, PodchatBubbleEvaluation | null>
+  >({});
+  const [bubbleEvalLoading, setBubbleEvalLoading] = useState<Record<string, boolean>>({});
+  const [bubbleEvalErrors, setBubbleEvalErrors] = useState<Record<string, string | null>>({});
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizData, setQuizData] = useState<PodchatQuizQuestion[] | null>(null);
@@ -1345,6 +1354,9 @@ export function PodchatView({
     setQuizLoading(false);
     setQuizAnswers({});
     setQuizSubmitted(false);
+    setBubbleEvals({});
+    setBubbleEvalLoading({});
+    setBubbleEvalErrors({});
     setRecordingState("idle");
     setLockedTranscript(null);
     if (onClearArticleContext) {
@@ -1830,6 +1842,40 @@ export function PodchatView({
       setEvalError(msg || "An error occurred during evaluation.");
     } finally {
       setEvalLoading(false);
+    }
+  }
+
+  async function evaluateBubble(turnId: string) {
+    const learnerTurn = turns.find((t) => t.id === turnId);
+    if (!learnerTurn || learnerTurn.speaker !== "learner") return;
+    setBubbleEvalLoading((prev) => ({ ...prev, [turnId]: true }));
+    setBubbleEvalErrors((prev) => ({ ...prev, [turnId]: null }));
+    try {
+      const response = await fetch("/api/podchat/evaluate-bubbles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          difficulty,
+          sessionMode: podchatSessionMode,
+          bubble: { speaker: "learner", text: learnerTurn.text },
+          turns: turns.map((t) => ({ speaker: t.speaker, text: t.text })),
+          ...(articleContext ? { articleContext } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.json().catch(() => ({}));
+        throw new Error(
+          (errText as { error?: string }).error || "Failed to evaluate this bubble.",
+        );
+      }
+      const data = (await response.json()) as PodchatBubbleEvaluation;
+      setBubbleEvals((prev) => ({ ...prev, [turnId]: data }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setBubbleEvalErrors((prev) => ({ ...prev, [turnId]: msg }));
+    } finally {
+      setBubbleEvalLoading((prev) => ({ ...prev, [turnId]: false }));
     }
   }
 
@@ -3139,6 +3185,35 @@ export function PodchatView({
             </div>
           </section>
         )}
+
+        <section className={card} data-testid="podchat-bubble-evaluations">
+          <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
+              Bubble-level feedback
+            </p>
+            <h3 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
+              Evaluate each of your responses
+            </h3>
+            <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
+              Tap Evaluate on a bubble to get focused feedback on that answer.
+            </p>
+          </div>
+          <div className="flex flex-col gap-4 p-6">
+            {turns
+              .filter((t) => t.speaker === "learner")
+              .map((t) => (
+                <BubbleEvaluationCard
+                  key={t.id}
+                  turnId={t.id}
+                  learnerText={t.text}
+                  evaluation={bubbleEvals[t.id] ?? null}
+                  loading={Boolean(bubbleEvalLoading[t.id])}
+                  error={bubbleEvalErrors[t.id] ?? null}
+                  onEvaluate={() => evaluateBubble(t.id)}
+                />
+              ))}
+          </div>
+        </section>
 
         {quizLoading && (
           <section className={`${card} p-6 flex flex-col items-center justify-center min-h-[160px]`} data-testid="podchat-quiz-loading">
