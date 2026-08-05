@@ -164,7 +164,7 @@ function getNow(): number {
 export function PatternDrillPrototype({
   onExit,
   ttsProvider = "amazon-polly",
-  ttsVoiceProfile = "british_female",
+  ttsVoiceProfile = "british_male",
   elevenLabsModelId = "",
 }: PatternDrillPrototypeProps) {
   const [weaknessState, setWeaknessState] = useState<FetchState>({ status: "loading" });

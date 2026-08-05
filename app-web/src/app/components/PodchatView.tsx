@@ -385,7 +385,7 @@ export function PodchatView({
   commonplaceMapContextRef,
   onClearCommonplaceMapContext,
   ttsProvider = "amazon-polly",
-  ttsVoiceProfile = "british_female",
+  ttsVoiceProfile = "british_male",
   elevenLabsModelId = "",
   isActiveView = true,
 }: PodchatViewProps) {

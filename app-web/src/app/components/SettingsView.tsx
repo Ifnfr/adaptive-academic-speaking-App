@@ -863,7 +863,7 @@ export function SettingsView({
   onFluencyProviderChange,
   defaultTtsProvider = "amazon-polly",
   onDefaultTtsProviderChange,
-  defaultTtsVoiceProfile = "british_female",
+  defaultTtsVoiceProfile = "british_male",
   onDefaultTtsVoiceProfileChange,
   defaultElevenLabsModel = "",
   onDefaultElevenLabsModelChange,
