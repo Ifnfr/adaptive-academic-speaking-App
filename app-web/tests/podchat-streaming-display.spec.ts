@@ -93,4 +93,52 @@ test.describe("StreamingJsonDisplay", () => {
     };
     expect(display.text()).toBe(`${parsed.hostText} ${parsed.followUpQuestion}`);
   });
+
+  test("REGRESSION: repeated text() calls after completion never leak the closing brace", () => {
+    // Real DeepSeek streaming calls text() once per delta, including AFTER
+    // the question's closing quote arrives — the trailing `}` of the JSON
+    // must never be decoded into the displayed/synthesized text.
+    const display = new StreamingJsonDisplay();
+    const raw =
+      '{\n  "hostText": "Ah, so for you it is about practice, not just convenience.",\n  "followUpQuestion": "What do you think makes the price different?"\n}';
+    // Feed the raw exactly as deltas would arrive, calling text() after each.
+    let previous = "";
+    const deltas = [
+      '{\n  "ho',
+      'stText": "Ah, so for you it is about practice, not just convenience.',
+      '",\n  "followUpQuestion": "What do you think makes the price different?',
+      '"\n}',
+    ];
+    for (const delta of deltas) {
+      display.append(delta);
+      const clean = display.text();
+      expect(clean.startsWith(previous)).toBe(true);
+      previous = clean;
+    }
+    // After the stream is complete, extra text() calls (e.g. post-done
+    // renders) must return the SAME clean text — no `}` appended.
+    expect(previous).toBe(
+      "Ah, so for you it is about practice, not just convenience. What do you think makes the price different?",
+    );
+    expect(display.text()).toBe(previous);
+    expect(display.text()).toBe(previous);
+    expect(previous.endsWith("}")).toBe(false);
+    expect(previous).not.toContain('"');
+  });
+
+  test("REGRESSION: truncated stream yields only the decoded clean prefix", () => {
+    // A provider stream that dies mid-question must leave the extractor with
+    // exactly the decodable text — nothing more, nothing duplicated.
+    const display = new StreamingJsonDisplay();
+    const raw =
+      '{"hostText":"First sentence. Second sentence.","followUpQuestion":"What do you think ma';
+    for (const char of raw) {
+      display.append(char);
+      display.text();
+    }
+    const clean = display.text();
+    expect(clean).toBe("First sentence. Second sentence. What do you think ma");
+    // Re-scanning must be idempotent.
+    expect(display.text()).toBe(clean);
+  });
 });

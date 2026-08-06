@@ -471,7 +471,7 @@ async function callGemini(
   system: string,
   user: string,
 ): Promise<string> {
-  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "";
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -506,7 +506,7 @@ async function callGemini(
 function getApiKey(provider: Provider): string | undefined {
   if (provider === "Claude") return process.env.CLAUDE_API_KEY;
   if (provider === "DeepSeek") return process.env.DEEPSEEK_API_KEY;
-  return process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  return process.env.DEEPSEEK_API_KEY || "";
 }
 
 function isArticleMockProvider(): boolean {

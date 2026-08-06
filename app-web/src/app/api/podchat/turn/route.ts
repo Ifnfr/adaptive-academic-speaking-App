@@ -804,7 +804,7 @@ async function callGeminiSafely(
   system: string,
   user: string,
 ): Promise<{ ok: true; text: string } | { ok: false; providerError: SafeProviderError }> {
-  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "";
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   let res: Response;
 
@@ -988,6 +988,8 @@ async function streamDeepSeekSafely(
   onDelta: (delta: string) => void,
 ): Promise<string> {
   const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
     res = await fetch("https://api.deepseek.com/chat/completions", {
@@ -1005,11 +1007,14 @@ async function streamDeepSeekSafely(
           { role: "user", content: user },
         ],
       }),
+      signal: controller.signal,
     });
   } catch {
+    clearTimeout(timeoutId);
     throw new ProviderRequestError("provider_unavailable", 503);
   }
   if (!res.ok) {
+    clearTimeout(timeoutId);
     throw new ProviderRequestError(mapProviderStatus(res.status), res.status);
   }
   try {
@@ -1021,6 +1026,8 @@ async function streamDeepSeekSafely(
   } catch (err) {
     if (err instanceof ProviderRequestError) throw err;
     throw invalidStreamError();
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -1030,8 +1037,10 @@ async function streamGeminiSafely(
   user: string,
   onDelta: (delta: string) => void,
 ): Promise<string> {
-  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || apiKey;
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
     res = await fetch("https://api.deepseek.com/chat/completions", {
@@ -1049,11 +1058,14 @@ async function streamGeminiSafely(
           { role: "user", content: user },
         ],
       }),
+      signal: controller.signal,
     });
   } catch {
+    clearTimeout(timeoutId);
     throw new ProviderRequestError("provider_unavailable", 503);
   }
   if (!res.ok) {
+    clearTimeout(timeoutId);
     throw new ProviderRequestError(mapProviderStatus(res.status), res.status);
   }
   try {
@@ -1065,6 +1077,8 @@ async function streamGeminiSafely(
   } catch (err) {
     if (err instanceof ProviderRequestError) throw err;
     throw invalidStreamError();
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -1075,6 +1089,8 @@ async function streamClaudeSafely(
   user: string,
   onDelta: (delta: string) => void,
 ): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
     res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1091,11 +1107,14 @@ async function streamClaudeSafely(
         system,
         messages: [{ role: "user", content: user }],
       }),
+      signal: controller.signal,
     });
   } catch {
+    clearTimeout(timeoutId);
     throw new ProviderRequestError("provider_unavailable", 503);
   }
   if (!res.ok) {
+    clearTimeout(timeoutId);
     throw new ProviderRequestError(mapProviderStatus(res.status), res.status);
   }
   try {
@@ -1107,6 +1126,8 @@ async function streamClaudeSafely(
   } catch (err) {
     if (err instanceof ProviderRequestError) throw err;
     throw invalidStreamError();
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

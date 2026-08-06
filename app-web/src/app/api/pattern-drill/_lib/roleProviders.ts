@@ -59,13 +59,13 @@ export async function resolveProvider(role: AiProviderRole): Promise<{ providerI
     apiKey = process.env.MINIMAX_API_KEY || "";
     modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
   } else if (providerId === "deepseek") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    apiKey = process.env.DEEPSEEK_API_KEY || "";
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else if (providerId === "claude") {
     apiKey = process.env.CLAUDE_API_KEY || "";
     modelName = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-20241022";
   } else if (providerId === "gemini") {
-    apiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+    apiKey = process.env.DEEPSEEK_API_KEY || "";
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else {
     // Default fallback to Claude config
@@ -254,7 +254,7 @@ async function callGemini(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "";
   const actualModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   return callDeepSeek(actualApiKey, actualModel, systemPrompt, userPrompt);
 }

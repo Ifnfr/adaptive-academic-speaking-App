@@ -29,6 +29,7 @@ export class StreamingJsonDisplay {
   private hostClosed = false;
   private qKeyFound = false;
   private qStarted = false;
+  private qClosed = false;
   private hostValue = "";
   private question = "";
 
@@ -60,6 +61,7 @@ export class StreamingJsonDisplay {
     this.hostClosed = false;
     this.qKeyFound = false;
     this.qStarted = false;
+    this.qClosed = false;
     this.hostValue = "";
     this.question = "";
   }
@@ -98,7 +100,11 @@ export class StreamingJsonDisplay {
       this.qStarted = true;
     }
 
-    this.readString(); // question may be incomplete; that is fine
+    if (!this.qClosed) {
+      if (this.readString()) {
+        this.qClosed = true;
+      }
+    }
   }
 
   /** After a key, skip whitespace + `:` + whitespace and locate the opening quote. */

@@ -1081,11 +1081,22 @@ export function PodchatView({
     ttsChunkerRef.current = null;
   }
 
-  /** Speak a complete host utterance (non-streaming path). */
+  /** Speak a host utterance that was never fed to TTS (non-streaming path). */
   function speakHostText(text: string) {
     beginHostSpeech();
     appendHostSpeech(text);
     finishHostSpeech();
+  }
+
+  /**
+   * Speak only the tail of a completed reply that the streaming path did not
+   * cover yet. Chains onto the existing synthesis queue WITHOUT stopping or
+   * clearing anything that is already in flight (unlike beginHostSpeech).
+   */
+  function speakRemainder(text: string) {
+    const chunker = new TtsChunker((chunk) => enqueueTtsChunk(chunk));
+    chunker.append(text);
+    chunker.finish();
   }
 
   async function synthChunk(text: string): Promise<string | null> {
@@ -1133,7 +1144,21 @@ export function PodchatView({
       })
       .then(async () => {
         if (ttsStopRequestedRef.current) return;
+        const gen = ttsGenerationRef.current;
         const url = await synthChunk(chunk);
+        // A stop/barge-in/new-turn may have happened while synthesizing —
+        // never push a stale chunk (it would play out of turn or repeat words
+        // from a previous utterance).
+        if (gen !== ttsGenerationRef.current || ttsStopRequestedRef.current) {
+          if (url) {
+            try {
+              URL.revokeObjectURL(url);
+            } catch {
+              // ignore
+            }
+          }
+          return;
+        }
         if (url) {
           ttsAudioQueueRef.current.push(url);
           kickTtsPlayback();
@@ -2057,10 +2082,13 @@ export function PodchatView({
   /**
    * Read a streaming (SSE) turn response. Emits deltas via onDelta and
    * resolves with the validated host reply from the `done` event.
+   * A watchdog aborts the request if no frame arrives for 20s so a silently
+   * dropped provider stream surfaces as an error + Retry instead of hanging.
    */
   async function readSseTurn(
     response: Response,
     onDelta: (delta: string) => void,
+    controller: AbortController,
   ): Promise<{ hostText: string; followUpQuestion: string }> {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -2068,51 +2096,75 @@ export function PodchatView({
     }
     const decoder = new TextDecoder();
     let buffer = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let frameIndex = buffer.indexOf("\n\n");
-      while (frameIndex !== -1) {
-        const frame = buffer.slice(0, frameIndex);
-        buffer = buffer.slice(frameIndex + 2);
-        const dataLine = frame
-          .split("\n")
-          .find((line) => line.startsWith("data:"));
-        const payload = dataLine ? dataLine.slice(5).trim() : "";
-        if (!payload) {
-          frameIndex = buffer.indexOf("\n\n");
-          continue;
-        }
-        let event: Record<string, unknown>;
+    let timedOut = false;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const armWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, 20000);
+    };
+    armWatchdog();
+    try {
+      for (;;) {
+        let value: Uint8Array | undefined;
         try {
-          event = JSON.parse(payload) as Record<string, unknown>;
-        } catch {
-          frameIndex = buffer.indexOf("\n\n");
-          continue;
-        }
-        if (event.type === "delta" && typeof event.text === "string") {
-          onDelta(event.text);
-        } else if (event.type === "done") {
-          if (
-            typeof event.hostText === "string" &&
-            typeof event.followUpQuestion === "string"
-          ) {
-            return {
-              hostText: event.hostText,
-              followUpQuestion: event.followUpQuestion,
-            };
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          value = chunk.value;
+        } catch (err: unknown) {
+          if (timedOut) {
+            throw new Error("Host response timed out. Please try again.");
           }
-          throw new Error("Invalid provider response format. Please try again.");
-        } else if (event.type === "error") {
-          const message =
-            typeof event.error === "string"
-              ? event.error
-              : "An error occurred. Please try again.";
-          throw new Error(message);
+          throw err;
         }
-        frameIndex = buffer.indexOf("\n\n");
+        armWatchdog();
+        buffer += decoder.decode(value, { stream: true });
+        let frameIndex = buffer.indexOf("\n\n");
+        while (frameIndex !== -1) {
+          const frame = buffer.slice(0, frameIndex);
+          buffer = buffer.slice(frameIndex + 2);
+          const dataLine = frame
+            .split("\n")
+            .find((line) => line.startsWith("data:"));
+          const payload = dataLine ? dataLine.slice(5).trim() : "";
+          if (!payload) {
+            frameIndex = buffer.indexOf("\n\n");
+            continue;
+          }
+          let event: Record<string, unknown>;
+          try {
+            event = JSON.parse(payload) as Record<string, unknown>;
+          } catch {
+            frameIndex = buffer.indexOf("\n\n");
+            continue;
+          }
+          if (event.type === "delta" && typeof event.text === "string") {
+            onDelta(event.text);
+          } else if (event.type === "done") {
+            if (
+              typeof event.hostText === "string" &&
+              typeof event.followUpQuestion === "string"
+            ) {
+              return {
+                hostText: event.hostText,
+                followUpQuestion: event.followUpQuestion,
+              };
+            }
+            throw new Error("Invalid provider response format. Please try again.");
+          } else if (event.type === "error") {
+            const message =
+              typeof event.error === "string"
+                ? event.error
+                : "An error occurred. Please try again.";
+            throw new Error(message);
+          }
+          frameIndex = buffer.indexOf("\n\n");
+        }
       }
+    } finally {
+      if (watchdog) clearTimeout(watchdog);
     }
     throw new Error("Host response ended unexpectedly. Please try again.");
   }
@@ -2149,7 +2201,7 @@ export function PodchatView({
       }
       const contentType = response.headers.get("content-type") || "";
       if (contentType.includes("text/event-stream")) {
-        return readSseTurn(response, onDelta);
+        return readSseTurn(response, onDelta, controller);
       }
       const data = (await response.json()) as {
         hostText?: unknown;
@@ -2193,19 +2245,21 @@ export function PodchatView({
     setRecordingState("idle");
     setStreamingHostText(null);
 
-    // Speak the completed reply. Streaming path: the clean text was already
-    // fed incrementally — flush the chunker tail and synthesize any remainder
-    // (e.g. the follow-up question if it arrived only with `done`). Legacy
-    // JSON path: nothing was fed — synthesize the full reply (restores the
-    // pre-streaming behavior where every host reply was spoken).
+    // Speak the completed reply. Streaming path: clean text was already fed
+    // incrementally — flush the chunker tail, then synthesize only the part
+    // of the validated reply that was NOT yet covered (never replay text that
+    // has already been spoken, which would make the voice repeat words).
+    // Legacy JSON path: nothing was fed — synthesize the full reply.
     const fullText = `${hostText} ${followUpQuestion}`;
     const fed = cleanStreamingTextRef.current;
-    if (ttsFedRef.current && fed && fullText.startsWith(fed)) {
+    let lcp = 0;
+    const maxLen = Math.min(fed.length, fullText.length);
+    while (lcp < maxLen && fed[lcp] === fullText[lcp]) lcp++;
+    if (ttsFedRef.current && fed && lcp > 0) {
       finishHostSpeech();
-      const remainder = fullText.slice(fed.length);
+      const remainder = fullText.slice(lcp);
       if (remainder.trim()) {
-        appendHostSpeech(remainder);
-        finishHostSpeech();
+        speakRemainder(remainder);
       }
     } else {
       // beginHostSpeech inside speakHostText clears any partially queued

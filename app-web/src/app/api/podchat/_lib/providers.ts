@@ -115,7 +115,7 @@ export async function callGemini(
   system: string,
   user: string,
 ): Promise<string> {
-  const actualApiKey = process.env.DEEPSEEK_API_KEY || "sk-ea8de68f5ef648b3a7f49bcff166cffa";
+  const actualApiKey = process.env.DEEPSEEK_API_KEY || "";
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
