@@ -28,9 +28,7 @@ import type {
 import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
 import { TtsChunker } from "../lib/podchat/ttsChunker";
 import { StreamingJsonDisplay } from "../lib/podchat/streamingDisplay";
-import {
-  BubbleEvaluationCard,
-} from "./BubbleEvaluationCard";
+import { EvaluationFlashcards } from "./EvaluationFlashcards";
 import type {
   PodchatBubbleEvaluation,
   PodchatBubbleSummary,
@@ -82,7 +80,7 @@ type PodchatAspectFeedback = {
   conversationalResponsiveness: PodchatAspectFeedbackItem;
 };
 
-type PodchatEvaluateResponse = {
+export type PodchatEvaluateResponse = {
   summary: string;
   corrections: PodchatCorrection[];
   betterSentences: string[];
@@ -168,18 +166,6 @@ const LEARNER_REPLIES: Record<PodchatTopic, readonly string[]> = {
     "Even if there are exceptions, the general principle still holds in most cases.",
   ],
 };
-
-const ASPECT_FEEDBACK_LABELS: Array<{
-  key: keyof PodchatAspectFeedback;
-  label: string;
-}> = [
-  { key: "sentenceStructure", label: "Sentence Structure" },
-  { key: "grammar", label: "Grammar" },
-  { key: "coherence", label: "Coherence" },
-  { key: "topicRelevance", label: "Topic Relevance / Substance" },
-  { key: "ideaDevelopment", label: "Idea Development" },
-  { key: "conversationalResponsiveness", label: "Conversational Responsiveness" },
-];
 
 function speakerLabel(speaker: PodchatSpeaker): string {
   return speaker === "host" ? "AI host" : "Learner";
@@ -456,6 +442,7 @@ export function PodchatView({
   const [quizData, setQuizData] = useState<PodchatQuizQuestion[] | null>(null);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number | string>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [deckResetKey, setDeckResetKey] = useState(0);
   const [commonplaceMapContext, setCommonplaceMapContext] =
     useState<PodchatCommonplaceMapDiscussionContext | null>(null);
   const [commonplaceMapContextLoading, setCommonplaceMapContextLoading] =
@@ -1415,6 +1402,7 @@ export function PodchatView({
     setBubbleEvalLoading({});
     setBubbleEvalErrors({});
     setBubbleSummary(null);
+    setDeckResetKey((key) => key + 1);
     setRecordingState("idle");
     setLockedTranscript(null);
     if (onClearArticleContext) {
@@ -3271,202 +3259,20 @@ export function PodchatView({
         )}
 
         {evalData && (
-          <section className={card} data-testid="podchat-evaluation-success">
-            <div className="p-6 flex flex-col gap-6">
-              <div>
-                <h3 className={labelClass}>Summary</h3>
-                <p className="text-sm leading-6 text-[var(--brand-ink-soft)]">{evalData.summary}</p>
-              </div>
-
-              {evalData.aspectFeedback && (
-                <div>
-                  <h3 className={labelClass}>Aspect Feedback</h3>
-                  <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {ASPECT_FEEDBACK_LABELS.map(({ key, label }) => {
-                      const item = evalData.aspectFeedback?.[key];
-                      if (!item?.message) return null;
-                      const displayText =
-                        item.status === "excellent" ? "Excellent" : item.message;
-                      return (
-                        <div
-                          key={key}
-                          className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-4"
-                        >
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-muted)]">
-                            {label}
-                          </p>
-                          <p className="mt-2 text-sm leading-6 text-[var(--brand-ink-soft)]">
-                            {displayText}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {evalData.corrections.length > 0 && (
-                <div>
-                  <h3 className={labelClass}>Corrections / Grammar Notes</h3>
-                  <div className="mt-2 flex flex-col gap-3">
-                    {evalData.corrections.map((c: PodchatCorrection, i: number) => (
-                      <div key={i} className="app-panel-muted p-4">
-                        <p className="text-xs text-[var(--brand-coral)] line-through">&quot;{c.original}&quot;</p>
-                        <p className="mt-1 text-sm font-medium text-[var(--brand-success-ink)]">&quot;{c.improved}&quot;</p>
-                        <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">{c.explanation}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {evalData.betterSentences.length > 0 && (
-                <div>
-                  <h3 className={labelClass}>Better sentence examples</h3>
-                  <ul className="mt-2 list-disc pl-5 text-sm text-[var(--brand-ink-soft)] space-y-2">
-                    {evalData.betterSentences.map((s: string, i: number) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {evalData.vocabularySuggestions.length > 0 && (
-                <div>
-                  <h3 className={labelClass}>Vocabulary suggestions</h3>
-                  <div className="mt-2 flex flex-col gap-3">
-                    {evalData.vocabularySuggestions.map((v: PodchatVocabularySuggestion, i: number) => (
-                      <div key={i} className="app-panel-muted p-4">
-                        <p className="text-sm font-semibold text-[var(--brand-ink)]">
-                          Instead of <span className="underline decoration-[var(--brand-coral)]">{v.originalOrBasic}</span>, try: <span className="text-[var(--brand-teal)]">{v.suggestion}</span>
-                        </p>
-                        <p className="mt-2 text-xs italic text-[var(--brand-ink-soft)]">Example: &quot;{v.example}&quot;</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {evalData.recurringErrors.length > 0 && (
-                <div>
-                  <h3 className={labelClass}>Recurring Errors</h3>
-                  <div className="mt-2 flex flex-col gap-3">
-                    {evalData.recurringErrors.map((re: PodchatRecurringError, i: number) => (
-                      <div key={i} className="app-panel-muted p-4">
-                        <p className="text-sm font-semibold text-[var(--brand-ink)]">{re.label}</p>
-                        <p className="mt-1 text-xs text-[var(--brand-ink-soft)]">Evidence: <span className="italic">&quot;{re.evidence}&quot;</span></p>
-                        <p className="mt-2 text-xs text-[var(--brand-teal-ink)]">Practice: {re.practiceFocus}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h3 className={labelClass}>Next practice focus</h3>
-                <p className="text-sm leading-6 text-[var(--brand-ink-soft)]">{evalData.nextPracticeFocus}</p>
-              </div>
-            </div>
-            <div className="border-t border-[var(--brand-border)] px-6 py-5 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={resetPodchat}
-                className={buttonSecondary}
-              >
-                Start New Podchat
-              </button>
-              {!quizData && !quizLoading && (
-                <button
-                  type="button"
-                  onClick={() => triggerQuiz(evalData)}
-                  className={buttonPrimary}
-                  data-testid="podchat-start-quiz"
-                >
-                  Start Quiz
-                </button>
-              )}
-            </div>
-          </section>
+          <EvaluationFlashcards
+            evalData={evalData}
+            bubbleSummary={bubbleSummary}
+            bubbleEvals={bubbleEvals}
+            bubbleEvalLoading={bubbleEvalLoading}
+            bubbleEvalErrors={bubbleEvalErrors}
+            learnerTurns={turns.filter((t) => t.speaker === "learner")}
+            onEvaluateBubble={(turnId) => evaluateBubble(turnId)}
+            onStartQuiz={() => triggerQuiz(evalData)}
+            onStartNew={resetPodchat}
+            quizActive={Boolean(quizData || quizLoading)}
+            resetKey={deckResetKey}
+          />
         )}
-
-        <section className={card} data-testid="podchat-bubble-evaluations">
-          <div className="border-b border-[var(--brand-border)] bg-[var(--brand-surface-2)] px-6 py-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-              Bubble-level feedback
-            </p>
-            <h3 className="mt-1 text-lg font-semibold text-[var(--brand-ink)]">
-              Evaluate each of your responses
-            </h3>
-            <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
-              Every answer you gave is evaluated on its own: what worked, what to fix, a stronger version, and one thing to practice.
-            </p>
-          </div>
-          <div className="flex flex-col gap-4 p-6">
-            {bubbleSummary && (
-              <div
-                className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4"
-                data-testid="podchat-bubble-summary"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
-                    Session summary
-                  </p>
-                  <span
-                    className={
-                      bubbleSummary.overallStatus === "strong"
-                        ? "app-status app-status-success"
-                        : bubbleSummary.overallStatus === "developing"
-                          ? "app-status app-status-info"
-                          : "app-status app-status-warning"
-                    }
-                  >
-                    {bubbleSummary.overallStatus === "strong"
-                      ? "Strong"
-                      : bubbleSummary.overallStatus === "developing"
-                        ? "Developing"
-                        : "Needs work"}
-                  </span>
-                </div>
-                {bubbleSummary.topWeaknesses.length > 0 && (
-                  <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-sm leading-6 text-[var(--brand-ink-soft)]">
-                    {bubbleSummary.topWeaknesses.map((weakness, i) => (
-                      <li key={`weakness-${i}`} data-testid={`podchat-bubble-weakness-${i}`}>
-                        <span className="font-semibold text-[var(--brand-ink)]">
-                          {weakness.label}
-                        </span>{" "}
-                        ({weakness.count}×) — {weakness.evidence}{" "}
-                        <span className="text-[var(--brand-teal)]">
-                          {weakness.practiceFocus}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p
-                  className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3 text-sm leading-6 text-[var(--brand-ink)]"
-                  data-testid="podchat-bubble-next-focus"
-                >
-                  <span className="font-semibold">Next practice focus: </span>
-                  {bubbleSummary.nextPracticeFocus}
-                </p>
-              </div>
-            )}
-
-            {turns
-              .filter((t) => t.speaker === "learner")
-              .map((t) => (
-                <BubbleEvaluationCard
-                  key={t.id}
-                  turnId={t.id}
-                  learnerText={t.text}
-                  evaluation={bubbleEvals[t.id] ?? null}
-                  loading={Boolean(bubbleEvalLoading[t.id])}
-                  error={bubbleEvalErrors[t.id] ?? null}
-                  onEvaluate={() => evaluateBubble(t.id)}
-                />
-              ))}
-          </div>
-        </section>
 
         {quizLoading && (
           <section className={`${card} p-6 flex flex-col items-center justify-center min-h-[160px]`} data-testid="podchat-quiz-loading">
