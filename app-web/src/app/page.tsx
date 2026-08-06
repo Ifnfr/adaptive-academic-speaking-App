@@ -1779,6 +1779,39 @@ export default function Home() {
     );
   };
 
+  const handleAddEvaluationVocabulary = async (candidate: {
+    word: string;
+    meaning: string;
+    example: string;
+  }): Promise<"added" | "duplicate"> => {
+    const trimmedWord = candidate.word.trim().toLowerCase();
+    // Duplicate check: case-insensitive, trimmed.
+    if (
+      vocabularyItems.some(
+        (item) => item.word.trim().toLowerCase() === trimmedWord,
+      )
+    ) {
+      return "duplicate";
+    }
+    const item = createVocabItem({
+      word: candidate.word,
+      meaning: candidate.meaning,
+      source: "feedback" as const,
+      level: level as VocabLevel,
+      example: candidate.example || "",
+      collocations: [],
+    });
+    const nextItems = [item, ...vocabularyItems];
+    persistVocabulary(nextItems);
+    awardMeaningfulGamificationEvent(
+      "evaluation_vocab_saved",
+      `evaluation-vocab-${item.id}`,
+      "vocabulary",
+      "Saved useful vocabulary from evaluation feedback.",
+    );
+    return "added";
+  };
+
   const handleAddVocabularyItem = () => {
     const word = vocabFormWord.trim();
     const meaning = vocabFormMeaning.trim();
@@ -2918,6 +2951,7 @@ export default function Home() {
               onActivePanelChange={setActiveSessionPanel}
               latestSession={sessions[0] ?? null}
               dayStreak={dayStreak}
+              onAddEvaluationVocabulary={handleAddEvaluationVocabulary}
             />
           </div>
 

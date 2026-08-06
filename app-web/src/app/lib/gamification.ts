@@ -40,6 +40,7 @@ export type XpEventType =
   | "podchat_retry_completed"
   | "article_essay_evaluated"
   | "article_vocab_saved"
+  | "evaluation_vocab_saved"
   | "vocab_item_added"
   | "vocab_completeness_bonus"
   | "vocab_sentence_submitted"
@@ -291,6 +292,7 @@ export const XP_RULES: Readonly<
   podchat_retry_completed: { xp: 20, dailyCap: 3 },
   article_essay_evaluated: { xp: 60, dailyCap: 5 },
   article_vocab_saved: { xp: 10, dailyCap: 5 },
+  evaluation_vocab_saved: { xp: 10, dailyCap: 5 },
   vocab_item_added: { xp: 10, dailyCap: 10 },
   vocab_completeness_bonus: { xp: 5, dailyCap: 5 },
   vocab_sentence_submitted: { xp: 15, dailyCap: 10 },

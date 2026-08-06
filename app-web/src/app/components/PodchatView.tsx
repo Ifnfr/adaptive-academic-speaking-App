@@ -309,6 +309,11 @@ export interface PodchatViewProps {
   isActiveView?: boolean;
   stopAIOnSpeech?: boolean;
   autoSendOnPause?: boolean;
+  onAddEvaluationVocabulary?: (candidate: {
+    word: string;
+    meaning: string;
+    example: string;
+  }) => Promise<"added" | "duplicate">;
 }
 
 function buildAurInputFromContext(
@@ -387,6 +392,7 @@ export function PodchatView({
   isActiveView = true,
   stopAIOnSpeech = true,
   autoSendOnPause = true,
+  onAddEvaluationVocabulary,
 }: PodchatViewProps) {
   const [phase, setPhase] = useState<PodchatPhase>("setup");
   const [topic, setTopic] = useState<PodchatTopic>("Technology");
@@ -3271,6 +3277,21 @@ export function PodchatView({
             onStartNew={resetPodchat}
             quizActive={Boolean(quizData || quizLoading)}
             resetKey={deckResetKey}
+            onAddVocabulary={
+              onAddEvaluationVocabulary
+                ? (suggestion, example) => {
+                    const matched = evalData.vocabularySuggestions.find(
+                      (v) => v.suggestion === suggestion,
+                    );
+                    const meaning = `"${suggestion}" — replaces "${matched?.originalOrBasic ?? ""}" (from evaluation feedback)`;
+                    return onAddEvaluationVocabulary({
+                      word: suggestion,
+                      meaning,
+                      example,
+                    });
+                  }
+                : undefined
+            }
           />
         )}
 
