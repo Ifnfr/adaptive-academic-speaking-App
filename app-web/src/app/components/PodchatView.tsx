@@ -27,10 +27,14 @@ import type {
 } from "../lib/podchat-aur/types";
 import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
 import { TtsChunker } from "../lib/podchat/ttsChunker";
+import { StreamingJsonDisplay } from "../lib/podchat/streamingDisplay";
 import {
   BubbleEvaluationCard,
 } from "./BubbleEvaluationCard";
-import type { PodchatBubbleEvaluation } from "../api/podchat/evaluate-bubbles/route";
+import type {
+  PodchatBubbleEvaluation,
+  PodchatBubbleSummary,
+} from "../api/podchat/evaluate-bubbles/route";
 
 type PodchatPhase =
   | "setup"
@@ -446,6 +450,7 @@ export function PodchatView({
   >({});
   const [bubbleEvalLoading, setBubbleEvalLoading] = useState<Record<string, boolean>>({});
   const [bubbleEvalErrors, setBubbleEvalErrors] = useState<Record<string, string | null>>({});
+  const [bubbleSummary, setBubbleSummary] = useState<PodchatBubbleSummary | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizData, setQuizData] = useState<PodchatQuizQuestion[] | null>(null);
@@ -478,6 +483,12 @@ export function PodchatView({
   const [streamingHostText, setStreamingHostText] = useState<string | null>(null);
   const turnAbortRef = useRef<AbortController | null>(null);
   const pendingTurnsRef = useRef<string[]>([]);
+  // Raw SSE deltas are JSON fragments; the extractor converts them to clean
+  // text for the live bubble AND for the TTS chunker.
+  const streamingDisplayRef = useRef<StreamingJsonDisplay | null>(null);
+  const cleanStreamingTextRef = useRef("");
+  // True once any clean text has been fed to the TTS pipeline (streaming path).
+  const ttsFedRef = useRef(false);
 
   // Live TTS queue (chunked, FIFO)
   const ttsChunkerRef = useRef<TtsChunker | null>(null);
@@ -1040,7 +1051,23 @@ export function PodchatView({
     stopTtsPlayback();
     setTtsError(null);
     ttsStopRequestedRef.current = false;
+    ttsFedRef.current = false;
     ttsChunkerRef.current = new TtsChunker((chunk) => enqueueTtsChunk(chunk));
+  }
+
+  /**
+   * Convert a raw SSE delta (JSON fragment) into the clean text increment to
+   * display and to feed to TTS. Returns "" when nothing new is decodable yet.
+   */
+  function appendStreamedDelta(rawDelta: string): string {
+    if (!streamingDisplayRef.current) {
+      streamingDisplayRef.current = new StreamingJsonDisplay();
+    }
+    streamingDisplayRef.current.append(rawDelta);
+    const clean = streamingDisplayRef.current.text();
+    const inc = clean.slice(cleanStreamingTextRef.current.length);
+    cleanStreamingTextRef.current = clean;
+    return inc;
   }
 
   /** Feed streamed host text into the TTS chunker (SSE delta path). */
@@ -1223,6 +1250,7 @@ export function PodchatView({
         setStatus("complete");
         setPhase("evaluation");
         triggerEvaluation(currentTurns);
+        void evaluateAllBubbles();
       }, 0);
     } else {
       setTimeout(() => {
@@ -1340,6 +1368,10 @@ export function PodchatView({
     cleanupAudio();
     cleanupMedia();
     turnAbortRef.current?.abort();
+    pendingTurnsRef.current = [];
+    setStreamingHostText(null);
+    streamingDisplayRef.current = null;
+    cleanStreamingTextRef.current = "";
     setPhase("setup");
     setSetupStep("topic");
     setStatus("host_turn");
@@ -1357,6 +1389,7 @@ export function PodchatView({
     setBubbleEvals({});
     setBubbleEvalLoading({});
     setBubbleEvalErrors({});
+    setBubbleSummary(null);
     setRecordingState("idle");
     setLockedTranscript(null);
     if (onClearArticleContext) {
@@ -1845,11 +1878,40 @@ export function PodchatView({
     }
   }
 
-  async function evaluateBubble(turnId: string) {
-    const learnerTurn = turns.find((t) => t.id === turnId);
-    if (!learnerTurn || learnerTurn.speaker !== "learner") return;
-    setBubbleEvalLoading((prev) => ({ ...prev, [turnId]: true }));
-    setBubbleEvalErrors((prev) => ({ ...prev, [turnId]: null }));
+  function buildLearnerBubblesPayload() {
+    const learnerTurns = turns.filter((t) => t.speaker === "learner");
+    return learnerTurns.map((turn, index) => {
+      // The host bubble immediately before this learner turn is its context.
+      const turnIndex = turns.findIndex((t) => t.id === turn.id);
+      const precedingHost = turnIndex > 0 ? turns[turnIndex - 1] : null;
+      return {
+        id: turn.id,
+        text: turn.text,
+        aiContext:
+          precedingHost && precedingHost.speaker === "host"
+            ? precedingHost.text
+            : undefined,
+      };
+    });
+  }
+
+  /**
+   * Evaluate ALL learner bubbles of the session in one batch call. Called
+   * automatically when the evaluation phase begins; sets per-bubble results
+   * plus the aggregated session summary.
+   */
+  async function evaluateAllBubbles() {
+    const learnerTurns = turns.filter((t) => t.speaker === "learner");
+    if (learnerTurns.length === 0) return;
+
+    const loadingMap: Record<string, boolean> = {};
+    for (const turn of learnerTurns) {
+      loadingMap[turn.id] = true;
+    }
+    setBubbleEvalLoading(loadingMap);
+    setBubbleEvalErrors({});
+    setBubbleSummary(null);
+
     try {
       const response = await fetch("/api/podchat/evaluate-bubbles", {
         method: "POST",
@@ -1858,7 +1920,63 @@ export function PodchatView({
           topic,
           difficulty,
           sessionMode: podchatSessionMode,
-          bubble: { speaker: "learner", text: learnerTurn.text },
+          learnerBubbles: buildLearnerBubblesPayload(),
+          turns: turns.map((t) => ({ speaker: t.speaker, text: t.text })),
+          ...(articleContext ? { articleContext } : {}),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.json().catch(() => ({}));
+        throw new Error(
+          (errText as { error?: string }).error || "Failed to evaluate bubbles.",
+        );
+      }
+      const data = (await response.json()) as {
+        evaluations: PodchatBubbleEvaluation[];
+        summary: PodchatBubbleSummary | null;
+      };
+      const evalMap: Record<string, PodchatBubbleEvaluation | null> = {};
+      for (const evaluation of data.evaluations) {
+        evalMap[evaluation.bubbleId] = evaluation;
+      }
+      setBubbleEvals((prev) => ({ ...prev, ...evalMap }));
+      if (data.summary) {
+        setBubbleSummary(data.summary);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const errorMap: Record<string, string | null> = {};
+      for (const turn of learnerTurns) {
+        errorMap[turn.id] = msg;
+      }
+      setBubbleEvalErrors(errorMap);
+    } finally {
+      const idleMap: Record<string, boolean> = {};
+      for (const turn of learnerTurns) {
+        idleMap[turn.id] = false;
+      }
+      setBubbleEvalLoading(idleMap);
+    }
+  }
+
+  /** Re-evaluate a single bubble (Re-evaluate button). */
+  async function evaluateBubble(turnId: string) {
+    const learnerTurn = turns.find((t) => t.id === turnId);
+    if (!learnerTurn || learnerTurn.speaker !== "learner") return;
+    setBubbleEvalLoading((prev) => ({ ...prev, [turnId]: true }));
+    setBubbleEvalErrors((prev) => ({ ...prev, [turnId]: null }));
+    try {
+      const singleBubble = buildLearnerBubblesPayload().filter(
+        (bubble) => bubble.id === turnId,
+      );
+      const response = await fetch("/api/podchat/evaluate-bubbles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          difficulty,
+          sessionMode: podchatSessionMode,
+          learnerBubbles: singleBubble,
           turns: turns.map((t) => ({ speaker: t.speaker, text: t.text })),
           ...(articleContext ? { articleContext } : {}),
         }),
@@ -1869,8 +1987,11 @@ export function PodchatView({
           (errText as { error?: string }).error || "Failed to evaluate this bubble.",
         );
       }
-      const data = (await response.json()) as PodchatBubbleEvaluation;
-      setBubbleEvals((prev) => ({ ...prev, [turnId]: data }));
+      const data = (await response.json()) as {
+        evaluations: PodchatBubbleEvaluation[];
+      };
+      const evaluation = data.evaluations.find((e) => e.bubbleId === turnId) ?? null;
+      setBubbleEvals((prev) => ({ ...prev, [turnId]: evaluation }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setBubbleEvalErrors((prev) => ({ ...prev, [turnId]: msg }));
@@ -2071,7 +2192,26 @@ export function PodchatView({
     setLockedTranscript(null);
     setRecordingState("idle");
     setStreamingHostText(null);
-    finishHostSpeech();
+
+    // Speak the completed reply. Streaming path: the clean text was already
+    // fed incrementally — flush the chunker tail and synthesize any remainder
+    // (e.g. the follow-up question if it arrived only with `done`). Legacy
+    // JSON path: nothing was fed — synthesize the full reply (restores the
+    // pre-streaming behavior where every host reply was spoken).
+    const fullText = `${hostText} ${followUpQuestion}`;
+    const fed = cleanStreamingTextRef.current;
+    if (ttsFedRef.current && fed && fullText.startsWith(fed)) {
+      finishHostSpeech();
+      const remainder = fullText.slice(fed.length);
+      if (remainder.trim()) {
+        appendHostSpeech(remainder);
+        finishHostSpeech();
+      }
+    } else {
+      // beginHostSpeech inside speakHostText clears any partially queued
+      // audio first, so this fallback can never duplicate speech.
+      speakHostText(fullText);
+    }
 
     autoScrollToBottom();
 
@@ -2091,13 +2231,19 @@ export function PodchatView({
   ): Promise<void> {
     const payload = { ...buildTurnPayload(baseTurns, submittedUserTurns), provider: resolvedProvider };
     setStreamingHostText("");
+    streamingDisplayRef.current = null;
+    cleanStreamingTextRef.current = "";
     beginHostSpeech();
     try {
       const { hostText, followUpQuestion } = await requestHostTurn(
         payload,
         (delta) => {
-          setStreamingHostText((prev) => (prev === null ? delta : prev + delta));
-          appendHostSpeech(delta);
+          const inc = appendStreamedDelta(delta);
+          if (inc) {
+            setStreamingHostText((prev) => (prev === null ? inc : prev + inc));
+            appendHostSpeech(inc);
+            ttsFedRef.current = true;
+          }
           autoScrollToBottom();
         },
       );
@@ -2109,13 +2255,15 @@ export function PodchatView({
         // Session was torn down (end/eval/unmount); discard the partial bubble
         // without touching status (already moved to complete/setup).
         setStreamingHostText(null);
+        streamingDisplayRef.current = null;
+        cleanStreamingTextRef.current = "";
         setRecordingState("idle");
         return;
       }
       const msg = err instanceof Error ? err.message : String(err);
       setTurnError(msg || "An error occurred. Please try again.");
-      // Keep any partial streamed text visible in the bubble; offer Retry.
-      setStreamingHostText(null);
+      // Keep any partial streamed text visible in the bubble; Retry restarts
+      // the turn from a clean extractor.
       setStatus("user_turn");
     }
   }
@@ -2167,6 +2315,7 @@ export function PodchatView({
     setStatus("complete");
     setPhase("evaluation");
     triggerEvaluation(turns);
+    void evaluateAllBubbles();
   }
 
   if (phase === "setup") {
@@ -3195,10 +3344,60 @@ export function PodchatView({
               Evaluate each of your responses
             </h3>
             <p className="mt-1 text-sm text-[var(--brand-ink-soft)]">
-              Tap Evaluate on a bubble to get focused feedback on that answer.
+              Every answer you gave is evaluated on its own: what worked, what to fix, a stronger version, and one thing to practice.
             </p>
           </div>
           <div className="flex flex-col gap-4 p-6">
+            {bubbleSummary && (
+              <div
+                className="rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4"
+                data-testid="podchat-bubble-summary"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-teal)]">
+                    Session summary
+                  </p>
+                  <span
+                    className={
+                      bubbleSummary.overallStatus === "strong"
+                        ? "app-status app-status-success"
+                        : bubbleSummary.overallStatus === "developing"
+                          ? "app-status app-status-info"
+                          : "app-status app-status-warning"
+                    }
+                  >
+                    {bubbleSummary.overallStatus === "strong"
+                      ? "Strong"
+                      : bubbleSummary.overallStatus === "developing"
+                        ? "Developing"
+                        : "Needs work"}
+                  </span>
+                </div>
+                {bubbleSummary.topWeaknesses.length > 0 && (
+                  <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-sm leading-6 text-[var(--brand-ink-soft)]">
+                    {bubbleSummary.topWeaknesses.map((weakness, i) => (
+                      <li key={`weakness-${i}`} data-testid={`podchat-bubble-weakness-${i}`}>
+                        <span className="font-semibold text-[var(--brand-ink)]">
+                          {weakness.label}
+                        </span>{" "}
+                        ({weakness.count}×) — {weakness.evidence}{" "}
+                        <span className="text-[var(--brand-teal)]">
+                          {weakness.practiceFocus}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p
+                  className="mt-3 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3 text-sm leading-6 text-[var(--brand-ink)]"
+                  data-testid="podchat-bubble-next-focus"
+                >
+                  <span className="font-semibold">Next practice focus: </span>
+                  {bubbleSummary.nextPracticeFocus}
+                </p>
+              </div>
+            )}
+
             {turns
               .filter((t) => t.speaker === "learner")
               .map((t) => (
@@ -3463,7 +3662,7 @@ export function PodchatView({
                 data-testid="podchat-streaming-host-bubble"
               >
                 <p className="text-xs font-medium uppercase tracking-wide text-[var(--brand-teal)]">
-                  AI host
+                  {speakerLabel("host")}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-[var(--brand-ink)]">
                   {streamingHostText}
@@ -3472,7 +3671,8 @@ export function PodchatView({
               </article>
             )}
 
-            {status === "submitting" && (
+            {status === "submitting" &&
+              (streamingHostText === null || streamingHostText === "") && (
               <div className="app-message app-message-info flex items-center gap-2" data-testid="podchat-loading-turn">
                 <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)]"></div>
                 <div className="h-2 w-2 rounded-full bg-[var(--brand-teal)] opacity-70"></div>
