@@ -522,10 +522,27 @@ function extractJsonObject(text: string): string | null {
   const start = candidate.indexOf("{");
   if (start === -1) return null;
 
+  // Brace-depth scan that ignores braces inside quoted strings, so provider
+  // output containing characters like "{...}" or "}" in message text does not
+  // break extraction.
   let depth = 0;
+  let inString = false;
+  let escaped = false;
   for (let i = start; i < candidate.length; i++) {
     const ch = candidate[i];
-    if (ch === "{") {
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{") {
       depth++;
     } else if (ch === "}") {
       depth--;
@@ -544,8 +561,11 @@ function readShortString(
   const value = source[key];
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed.length > maxLength) return null;
-  return trimmed;
+  if (trimmed.length === 0) return null;
+  // Truncate (never reject) over-long model text — verbose provider output
+  // (e.g. DeepSeek) regularly exceeds the cap and failing the whole
+  // evaluation on length is a worse outcome than a trimmed message.
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
 }
 
 function normalizeStringArray(raw: unknown, maxItems: number): string[] | null {
@@ -555,8 +575,8 @@ function normalizeStringArray(raw: unknown, maxItems: number): string[] | null {
   for (const item of raw) {
     if (typeof item !== "string") return null;
     const trimmed = item.trim();
-    if (trimmed.length === 0 || trimmed.length > 400) return null;
-    result.push(trimmed);
+    if (trimmed.length === 0) return null;
+    result.push(trimmed.length > 400 ? trimmed.slice(0, 400) : trimmed);
   }
 
   return result;
@@ -590,7 +610,7 @@ function normalizeVocabularySuggestions(
     const source = item as Record<string, unknown>;
     const originalOrBasic = readShortString(source, "originalOrBasic", 300);
     const suggestion = readShortString(source, "suggestion", 300);
-    const example = readShortString(source, "example", 400);
+    const example = readShortString(source, "example", 600);
     if (!originalOrBasic || !suggestion || !example) return null;
     result.push({ originalOrBasic, suggestion, example });
   }
@@ -606,8 +626,8 @@ function normalizeRecurringErrors(raw: unknown): PodchatRecurringError[] | null 
     if (!item || typeof item !== "object") return null;
     const source = item as Record<string, unknown>;
     const label = readShortString(source, "label", 160);
-    const evidence = readShortString(source, "evidence", 400);
-    const practiceFocus = readShortString(source, "practiceFocus", 300);
+    const evidence = readShortString(source, "evidence", 600);
+    const practiceFocus = readShortString(source, "practiceFocus", 600);
     if (!label || !evidence || !practiceFocus) return null;
     result.push({ label, evidence, practiceFocus });
   }
@@ -621,7 +641,7 @@ function normalizeAspectFeedbackItem(raw: unknown): PodchatAspectFeedbackItem | 
   const status = source.status;
   if (status !== "excellent" && status !== "needs_improvement") return null;
 
-  const message = readShortString(source, "message", 240);
+  const message = readShortString(source, "message", 500);
   if (!message) return null;
   if (status === "needs_improvement" && message.toLowerCase() === "improve grammar") {
     return null;
@@ -690,7 +710,7 @@ function validateClaudeOutput(
       data.vocabularySuggestions,
     );
     const recurringErrors = normalizeRecurringErrors(data.recurringErrors);
-    const nextPracticeFocus = readShortString(data, "nextPracticeFocus", 300);
+    const nextPracticeFocus = readShortString(data, "nextPracticeFocus", 600);
     const aspectFeedback =
       data.aspectFeedback === undefined
         ? undefined
