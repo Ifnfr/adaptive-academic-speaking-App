@@ -2555,6 +2555,32 @@ export async function deleteCommonplaceMindMap(
   }
 
   try {
+    // Cascade: delete edges first, then nodes, then the map itself
+    const { error: edgesError } = await supabaseClient
+      .from(EDGES_TABLE)
+      .delete()
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId);
+
+    if (edgesError) return { ok: false, error: "commonplace_save_failed" };
+
+    const { error: nodesError } = await supabaseClient
+      .from(NODES_TABLE)
+      .delete()
+      .eq("owner_id", cleanOwnerId)
+      .eq("mindmap_id", cleanMindMapId);
+
+    if (nodesError) return { ok: false, error: "commonplace_save_failed" };
+
+    // Also clean up main map references (cluster nodes pointing to this sub-map)
+    const { error: mainNodesError } = await supabaseClient
+      .from(MAINMAP_NODES_TABLE)
+      .delete()
+      .eq("owner_id", cleanOwnerId)
+      .eq("sub_mindmap_id", cleanMindMapId);
+
+    if (mainNodesError) return { ok: false, error: "commonplace_save_failed" };
+
     const { error } = await supabaseClient
       .from(MINDMAPS_TABLE)
       .delete()
