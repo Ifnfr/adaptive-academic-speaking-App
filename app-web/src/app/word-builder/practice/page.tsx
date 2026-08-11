@@ -152,6 +152,10 @@ export default function WordBuilderPractice() {
   const [isSessionComplete, setIsSessionComplete] = useState(false);
   const [promptsCorrectFirstTry, setPromptsCorrectFirstTry] = useState(0);
 
+  // Resume dialog state
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [resumeData, setResumeData] = useState<any>(null);
+
   // ─── Attempt logging retry queue ───────────────────────────────────────
   const pendingAttemptsRef = useRef<Array<{ body: any; retries: number }>>([]);
   const isFlushingRef = useRef(false);
@@ -200,45 +204,165 @@ export default function WordBuilderPractice() {
 
   // ─── Session Initialization ──────────────────────────────────────────────
 
+  const initNewSession = async () => {
+    try {
+      const res = await fetch("/api/word-builder/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create" }),
+      });
+      const data = await res.json();
+      setSessionId(data.sessionId);
+      const allPrompts = data.prompts || [];
+      setPromptQueue(allPrompts);
+
+      const initialStates = allPrompts.map((_: any, index: number) => ({
+        promptIndex: index,
+        step: "PROMPT" as PromptStep,
+        userSentence: "",
+        revisionSentence: "",
+        attemptCount: 0,
+        isCorrect: false,
+        evaluationResult: null,
+        userAnalysis: "",
+        analysisResult: null,
+        isCompleted: false,
+      }));
+      setPromptStates(initialStates);
+
+      if (data.decisions?.ruleCardCategories?.length > 0) {
+        setRuleCardCategories(data.decisions.ruleCardCategories);
+        setShowRuleCard(true);
+      }
+    } catch (error) {
+      console.error("Session init error:", error);
+    } finally {
+      setIsSessionLoading(false);
+    }
+  };
+
   useEffect(() => {
     const initSession = async () => {
       try {
-        const res = await fetch("/api/word-builder/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "create" }),
-        });
-        const data = await res.json();
-        setSessionId(data.sessionId);
-        const slicedPrompts = (data.prompts || []).slice(0, 5);
-        setPromptQueue(slicedPrompts);
+        // Check for active session first
+        const activeRes = await fetch("/api/word-builder/session/active");
+        const activeData = await activeRes.json();
 
-        const initialStates = slicedPrompts.map((_: any, index: number) => ({
-          promptIndex: index,
-          step: "PROMPT" as PromptStep,
-          userSentence: "",
-          revisionSentence: "",
-          attemptCount: 0,
-          isCorrect: false,
-          evaluationResult: null,
-          userAnalysis: "",
-          analysisResult: null,
-          isCompleted: false,
-        }));
-        setPromptStates(initialStates);
-
-        if (data.decisions?.ruleCardCategories?.length > 0) {
-          setRuleCardCategories(data.decisions.ruleCardCategories);
-          setShowRuleCard(true);
+        if (activeData.activeSession) {
+          setResumeData(activeData.activeSession);
+          setShowResumeDialog(true);
+          setIsSessionLoading(false);
+          return;
         }
+
+        await initNewSession();
       } catch (error) {
         console.error("Session init error:", error);
-      } finally {
         setIsSessionLoading(false);
       }
     };
     initSession();
   }, []);
+
+  const handleResumeSession = () => {
+    if (!resumeData) return;
+    setShowResumeDialog(false);
+    setSessionId(resumeData.sessionId);
+
+    // Reconstruct prompt queue from resume data
+    const prompts = resumeData.promptAttempts.map((pa: any) => ({
+      id: pa.promptId,
+      prompt_text: pa.promptText,
+      mode: pa.promptMode,
+    }));
+    setPromptQueue(prompts);
+
+    // Reconstruct prompt states
+    const states = resumeData.promptAttempts.map((pa: any, index: number) => {
+      const lastAttempt = pa.attempts[pa.attempts.length - 1];
+      const isCorrect = lastAttempt?.isCorrect ?? false;
+      const attemptsCount = pa.attempts.length;
+      const hasAnalysis = !!lastAttempt?.userAnalysis;
+
+      // Determine step
+      let step: PromptStep = "PROMPT";
+      if (lastAttempt) {
+        if (hasAnalysis) {
+          step = "DISCUSSION";
+        } else if (isCorrect || attemptsCount >= 3) {
+          step = "REVEAL_ANALYSIS";
+        } else {
+          step = "CORRECTION";
+        }
+      }
+
+      return {
+        promptIndex: index,
+        step,
+        userSentence: lastAttempt?.attemptText ?? "",
+        revisionSentence: lastAttempt?.attemptText ?? "",
+        attemptCount: attemptsCount,
+        isCorrect,
+        evaluationResult: lastAttempt ? {
+          isCorrect: lastAttempt.isCorrect,
+          errors: lastAttempt.errors?.map((e: any) => ({
+            errorId: e.category || "err",
+            category: e.category,
+            severity: e.severity,
+            locationHint: "",
+            ruleReference: "",
+            guidedCompletion: "",
+            resolved: e.resolved ?? false,
+          })) ?? [],
+          correctedSentence: lastAttempt.correctedSentence ?? lastAttempt.attemptText,
+          echoPrompt: "",
+          highlightedWords: [],
+        } : null,
+        userAnalysis: lastAttempt?.userAnalysis ?? "",
+        analysisResult: lastAttempt?.analysisFeedback ? {
+          isCorrect: true,
+          feedback: lastAttempt.analysisFeedback,
+          correctElements: [],
+          incorrectElements: [],
+          modelAnalysis: lastAttempt.analysisFeedback,
+        } : null,
+        isCompleted: step === "DISCUSSION",
+      };
+    });
+    setPromptStates(states);
+
+    // Set current index to first incomplete prompt
+    const firstIncomplete = states.findIndex((s) => !s.isCompleted);
+    if (firstIncomplete !== -1) {
+      setCurrentPromptIndex(firstIncomplete);
+    }
+
+    setIsSessionLoading(false);
+  };
+
+  const handleStartNewSession = async () => {
+    setShowResumeDialog(false);
+    // Mark old session as abandoned (complete it silently)
+    if (resumeData?.sessionId) {
+      try {
+        await fetch("/api/word-builder/session", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "complete",
+            sessionId: resumeData.sessionId,
+            promptsAttempted: resumeData.promptAttempts?.length ?? 0,
+            promptsCorrectFirstTry: 0,
+          }),
+        });
+      } catch {
+        // Best-effort
+      }
+    }
+    setResumeData(null);
+    setIsSessionLoading(true);
+    await initNewSession();
+  };
 
   // ─── Derived state ───────────────────────────────────────────────────────
 
@@ -665,6 +789,43 @@ export default function WordBuilderPractice() {
   };
 
   // ─── Early returns ───────────────────────────────────────────────────────
+
+  if (showResumeDialog) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-100 p-4 font-sans">
+        <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-6 text-center">
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-white">Unfinished Session</h2>
+            <p className="text-sm text-zinc-400">
+              You have an unfinished practice session from{" "}
+              {resumeData?.startedAt
+                ? new Date(resumeData.startedAt).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                  })
+                : "earlier"}.
+            </p>
+            <p className="text-xs text-zinc-500">
+              {resumeData?.promptAttempts?.length ?? 0} prompts loaded
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleResumeSession}
+              className="w-full py-3 bg-teal-500 hover:bg-teal-400 text-zinc-950 font-semibold rounded-xl transition-colors"
+            >
+              Continue Session
+            </button>
+            <button
+              onClick={handleStartNewSession}
+              className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium rounded-xl transition-colors"
+            >
+              Start New Session
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isSessionLoading || (!isSessionComplete && !currentState)) {
     return (
