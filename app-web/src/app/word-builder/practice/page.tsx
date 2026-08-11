@@ -627,6 +627,27 @@ export default function WordBuilderPractice() {
     return () => clearTimeout(t);
   }, [showNoteToast]);
 
+  // ─── Keyboard Shortcuts ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (e.key === "ArrowRight" && currentState?.step === "DISCUSSION") {
+        e.preventDefault();
+        handleNextPrompt();
+      }
+      if (e.key === "ArrowLeft" && currentPromptIndex > 0 && currentState?.step === "DISCUSSION") {
+        e.preventDefault();
+        setCurrentPromptIndex(currentPromptIndex - 1);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [currentState, currentPromptIndex, handleNextPrompt]);
+
   // ─── Word Popup Handlers ─────────────────────────────────────────────────
 
   const handleTextSelect = useCallback((e: React.MouseEvent) => {
