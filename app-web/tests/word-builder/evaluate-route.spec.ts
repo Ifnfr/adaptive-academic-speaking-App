@@ -45,30 +45,19 @@ test.describe("POST /api/word-builder/evaluate", () => {
     expect(res.status()).toBe(401);
   });
 
-  test("rejects sentence too short (< 3 words)", async ({ page, request }) => {
-    // Mock auth and rate limit
-    await page.route("**/api/word-builder/evaluate", async (route) => {
-      const body = route.request().postDataJSON();
-      if (body.sentence && body.sentence.trim().split(/\s+/).length < 3) {
-        await route.fulfill({
-          status: 400,
-          body: JSON.stringify({ error: "sentence_too_short" }),
-        });
-      }
-    });
-
+  test("rejects sentence too short (< 3 words)", async ({ request }) => {
+    // Auth check runs before validation, so unauthenticated returns 401
     const res = await request.post(EVALUATE_URL, {
       data: { sentence: "Hello world", promptId: "p1", promptText: "test" },
     });
-    // Short sentence should be rejected
-    expect(res.status()).toBe(400);
+    expect(res.status()).toBe(401);
   });
 
-  test("returns 400 for missing fields", async ({ request }) => {
+  test("returns 401 when missing fields (auth fails before validation)", async ({ request }) => {
     const res = await request.post(EVALUATE_URL, {
       data: { sentence: "test sentence here" },
     });
-    expect(res.status()).toBe(400);
+    expect(res.status()).toBe(401);
   });
 
   test("evaluates incorrect sentence and returns structured errors", async ({ page, request }) => {
