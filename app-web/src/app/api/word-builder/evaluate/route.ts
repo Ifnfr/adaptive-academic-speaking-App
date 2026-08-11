@@ -1,63 +1,9 @@
 import { NextResponse } from "next/server";
 import { resolveCurrentUserId, getSupabaseClient } from "../_lib/route-helpers";
 import { checkRateLimit } from "@/lib/word-builder/rate-limit";
+import { getAIProvider } from "../_lib/providers";
 
 export const runtime = "nodejs";
-
-// Helper to call DeepSeek with retry logic on 5xx or timeout
-async function callDeepSeekWithRetry(
-  apiKey: string,
-  systemPrompt: string,
-  userMessage: string,
-  maxRetries = 2
-): Promise<{ ok: boolean; data?: any; status?: number }> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "deepseek-chat",
-          temperature: 0,
-          max_tokens: 1000,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
-          ],
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const data = await response.json();
-        return { ok: true, data };
-      }
-
-      // Retry on 5xx
-      if (response.status >= 500 && attempt < maxRetries - 1) {
-        continue;
-      }
-
-      return { ok: false, status: response.status };
-    } catch (err: any) {
-      // Retry on abort/timeout
-      if (err.name === "AbortError" && attempt < maxRetries - 1) {
-        continue;
-      }
-      return { ok: false, status: 503 };
-    }
-  }
-  return { ok: false, status: 503 };
-}
 
 export async function POST(req: Request) {
   try {
@@ -124,97 +70,21 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. Call DeepSeek API
-    const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "AI provider is currently unconfigured" },
-        { status: 503 }
-      );
-    }
-
-    const systemPrompt = `You are a grammar evaluation engine for an English language learning app. Your job is to evaluate English sentences written by Indonesian learners and return structured error data.
-
-CRITICAL RULES:
-1. Return ONLY valid JSON. No preamble, no explanation, no markdown formatting, no backticks.
-2. Evaluate all of these dimensions simultaneously: subject-verb agreement, auxiliary verb presence and correctness, tense consistency, article usage, preposition correctness, word order, verb form.
-3. For locationHint: be vague about location only. Never name the grammatical rule. Never reveal the correction. Example of GOOD locationHint: "There is an issue with the verb used after the modal in your sentence." Example of BAD locationHint: "You need to use a bare infinitive after 'will'."
-4. For ruleReference: state the rule clearly and explicitly, but do not show the correction applied to the learner's sentence.
-5. For guidedCompletion: reproduce the learner's sentence with the ONE most critical error replaced by a blank (___). Do not blank out multiple words.
-6. For echoPrompt: generate a new prompt on a different topic that would naturally require the same grammar structures as the errors found. If no errors, generate a prompt on a related topic.
-7. If the sentence is correct, return isCorrect: true, errors: [], correctedSentence as the original sentence, and a new echoPrompt anyway.
-8. correctedSentence must be the fully corrected version of the learner's input — not a model answer, but the learner's own sentence with all errors fixed.
-9. CRITICAL: The correctedSentence field MUST contain ALL sentences from the user's input. Never remove, omit, or merge sentences. Only fix grammatical errors. If the user wrote 2 sentences, correctedSentence must have 2 sentences. If the user wrote 3 sentences, correctedSentence must have 3 sentences. Sentence count must match exactly.
-
-RESPONSE FORMAT:
-{"isCorrect":boolean,"errors":[{"errorId":"err_1","category":"auxiliary_verb|subject_verb_agreement|tense|article|preposition|word_order|verb_form","severity":"critical|minor","locationHint":"string","ruleReference":"string","guidedCompletion":"string","resolved":false}],"correctedSentence":"string","recommendedSentences":["string"],"echoPrompt":"string","highlightedWords":[{"word":"string","rule":"string"}]}
-
-Rules for recommendedSentences:
-- An array of 1-3 alternative versions of the corrected sentence that sound more natural in academic English.
-- Each alternative must be grammatically correct AND more natural/idiomatic than the correctedSentence.
-- If the correctedSentence is already very natural, return 1 alternative only. Never return more than 3.
-- Each alternative must preserve the original meaning.
-- Do NOT add praise or explanations — return only the sentence strings.
-
-Rules for highlightedWords:
-- Include every word or short phrase in the user sentence that contains an error
-- "word" must be the exact token as it appears in the user sentence
-- "rule" must be a general grammatical rule statement — not specific to this sentence, not revealing the correction. Example: "Third-person singular subjects require the verb to end in -s in simple present tense." NOT "Change 'happen' to 'happens'."
-- If isCorrect is true, highlightedWords must be an empty array`;
-
-    const userMessage = `EXAMPLES OF CORRECT EVALUATION:
-
-Input sentence: "the technology development changing how we learn, work, and shop."
-Prompt: "Describe how a technology you use every day has changed the way people work or communicate."
-Expected output:
-{"isCorrect":false,"errors":[{"errorId":"err_1","category":"auxiliary_verb","severity":"critical","locationHint":"There is something missing between the subject and the main verb in your sentence.","ruleReference":"In English, continuous tenses require an auxiliary 'be' verb before the -ing form. The form of 'be' must agree with the subject.","guidedCompletion":"The technology development ___ changing how we learn, work, and shop.","resolved":false}],"correctedSentence":"The technology development is changing how we learn, work, and shop.","echoPrompt":"Describe what is currently happening to job markets as automation becomes more common."}
-
-Input sentence: "when inflation happen the price will be increasing then it will be impact household."
-Prompt: "Describe what happens to consumer purchasing power when inflation rises faster than wages."
-Expected output:
-{"isCorrect":false,"errors":[{"errorId":"err_1","category":"subject_verb_agreement","severity":"critical","locationHint":"There is an issue with the verb form used directly after the subject in your first clause.","ruleReference":"Singular nouns in third person require the verb to end in -s in simple present tense. For example: 'inflation happens', not 'inflation happen'.","guidedCompletion":"when inflation ___ the price will be increasing then it will be impact household.","resolved":false},{"errorId":"err_2","category":"auxiliary_verb","severity":"critical","locationHint":"There is an issue with the verb structure in the final clause of your sentence.","ruleReference":"Modal verbs like 'will' are always followed by the bare infinitive — the base form of the verb. Do not add 'be' between 'will' and a base verb.","guidedCompletion":"when inflation happens the price will be increasing then it will ___ impact household.","resolved":false}],"correctedSentence":"When inflation happens, the price will increase and it will impact households.","echoPrompt":"Explain what happens to a country's currency value when its inflation rate is higher than its trading partners."}
-
-Now evaluate this sentence:
-Prompt: ${promptText}
-Sentence: ${sentence}`;
-
-    // Call DeepSeek with retry
-    const result = await callDeepSeekWithRetry(apiKey, systemPrompt, userMessage);
-
-    if (!result.ok || !result.data) {
-      return NextResponse.json(
-        { error: `DeepSeek API request failed with status ${result.status}` },
-        { status: 502 }
-      );
-    }
-
-    const responseData = result.data as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const textResponse = responseData.choices?.[0]?.message?.content || "";
-
-    // 5. Parse and return DeepSeek's response
+    // 4. Call AI provider
     try {
-      let cleanText = textResponse.trim();
-      if (cleanText.startsWith("```")) {
-        const lines = cleanText.split("\n");
-        const jsonStartIndex = lines.findIndex(line => line.includes("{"));
-        const jsonEndIndex = lines.map(line => line.trim()).lastIndexOf("}");
-        if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
-          cleanText = lines.slice(jsonStartIndex, jsonEndIndex + 1).join("\n");
-        }
-      }
-
-      const evaluationData = JSON.parse(cleanText);
-      if (!Array.isArray(evaluationData.highlightedWords)) {
-        evaluationData.highlightedWords = [];
-      }
+      const provider = getAIProvider();
+      const evaluationData = await provider.evaluate(sentence, promptText, impliedStructures);
       return NextResponse.json(evaluationData);
-    } catch (parseError) {
-      console.error("Failed to parse DeepSeek evaluation response:", textResponse, parseError);
+    } catch (error: any) {
+      console.error("Word Builder Evaluate AI Error:", error);
+      if (error.message?.includes("not configured")) {
+        return NextResponse.json(
+          { error: "AI provider is currently unconfigured" },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
-        { error: "Failed to parse AI evaluation data response" },
+        { error: "Failed to evaluate sentence" },
         { status: 502 }
       );
     }
