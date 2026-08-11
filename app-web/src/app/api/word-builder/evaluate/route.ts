@@ -67,8 +67,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Rate Limit Check
-    const { allowed } = checkRateLimit(userId);
+    // Rate Limit Check — requires supabase client for persistence
+    const supabase = getSupabaseClient();
+    const { allowed } = await checkRateLimit(supabase, userId);
     if (!allowed) {
       return NextResponse.json(
         { error: "rate_limit_exceeded" },
@@ -98,7 +99,6 @@ export async function POST(req: Request) {
     }
 
     // 3. Fetch prompt metadata (implied structures) from Supabase
-    const supabase = getSupabaseClient();
     let impliedStructures: string[] = [];
     if (supabase) {
       try {

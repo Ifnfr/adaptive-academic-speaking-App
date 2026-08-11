@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveCurrentUserId, getSupabaseClient } from "../_lib/route-helpers";
+import { checkRateLimit } from "@/lib/word-builder/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -61,6 +62,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Rate Limit Check
+    const supabase = getSupabaseClient();
+    const { allowed } = await checkRateLimit(supabase, userId);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "rate_limit_exceeded" },
+        { status: 429 }
+      );
+    }
+
     let body: any;
     try {
       body = await req.json();
@@ -79,7 +90,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "message_too_long" }, { status: 400 });
     }
 
-    const supabase = getSupabaseClient();
     if (!supabase) {
       return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
     }
