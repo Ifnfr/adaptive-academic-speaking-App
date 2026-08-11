@@ -48,6 +48,7 @@ export async function POST(req: Request) {
         user_id: userId,
         word: word,
         note_text: noteText,
+        source: "word_builder",
       })
       .select("id")
       .single();
