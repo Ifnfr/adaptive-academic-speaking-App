@@ -153,6 +153,9 @@ export default function WordBuilderPractice() {
   const [promptsCorrectFirstTry, setPromptsCorrectFirstTry] = useState(0);
   const [xpEarned, setXpEarned] = useState(0);
 
+  // Echo prompts for post-session practice
+  const [echoPrompts, setEchoPrompts] = useState<string[]>([]);
+
   // Resume dialog state
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [resumeData, setResumeData] = useState<any>(null);
@@ -569,6 +572,12 @@ export default function WordBuilderPractice() {
         const xp = 10 + (finalFirstTry * 5);
         setXpEarned(xp);
 
+        // Collect echo prompts from prompts that needed work
+        const echoes = promptStates
+          .filter((s) => s.evaluationResult?.echoPrompt && (s.attemptCount > 1 || !s.isCorrect))
+          .map((s) => s.evaluationResult!.echoPrompt);
+        setEchoPrompts(echoes);
+
         try {
           await fetch("/api/word-builder/session", {
             method: "PATCH",
@@ -937,6 +946,20 @@ export default function WordBuilderPractice() {
               <p className="text-amber-400 font-bold text-lg">+{xpEarned} XP</p>
               <p className="text-xs text-zinc-500">earned this session</p>
             </div>
+            {echoPrompts.length > 0 && (
+              <div className="text-left bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-3 w-full">
+                <p className="text-sm font-semibold text-zinc-300">
+                  Practice these patterns with new topics
+                </p>
+                <div className="space-y-2">
+                  {echoPrompts.slice(0, 3).map((ep, i) => (
+                    <p key={i} className="text-xs text-zinc-400 italic border-l-2 border-teal-500 pl-3">
+                      {ep}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex flex-col items-center gap-3 pt-2">
               <Link
                 href="/drill"
