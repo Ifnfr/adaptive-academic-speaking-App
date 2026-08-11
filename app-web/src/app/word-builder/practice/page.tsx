@@ -151,6 +151,7 @@ export default function WordBuilderPractice() {
   // Session complete states
   const [isSessionComplete, setIsSessionComplete] = useState(false);
   const [promptsCorrectFirstTry, setPromptsCorrectFirstTry] = useState(0);
+  const [xpEarned, setXpEarned] = useState(0);
 
   // Resume dialog state
   const [showResumeDialog, setShowResumeDialog] = useState(false);
@@ -563,6 +564,11 @@ export default function WordBuilderPractice() {
           (s) => s.isCorrect && s.attemptCount === 1
         ).length;
         setPromptsCorrectFirstTry(finalFirstTry);
+
+        // Calculate XP: base 10 + 5 per correct first try
+        const xp = 10 + (finalFirstTry * 5);
+        setXpEarned(xp);
+
         try {
           await fetch("/api/word-builder/session", {
             method: "PATCH",
@@ -926,6 +932,10 @@ export default function WordBuilderPractice() {
                 </p>
                 <p>correct first try</p>
               </div>
+            </div>
+            <div className="pt-2">
+              <p className="text-amber-400 font-bold text-lg">+{xpEarned} XP</p>
+              <p className="text-xs text-zinc-500">earned this session</p>
             </div>
             <div className="flex flex-col items-center gap-3 pt-2">
               <Link
