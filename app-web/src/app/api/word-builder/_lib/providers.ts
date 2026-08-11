@@ -103,6 +103,61 @@ async function callDeepSeek(
   throw lastError || new Error("DeepSeek request failed");
 }
 
+async function callDeepSeekMulti(
+  messages: Array<{ role: string; content: string }>,
+  options: { temperature?: number; maxTokens?: number; jsonMode?: boolean } = {}
+): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
+
+  const { temperature = 0, maxTokens = 1000, jsonMode = false } = options;
+
+  const body: Record<string, any> = {
+    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    temperature,
+    max_tokens: maxTokens,
+    messages,
+  };
+
+  if (jsonMode) {
+    body.response_format = { type: "json_object" };
+  }
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status >= 500 && attempt === 0) continue;
+        throw new Error(`DeepSeek returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || "";
+    } catch (err: any) {
+      lastError = err;
+      if (err.name === "AbortError" && attempt === 0) continue;
+      throw err;
+    }
+  }
+
+  throw lastError || new Error("DeepSeek request failed");
+}
+
 function extractJson(text: string): any {
   let clean = text.trim();
   if (clean.startsWith("```")) {
@@ -225,7 +280,7 @@ BEHAVIORAL RULES:
       ...messages,
     ];
 
-    return await callDeepSeek(fullSystemPrompt, messages[messages.length - 1]?.content || "", {
+    return await callDeepSeekMulti(allMessages, {
       temperature: 0.3,
       maxTokens: 800,
     });

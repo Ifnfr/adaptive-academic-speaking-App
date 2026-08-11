@@ -336,7 +336,7 @@ export default function WordBuilderPractice() {
     setPromptStates(states);
 
     // Set current index to first incomplete prompt
-    const firstIncomplete = states.findIndex((s) => !s.isCompleted);
+    const firstIncomplete = states.findIndex((s: PromptState) => !s.isCompleted);
     if (firstIncomplete !== -1) {
       setCurrentPromptIndex(firstIncomplete);
     }
