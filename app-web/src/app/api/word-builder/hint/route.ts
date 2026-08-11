@@ -1,17 +1,7 @@
 import { NextResponse } from "next/server";
+import { resolveCurrentUserId } from "../_lib/route-helpers";
 
 export const runtime = "nodejs";
-
-// Helper function to resolve Clerk authentication
-async function resolveCurrentUserId(): Promise<string | null> {
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const session = await auth();
-    return session?.userId || null;
-  } catch {
-    return null;
-  }
-}
 
 export async function POST(req: Request) {
   try {

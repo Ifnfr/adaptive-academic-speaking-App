@@ -1,38 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { resolveCurrentUserId, getSupabaseClient } from "../_lib/route-helpers";
 import { calculateUserMetrics } from "@/lib/word-builder/metrics";
 
 export const runtime = "nodejs";
-
-// Helper function to resolve Clerk authentication
-async function resolveCurrentUserId(): Promise<string | null> {
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const session = await auth();
-    return session?.userId || null;
-  } catch {
-    return null;
-  }
-}
-
-// Helper to initialize Supabase service client
-function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-
-  try {
-    return createClient(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-  } catch {
-    return null;
-  }
-}
 
 // GET /api/word-builder/metrics
 export async function GET(req: Request) {

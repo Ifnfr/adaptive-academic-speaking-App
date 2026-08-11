@@ -1,17 +1,7 @@
 import { NextResponse } from "next/server";
+import { resolveCurrentUserId } from "../_lib/route-helpers";
 
 export const runtime = "nodejs";
-
-// Helper function to resolve Clerk authentication
-async function resolveCurrentUserId(): Promise<string | null> {
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const session = await auth();
-    return session?.userId || null;
-  } catch {
-    return null;
-  }
-}
 
 // Helper to call DeepSeek with retry logic on 5xx or timeout
 async function callDeepSeekWithRetry(
