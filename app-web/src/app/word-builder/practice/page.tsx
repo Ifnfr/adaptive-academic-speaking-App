@@ -152,6 +152,52 @@ export default function WordBuilderPractice() {
   const [isSessionComplete, setIsSessionComplete] = useState(false);
   const [promptsCorrectFirstTry, setPromptsCorrectFirstTry] = useState(0);
 
+  // ─── Attempt logging retry queue ───────────────────────────────────────
+  const pendingAttemptsRef = useRef<Array<{ body: any; retries: number }>>([]);
+  const isFlushingRef = useRef(false);
+
+  const flushPendingAttempts = useCallback(async () => {
+    if (isFlushingRef.current || pendingAttemptsRef.current.length === 0) return;
+    isFlushingRef.current = true;
+    while (pendingAttemptsRef.current.length > 0) {
+      const attempt = pendingAttemptsRef.current[0];
+      try {
+        const res = await fetch("/api/word-builder/attempt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(attempt.body),
+        });
+        if (res.ok) {
+          pendingAttemptsRef.current.shift();
+        } else {
+          throw new Error(`Attempt logging returned ${res.status}`);
+        }
+      } catch {
+        attempt.retries++;
+        if (attempt.retries >= 3) {
+          console.error("Attempt logging failed after 3 retries:", attempt.body);
+          pendingAttemptsRef.current.shift();
+        } else {
+          break; // wait for next flush cycle
+        }
+      }
+    }
+    isFlushingRef.current = false;
+  }, []);
+
+  // Flush pending attempts every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => flushPendingAttempts(), 5000);
+    return () => clearInterval(interval);
+  }, [flushPendingAttempts]);
+
+  // Also flush on page unload (best-effort)
+  useEffect(() => {
+    const handleBeforeUnload = () => { flushPendingAttempts(); };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [flushPendingAttempts]);
+
   // ─── Session Initialization ──────────────────────────────────────────────
 
   useEffect(() => {
@@ -243,11 +289,9 @@ export default function WordBuilderPractice() {
         isCorrect: data.isCorrect,
       });
 
-      // Fire-and-forget attempt log
-      fetch("/api/word-builder/attempt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // Queue attempt log (retried on failure)
+      pendingAttemptsRef.current.push({
+        body: {
           sessionId,
           promptId: currentPrompt?.id,
           promptMode: currentPrompt?.mode,
@@ -265,8 +309,10 @@ export default function WordBuilderPractice() {
             })) ?? [],
           promptText: currentPrompt?.prompt_text,
           correctedSentence: data.correctedSentence ?? null,
-        }),
+        },
+        retries: 0,
       });
+      flushPendingAttempts();
     } catch (error) {
       console.error("Evaluation error:", error);
     } finally {
@@ -299,11 +345,9 @@ export default function WordBuilderPractice() {
       const data: EvaluationResult = await res.json();
       const currentAttempt = currentState.attemptCount;
 
-      // Fire-and-forget attempt log
-      fetch("/api/word-builder/attempt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // Queue attempt log (retried on failure)
+      pendingAttemptsRef.current.push({
+        body: {
           sessionId,
           promptId: currentPrompt?.id,
           promptMode: currentPrompt?.mode,
@@ -321,8 +365,10 @@ export default function WordBuilderPractice() {
             })) ?? [],
           promptText: currentPrompt?.prompt_text,
           correctedSentence: data.correctedSentence ?? null,
-        }),
+        },
+        retries: 0,
       });
+      flushPendingAttempts();
 
       if (data.isCorrect || currentAttempt >= 2) {
         updateCurrentState({
