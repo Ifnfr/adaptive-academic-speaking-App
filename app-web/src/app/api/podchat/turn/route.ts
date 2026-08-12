@@ -733,7 +733,7 @@ async function callDeepSeekSafely(
   let res: Response;
 
   try {
-    res = await fetch("https://api.deepseek.com/chat/completions", {
+    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -809,7 +809,7 @@ async function callGeminiSafely(
   let res: Response;
 
   try {
-    res = await fetch("https://api.deepseek.com/chat/completions", {
+    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -992,7 +992,7 @@ async function streamDeepSeekSafely(
   const timeoutId = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
-    res = await fetch("https://api.deepseek.com/chat/completions", {
+    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -1043,7 +1043,7 @@ async function streamGeminiSafely(
   const timeoutId = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
-    res = await fetch("https://api.deepseek.com/chat/completions", {
+    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",

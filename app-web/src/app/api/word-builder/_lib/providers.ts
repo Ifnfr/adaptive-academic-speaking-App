@@ -74,7 +74,7 @@ async function callDeepSeek(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
+      const response = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -129,7 +129,7 @@ async function callDeepSeekMulti(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
+      const response = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
         method: "POST",
         headers: {
           "content-type": "application/json",

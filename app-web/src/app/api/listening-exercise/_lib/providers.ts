@@ -301,7 +301,7 @@ export async function callListeningAI(
   } else if (providerId === "minimax_m3" || providerId === "minimax") {
     endpoint = process.env.MINIMAX_BASE_URL || "https://api.minimax.io/v1/text/chatcompletion_v2";
   } else {
-    endpoint = "https://api.deepseek.com/chat/completions";
+    endpoint = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions");
   }
 
   // Build provider-specific request

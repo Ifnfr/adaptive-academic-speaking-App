@@ -42,7 +42,7 @@ async function callDeepSeek(
   system: string,
   user: string,
 ): Promise<string> {
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+  const res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",

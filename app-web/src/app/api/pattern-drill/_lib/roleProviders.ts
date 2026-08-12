@@ -212,7 +212,7 @@ async function callDeepSeek(
 ): Promise<string> {
   let res: Response;
   try {
-    res = await fetch("https://api.deepseek.com/chat/completions", {
+    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",

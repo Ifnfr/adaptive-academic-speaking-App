@@ -117,7 +117,7 @@ export async function callGemini(
 ): Promise<string> {
   const actualApiKey = process.env.DEEPSEEK_API_KEY || "";
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+  const res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -152,7 +152,7 @@ export async function callDeepSeek(
   user: string,
 ): Promise<string> {
   const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+  const res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",

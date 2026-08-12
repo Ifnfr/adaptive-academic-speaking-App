@@ -113,7 +113,7 @@ async function callDefaultDeepSeekJson(
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) throw new Error("podchat_context_analysis_unavailable");
   const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  const response = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",

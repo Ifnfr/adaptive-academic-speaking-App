@@ -124,7 +124,7 @@ async function callDefaultWeeklyMissionProvider(
   if (!apiKey) throw new Error("weekly_mission_provider_unavailable");
   const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  const response = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
