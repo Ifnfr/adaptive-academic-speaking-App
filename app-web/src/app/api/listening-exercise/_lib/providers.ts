@@ -292,13 +292,53 @@ export async function callListeningAI(
     }
   }
 
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  // Resolve provider-specific endpoint
+  let endpoint: string;
+  if (providerId === "claude") {
+    endpoint = "https://api.anthropic.com/v1/messages";
+  } else if (providerId === "gemini") {
+    endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  } else if (providerId === "minimax_m3" || providerId === "minimax") {
+    endpoint = process.env.MINIMAX_BASE_URL || "https://api.minimax.io/v1/text/chatcompletion_v2";
+  } else {
+    endpoint = "https://api.deepseek.com/chat/completions";
+  }
+
+  // Build provider-specific request
+  let body: any;
+  let headers: Record<string, string> = { "content-type": "application/json" };
+
+  if (providerId === "claude") {
+    headers["x-api-key"] = apiKey;
+    headers["anthropic-version"] = "2023-06-01";
+    body = {
+      model: modelName,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    };
+  } else if (providerId === "gemini") {
+    body = {
+      contents: [
+        { role: "user", parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] },
+      ],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+    };
+  } else if (providerId === "minimax_m3" || providerId === "minimax") {
+    headers["authorization"] = `Bearer ${apiKey}`;
+    body = {
+      model: modelName,
+      temperature: 0.2,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+  } else {
+    // DeepSeek (default)
+    headers["authorization"] = `Bearer ${apiKey}`;
+    body = {
       model: modelName,
       temperature: 0.2,
       max_tokens: 4096,
@@ -307,26 +347,58 @@ export async function callListeningAI(
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`DeepSeek request failed: ${res.status} ${await res.text()}`);
+    };
   }
 
-  const data = (await res.json()) as {
-    choices?: Array<{ finish_reason?: string; message?: { content?: string } }>;
-  };
-  const finishReason = data.choices?.[0]?.finish_reason;
-  const content = data.choices?.[0]?.message?.content ?? "";
+  // Retry logic
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-  if (finishReason === "length") {
-    throw new Error(
-      `TRUNCATED_RESPONSE: DeepSeek response was cut off by the max_tokens limit (finish_reason=length). Partial content: ${content.slice(0, 1000)}`
-    );
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        if (res.status >= 500 && attempt === 0) continue;
+        throw new Error(`${providerId} request failed: ${res.status} ${await res.text()}`);
+      }
+
+      const data = await res.json();
+
+      // Extract text based on provider
+      if (providerId === "claude") {
+        return data.content?.[0]?.text ?? "";
+      } else if (providerId === "gemini") {
+        return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      } else {
+        // DeepSeek / MiniMax (OpenAI-compatible)
+        const content = data.choices?.[0]?.message?.content ?? "";
+
+        // Check for truncation (DeepSeek only)
+        if (providerId === "deepseek" && data.choices?.[0]?.finish_reason === "length") {
+          throw new Error(
+            `TRUNCATED_RESPONSE: DeepSeek response was cut off by the max_tokens limit (finish_reason=length). Partial content: ${content.slice(0, 1000)}`
+          );
+        }
+
+        return content;
+      }
+    } catch (err: any) {
+      lastError = err;
+      if (err.name === "AbortError" && attempt === 0) continue;
+      throw err;
+    }
   }
 
-  return content;
+  throw lastError || new Error(`${providerId} request failed`);
 }
 
 function buildDifficultyInstruction(targetDifficulty: "easy" | "medium" | "hard"): string {
