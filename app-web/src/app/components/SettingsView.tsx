@@ -55,11 +55,11 @@ export type SettingsViewProps = {
   onSavePreferences: (patch: UserProfilePreferencesPatch) => void;
   onAppLanguageChange?: (language: AppLanguage) => void;
   podchatProvider?: string;
-  onPodchatProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  onPodchatProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek" | "OpenCode") => void;
   listeningProvider?: string;
-  onListeningProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  onListeningProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek" | "OpenCode") => void;
   fluencyProvider?: string;
-  onFluencyProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek") => void;
+  onFluencyProviderChange?: (provider: "Claude" | "Gemini" | "DeepSeek" | "OpenCode") => void;
   defaultTtsProvider?: TtsProvider;
   onDefaultTtsProviderChange?: (provider: TtsProvider) => void;
   defaultTtsVoiceProfile?: TtsVoiceProfile;
@@ -951,12 +951,13 @@ export function SettingsView({
               <select
                 id="podchat-provider-select"
                 value={podchatProvider}
-                onChange={(e) => onPodchatProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                onChange={(e) => onPodchatProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek" | "OpenCode")}
                 className="app-field"
               >
                 <option value="Claude">Claude (Slower, precise Socratic coaching)</option>
                 <option value="Gemini">Gemini (Fast, multimodal, flexible)</option>
                 <option value="DeepSeek">DeepSeek (Cost-efficient, smart context bridge)</option>
+                <option value="OpenCode">OpenCode (via Hermes, always available)</option>
               </select>
             </label>
 
@@ -967,12 +968,13 @@ export function SettingsView({
               <select
                 id="listening-provider-select"
                 value={listeningProvider}
-                onChange={(e) => onListeningProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                onChange={(e) => onListeningProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek" | "OpenCode")}
                 className="app-field"
               >
                 <option value="Claude">Claude (Detailed exercise planning)</option>
                 <option value="Gemini">Gemini (Fast, high-fidelity audio mapping)</option>
                 <option value="DeepSeek">DeepSeek (Swift reasoning & cost efficiency)</option>
+                <option value="OpenCode">OpenCode (via Hermes, always available)</option>
               </select>
             </label>
 
@@ -983,12 +985,13 @@ export function SettingsView({
               <select
                 id="fluency-provider-select"
                 value={fluencyProvider}
-                onChange={(e) => onFluencyProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek")}
+                onChange={(e) => onFluencyProviderChange?.(e.target.value as "Claude" | "Gemini" | "DeepSeek" | "OpenCode")}
                 className="app-field"
               >
                 <option value="Claude">Claude (Advanced debate & argument coach)</option>
                 <option value="Gemini">Gemini (Ultra-low latency fluency drills)</option>
                 <option value="DeepSeek">DeepSeek (Default, balanced grammar corrections)</option>
+                <option value="OpenCode">OpenCode (via Hermes, always available)</option>
               </select>
             </label>
           </div>

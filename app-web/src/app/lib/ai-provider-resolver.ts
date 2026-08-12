@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 export type FeatureKey = "podchat" | "listening" | "fluency";
-export type AIProvider = "Claude" | "DeepSeek" | "Gemini";
+export type AIProvider = "Claude" | "DeepSeek" | "Gemini" | "OpenCode";
 
 function parseCookie(cookieHeader: string | null, name: string): string | undefined {
   if (!cookieHeader) return undefined;
@@ -48,7 +48,7 @@ export async function resolveFeatureProvider(
   if (providerId) {
     // case insensitive match but normalized to lower case for internal logic
     const lower = providerId.toLowerCase();
-    if (["claude", "gemini", "deepseek", "minimax_m3", "minimax"].includes(lower)) {
+    if (["claude", "gemini", "deepseek", "minimax_m3", "minimax", "opencode"].includes(lower)) {
       providerId = lower;
     } else {
       providerId = undefined;
@@ -103,6 +103,9 @@ export async function resolveFeatureProvider(
   } else if (providerId === "minimax_m3" || providerId === "minimax") {
     apiKey = process.env.MINIMAX_API_KEY || "";
     modelName = process.env.MINIMAX_MODEL || "MiniMax-M3";
+  } else if (providerId === "opencode") {
+    apiKey = process.env.OPENCODE_GO_API_KEY || "";
+    modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   } else {
     // Default fallback to deepseek config
     apiKey = process.env.DEEPSEEK_API_KEY || "";

@@ -300,6 +300,8 @@ export async function callListeningAI(
     endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
   } else if (providerId === "minimax_m3" || providerId === "minimax") {
     endpoint = process.env.MINIMAX_BASE_URL || "https://api.minimax.io/v1/text/chatcompletion_v2";
+  } else if (providerId === "opencode") {
+    endpoint = process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1/chat/completions";
   } else {
     endpoint = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions");
   }
@@ -325,6 +327,17 @@ export async function callListeningAI(
       generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
     };
   } else if (providerId === "minimax_m3" || providerId === "minimax") {
+    headers["authorization"] = `Bearer ${apiKey}`;
+    body = {
+      model: modelName,
+      temperature: 0.2,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+  } else if (providerId === "opencode") {
     headers["authorization"] = `Bearer ${apiKey}`;
     body = {
       model: modelName,
