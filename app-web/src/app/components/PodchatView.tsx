@@ -1243,11 +1243,8 @@ export function PodchatView({
     };
   }, []);
 
-  // Clear stale podchat_provider cookie on mount to prevent stale provider resolution
-  useEffect(() => {
-    document.cookie = "podchat_provider=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    console.log("[PODCHAT_DEBUG] PodchatView mount: cleared stale podchat_provider cookie");
-  }, []);
+  // Provider persistence is handled by page.tsx (localStorage + cookie sync on mount).
+  // Do NOT clear the podchat_provider cookie here - it wipes the user's saved choice.
 
   // When time expires during speaking, allow End Session automatically if
   // the user is idle and has at least one learner turn.

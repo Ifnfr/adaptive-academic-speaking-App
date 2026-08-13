@@ -620,18 +620,18 @@ export default function Home() {
     const timer = window.setTimeout(() => {
       if (typeof window !== "undefined") {
         const storedPodchat = window.localStorage.getItem("podchatProvider");
-        if (storedPodchat === "Claude" || storedPodchat === "Gemini" || storedPodchat === "DeepSeek") {
+        if (storedPodchat === "Claude" || storedPodchat === "Gemini" || storedPodchat === "DeepSeek" || storedPodchat === "OpenCode" || storedPodchat === "TokenRouter" || storedPodchat === "Hermes" || storedPodchat === "RouteAPI") {
           setPodchatProvider(storedPodchat as AIProvider);
-          // document.cookie = `podchat_provider=${storedPodchat}; path=/; max-age=31536000; SameSite=Lax`;
+          document.cookie = `podchat_provider=${storedPodchat}; path=/; max-age=31536000; SameSite=Lax`;
         } else {
           const initial = "Claude";
           setPodchatProvider(initial);
           window.localStorage.setItem("podchatProvider", initial);
-          // document.cookie = `podchat_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
+          document.cookie = `podchat_provider=${initial}; path=/; max-age=31536000; SameSite=Lax`;
         }
 
         const storedListening = window.localStorage.getItem("listeningProvider");
-        if (storedListening === "Claude" || storedListening === "Gemini" || storedListening === "DeepSeek") {
+        if (storedListening === "Claude" || storedListening === "Gemini" || storedListening === "DeepSeek" || storedListening === "OpenCode" || storedListening === "TokenRouter" || storedListening === "Hermes" || storedListening === "RouteAPI") {
           setListeningProvider(storedListening as AIProvider);
           document.cookie = `listening_provider=${storedListening}; path=/; max-age=31536000; SameSite=Lax`;
         } else {
@@ -642,7 +642,7 @@ export default function Home() {
         }
 
         const storedFluency = window.localStorage.getItem("fluencyProvider");
-        if (storedFluency === "Claude" || storedFluency === "Gemini" || storedFluency === "DeepSeek") {
+        if (storedFluency === "Claude" || storedFluency === "Gemini" || storedFluency === "DeepSeek" || storedFluency === "OpenCode" || storedFluency === "TokenRouter" || storedFluency === "Hermes" || storedFluency === "RouteAPI") {
           setFluencyProvider(storedFluency as AIProvider);
           document.cookie = `fluency_provider=${storedFluency}; path=/; max-age=31536000; SameSite=Lax`;
         } else {
