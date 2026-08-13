@@ -426,9 +426,59 @@ async function executeProviderCall(
     return callGemini(apiKey, systemPrompt, userPrompt);
   } else if (providerId === "deepseek") {
     return callDeepSeek(apiKey, systemPrompt, userPrompt);
+  } else if (providerId === "tokenrouter") {
+    const trBase = process.env.TOKENROUTER_BASE_URL || "https://api.tokenrouter.com/v1";
+    const endpoint = trBase.endsWith("/chat/completions") ? trBase : `${trBase.replace(/\/$/, "")}/chat/completions`;
+    return callOpenAICompatible(endpoint, apiKey, modelName, systemPrompt, userPrompt);
+  } else if (providerId === "routeapi") {
+    const raBase = process.env.ROUTEAPI_BASE_URL || "https://www.routeapi.ai/v1";
+    const endpoint = raBase.endsWith("/chat/completions") ? raBase : `${raBase.replace(/\/$/, "")}/chat/completions`;
+    return callOpenAICompatible(endpoint, apiKey, modelName, systemPrompt, userPrompt);
+  } else if (providerId === "opencode") {
+    const ocBase = process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1";
+    const endpoint = ocBase.endsWith("/chat/completions") ? ocBase : `${ocBase.replace(/\/$/, "")}/chat/completions`;
+    return callOpenAICompatible(endpoint, apiKey, modelName, systemPrompt, userPrompt);
+  } else if (providerId === "hermes") {
+    const hBase = process.env.HERMES_BASE_URL || "http://127.0.0.1:8642/v1";
+    const endpoint = hBase.endsWith("/chat/completions") ? hBase : `${hBase.replace(/\/$/, "")}/chat/completions`;
+    return callOpenAICompatible(endpoint, apiKey, modelName, systemPrompt, userPrompt);
   } else {
     return callClaude(apiKey, modelName, systemPrompt, userPrompt);
   }
+}
+
+async function callOpenAICompatible(
+  endpoint: string,
+  apiKey: string,
+  modelName: string,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> {
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelName,
+      temperature: 0.7,
+      max_tokens: 1000,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Provider request failed with status ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
 async function callClaude(

@@ -305,9 +305,11 @@ export async function callListeningAI(
   } else if (providerId === "hermes") {
     endpoint = process.env.HERMES_BASE_URL || "http://127.0.0.1:8642/v1/chat/completions";
   } else if (providerId === "tokenrouter") {
-    endpoint = process.env.TOKENROUTER_BASE_URL || "https://api.tokenrouter.com/v1/chat/completions";
+    const trBase = process.env.TOKENROUTER_BASE_URL || "https://api.tokenrouter.com/v1";
+    endpoint = trBase.endsWith("/chat/completions") ? trBase : `${trBase.replace(/\/$/, "")}/chat/completions`;
   } else if (providerId === "routeapi") {
-    endpoint = process.env.ROUTEAPI_BASE_URL || "https://www.routeapi.ai/v1/chat/completions";
+    const raBase = process.env.ROUTEAPI_BASE_URL || "https://www.routeapi.ai/v1";
+    endpoint = raBase.endsWith("/chat/completions") ? raBase : `${raBase.replace(/\/$/, "")}/chat/completions`;
   } else {
     endpoint = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions");
   }
