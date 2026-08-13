@@ -5,6 +5,7 @@ import {
   buildMockPodchatEvaluation,
   callDeepSeek,
   callGemini,
+  callOpenAICompatibleForProvider,
   type PodchatArticleContext,
 } from "../_lib/providers";
 import { testHooks } from "./route-test-hooks";
@@ -882,7 +883,7 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-  } else if (provider === "deepseek") {
+  } else if (provider === "deepseek" || provider === "tokenrouter" || provider === "routeapi" || provider === "opencode" || provider === "hermes") {
     if (!apiKey) {
       return NextResponse.json(
         { error: "Provider is not configured. Please try again later." },
@@ -894,7 +895,9 @@ export async function POST(request: Request) {
     const userPrompt = buildUserPrompt(validatedReq);
 
     try {
-      const text = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+      const text = provider === "deepseek"
+        ? await callDeepSeek(apiKey, systemPrompt, userPrompt)
+        : await callOpenAICompatibleForProvider(provider, apiKey, systemPrompt, userPrompt);
       const outputValidation = validateClaudeOutput(text);
       if (!outputValidation.valid) {
         console.error(`DeepSeek output validation failed: ${outputValidation.error}. Raw: ${text}`);

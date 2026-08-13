@@ -110,6 +110,75 @@ export function buildMockPodchatEvaluation(req: MockEvaluateRequest): string {
   });
 }
 
+
+export function openAICompatibleConfigForProvider(providerId: string): { endpoint: string; model: string } {
+  const ensure = (base: string) =>
+    base.endsWith("/chat/completions") ? base : `${base.replace(/\/$/, "")}/chat/completions`;
+  if (providerId === "tokenrouter") {
+    return {
+      endpoint: ensure(process.env.TOKENROUTER_BASE_URL || "https://api.tokenrouter.com/v1"),
+      model: process.env.TOKENROUTER_MODEL || "deepseek/deepseek-v4-flash-0731",
+    };
+  }
+  if (providerId === "routeapi") {
+    return {
+      endpoint: ensure(process.env.ROUTEAPI_BASE_URL || "https://www.routeapi.ai/v1"),
+      model: process.env.ROUTEAPI_MODEL || "deepseek-v4-flash",
+    };
+  }
+  if (providerId === "opencode") {
+    return {
+      endpoint: ensure(process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1"),
+      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+    };
+  }
+  if (providerId === "hermes") {
+    return {
+      endpoint: ensure(process.env.HERMES_BASE_URL || "http://127.0.0.1:8642/v1"),
+      model: process.env.HERMES_MODEL || "deepseek-v4-flash",
+    };
+  }
+  return {
+    endpoint: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions",
+    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+  };
+}
+
+export async function callOpenAICompatibleForProvider(
+  providerId: string,
+  apiKey: string,
+  system: string,
+  user: string,
+): Promise<string> {
+  const cfg = openAICompatibleConfigForProvider(providerId);
+  const res = await fetch(cfg.endpoint, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`${providerId} API error ${res.status}: ${errText.slice(0, 500)}`);
+    throw new Error(`${providerId} request failed with status ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  return data.choices?.[0]?.message?.content ?? "";
+}
 export async function callGemini(
   apiKey: string,
   system: string,

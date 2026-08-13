@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveFeatureProvider } from "../../../lib/ai-provider-resolver";
-import { callDeepSeek, callGemini } from "../_lib/providers";
+import { callDeepSeek, callGemini, callOpenAICompatibleForProvider } from "../_lib/providers";
 
 export const runtime = "nodejs";
 
@@ -190,11 +190,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Provider is not configured." }, { status: 503 });
       }
       rawText = await callGemini(apiKey, systemPrompt, userPrompt);
-    } else if (provider === "deepseek") {
+    } else if (provider === "deepseek" || provider === "tokenrouter" || provider === "routeapi" || provider === "opencode" || provider === "hermes") {
       if (!apiKey) {
         return NextResponse.json({ error: "Provider is not configured." }, { status: 503 });
       }
-      rawText = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+      rawText = provider === "deepseek"
+        ? await callDeepSeek(apiKey, systemPrompt, userPrompt)
+        : await callOpenAICompatibleForProvider(provider, apiKey, systemPrompt, userPrompt);
     } else {
       // Claude default
       if (!apiKey) {

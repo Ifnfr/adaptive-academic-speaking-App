@@ -62,7 +62,7 @@ type ProviderErrorCategory =
   | "missing_configuration"
   | "unknown";
 
-type ProviderName = "Claude" | "Gemini" | "DeepSeek";
+type ProviderName = "Claude" | "Gemini" | "DeepSeek" | "TokenRouter" | "RouteAPI" | "OpenCode" | "Hermes";
 
 type SafeProviderError = {
   provider: ProviderName;
@@ -724,16 +724,52 @@ function validateClaudeOutput(text: string): { valid: true; response: { hostText
   }
 }
 
+function openAICompatibleConfig(providerId: string): { endpoint: string; model: string } {
+  const ensure = (base: string) =>
+    base.endsWith("/chat/completions") ? base : `${base.replace(/\/$/, "")}/chat/completions`;
+
+  if (providerId === "tokenrouter") {
+    return {
+      endpoint: ensure(process.env.TOKENROUTER_BASE_URL || "https://api.tokenrouter.com/v1"),
+      model: process.env.TOKENROUTER_MODEL || "deepseek/deepseek-v4-flash-0731",
+    };
+  }
+  if (providerId === "routeapi") {
+    return {
+      endpoint: ensure(process.env.ROUTEAPI_BASE_URL || "https://www.routeapi.ai/v1"),
+      model: process.env.ROUTEAPI_MODEL || "deepseek-v4-flash",
+    };
+  }
+  if (providerId === "opencode") {
+    return {
+      endpoint: ensure(process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1"),
+      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+    };
+  }
+  if (providerId === "hermes") {
+    return {
+      endpoint: ensure(process.env.HERMES_BASE_URL || "http://127.0.0.1:8642/v1"),
+      model: process.env.HERMES_MODEL || "deepseek-v4-flash",
+    };
+  }
+  return {
+    endpoint: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions",
+    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+  };
+}
+
 async function callDeepSeekSafely(
   apiKey: string,
   system: string,
   user: string,
+  endpointOverride?: string,
+  modelOverride?: string,
 ): Promise<{ ok: true; text: string } | { ok: false; providerError: SafeProviderError }> {
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const model = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-chat";
   let res: Response;
 
   try {
-    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
+    res = await fetch(endpointOverride || (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -986,13 +1022,15 @@ async function streamDeepSeekSafely(
   system: string,
   user: string,
   onDelta: (delta: string) => void,
+  endpointOverride?: string,
+  modelOverride?: string,
 ): Promise<string> {
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const model = modelOverride || process.env.DEEPSEEK_MODEL || "deepseek-chat";
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
-    res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
+    res = await fetch(endpointOverride || (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -1296,14 +1334,20 @@ export async function POST(request: Request) {
     return NextResponse.json(outputValidation.response);
   }
 
-  if (provider === "deepseek") {
+  if (provider === "deepseek" || provider === "tokenrouter" || provider === "routeapi" || provider === "opencode" || provider === "hermes") {
+    const cfg = openAICompatibleConfig(provider);
     if (!apiKey) {
       if (wantsStream) {
         return streamTurnResponse(async () => {
           throw new ProviderRequestError("missing_configuration", 503);
         });
       }
-      return missingProviderConfiguration("DeepSeek");
+      const displayName: ProviderName =
+        provider === "deepseek" ? "DeepSeek" :
+        provider === "tokenrouter" ? "TokenRouter" :
+        provider === "routeapi" ? "RouteAPI" :
+        provider === "opencode" ? "OpenCode" : "Hermes";
+      return missingProviderConfiguration(displayName);
     }
 
     if (wantsStream) {
@@ -1313,7 +1357,8 @@ export async function POST(request: Request) {
           systemPrompt,
           userPrompt,
           (delta) => emit({ type: "delta", text: delta }),
-        );
+          cfg.endpoint,
+          cfg.model);
         const outputValidation = validateClaudeOutput(text);
         if (!outputValidation.valid) {
           throw invalidStreamError();
@@ -1326,7 +1371,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const providerResult = await callDeepSeekSafely(apiKey, systemPrompt, userPrompt);
+    const providerResult = await callDeepSeekSafely(apiKey, systemPrompt, userPrompt, cfg.endpoint, cfg.model);
     if (!providerResult.ok) {
       return providerErrorResponse(providerResult.providerError);
     }

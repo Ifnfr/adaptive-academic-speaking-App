@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   callDeepSeek,
   callGemini,
+  callOpenAICompatibleForProvider,
   type PodchatArticleContext,
 } from "../_lib/providers";
 import {
@@ -729,11 +730,13 @@ export async function POST(request: Request) {
       }
       return callGemini(apiKey, system, user);
     }
-    if (provider === "deepseek") {
+    if (provider === "deepseek" || provider === "tokenrouter" || provider === "routeapi" || provider === "opencode" || provider === "hermes") {
       if (!apiKey) {
         throw new Error("provider_not_configured");
       }
-      return callDeepSeek(apiKey, system, user);
+      return provider === "deepseek"
+      ? callDeepSeek(apiKey, system, user)
+      : callOpenAICompatibleForProvider(provider, apiKey, system, user);
     }
     // Claude default
     if (!apiKey) {
