@@ -302,6 +302,12 @@ export async function callListeningAI(
     endpoint = process.env.MINIMAX_BASE_URL || "https://api.minimax.io/v1/text/chatcompletion_v2";
   } else if (providerId === "opencode") {
     endpoint = process.env.OPENCODE_GO_BASE_URL || "https://opencode.ai/zen/go/v1/chat/completions";
+  } else if (providerId === "hermes") {
+    endpoint = process.env.HERMES_BASE_URL || "http://127.0.0.1:8642/v1/chat/completions";
+  } else if (providerId === "tokenrouter") {
+    endpoint = process.env.TOKENROUTER_BASE_URL || "https://api.tokenrouter.com/v1/chat/completions";
+  } else if (providerId === "routeapi") {
+    endpoint = process.env.ROUTEAPI_BASE_URL || "https://www.routeapi.ai/v1/chat/completions";
   } else {
     endpoint = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions");
   }
@@ -338,6 +344,39 @@ export async function callListeningAI(
       ],
     };
   } else if (providerId === "opencode") {
+    headers["authorization"] = `Bearer ${apiKey}`;
+    body = {
+      model: modelName,
+      temperature: 0.2,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+  } else if (providerId === "hermes") {
+    headers["authorization"] = `Bearer ${apiKey}`;
+    body = {
+      model: modelName,
+      temperature: 0.2,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+  } else if (providerId === "tokenrouter") {
+    headers["authorization"] = `Bearer ${apiKey}`;
+    body = {
+      model: modelName,
+      temperature: 0.2,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    };
+  } else if (providerId === "routeapi") {
     headers["authorization"] = `Bearer ${apiKey}`;
     body = {
       model: modelName,

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 
 export type FeatureKey = "podchat" | "listening" | "fluency";
-export type AIProvider = "Claude" | "DeepSeek" | "Gemini" | "OpenCode";
+export type AIProvider = "Claude" | "DeepSeek" | "Gemini" | "OpenCode" | "Hermes" | "TokenRouter" | "RouteAPI";
 
 function parseCookie(cookieHeader: string | null, name: string): string | undefined {
   if (!cookieHeader) return undefined;
@@ -48,7 +48,7 @@ export async function resolveFeatureProvider(
   if (providerId) {
     // case insensitive match but normalized to lower case for internal logic
     const lower = providerId.toLowerCase();
-    if (["claude", "gemini", "deepseek", "minimax_m3", "minimax", "opencode"].includes(lower)) {
+    if (["claude", "gemini", "deepseek", "minimax_m3", "minimax", "opencode", "hermes", "tokenrouter", "routeapi"].includes(lower)) {
       providerId = lower;
     } else {
       providerId = undefined;
@@ -106,6 +106,15 @@ export async function resolveFeatureProvider(
   } else if (providerId === "opencode") {
     apiKey = process.env.OPENCODE_GO_API_KEY || "";
     modelName = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  } else if (providerId === "hermes") {
+    apiKey = process.env.HERMES_API_KEY || "";
+    modelName = process.env.HERMES_MODEL || "deepseek-v4-pro";
+  } else if (providerId === "tokenrouter") {
+    apiKey = process.env.TOKENROUTER_API_KEY || "";
+    modelName = process.env.TOKENROUTER_MODEL || "deepseek/deepseek-v4-flash-0731";
+  } else if (providerId === "routeapi") {
+    apiKey = process.env.ROUTEAPI_API_KEY || "";
+    modelName = process.env.ROUTEAPI_MODEL || "deepseek-v4-flash";
   } else {
     // Default fallback to deepseek config
     apiKey = process.env.DEEPSEEK_API_KEY || "";

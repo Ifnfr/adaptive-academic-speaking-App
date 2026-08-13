@@ -147,7 +147,7 @@ type Mode =
   | "Diagnostic";
 type FeedbackType = "Quick" | "Deep";
 type SessionType = "Micro" | "Standard" | "Deep";
-type AIProvider = "Claude" | "DeepSeek" | "Gemini" | "OpenCode";
+type AIProvider = "Claude" | "DeepSeek" | "Gemini" | "OpenCode" | "Hermes" | "TokenRouter" | "RouteAPI";
 
 type VocabularyCorrectionResult = Omit<
   VocabSentenceCorrection,
