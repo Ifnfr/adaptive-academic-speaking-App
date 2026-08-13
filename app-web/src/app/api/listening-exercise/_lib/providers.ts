@@ -372,7 +372,8 @@ export async function callListeningAI(
     body = {
       model: modelName,
       temperature: 0.2,
-      max_tokens: 4096,
+      max_tokens: 8192,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -409,7 +410,7 @@ export async function callListeningAI(
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       const res = await fetch(endpoint, {
         method: "POST",
