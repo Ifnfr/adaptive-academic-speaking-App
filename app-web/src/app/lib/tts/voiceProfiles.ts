@@ -20,16 +20,16 @@ export const AMAZON_POLLY_VOICE_PROFILES = {
     engine: "neural",
   },
   british_female_generative: {
-    label: "British Female (Generative)",
+    label: "British Female",
     languageCode: "en-GB",
     voiceId: "Amy",
-    engine: "generative",
+    engine: "neural",
   },
   american_male_generative: {
-    label: "American Male (Generative)",
+    label: "American Male",
     languageCode: "en-US",
     voiceId: "Matthew",
-    engine: "generative",
+    engine: "neural",
   },
 } as const satisfies Record<
   TtsVoiceProfile,
