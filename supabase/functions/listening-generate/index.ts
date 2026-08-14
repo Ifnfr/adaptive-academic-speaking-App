@@ -19,8 +19,10 @@
 // Claim protocol: section must be 'pending' -> atomically 'generating'.
 // Only one process may claim; a duplicate call returns claimed:false.
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").trim();
+// SRV_ROLE_KEY is set explicitly via `supabase secrets set` (the CLI refuses
+// SUPABASE_-prefixed names and the auto-injected service key can be stale).
+const SERVICE_ROLE = (Deno.env.get("SRV_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
 const TR_KEY = Deno.env.get("TOKENROUTER_API_KEY") ?? "";
 const TR_BASE = (Deno.env.get("TOKENROUTER_BASE_URL") ?? "https://api.tokenrouter.com/v1").replace(/\/+$/, "");
 const TR_MODEL = Deno.env.get("TOKENROUTER_MODEL") ?? "deepseek/deepseek-v4-flash-0731";
@@ -332,7 +334,10 @@ Deno.serve(async (req: Request) => {
   // Caller must present the service role key
   const auth = req.headers.get("authorization") ?? "";
   if (SERVICE_ROLE && auth !== `Bearer ${SERVICE_ROLE}`) {
-    return json({ error: "Unauthorized" }, 401);
+    // Debug: reveal only the last 4 chars of the expected key so we can
+    // detect a stale/auto-injected mismatch without exposing the secret.
+    const tail = SERVICE_ROLE.length >= 4 ? SERVICE_ROLE.slice(-4) : "";
+    return json({ error: "Unauthorized", expected_tail: tail }, 401);
   }
 
   let body: Record<string, unknown>;
