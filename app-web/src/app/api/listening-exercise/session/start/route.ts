@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { generateSection1Content } from "../../_lib/generate-section";
-import { waitUntil } from "@vercel/functions";
 
 export const runtime = "nodejs";
 
@@ -147,17 +145,10 @@ export async function POST(request: Request) {
 
   // Register background AI execution (best-effort). The status route also
   // triggers generation inline if this background job is killed by the platform.
-  waitUntil(
-    generateSection1Content(supabase, {
-      ownerId,
-      sessionId,
-      sectionId,
-      cefrLevel,
-      sectionCount,
-      isPlacement,
-      resolvedDifficulty,
-    }),
-  );
+  // Generation is orchestrated by the status route + Supabase Edge Function:
+  // the client's first status poll fires the plan job, subsequent polls fire
+  // content jobs, and sections 1-2 are pre-generated while the user works.
+  // No background job here — Vercel background execution is unreliable.
 
   // Immediately respond HTTP 202 Accepted
   return NextResponse.json({ session_id: sessionId }, { status: 202 });
