@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { generateSection1Content, generateNextSectionContent } from "../../../_lib/generate-section";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 async function resolveCurrentUserId(): Promise<string | null> {
   try {
@@ -83,8 +85,59 @@ export async function GET(
     );
   }
 
-  const activeSection = sections[0];
-  const dbStatus = activeSection.generation_status;
+  let activeSection = sections[0];
+  let dbStatus = activeSection.generation_status;
+
+  // Inline fallback: if the section is still pending, the background job was
+  // killed by the platform (e.g. Vercel waitUntil limit). Generate here.
+  if (dbStatus === "pending") {
+    const { data: sessionRow } = await supabase
+      .from("listening_exercise_sessions")
+      .select("cefr_level, section_count, is_placement, generation_plan")
+      .eq("id", sessionId)
+      .eq("owner_id", ownerId)
+      .single();
+
+    const sessionPlan = (sessionRow?.generation_plan ?? {}) as {
+      difficulty?: string;
+    };
+
+    const difficulty: "easy" | "medium" | "hard" =
+      sessionPlan.difficulty === "easy" || sessionPlan.difficulty === "hard"
+        ? sessionPlan.difficulty
+        : "medium";
+
+    await (activeSection.section_index === 0
+      ? generateSection1Content(supabase, {
+          ownerId,
+          sessionId,
+          sectionId: activeSection.id,
+          cefrLevel: sessionRow?.cefr_level || "B2",
+          sectionCount: sessionRow?.section_count || 3,
+          isPlacement: sessionRow?.is_placement === true,
+          resolvedDifficulty: difficulty,
+        })
+      : generateNextSectionContent(supabase, {
+          ownerId,
+          sessionId,
+          sectionId: activeSection.id,
+          sectionIndex: activeSection.section_index,
+          isPlacement: sessionRow?.is_placement === true,
+        }));
+
+    // Re-read the section to get the latest status
+    const { data: refreshed } = await supabase
+      .from("listening_exercise_sections")
+      .select("id, generation_status, section_index, topic, questions, audio_script, pre_listening_prompt")
+      .eq("id", activeSection.id)
+      .eq("owner_id", ownerId)
+      .single();
+
+    if (refreshed) {
+      activeSection = refreshed;
+      dbStatus = refreshed.generation_status;
+    }
+  }
 
   // Map db status 'error' to response status 'failed'
   const generationStatus = dbStatus === "error" ? "failed" : dbStatus;

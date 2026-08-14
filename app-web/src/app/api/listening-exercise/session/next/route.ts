@@ -7,6 +7,7 @@ import {
   extractJsonObject
 } from "../../_lib/providers";
 import { waitUntil } from "@vercel/functions";
+import { generateNextSectionContent } from "../../_lib/generate-section";
 import { getWeakestEligibleSubSkill } from "../../../../lib/listening-exercise/metrics";
 
 export const runtime = "nodejs";
@@ -158,7 +159,7 @@ export async function POST(request: Request) {
       section_index: nextIndex,
       cefr_level: targetLevel,
       topic: targetTopic,
-      generation_status: "generating",
+      generation_status: "pending",
     })
     .select("id")
     .single();
@@ -173,111 +174,17 @@ export async function POST(request: Request) {
 
   const sectionId = newSectionData.id;
 
-  // Register background AI execution with the runtime lifecycle manager
-  waitUntil((async () => {
-    let aiResponseText: string | undefined;
-    try {
-      let weakSubSkill: string | null = null;
-      if (!sessionData.is_placement) {
-        weakSubSkill = await getWeakestEligibleSubSkill(supabase, ownerId);
-      }
-
-      const questionType = targetQuestionTypes[0] || "fill_blank";
-      const systemPrompt = buildNextSectionSystemPrompt(questionType, targetDifficulty);
-      const userPrompt = buildNextSectionUserPrompt(
-        nextIndex,
-        targetLevel,
-        targetTopic,
-        targetQuestionTypes,
-        weakSubSkill
-      );
-
-      let payload: {
-        section?: {
-          topic?: string;
-          audio_script?: string;
-          fact_units?: unknown[];
-          questions?: unknown[];
-          pre_listening_prompt?: string;
-        };
-      } | undefined;
-
-      const maxAttempts = 3;
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          aiResponseText = await callListeningAI(systemPrompt, userPrompt);
-          const jsonText = extractJsonObject(aiResponseText);
-
-          if (!jsonText) {
-            throw new Error("AI provider returned invalid JSON formatting.");
-          }
-
-          const parsedPayload = JSON.parse(jsonText) as {
-            section?: {
-              topic?: string;
-              audio_script?: string;
-              fact_units?: unknown[];
-              questions?: unknown[];
-              pre_listening_prompt?: string;
-            };
-          };
-
-          if (!parsedPayload.section) {
-            throw new Error("AI provider JSON missing 'section' field.");
-          }
-
-          const qs = parsedPayload.section.questions;
-          const fu = parsedPayload.section.fact_units;
-          if (!Array.isArray(qs) || qs.length === 0) {
-            throw new Error("AI provider JSON missing or empty 'questions' array.");
-          }
-          if (!Array.isArray(fu) || fu.length === 0) {
-            throw new Error("AI provider JSON missing or empty 'fact_units' array.");
-          }
-
-          payload = parsedPayload;
-          break;
-        } catch (err) {
-          console.warn(`AI generation attempt ${attempt}/${maxAttempts} failed:`, err);
-          if (attempt === maxAttempts) {
-            throw err;
-          }
-        }
-      }
-
-      if (!payload || !payload.section) {
-        throw new Error("AI provider JSON missing 'section' field.");
-      }
-
-      // Update next section row
-      const { error: sectionUpdateError } = await supabase
-        .from("listening_exercise_sections")
-        .update({
-          topic: payload.section.topic || targetTopic,
-          audio_script: payload.section.audio_script,
-          fact_units: payload.section.fact_units,
-          questions: payload.section.questions,
-          pre_listening_prompt: payload.section.pre_listening_prompt,
-          generation_status: "ready",
-        })
-        .eq("id", sectionId);
-
-      if (sectionUpdateError) {
-        throw sectionUpdateError;
-      }
-    } catch (err: unknown) {
-      console.error(`Listening session next section background job failed:`, err);
-      // Mark section status as 'error'
-      await supabase
-        .from("listening_exercise_sections")
-        .update({
-          generation_status: "error",
-          generation_error: err instanceof Error ? err.message : String(err),
-          generation_error_raw_response: aiResponseText ?? null,
-        })
-        .eq("id", sectionId);
-    }
-  })());
+  // Register background AI execution (best-effort). The status route also
+  // triggers generation inline if this background job is killed by the platform.
+  waitUntil(
+    generateNextSectionContent(supabase, {
+      ownerId,
+      sessionId,
+      sectionId,
+      sectionIndex: nextIndex,
+      isPlacement: sessionData.is_placement === true,
+    }),
+  );
 
   // Immediately respond HTTP 202 Accepted
   return NextResponse.json(
