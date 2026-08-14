@@ -196,7 +196,7 @@ export function ListeningExerciseSession({
     const startTime = Date.now();
 
     async function pollStatus() {
-      if (Date.now() - startTime > 45000) {
+      if (Date.now() - startTime > 120000) {
         if (isMountedRef.current) {
           setStep("error");
           setErrorMsg("Generation timed out. Please try again.");

@@ -88,6 +88,34 @@ export async function GET(
   let activeSection = sections[0];
   let dbStatus = activeSection.generation_status;
 
+  // Stale-claim recovery: if a generation process claimed the section but died
+  // (platform kill), it stays 'generating' forever. Reset it so we can retry.
+  if (dbStatus === "generating") {
+    let updatedAt = 0;
+    try {
+      const { data: tsRow } = await supabase
+        .from("listening_exercise_sections")
+        .select("updated_at")
+        .eq("id", activeSection.id)
+        .maybeSingle();
+      if (tsRow && typeof tsRow.updated_at === "string") {
+        const t = new Date(tsRow.updated_at).getTime();
+        if (!Number.isNaN(t)) updatedAt = t;
+      }
+    } catch {
+      // updated_at column missing — skip stale recovery (no crash)
+    }
+    const isStale = updatedAt === 0 || Date.now() - updatedAt > 75000;
+    if (isStale) {
+      await supabase
+        .from("listening_exercise_sections")
+        .update({ generation_status: "pending" })
+        .eq("id", activeSection.id)
+        .eq("generation_status", "generating");
+      dbStatus = "pending";
+    }
+  }
+
   // Inline fallback: if the section is still pending, the background job was
   // killed by the platform (e.g. Vercel waitUntil limit). Generate here.
   if (dbStatus === "pending") {
