@@ -109,7 +109,7 @@ export async function GET(
     } catch {
       // updated_at column missing — skip stale recovery (no crash)
     }
-    const isStale = updatedAt === 0 || Date.now() - updatedAt > 75000;
+    const isStale = updatedAt === 0 || Date.now() - updatedAt > 100000;
     if (isStale) {
       await supabase
         .from("listening_exercise_sections")

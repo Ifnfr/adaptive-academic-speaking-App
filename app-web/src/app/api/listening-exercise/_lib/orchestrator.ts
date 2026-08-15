@@ -49,9 +49,16 @@ export async function fireEdgeJob(payload: Record<string, unknown>): Promise<boo
       clearTimeout(timer);
     }
   } catch (err) {
-    // Abort/timeout while the edge function is still working is expected —
-    // the section stays 'pending'/'generating' and the next poll re-fires.
-    console.error("[listening] fireEdgeJob error:", err instanceof Error ? err.message : String(err));
+    // Abort after 5s is EXPECTED (fire-and-forget): the edge function keeps
+    // running server-side (Supabase Edge Functions survive client disconnect)
+    // and the section status is updated directly in the DB. The next poll
+    // re-fires only if the section is still 'pending'. Log as info, not error.
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("aborted")) {
+      console.info("[listening] fireEdgeJob: fire-and-forget timeout (expected). Edge function continues.");
+    } else {
+      console.error("[listening] fireEdgeJob error:", message);
+    }
     return false;
   }
 }

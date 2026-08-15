@@ -23,9 +23,15 @@ const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") ?? "").trim();
 // SRV_ROLE_KEY is set explicitly via `supabase secrets set` (the CLI refuses
 // SUPABASE_-prefixed names and the auto-injected service key can be stale).
 const SERVICE_ROLE = (Deno.env.get("SRV_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
+// Provider selection: default tokenrouter; set LISTENING_GEN_PROVIDER=deepseek
+// to use the official DeepSeek API (DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL secrets).
+const GEN_PROVIDER = (Deno.env.get("LISTENING_GEN_PROVIDER") ?? "tokenrouter").trim();
 const TR_KEY = Deno.env.get("TOKENROUTER_API_KEY") ?? "";
 const TR_BASE = (Deno.env.get("TOKENROUTER_BASE_URL") ?? "https://api.tokenrouter.com/v1").replace(/\/+$/, "");
 const TR_MODEL = Deno.env.get("TOKENROUTER_MODEL") ?? "deepseek/deepseek-v4-flash-0731";
+const DS_KEY = Deno.env.get("DEEPSEEK_API_KEY") ?? "";
+const DS_BASE = (Deno.env.get("DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com/v1").replace(/\/+$/, "");
+const DS_MODEL = Deno.env.get("DEEPSEEK_MODEL") ?? "deepseek-chat";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,49 +86,74 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
-async function callTokenRouter(systemPrompt: string, userPrompt: string): Promise<string> {
-  if (!TR_KEY) {
-    throw new Error("TOKENROUTER_API_KEY is not set in edge function secrets.");
+async function callGenAI(systemPrompt: string, userPrompt: string): Promise<string> {
+  const useDeepSeek = GEN_PROVIDER === "deepseek";
+  const apiKey = useDeepSeek ? DS_KEY : TR_KEY;
+  if (!apiKey) {
+    throw new Error(
+      useDeepSeek
+        ? "DEEPSEEK_API_KEY is not set in edge function secrets (or set LISTENING_GEN_PROVIDER=tokenrouter)."
+        : "TOKENROUTER_API_KEY is not set in edge function secrets (or set LISTENING_GEN_PROVIDER=deepseek).",
+    );
   }
-  const endpoint = TR_BASE.endsWith("/chat/completions") ? TR_BASE : `${TR_BASE}/chat/completions`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 140000); // under the 150s edge cap
+  const base = useDeepSeek ? DS_BASE : TR_BASE;
+  const model = useDeepSeek ? DS_MODEL : TR_MODEL;
+  const endpoint = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
 
-  try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${TR_KEY}`,
-      },
-      body: JSON.stringify({
-        model: TR_MODEL,
-        temperature: 0.2,
-        max_tokens: 8192,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-      signal: controller.signal,
-    });
+  // Retry once on empty content or 5xx (transient failures)
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 140000); // under the 150s edge cap
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`TokenRouter request failed: ${res.status} ${text.slice(0, 400)}`);
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            max_tokens: 12000,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`AI request failed: ${res.status} ${text.slice(0, 400)}`);
+        }
+
+        const data = await res.json();
+        const content = data?.choices?.[0]?.message?.content ?? "";
+        if (typeof content !== "string" || content.trim().length === 0) {
+          throw new Error("AI provider returned empty content.");
+        }
+        return content;
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      lastError = err instanceof Error ? err : new Error(message);
+      const isTransient =
+        /empty content|request failed: (500|502|503|504)|aborted/i.test(message);
+      if (attempt === 2 || !isTransient) {
+        throw lastError;
+      }
+      console.warn(`AI call attempt ${attempt}/2 failed (retrying):`, message);
     }
-
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content ?? "";
-    if (typeof content !== "string" || content.trim().length === 0) {
-      throw new Error("TokenRouter returned empty content.");
-    }
-    return content;
-  } finally {
-    clearTimeout(timer);
   }
+  throw lastError ?? new Error("AI call failed.");
 }
 
 async function claimSection(sectionId: string): Promise<boolean> {
@@ -175,7 +206,7 @@ async function handlePlan(body: Record<string, unknown>): Promise<Response> {
   }
 
   try {
-    const aiText = await callTokenRouter(systemPrompt, userPrompt);
+    const aiText = await callGenAI(systemPrompt, userPrompt);
     const jsonText = extractJsonObject(aiText);
     if (!jsonText) {
       throw new Error("AI provider returned invalid JSON formatting.");
@@ -266,7 +297,7 @@ async function handleContent(body: Record<string, unknown>): Promise<Response> {
   }
 
   try {
-    const aiText = await callTokenRouter(systemPrompt, userPrompt);
+    const aiText = await callGenAI(systemPrompt, userPrompt);
     const jsonText = extractJsonObject(aiText);
     if (!jsonText) {
       throw new Error("AI provider returned invalid JSON formatting.");
