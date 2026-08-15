@@ -101,59 +101,48 @@ async function callGenAI(systemPrompt: string, userPrompt: string): Promise<stri
   const model = useDeepSeek ? DS_MODEL : TR_MODEL;
   const endpoint = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
 
-  // Retry once on empty content or 5xx (transient failures)
-  let lastError: Error | null = null;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 140000); // under the 150s edge cap
+  // Single attempt with a 90s timeout. No retry here: the Vercel status route
+  // owns retry via transient-error recovery (reset error -> pending -> re-fire),
+  // and the stale-claim recovery resets stuck 'generating' after 100s. A retry
+  // loop here would run PAST the stale threshold and cause two parallel AI
+  // calls for the same section (duplicate spend).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90000);
 
-      try {
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.2,
-            max_tokens: 12000,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-          }),
-          signal: controller.signal,
-        });
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 12000,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
 
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`AI request failed: ${res.status} ${text.slice(0, 400)}`);
-        }
-
-        const data = await res.json();
-        const content = data?.choices?.[0]?.message?.content ?? "";
-        if (typeof content !== "string" || content.trim().length === 0) {
-          throw new Error("AI provider returned empty content.");
-        }
-        return content;
-      } finally {
-        clearTimeout(timer);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      lastError = err instanceof Error ? err : new Error(message);
-      const isTransient =
-        /empty content|request failed: (500|502|503|504)|aborted/i.test(message);
-      if (attempt === 2 || !isTransient) {
-        throw lastError;
-      }
-      console.warn(`AI call attempt ${attempt}/2 failed (retrying):`, message);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`AI request failed: ${res.status} ${text.slice(0, 400)}`);
     }
+
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content ?? "";
+    if (typeof content !== "string" || content.trim().length === 0) {
+      throw new Error("AI provider returned empty content.");
+    }
+    return content;
+  } finally {
+    clearTimeout(timer);
   }
-  throw lastError ?? new Error("AI call failed.");
 }
 
 async function claimSection(sectionId: string): Promise<boolean> {

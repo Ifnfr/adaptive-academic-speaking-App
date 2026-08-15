@@ -65,14 +65,30 @@ export async function GET(
     );
   }
 
-  // Query the database for the active section (most recently created section index)
-  const { data: sections, error: sectionsError } = await supabase
+  // Query the database for the section the client is waiting for.
+  // The client passes ?section_index=N so pre-generated sections (1-2 created
+  // ahead of time) never shadow the section the user is actually on.
+  const url = new URL(request.url);
+  const requestedIndexRaw = url.searchParams.get("section_index");
+  const requestedIndex =
+    requestedIndexRaw !== null && requestedIndexRaw !== ""
+      ? Number(requestedIndexRaw)
+      : NaN;
+
+  let query = supabase
     .from("listening_exercise_sections")
-    .select("id, generation_status, section_index, topic, questions, audio_script, pre_listening_prompt")
+    .select("id, generation_status, section_index, topic, questions, audio_script, pre_listening_prompt, generation_error, created_at")
     .eq("session_id", sessionId)
-    .eq("owner_id", ownerId)
-    .order("section_index", { ascending: false })
-    .limit(1);
+    .eq("owner_id", ownerId);
+
+  if (!Number.isNaN(requestedIndex)) {
+    query = query.eq("section_index", requestedIndex);
+  } else {
+    // Backward-compatible fallback: most recently created section
+    query = query.order("section_index", { ascending: false }).limit(1);
+  }
+
+  const { data: sections, error: sectionsError } = await query;
 
   if (sectionsError) {
     console.error("Failed to query section generation status:", sectionsError);
@@ -120,6 +136,34 @@ export async function GET(
     }
   }
 
+  // Transient-error recovery: a section marked 'error' by a transient failure
+  // (timeout, 5xx, empty content) is reset to 'pending' so the next poll
+  // re-fires generation. Deterministic errors (invalid JSON, missing fields)
+  // stay 'error' so the user sees a real failure instead of an infinite loop.
+  // Guard: only auto-retry within 15 minutes of creation — after that, stop
+  // (prevents an infinite retry loop when the failure is persistent).
+  if (dbStatus === "error") {
+    const errText = (activeSection.generation_error ?? "").toLowerCase();
+    const transient =
+      /aborted|timeout|request failed: (5\d\d|429)|empty content|truncated_response|failed to fetch/i.test(
+        errText
+      );
+    const createdMs = activeSection.created_at ? new Date(activeSection.created_at).getTime() : 0;
+    const ageMs = createdMs === 0 ? 0 : Date.now() - createdMs;
+    const recentEnough = createdMs === 0 || ageMs < 15 * 60 * 1000;
+    if (transient && recentEnough) {
+      await supabase
+        .from("listening_exercise_sections")
+        .update({
+          generation_status: "pending",
+          generation_error: null,
+          generation_error_raw_response: null,
+        })
+        .eq("id", activeSection.id);
+      dbStatus = "pending";
+    }
+  }
+
   // If the section is pending, fire the appropriate edge job.
   // The client's polling IS the orchestrator: poll #1 fires the plan job,
   // the next polls fire content jobs, and pre-generation of sections 1-2
@@ -152,8 +196,11 @@ export async function GET(
 
     const sectionIndex = activeSection.section_index;
 
-    // STEP 1: no plan yet -> fire the fast PLAN job
-    if (sectionIndex === 0 && !plan) {
+    // STEP 1: no plan sections yet -> fire the fast PLAN job.
+    // Note: start route stores { difficulty } as a placeholder, which is
+    // truthy — so check for actual plan.sections, not the object itself.
+    const planHasSections = !!plan && Array.isArray(plan.sections) && plan.sections.length > 0;
+    if (sectionIndex === 0 && !planHasSections) {
       const { historySummary, recentSessions } = await fetchHistorySummary(
         supabase,
         ownerId,
@@ -269,7 +316,7 @@ export async function GET(
     // Re-read the section to get the latest status after any job fired
     const { data: refreshed } = await supabase
       .from("listening_exercise_sections")
-      .select("id, generation_status, section_index, topic, questions, audio_script, pre_listening_prompt")
+      .select("id, generation_status, section_index, topic, questions, audio_script, pre_listening_prompt, generation_error, created_at")
       .eq("id", activeSection.id)
       .eq("owner_id", ownerId)
       .single();

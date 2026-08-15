@@ -206,7 +206,9 @@ export function ListeningExerciseSession({
       }
 
       try {
-        const res = await fetch(`/api/listening-exercise/session/${sessionId}/status`);
+        const res = await fetch(
+          `/api/listening-exercise/session/${sessionId}/status?section_index=${sectionIndex}`
+        );
         if (!res.ok) {
           throw new Error("Unable to check generation progress.");
         }
