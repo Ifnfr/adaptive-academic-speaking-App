@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { abandonStaleSessions } from "../../_lib/abandon-sessions";
 import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -92,6 +93,10 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  // Lazy cleanup: mark this user's stale in-progress sessions as abandoned
+  // (24h+ old) so they don't pile up and don't pollute the session list.
+  await abandonStaleSessions(supabase, { ownerId });
 
   // Insert session
   const { data: sessionData, error: sessionError } = await supabase
