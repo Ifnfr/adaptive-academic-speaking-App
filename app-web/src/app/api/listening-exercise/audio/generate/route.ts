@@ -5,8 +5,12 @@ import {
   AMAZON_POLLY_VOICE_PROFILES,
   DEFAULT_TTS_VOICE_PROFILE,
   isTtsVoiceProfile,
+  resolveElevenLabsModelId,
+  resolveElevenLabsVoiceId,
+  resolveTtsProvider,
   type TtsVoiceProfile,
 } from "../../../../lib/tts/voiceProfiles";
+import { synthesizeWithElevenLabs } from "../../../../lib/tts/elevenlabs";
 
 export const runtime = "nodejs";
 
@@ -271,26 +275,71 @@ export async function POST(request: Request) {
     );
   }
 
-  // Synthesize speech via Amazon Polly
-  const awsConfig = getAwsConfig();
-  if (!awsConfig) {
-    return NextResponse.json(
-      { error: "Audio generation failed", message: "Polly credentials missing." },
-      { status: 503 }
-    );
-  }
-
-  const voiceProfile = await resolveVoiceProfileForUser(ownerId, supabase);
+  // Synthesize speech — provider follows the same fallback chain as
+  // /api/podchat/tts: explicit request override, then TTS_PROVIDER env,
+  // then PODCHAT_TTS_PROVIDER env, defaulting to Amazon Polly.
+  const ttsProvider = resolveTtsProvider(parsedBody.ttsProvider);
+  const modelId = resolveElevenLabsModelId(parsedBody.elevenLabsModelId);
+  const voiceId = resolveElevenLabsVoiceId(parsedBody.elevenLabsVoiceId);
 
   let audioBytes: ArrayBuffer;
-  try {
-    audioBytes = await synthesizeSpeech(text, awsConfig, voiceProfile);
-  } catch (err: any) {
-    console.error("Polly speech synthesis error:", err);
-    return NextResponse.json(
-      { error: "Audio generation failed" },
-      { status: 502 }
-    );
+  if (ttsProvider === "elevenlabs") {
+    if (!modelId) {
+      return NextResponse.json(
+        {
+          error: "Audio generation failed",
+          message:
+            "ElevenLabs selected but no model configured. Set ELEVENLABS_MODEL_ID or pass elevenLabsModelId.",
+        },
+        { status: 503 },
+      );
+    }
+    if (!voiceId) {
+      return NextResponse.json(
+        {
+          error: "Audio generation failed",
+          message:
+            "ElevenLabs selected but no voice configured. Set ELEVENLABS_VOICE_ID or pass elevenLabsVoiceId.",
+        },
+        { status: 503 },
+      );
+    }
+
+    const result = await synthesizeWithElevenLabs(text, { modelId, voiceId });
+    if (!result.ok) {
+      return NextResponse.json(
+        {
+          error: "Audio generation failed",
+          message:
+            result.reason === "missing_config"
+              ? "ElevenLabs credentials missing."
+              : "ElevenLabs synthesis failed.",
+        },
+        { status: result.reason === "missing_config" ? 503 : 502 },
+      );
+    }
+    audioBytes = result.audio;
+  } else {
+    // Amazon Polly path
+    const awsConfig = getAwsConfig();
+    if (!awsConfig) {
+      return NextResponse.json(
+        { error: "Audio generation failed", message: "Polly credentials missing." },
+        { status: 503 }
+      );
+    }
+
+    const voiceProfile = await resolveVoiceProfileForUser(ownerId, supabase);
+
+    try {
+      audioBytes = await synthesizeSpeech(text, awsConfig, voiceProfile);
+    } catch (err: any) {
+      console.error("Polly speech synthesis error:", err);
+      return NextResponse.json(
+        { error: "Audio generation failed" },
+        { status: 502 }
+      );
+    }
   }
 
   // Upload to Supabase Storage

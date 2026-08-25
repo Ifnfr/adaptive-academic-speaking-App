@@ -128,8 +128,10 @@ import {
 import type { WeeklyMissionRouteTarget } from "./lib/weekly-review-missions";
 import {
   DEFAULT_TTS_VOICE_PROFILE,
+  isElevenLabsVoiceId,
   normalizeTtsProvider,
   normalizeTtsVoiceProfile,
+  type ElevenLabsVoiceId,
   type TtsProvider,
   type TtsVoiceProfile,
 } from "./lib/tts/voiceProfiles";
@@ -813,6 +815,37 @@ export default function Home() {
         window.localStorage.setItem("defaultElevenLabsModel", model);
       } else {
         window.localStorage.removeItem("defaultElevenLabsModel");
+      }
+    }
+  };
+
+  // --- ElevenLabs Voice Setting ---
+  const [elevenLabsVoice, setElevenLabsVoice] = useState<ElevenLabsVoiceId | "">("");
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem("defaultElevenLabsVoice");
+        if (isElevenLabsVoiceId(stored)) {
+          setElevenLabsVoice(stored);
+        } else {
+          setElevenLabsVoice("");
+          if (stored !== null) {
+            window.localStorage.removeItem("defaultElevenLabsVoice");
+          }
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const handleDefaultElevenLabsVoiceChange = (voice: ElevenLabsVoiceId | "") => {
+    setElevenLabsVoice(voice);
+    if (typeof window !== "undefined") {
+      if (voice) {
+        window.localStorage.setItem("defaultElevenLabsVoice", voice);
+      } else {
+        window.localStorage.removeItem("defaultElevenLabsVoice");
       }
     }
   };
@@ -2944,6 +2977,7 @@ export default function Home() {
               ttsProvider={ttsProvider}
               ttsVoiceProfile={ttsVoiceProfile}
               elevenLabsModelId={elevenLabsModel}
+              elevenLabsVoiceId={elevenLabsVoice}
               stopAIOnSpeech={stopAIOnSpeech}
               autoSendOnPause={autoSendOnPause}
               isActiveView={view === "active"}
@@ -3134,6 +3168,9 @@ export default function Home() {
                 initialSectionCount={3}
                 initialIsPlacement={false}
                 ttsVoiceProfile={ttsVoiceProfile}
+                ttsProvider={ttsProvider}
+                elevenLabsModelId={elevenLabsModel}
+                elevenLabsVoiceId={elevenLabsVoice}
               />
             </div>
           )}
@@ -3214,6 +3251,8 @@ export default function Home() {
               onDefaultTtsVoiceProfileChange={handleDefaultTtsVoiceProfileChange}
               defaultElevenLabsModel={elevenLabsModel}
               onDefaultElevenLabsModelChange={handleDefaultElevenLabsModelChange}
+              defaultElevenLabsVoice={elevenLabsVoice}
+              onDefaultElevenLabsVoiceChange={handleDefaultElevenLabsVoiceChange}
               stopAiOnSpeechEnabled={stopAIOnSpeech}
               onStopAiOnSpeechEnabledChange={handleStopAiOnSpeechChange}
               autoSendOnPauseEnabled={autoSendOnPause}

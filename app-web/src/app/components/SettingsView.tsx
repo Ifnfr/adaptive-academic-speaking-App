@@ -32,6 +32,9 @@ import {
 } from "../lib/storage/supabase-profile-adapter";
 import {
   AMAZON_POLLY_VOICE_PROFILES,
+  ELEVENLABS_VOICE_CATALOG,
+  isElevenLabsVoiceId,
+  type ElevenLabsVoiceId,
   type TtsProvider,
   type TtsVoiceProfile,
 } from "../lib/tts/voiceProfiles";
@@ -66,6 +69,8 @@ export type SettingsViewProps = {
   onDefaultTtsVoiceProfileChange?: (profile: TtsVoiceProfile) => void;
   defaultElevenLabsModel?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
   onDefaultElevenLabsModelChange?: (model: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "") => void;
+  defaultElevenLabsVoice?: ElevenLabsVoiceId | "";
+  onDefaultElevenLabsVoiceChange?: (voice: ElevenLabsVoiceId | "") => void;
   stopAiOnSpeechEnabled?: boolean;
   onStopAiOnSpeechEnabledChange?: (enabled: boolean) => void;
   autoSendOnPauseEnabled?: boolean;
@@ -871,6 +876,8 @@ export function SettingsView({
   onDefaultTtsVoiceProfileChange,
   defaultElevenLabsModel = "",
   onDefaultElevenLabsModelChange,
+  defaultElevenLabsVoice = "",
+  onDefaultElevenLabsVoiceChange,
   stopAiOnSpeechEnabled = true,
   onStopAiOnSpeechEnabledChange,
   autoSendOnPauseEnabled = true,
@@ -1141,6 +1148,39 @@ export function SettingsView({
                   </option>
                 </select>
               </label>
+            </div>
+          )}
+
+          {/* ElevenLabs Voice Dropdown */}
+          {defaultTtsProvider === "elevenlabs" && (
+            <div className="mt-4 max-w-xs">
+              <label className="flex flex-col gap-1.5 font-sans">
+                <span className="app-label">
+                  ElevenLabs Voice
+                </span>
+                <select
+                  id="default-elevenlabs-voice-select"
+                  value={defaultElevenLabsVoice}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    onDefaultElevenLabsVoiceChange?.(
+                      isElevenLabsVoiceId(next) ? next : "",
+                    );
+                  }}
+                  className="app-field"
+                >
+                  <option value="">Use server default voice</option>
+                  {Object.entries(ELEVENLABS_VOICE_CATALOG).map(([value, voice]) => (
+                    <option key={value} value={value}>
+                      {voice.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="app-helper mt-2">
+                The browser stores only this voice ID. The server maps it to the approved ElevenLabs
+                voice; leaving it unset uses the server&apos;s configured default.
+              </p>
             </div>
           )}
 

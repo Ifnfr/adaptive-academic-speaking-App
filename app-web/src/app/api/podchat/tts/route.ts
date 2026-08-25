@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   AMAZON_POLLY_VOICE_PROFILES,
   DEFAULT_TTS_VOICE_PROFILE,
+  isElevenLabsVoiceId,
   isTtsVoiceProfile,
   normalizeTtsProvider,
   type TtsProvider,
@@ -29,6 +30,7 @@ type PodchatTtsRequest = {
   ttsProvider: TtsProvider;
   voiceProfile: TtsVoiceProfile;
   elevenLabsModelId?: string;
+  elevenLabsVoiceId?: string;
 };
 
 type AwsConfig = {
@@ -106,6 +108,7 @@ function validateRequest(
     voiceProfile = source.voiceProfile;
   }
   const elevenLabsModelId = typeof source.elevenLabsModelId === "string" ? source.elevenLabsModelId.trim() : undefined;
+  const elevenLabsVoiceId = typeof source.elevenLabsVoiceId === "string" ? source.elevenLabsVoiceId.trim() : undefined;
 
   return {
     valid: true,
@@ -114,6 +117,7 @@ function validateRequest(
       ttsProvider,
       voiceProfile,
       elevenLabsModelId,
+      elevenLabsVoiceId,
     },
   };
 }
@@ -256,11 +260,14 @@ async function synthesizeSpeech(
 // ElevenLabs helpers
 // ---------------------------------------------------------------------------
 
-function getElevenLabsConfig(modelId: string): ElevenLabsConfig | null {
+function getElevenLabsConfig(modelId: string, voiceOverride?: string): ElevenLabsConfig | null {
   const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
-  const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim();
-
-  if (!apiKey || !voiceId) {
+  if (!apiKey) {
+    return null;
+  }
+  // Per-request catalog voices win; env voice is the default fallback.
+  const voiceId = voiceOverride ?? process.env.ELEVENLABS_VOICE_ID?.trim();
+  if (!voiceId) {
     return null;
   }
 
@@ -336,7 +343,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { ttsProvider, elevenLabsModelId } = validation.request;
+  const { ttsProvider, elevenLabsModelId, elevenLabsVoiceId } = validation.request;
 
   try {
     if (ttsProvider === "elevenlabs") {
@@ -352,7 +359,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const elevenLabsConfig = getElevenLabsConfig(elevenLabsModelId);
+      const requestVoiceId = isElevenLabsVoiceId(elevenLabsVoiceId) ? elevenLabsVoiceId : undefined;
+      const elevenLabsConfig = getElevenLabsConfig(elevenLabsModelId, requestVoiceId);
       if (!elevenLabsConfig) {
         return NextResponse.json(
           { error: "tts_unavailable", message: "Text-to-speech is unavailable. Continuing with text." },

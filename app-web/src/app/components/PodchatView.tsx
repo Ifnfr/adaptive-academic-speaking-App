@@ -25,7 +25,12 @@ import type {
   ContextUnderstandingState,
   PodchatAurInput,
 } from "../lib/podchat-aur/types";
-import type { TtsProvider, TtsVoiceProfile } from "../lib/tts/voiceProfiles";
+import type {
+  ElevenLabsModelId,
+  ElevenLabsVoiceId,
+  TtsProvider,
+  TtsVoiceProfile,
+} from "../lib/tts/voiceProfiles";
 import { TtsChunker } from "../lib/podchat/ttsChunker";
 import { StreamingJsonDisplay } from "../lib/podchat/streamingDisplay";
 import { EvaluationFlashcards } from "./EvaluationFlashcards";
@@ -305,7 +310,8 @@ export interface PodchatViewProps {
   onClearCommonplaceMapContext?: () => void;
   ttsProvider?: TtsProvider;
   ttsVoiceProfile?: TtsVoiceProfile;
-  elevenLabsModelId?: "eleven_flash_v2_5" | "eleven_multilingual_v2" | "eleven_v3" | "";
+  elevenLabsModelId?: ElevenLabsModelId | "";
+  elevenLabsVoiceId?: ElevenLabsVoiceId | "";
   isActiveView?: boolean;
   stopAIOnSpeech?: boolean;
   autoSendOnPause?: boolean;
@@ -389,6 +395,7 @@ export function PodchatView({
   ttsProvider = "amazon-polly",
   ttsVoiceProfile = "british_male",
   elevenLabsModelId = "",
+  elevenLabsVoiceId = "",
   isActiveView = true,
   stopAIOnSpeech = true,
   autoSendOnPause = true,
@@ -1099,7 +1106,7 @@ export function PodchatView({
     }
     try {
       const requestBody = ttsProvider === "elevenlabs"
-        ? { text, ttsProvider, elevenLabsModelId }
+        ? { text, ttsProvider, elevenLabsModelId, elevenLabsVoiceId: elevenLabsVoiceId || undefined }
         : { text, ttsProvider, voiceProfile: ttsVoiceProfile };
 
       const internalKey =

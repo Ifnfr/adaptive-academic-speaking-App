@@ -5,7 +5,12 @@ import {
   type ReviewData,
 } from "./ListeningExerciseEvaluationView";
 import { type Question } from "./QuestionList";
-import type { TtsVoiceProfile } from "../../lib/tts/voiceProfiles";
+import type {
+  ElevenLabsModelId,
+  ElevenLabsVoiceId,
+  TtsProvider,
+  TtsVoiceProfile,
+} from "../../lib/tts/voiceProfiles";
 import {
   LISTENING_DIFFICULTY_OPTIONS,
   loadListeningDifficulty,
@@ -19,6 +24,12 @@ export interface ListeningExerciseSessionProps {
   initialIsPlacement?: boolean;
   onSessionComplete?: (result: { overallScore: number; estimatedBand: string }) => void;
   ttsVoiceProfile?: TtsVoiceProfile;
+  /** Explicit TTS provider choice from Settings; env fallback applies when omitted. */
+  ttsProvider?: TtsProvider;
+  /** Selected ElevenLabs model from Settings ("" = unset). */
+  elevenLabsModelId?: ElevenLabsModelId | "";
+  /** Selected ElevenLabs voice from Settings ("" = unset → server env default). */
+  elevenLabsVoiceId?: ElevenLabsVoiceId | "";
 }
 
 type StepType =
@@ -120,6 +131,9 @@ export function ListeningExerciseSession({
   initialIsPlacement = false,
   onSessionComplete,
   ttsVoiceProfile,
+  ttsProvider,
+  elevenLabsModelId,
+  elevenLabsVoiceId,
 }: ListeningExerciseSessionProps) {
   const [step, setStep] = useState<StepType>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -245,6 +259,11 @@ export function ListeningExerciseSession({
                 sessionId,
                 sectionId: sectionData.id,
                 text: scriptText,
+                // undefined values are dropped by JSON.stringify, so an unset
+                // Settings choice defers to the server's env fallback chain.
+                ttsProvider,
+                elevenLabsModelId: elevenLabsModelId || undefined,
+                elevenLabsVoiceId: elevenLabsVoiceId || undefined,
               }),
             });
 

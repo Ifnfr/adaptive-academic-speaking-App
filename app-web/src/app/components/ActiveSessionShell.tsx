@@ -170,6 +170,7 @@ export function ActiveSessionShell(
               ttsProvider={podchatProps.ttsProvider}
               ttsVoiceProfile={podchatProps.ttsVoiceProfile}
               elevenLabsModelId={podchatProps.elevenLabsModelId}
+              elevenLabsVoiceId={podchatProps.elevenLabsVoiceId}
             />
           )}
         </div>
