@@ -114,7 +114,7 @@ export async function POST(request: Request) {
   // Determine the next section index by fetching existing sections
   const { data: sectionsData, error: sectionsError } = await supabase
     .from("listening_exercise_sections")
-    .select("section_index, id, generation_status")
+    .select("section_index, id, generation_status, section_score")
     .eq("session_id", sessionId)
     .eq("owner_id", ownerId)
     .order("section_index", { ascending: false });
@@ -127,14 +127,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const highestExisting =
-    sectionsData.length > 0 ? sectionsData[0].section_index : null;
-  const nextIndex =
-    completedIndex !== null
-      ? completedIndex + 1
-      : highestExisting !== null
-        ? highestExisting + 1
-        : 0;
+  let nextIndex: number;
+  if (completedIndex !== null) {
+    nextIndex = completedIndex + 1;
+  } else {
+    // Stale-client fallback: with pre-generation, highest+1 always overflows
+    // (the original bug). Instead, resume at the FIRST section that has no
+    // score yet - i.e. the earliest section the user has not submitted.
+    const unscored = sectionsData
+      .filter((s) => s.section_score === null)
+      .sort((a, b) => a.section_index - b.section_index);
+    nextIndex = unscored.length > 0 ? unscored[0].section_index : 0;
+    // Only sections after the completed one are legitimate "next" targets.
+    if (unscored.length === 0 || nextIndex === 0) {
+      return NextResponse.json(
+        { error: "All sections for this session have already been generated." },
+        { status: 400 }
+      );
+    }
+  }
 
   // Validate against plan section limits
   if (nextIndex >= sessionData.section_count) {
