@@ -982,12 +982,6 @@ export default function WordBuilderPractice() {
               </div>
             )}
             <div className="flex flex-col items-center gap-3 pt-2">
-              <Link
-                href="/drill"
-                className="inline-block px-8 py-2.5 bg-teal-500 hover:bg-teal-400 text-zinc-950 font-semibold rounded-lg transition-colors text-sm"
-              >
-                Go to Drill Mode →
-              </Link>
               <button
                 onClick={() => window.location.reload()}
                 className="text-sm text-zinc-500 hover:text-zinc-400 transition-colors"
