@@ -352,7 +352,7 @@ export function ListeningExerciseSession({
       const res = await fetch("/api/listening-exercise/session/next", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId }),
+        body: JSON.stringify({ session_id: sessionId, section_index: sectionIndex }),
       });
 
       if (!res.ok) {
@@ -401,7 +401,7 @@ export function ListeningExerciseSession({
         const nextRes = await fetch("/api/listening-exercise/session/next", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId }),
+          body: JSON.stringify({ session_id: sessionId, section_index: sectionIndex }),
         });
 
         if (!nextRes.ok) {

@@ -54,6 +54,16 @@ export async function POST(request: Request) {
 
   const b = parsedBody as Record<string, unknown>;
   const sessionId = b.session_id as string;
+  // Optional: index of the section the client just COMPLETED. With
+  // pre-generation the status route creates ALL sections up front, so
+  // deriving the next index from max(existing)+1 always overflows and 400s
+  // ("All sections ... already generated") the moment any section exists.
+  // The app shell therefore sends the completed index explicitly; falling
+  // back to the legacy highest+1 derivation keeps direct API callers working.
+  const completedIndex =
+    typeof b.section_index === "number" && Number.isInteger(b.section_index)
+      ? b.section_index
+      : null;
 
   if (!sessionId || typeof sessionId !== "string") {
     return NextResponse.json(
@@ -117,7 +127,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const nextIndex = sectionsData.length > 0 ? sectionsData[0].section_index + 1 : 0;
+  const highestExisting =
+    sectionsData.length > 0 ? sectionsData[0].section_index : null;
+  const nextIndex =
+    completedIndex !== null
+      ? completedIndex + 1
+      : highestExisting !== null
+        ? highestExisting + 1
+        : 0;
 
   // Validate against plan section limits
   if (nextIndex >= sessionData.section_count) {
