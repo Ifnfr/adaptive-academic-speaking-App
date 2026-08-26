@@ -32,6 +32,9 @@ import {
 } from "../lib/storage/supabase-profile-adapter";
 import {
   AMAZON_POLLY_VOICE_PROFILES,
+  // Kept imported: the (currently unreachable) ElevenLabs model/voice
+  // dropdown blocks below still reference the catalog so re-enabling the
+  // provider after an account upgrade needs no code archaeology.
   ELEVENLABS_VOICE_CATALOG,
   isElevenLabsVoiceId,
   type ElevenLabsVoiceId,
@@ -1087,7 +1090,12 @@ export function SettingsView({
                 className="app-field"
               >
                 <option value="amazon-polly">Amazon Polly</option>
-                <option value="elevenlabs">ElevenLabs</option>
+                {/* ElevenLabs is temporarily hidden from selection: the account
+                    is on the free tier and the ElevenLabs API rejects every
+                    text-to-speech call with 402 paid_plan_required. The full
+                    pipeline stays wired end-to-end; restore this option (and
+                    the normalizeTtsProvider coercion) once the account is on a
+                    paid plan. */}
               </select>
             </label>
           </div>

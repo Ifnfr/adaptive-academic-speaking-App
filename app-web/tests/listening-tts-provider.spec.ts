@@ -428,7 +428,7 @@ async function setupListeningMocks(page: import("@playwright/test").Page, captur
 }
 
 test.describe("Listening audio request carries the Settings TTS choice", () => {
-  test("Settings selection elevenlabs + model reaches the audio generate request", async ({
+  test("Settings selection reaches the audio generate request as canonical amazon-polly", async ({
     page,
   }) => {
     const captured: AudioBody[] = [];
@@ -436,17 +436,22 @@ test.describe("Listening audio request carries the Settings TTS choice", () => {
 
     await page.goto("/?mockAuth=true");
     await page.getByRole("button", { name: "Settings" }).click();
-    await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
-    await page.locator("#default-elevenlabs-model-select").selectOption("eleven_flash_v2_5");
-    await page.locator("#default-elevenlabs-voice-select").selectOption("BIvP0GN1cAtSRTxNHnWS");
+
+    // ElevenLabs is hidden from the provider dropdown while the account is
+    // free-tier (402 paid_plan_required), so Amazon Polly is the only
+    // selectable choice. The Settings selection must still reach the request.
+    const providerSelect = page.locator("#default-tts-provider-select");
+    await expect(providerSelect.locator("option")).toHaveText(["Amazon Polly"]);
+    await providerSelect.selectOption("amazon-polly");
+    await page.locator("#default-tts-voice-profile-select").selectOption("american_female");
 
     await page.getByRole("button", { name: "Listening", exact: true }).click();
     await page.getByRole("button", { name: "Start Assessment" }).click();
 
     await expect.poll(() => captured.length).toBeGreaterThan(0);
-    expect(captured[0].ttsProvider).toBe("elevenlabs");
-    expect(captured[0].elevenLabsModelId).toBe("eleven_flash_v2_5");
-    expect(captured[0].elevenLabsVoiceId).toBe("BIvP0GN1cAtSRTxNHnWS");
+    expect(captured[0].ttsProvider).toBe("amazon-polly");
+    expect(captured[0].elevenLabsModelId).toBeUndefined();
+    expect(captured[0].elevenLabsVoiceId).toBeUndefined();
   });
 
   test("fresh load without stored choice sends canonical amazon-polly and omits model", async ({
@@ -467,22 +472,18 @@ test.describe("Listening audio request carries the Settings TTS choice", () => {
     expect(captured[0].elevenLabsVoiceId).toBeUndefined();
   });
 
-  test("ElevenLabs voice dropdown only appears for the elevenlabs provider", async ({ page }) => {
+  test("ElevenLabs voice and model dropdowns never render while ElevenLabs is hidden", async ({ page }) => {
     await page.goto("/?mockAuth=true");
     await page.getByRole("button", { name: "Settings" }).click();
 
-    const voiceSelect = page.locator("#default-elevenlabs-voice-select");
-    await expect(voiceSelect).toHaveCount(0);
+    // Provider dropdown offers only Polly while ElevenLabs is hidden
+    // (free-tier account: every TTS call fails with 402 paid_plan_required).
+    const providerSelect = page.locator("#default-tts-provider-select");
+    await expect(providerSelect.locator("option")).toHaveCount(1);
+    await expect(providerSelect.locator("option[value='elevenlabs']")).toHaveCount(0);
 
-    await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
-    await expect(voiceSelect).toBeVisible();
-
-    // Catalog voices render with their labels; Ellen is selectable.
-    const ellenOption = voiceSelect.locator("option[value='BIvP0GN1cAtSRTxNHnWS']");
-    await expect(ellenOption).toContainText("Ellen");
-
-    await voiceSelect.selectOption("BIvP0GN1cAtSRTxNHnWS");
-    const stored = await page.evaluate(() => localStorage.getItem("defaultElevenLabsVoice"));
-    expect(stored).toBe("BIvP0GN1cAtSRTxNHnWS");
+    // With no way to select elevenlabs, its sub-dropdowns must not appear.
+    await expect(page.locator("#default-elevenlabs-model-select")).toHaveCount(0);
+    await expect(page.locator("#default-elevenlabs-voice-select")).toHaveCount(0);
   });
 });

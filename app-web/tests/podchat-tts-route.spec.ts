@@ -728,13 +728,19 @@ test.describe("Podchat TTS Browser Integration", () => {
     expect(page.locator("input[placeholder*='ElevenLabs']")).toHaveCount(0);
     expect(page.locator("input[placeholder*='elevenlabs']")).toHaveCount(0);
 
+    // ElevenLabs is temporarily hidden from the dropdown (free-tier account:
+    // every TTS call fails with 402 paid_plan_required), so Amazon Polly is
+    // the only selectable TTS provider.
     const select = page.locator("#default-tts-provider-select");
-    await select.selectOption("elevenlabs");
+    await expect(select.locator("option")).toHaveText(["Amazon Polly"]);
+    await expect(select.locator("option[value='elevenlabs']")).toHaveCount(0);
+
+    await select.selectOption("amazon-polly");
 
     const stored = await page.evaluate(() => localStorage.getItem("defaultTtsProvider"));
-    expect(stored).toBe("elevenlabs");
+    expect(stored).toBe("amazon-polly");
 
-    await expect(select).toHaveValue("elevenlabs");
+    await expect(select).toHaveValue("amazon-polly");
 
     const hasKeys = await page.evaluate(() => {
       for (let i = 0; i < localStorage.length; i++) {
@@ -754,6 +760,20 @@ test.describe("Podchat TTS Browser Integration", () => {
     await page.goto("/");
     await page.evaluate(() => {
       localStorage.setItem("defaultTtsProvider", "GoogleCloud");
+    });
+    await page.reload();
+    await page.waitForTimeout(100);
+
+    const stored = await page.evaluate(() => localStorage.getItem("defaultTtsProvider"));
+    expect(stored).toBe("amazon-polly");
+  });
+
+  test("Stale stored elevenlabs choice sanitizes back to amazon-polly on load", async ({ page }) => {
+    // Users who picked ElevenLabs before it was hidden must not stay on a
+    // provider whose every call now fails with 402 paid_plan_required.
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.setItem("defaultTtsProvider", "elevenlabs");
     });
     await page.reload();
     await page.waitForTimeout(100);
@@ -811,8 +831,9 @@ test.describe("Podchat TTS Browser Integration", () => {
 
     await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
-    await page.locator("#default-tts-provider-select").selectOption("elevenlabs");
-    await page.locator("#default-elevenlabs-model-select").selectOption("eleven_flash_v2_5");
+    // With ElevenLabs hidden, the canonical flow uses Amazon Polly; the
+    // request must still carry the explicit provider value.
+    await page.locator("#default-tts-provider-select").selectOption("amazon-polly");
 
     await page.getByRole("button", { name: "Active Session" }).click();
     await page.getByRole("button", { name: "Start a Podchat" }).click();
@@ -826,8 +847,8 @@ test.describe("Podchat TTS Browser Integration", () => {
     await expect.poll(() => requestPayload).not.toBeNull();
 
     const payload = requestPayload as unknown as { ttsProvider?: string; elevenLabsModelId?: string };
-    expect(payload.ttsProvider).toBe("elevenlabs");
-    expect(payload.elevenLabsModelId).toBe("eleven_flash_v2_5");
+    expect(payload.ttsProvider).toBe("amazon-polly");
+    expect(payload.elevenLabsModelId).toBeUndefined();
   });
 
   test("Settings renders TTS Provider Status and handles checking", async ({ page }) => {
@@ -867,40 +888,31 @@ test.describe("Podchat TTS Browser Integration", () => {
     );
   });
 
-  test("ElevenLabs Model selector is rendered with Recommended label, saves to localStorage, and sanitizes invalid values", async ({ page }) => {
+  test("ElevenLabs Model setting stays sanitized while the selector is hidden", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Settings" }).click();
 
-    const providerSelect = page.locator("#default-tts-provider-select");
-    await providerSelect.selectOption("elevenlabs");
+    // The selector itself must not render while ElevenLabs is hidden.
+    await expect(page.locator("#default-elevenlabs-model-select")).toHaveCount(0);
 
-    const modelSelect = page.locator("#default-elevenlabs-model-select");
-    await expect(modelSelect).toBeVisible();
-
-    // Check default is empty if localStorage is empty
-    await expect(modelSelect).toHaveValue("");
-
-    // Check eleven_flash_v2_5 shows "Recommended"
-    const recommendedOption = page.locator("#default-elevenlabs-model-select option[value='eleven_flash_v2_5']");
-    await expect(recommendedOption).toContainText("Recommended");
-
-    // Selecting a model stores allowed model ID in localStorage
-    await modelSelect.selectOption("eleven_flash_v2_5");
-    let storedModel = await page.evaluate(() => localStorage.getItem("defaultElevenLabsModel"));
-    expect(storedModel).toBe("eleven_flash_v2_5");
-
-    // Invalid localStorage model value sanitizes to empty/unset
+    // Sanitization of the underlying storage still applies: an invalid model
+    // id is removed by the shell's restore effect, a valid one survives so a
+    // future re-enable keeps working without migration.
     await page.evaluate(() => {
       localStorage.setItem("defaultElevenLabsModel", "invalid_model_name");
     });
     await page.reload();
     await page.waitForTimeout(100);
-    storedModel = await page.evaluate(() => localStorage.getItem("defaultElevenLabsModel"));
+    let storedModel = await page.evaluate(() => localStorage.getItem("defaultElevenLabsModel"));
     expect(storedModel).toBeNull(); // sanitized/removed
 
-    await page.getByRole("button", { name: "Settings" }).click();
-    await providerSelect.selectOption("elevenlabs");
-    await expect(modelSelect).toHaveValue("");
+    await page.evaluate(() => {
+      localStorage.setItem("defaultElevenLabsModel", "eleven_flash_v2_5");
+    });
+    await page.reload();
+    await page.waitForTimeout(100);
+    storedModel = await page.evaluate(() => localStorage.getItem("defaultElevenLabsModel"));
+    expect(storedModel).toBe("eleven_flash_v2_5"); // valid values are kept
   });
 
   test("Podchat sends selected voiceProfile for Amazon Polly", async ({ page }) => {

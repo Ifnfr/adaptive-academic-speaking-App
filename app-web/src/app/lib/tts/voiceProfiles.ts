@@ -59,7 +59,12 @@ export function normalizeTtsVoiceProfile(value: unknown): TtsVoiceProfile {
 export function normalizeTtsProvider(value: unknown): TtsProvider {
   if (typeof value !== "string") return "amazon-polly";
   const normalized = value.trim().toLowerCase();
-  if (normalized === "elevenlabs") return "elevenlabs";
+  // ElevenLabs is hidden from Settings for now: the account is on the free
+  // tier, so every TTS call fails with 402 paid_plan_required. Stored
+  // "elevenlabs" choices are coerced back to Polly so users never hit the
+  // dead provider. NOTE: resolveTtsProvider() below intentionally still
+  // accepts "elevenlabs" so direct API callers and the (hidden) pipeline
+  // keep working unchanged.
   if (normalized === "amazon-polly" || normalized === "amazon_polly" || normalized === "polly") {
     return "amazon-polly";
   }
