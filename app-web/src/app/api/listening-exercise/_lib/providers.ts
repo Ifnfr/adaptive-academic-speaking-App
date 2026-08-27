@@ -492,14 +492,16 @@ function buildDifficultyInstruction(targetDifficulty: "easy" | "medium" | "hard"
  */
 export function adaptiveLengthBudget(sectionIndex: number): string {
   // Tiers: index 0 → ~150-200 words (60-80s); 1 → ~350-450 (110-150s);
-  // 2+ → ~550-700 (220-280s). Clamp so any future index keeps growing safely.
+  // 2+ → ~450-500 (180-220s). Capped at 500 words (~2500 chars) to stay
+  // safely under Amazon Polly's 3000-char plaintext limit for a single
+  // synthesis request (longer passages would fail with HTTP 400).
   let min: number, max: number, secMin: number, secMax: number;
   if (sectionIndex <= 0) {
     min = 150; max = 200; secMin = 60; secMax = 80;
   } else if (sectionIndex === 1) {
     min = 350; max = 450; secMin = 110; secMax = 150;
   } else {
-    min = 550; max = 700; secMin = 220; secMax = 280;
+    min = 450; max = 500; secMin = 180; secMax = 220;
   }
   return (
     `ADAPTIVE LENGTH BUDGET (section index ${sectionIndex}): the finished audio_script MUST be ` +
