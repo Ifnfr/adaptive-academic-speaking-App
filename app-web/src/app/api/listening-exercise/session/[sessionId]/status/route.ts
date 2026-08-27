@@ -247,7 +247,7 @@ export async function GET(
         sessionId,
         sectionId: activeSection.id,
         sectionIndex,
-        systemPrompt: buildNextSectionSystemPrompt(questionType, difficulty),
+        systemPrompt: buildNextSectionSystemPrompt(questionType, difficulty, sectionIndex),
         userPrompt: buildNextSectionUserPrompt(
           sectionIndex,
           targetLevel,
@@ -300,7 +300,7 @@ export async function GET(
             sessionId,
             sectionId: newRow.id,
             sectionIndex: idx,
-            systemPrompt: buildNextSectionSystemPrompt(qType, difficulty),
+            systemPrompt: buildNextSectionSystemPrompt(qType, difficulty, idx),
             userPrompt: buildNextSectionUserPrompt(
               idx,
               ps.cefr_level || cefrLevel,

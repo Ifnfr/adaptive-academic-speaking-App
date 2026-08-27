@@ -221,7 +221,7 @@ export async function POST(request: Request) {
       sessionId,
       sectionId,
       sectionIndex: nextIndex,
-      systemPrompt: buildNextSectionSystemPrompt(questionType, targetDifficulty),
+      systemPrompt: buildNextSectionSystemPrompt(questionType, targetDifficulty, nextIndex),
       userPrompt: buildNextSectionUserPrompt(
         nextIndex,
         targetLevel,

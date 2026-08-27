@@ -324,7 +324,9 @@ export async function callListeningAI(
     body = {
       model: modelName,
       max_tokens: 4096,
-      system: systemPrompt,
+      system: [
+        { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+      ],
       messages: [{ role: "user", content: userPrompt }],
     };
   } else if (providerId === "gemini") {
@@ -391,8 +393,11 @@ export async function callListeningAI(
       ],
     };
   } else {
-    // DeepSeek (default)
+    // DeepSeek (default) — OpenAI-compatible. Prompt-caching hint:
+    // DeepSeek reads the `X-DeepSeek-Cache: true` header to cache the
+    // (stable) system prefix across calls. Ignored harmlessly if unsupported.
     headers["authorization"] = `Bearer ${apiKey}`;
+    headers["X-DeepSeek-Cache"] = "true";
     body = {
       model: modelName,
       temperature: 0.2,
@@ -427,6 +432,18 @@ export async function callListeningAI(
       }
 
       const data = await res.json();
+
+      // Observability: log token accounting (prompt cache hit detection).
+      // DeepSeek/OpenAI-compatible surfaces cached_tokens in usage; Anthropic
+      // in usage.input_tokens_*; Gemini omits it. Harmless if absent.
+      if (data?.usage) {
+        console.log(
+          `[llm-cache] provider=${providerId} model=${modelName} ` +
+          `prompt_tokens=${data.usage.prompt_tokens ?? data.usage.total_tokens ?? "?"} ` +
+          `cached_tokens=${data.usage.cached_tokens ?? data.usage.prompt_cache_hit_tokens ?? data.usage.cache_read_input_tokens ?? 0} ` +
+          `completion_tokens=${data.usage.completion_tokens ?? "?"}`
+        );
+      }
 
       // Extract text based on provider
       if (providerId === "claude") {
@@ -468,6 +485,32 @@ function buildDifficultyInstruction(targetDifficulty: "easy" | "medium" | "hard"
 }
 
 /**
+ * Adaptive length budget per section index (the "adaptive session" feature).
+ * Section 0 acts as a warm-up (~1 min); later sections grow longer to train
+ * sustained listening stamina (up to ~3 min). Returns a ready-to-embed
+ * instruction string. All fact_units must fit inside the budget.
+ */
+export function adaptiveLengthBudget(sectionIndex: number): string {
+  // Tiers: index 0 → ~150-200 words (60-80s); 1 → ~350-450 (110-150s);
+  // 2+ → ~550-700 (220-280s). Clamp so any future index keeps growing safely.
+  let min: number, max: number, secMin: number, secMax: number;
+  if (sectionIndex <= 0) {
+    min = 150; max = 200; secMin = 60; secMax = 80;
+  } else if (sectionIndex === 1) {
+    min = 350; max = 450; secMin = 110; secMax = 150;
+  } else {
+    min = 550; max = 700; secMin = 220; secMax = 280;
+  }
+  return (
+    `ADAPTIVE LENGTH BUDGET (section index ${sectionIndex}): the finished audio_script MUST be ` +
+    `between ${min} and ${max} words total (roughly ${secMin}-${secMax} seconds of spoken audio at a natural pace). ` +
+    `All 5 fact_units must fit inside this budget. Count the words of your draft BEFORE returning; ` +
+    `if it exceeds ${max} words, compress by removing redundant restatements first until it fits. ` +
+    `NEVER exceed ${max} words under any circumstance — a passage that is too long is a failed output even if everything else is perfect.`
+  );
+}
+
+/**
  * Builds the Phase 1, Phase 2, Phase 3 system prompt for Section 1 generation.
  */
 export function buildSection1SystemPrompt(
@@ -496,7 +539,7 @@ export function buildSection1SystemPrompt(
     "  - Incorporate mild redundancy by occasionally restating or rephrasing a point in slightly different words (self-paraphrase) as natural speech does, rather than stating each fact exactly once in perfectly dense prose.",
     "  - Maintain a conversational sentence rhythm using a mix of shorter and longer sentences, with occasional self-corrections (e.g., 'or rather', 'what I mean is'), while remaining fully grammatical, clear, and suitable for a listening exercise.",
     "",
-    "HARD LENGTH BUDGET for audio_script: the finished passage MUST be between 150 and 200 words total (roughly 60-80 seconds of spoken audio at a natural pace). All 5 fact_units must fit inside this budget. Count the words of your draft BEFORE returning; if it exceeds 200 words, compress by removing redundant restatements first until it fits. NEVER exceed 200 words under any circumstance - a passage that is too long is a failed output even if everything else is perfect.",
+    adaptiveLengthBudget(0),
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",
@@ -622,7 +665,8 @@ export function buildSection1UserPrompt(
  */
 export function buildNextSectionSystemPrompt(
   questionType: string,
-  targetDifficulty: "easy" | "medium" | "hard"
+  targetDifficulty: "easy" | "medium" | "hard",
+  sectionIndex: number
 ): string {
   let questionsExample = "";
   let subSkillInstruction = "";
@@ -679,13 +723,14 @@ export function buildNextSectionSystemPrompt(
     "Your task is to generate the next section content based on the pre-approved session generation plan.",
     "",
     "You must execute Phase 3: Implementation for this section.",
+    `ADAPTIVE SECTION DURATION (section index ${sectionIndex}): this section's audio_script length is governed by the ADAPTIVE LENGTH BUDGET instruction below — it scales up with the section index to progressively train listening stamina. Do NOT use the fixed 150-200 word budget; use the budget specified later in this prompt.`,
     "The audio script must NOT use ordinal or sequential markers (e.g., 'first', 'second', 'third', 'finally', 'lastly', 'to begin with', 'next') to structure the passage. Information must flow naturally as connected prose or natural spoken discourse — not as a numbered list read aloud. The listener must not be able to infer the number or position of key facts from the script's structure.",
     "The audio script MUST sound like natural spoken discourse, not an essay read aloud:",
     "  - Use discourse markers naturally and non-repetitively (e.g., 'you know', 'actually', 'I mean', 'so', 'well', 'anyway'). Vary them throughout the passage without reusing the same marker repeatedly.",
     "  - Incorporate mild redundancy by occasionally restating or rephrasing a point in slightly different words (self-paraphrase) as natural speech does, rather than stating each fact exactly once in perfectly dense prose.",
     "  - Maintain a conversational sentence rhythm using a mix of shorter and longer sentences, with occasional self-corrections (e.g., 'or rather', 'what I mean is'), while remaining fully grammatical, clear, and suitable for a listening exercise.",
     "",
-    "HARD LENGTH BUDGET for audio_script: the finished passage MUST be between 150 and 200 words total (roughly 60-80 seconds of spoken audio at a natural pace). All 5 fact_units must fit inside this budget. Count the words of your draft BEFORE returning; if it exceeds 200 words, compress by removing redundant restatements first until it fits. NEVER exceed 200 words under any circumstance - a passage that is too long is a failed output even if everything else is perfect.",
+    adaptiveLengthBudget(sectionIndex),
     "",
     "CRITICAL STRUCTURAL BRIDGE (FACT-UNITS BRIDGE):",
     "- You MUST write the complete passage audio_script first.",

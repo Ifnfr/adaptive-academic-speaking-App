@@ -290,7 +290,7 @@ export async function generateNextSectionContent(
     }
 
     const questionType = targetQuestionTypes[0] || "fill_blank";
-    const systemPrompt = buildNextSectionSystemPrompt(questionType, targetDifficulty);
+    const systemPrompt = buildNextSectionSystemPrompt(questionType, targetDifficulty, sectionIndex);
     const userPrompt = buildNextSectionUserPrompt(
       sectionIndex,
       targetLevel,
