@@ -21,9 +21,10 @@ import {
 
 // Runs on the Node.js runtime so article fetching and provider keys stay server-side.
 export const runtime = "nodejs";
-// 25s is well above the typical 5-15s Article Practice runtime and stays inside Vercel Hobby's
-// per-function wall clock. Without this, Vercel kills the function at 10s and returns 502.
-export const maxDuration = 25;
+// 30s gives headroom: 8s article fetch + 20s provider timeout + Supabase
+// writes. Well inside Vercel Hobby's per-function ceiling. Without this,
+// Vercel kills the function at 10s and returns 502.
+export const maxDuration = 30;
 
 type Provider = "Claude" | "DeepSeek" | "Gemini";
 
@@ -1206,7 +1207,7 @@ async function callClaude(
   system: string,
   user: string,
 ): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -1238,7 +1239,7 @@ async function callDeepSeek(
   system: string,
   user: string,
 ): Promise<string> {
-  const res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
+  const res = await fetchWithTimeout((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -1275,7 +1276,7 @@ async function callGemini(
 ): Promise<string> {
   const actualApiKey = process.env.DEEPSEEK_API_KEY || "";
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
-  const res = await fetch((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
+  const res = await fetchWithTimeout((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -1313,6 +1314,29 @@ function getApiKey(provider: Provider): string | undefined {
       return process.env.DEEPSEEK_API_KEY;
     case "Gemini":
       return process.env.DEEPSEEK_API_KEY || "";
+  }
+}
+
+// Wraps fetch with an AbortController so a slow provider cannot hang the
+// Vercel function until it hits maxDuration and returns a bare 502.
+// Without this, callDeepSeek/callClaude/callGemini had no timeout and would
+// block until Vercel killed the invocation (observed: 23s hang -> 502).
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = 20000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Provider request timed out after 20s.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
