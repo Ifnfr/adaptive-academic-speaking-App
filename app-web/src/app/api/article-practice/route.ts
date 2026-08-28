@@ -1317,6 +1317,11 @@ function getApiKey(provider: Provider): string | undefined {
 }
 
 export async function POST(request: Request) {
+  const t0 = Date.now();
+  const tlog = (label: string, extra?: Record<string, unknown>) => {
+    console.log(`[article-practice-t+${Date.now() - t0}ms] ${label}`, extra ?? "");
+  };
+  tlog("handler_start");
   let parsed: unknown;
   try {
     parsed = await request.json();
@@ -1326,15 +1331,24 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  tlog("body_parsed");
 
   const validated = validateRequest(parsed);
   if (typeof validated === "string") {
     return NextResponse.json({ error: validated }, { status: 400 });
   }
+  tlog("request_validated", {
+    inputMode: validated.inputMode,
+    provider: validated.provider,
+    level: validated.level,
+    hasUrl: Boolean(validated.url),
+    hasMarkdown: Boolean(validated.preparedContextMarkdown),
+  });
 
   if (isArticleMockProvider()) {
     return NextResponse.json(buildMockArticlePracticeResponse());
   }
+  tlog("mock_check_done");
 
   const resolvedModel = resolveProviderModel(validated.provider);
   const isUrlMode = validated.inputMode === "url";
@@ -1364,6 +1378,7 @@ export async function POST(request: Request) {
         "global:article-practice",
         idempotencyKeyHash
       );
+      tlog("idempotency_lookup_done", { found: Boolean(existing) });
       if (
         existing &&
         existing.request_status === "succeeded" &&
@@ -1417,6 +1432,7 @@ export async function POST(request: Request) {
     );
     try {
     const cached = await getGlobalCachedResponse(cacheKey);
+    tlog("global_cache_lookup_done", { hit: Boolean(cached) });
     if (cached) {
       // Log cache hit — fire and forget
       recordAiUsageEvent({
@@ -1451,9 +1467,17 @@ export async function POST(request: Request) {
 
   let article: ExtractedArticle;
   if (isUrlMode) {
+    tlog("fetchArticle_start", { url: validated.url });
     try {
       article = await fetchArticle(validated.url ?? "");
+      tlog("fetchArticle_done", {
+        textChars: article.text.length,
+        wasTrimmed: article.wasTrimmed,
+      });
     } catch (err) {
+      tlog("fetchArticle_failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
       const message =
         err instanceof ArticleFetchError
           ? err.message
@@ -1488,6 +1512,7 @@ export async function POST(request: Request) {
   }
 
   const apiKey = getApiKey(validated.provider);
+  tlog("api_key_resolved", { hasKey: Boolean(apiKey) });
   if (!apiKey) {
     if (idempotencyKeyValid) {
       saveIdempotencyRecord({
@@ -1512,6 +1537,7 @@ export async function POST(request: Request) {
   const estimatedInputTokens = estimateTokensFromText(systemPrompt + userPrompt);
 
   let raw = "";
+  tlog("provider_call_start", { provider: validated.provider, model: process.env.DEEPSEEK_MODEL });
   try {
     if (validated.provider === "Claude") {
       raw = await callClaude(apiKey, systemPrompt, userPrompt);
@@ -1520,7 +1546,11 @@ export async function POST(request: Request) {
     } else {
       raw = await callGemini(apiKey, systemPrompt, userPrompt);
     }
+    tlog("provider_call_done", { rawChars: raw.length });
   } catch (err) {
+    tlog("provider_call_failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
     const message = err instanceof Error ? err.message : "Provider call failed.";
     recordAiUsageEvent({
       feature: "article-practice",
