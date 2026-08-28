@@ -22,9 +22,10 @@ import {
 // Runs on the Node.js runtime so article fetching and provider keys stay server-side.
 export const runtime = "nodejs";
 // 30s gives headroom: 8s article fetch + 20s provider timeout + Supabase
-// writes. Well inside Vercel Hobby's per-function ceiling. Without this,
-// Vercel kills the function at 10s and returns 502.
-export const maxDuration = 30;
+// writes. Vercel Hobby caps a function at 60s, so we use the full ceiling:
+// 8s fetch + up to ~55s provider think time (deepseek-v4-flash is a reasoning
+// model and can be slow from the Singapore region) fits under 60s.
+export const maxDuration = 60;
 
 type Provider = "Claude" | "DeepSeek" | "Gemini";
 
@@ -1230,8 +1231,8 @@ async function callClaude(
 
   const data = (await withTimeout(
     res.json(),
-    20000,
-    "Claude response read timed out after 20s.",
+    55000,
+    "Claude response read timed out after 55s.",
   )) as {
     content?: Array<{ type: string; text?: string }>;
   };
@@ -1269,8 +1270,8 @@ async function callDeepSeek(
 
   const raw = await withTimeout(
     res.text(),
-    20000,
-    "Provider response read timed out after 20s.",
+    55000,
+    "Provider response read timed out after 55s.",
   );
   const content = extractJsonContent(raw);
   if (!content) {
@@ -1317,8 +1318,8 @@ async function callGemini(
 
   const raw = await withTimeout(
     res.text(),
-    20000,
-    "Provider response read timed out after 20s.",
+    55000,
+    "Provider response read timed out after 55s.",
   );
   const content = extractJsonContent(raw);
   if (!content) {
@@ -1399,7 +1400,7 @@ async function withTimeout<T>(
 async function fetchWithTimeout(
   url: string,
   init: RequestInit,
-  timeoutMs = 20000,
+  timeoutMs = 55000,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
