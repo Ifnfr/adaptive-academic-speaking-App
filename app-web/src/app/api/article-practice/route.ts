@@ -21,6 +21,9 @@ import {
 
 // Runs on the Node.js runtime so article fetching and provider keys stay server-side.
 export const runtime = "nodejs";
+// 25s is well above the typical 5-15s Article Practice runtime and stays inside Vercel Hobby's
+// per-function wall clock. Without this, Vercel kills the function at 10s and returns 502.
+export const maxDuration = 25;
 
 type Provider = "Claude" | "DeepSeek" | "Gemini";
 
@@ -109,7 +112,9 @@ const MAX_HTML_BYTES = 1_000_000;
 const ARTICLE_TEXT_CHAR_BUDGET = 10_000;
 const PREPARED_MARKDOWN_CHAR_BUDGET = 20_000;
 const MIN_EXTRACTED_TEXT_CHARS = 400;
-const FETCH_TIMEOUT_MS = 12_000;
+// 8s is tight enough to skip slow/blocked article hosts before the 25s Vercel budget runs out
+// (worst case: 1 attempt 8s + AI call ~10s + parsing/Supabase writes ~5s ≈ 23s).
+const FETCH_TIMEOUT_MS = 8_000;
 const MAX_REDIRECTS = 3;
 const ARTICLE_PRACTICE_PROMPT_VERSION = "v1.2";
 const ESSAY_TARGET_SKILLS = [
