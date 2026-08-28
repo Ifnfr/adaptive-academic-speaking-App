@@ -1267,14 +1267,21 @@ async function callDeepSeek(
     throw new Error(friendlyProviderError("DeepSeek", res.status, errText));
   }
 
-  const data = (await withTimeout(
-    res.json(),
+  const raw = await withTimeout(
+    res.text(),
     20000,
     "Provider response read timed out after 20s.",
-  )) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content ?? "";
+  );
+  const content = extractJsonContent(raw);
+  if (!content) {
+    console.error(
+      `DeepSeek response not parseable as JSON. First 500 chars: ${raw.slice(0, 500)}`,
+    );
+    throw new Error(
+      "Provider response could not be parsed as JSON. Try again or switch provider.",
+    );
+  }
+  return content;
 }
 
 async function callGemini(
@@ -1308,14 +1315,49 @@ async function callGemini(
     throw new Error(friendlyProviderError("DeepSeek", res.status, errText));
   }
 
-  const data = (await withTimeout(
-    res.json(),
+  const raw = await withTimeout(
+    res.text(),
     20000,
     "Provider response read timed out after 20s.",
-  )) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  return data.choices?.[0]?.message?.content ?? "";
+  );
+  const content = extractJsonContent(raw);
+  if (!content) {
+    console.error(
+      `DeepSeek response not parseable as JSON. First 500 chars: ${raw.slice(0, 500)}`,
+    );
+    throw new Error(
+      "Provider response could not be parsed as JSON. Try again or switch provider.",
+    );
+  }
+  return content;
+}
+
+// Pulls the model's message content out of a provider response, tolerating
+// reasoning models that wrap JSON in markdown fences or emit reasoning text
+// before the JSON object. Falls back to returning the raw content string.
+function extractJsonContent(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = null;
+  }
+  if (parsed && typeof parsed === "object") {
+    const msg =
+      (parsed as { choices?: Array<{ message?: { content?: string } }> })
+        .choices?.[0]?.message?.content ??
+      (parsed as { content?: string }).content;
+    if (typeof msg === "string") return msg;
+  }
+  // Not direct JSON: try to find a fenced or bare JSON object in the text.
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : raw;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return candidate.slice(start, end + 1);
+  }
+  return null;
 }
 
 function getApiKey(provider: Provider): string | undefined {
