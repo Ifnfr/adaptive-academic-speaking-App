@@ -1251,9 +1251,12 @@ async function callDeepSeek(
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+      model:
+        process.env.ARTICLE_DEEPSEEK_MODEL ||
+        process.env.DEEPSEEK_MODEL ||
+        "deepseek-v4-flash-vision-exp",
       temperature: 0.2,
-      max_tokens: 1800,
+      max_tokens: 1200,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
