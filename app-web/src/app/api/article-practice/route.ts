@@ -1228,7 +1228,11 @@ async function callClaude(
     throw new Error(friendlyProviderError("Claude", res.status, errText));
   }
 
-  const data = (await res.json()) as {
+  const data = (await withTimeout(
+    res.json(),
+    20000,
+    "Claude response read timed out after 20s.",
+  )) as {
     content?: Array<{ type: string; text?: string }>;
   };
   return data.content?.find((item) => item.type === "text")?.text ?? "";
@@ -1263,7 +1267,11 @@ async function callDeepSeek(
     throw new Error(friendlyProviderError("DeepSeek", res.status, errText));
   }
 
-  const data = (await res.json()) as {
+  const data = (await withTimeout(
+    res.json(),
+    20000,
+    "Provider response read timed out after 20s.",
+  )) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   return data.choices?.[0]?.message?.content ?? "";
@@ -1300,7 +1308,11 @@ async function callGemini(
     throw new Error(friendlyProviderError("DeepSeek", res.status, errText));
   }
 
-  const data = (await res.json()) as {
+  const data = (await withTimeout(
+    res.json(),
+    20000,
+    "Provider response read timed out after 20s.",
+  )) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   return data.choices?.[0]?.message?.content ?? "";
@@ -1314,6 +1326,27 @@ function getApiKey(provider: Provider): string | undefined {
       return process.env.DEEPSEEK_API_KEY;
     case "Gemini":
       return process.env.DEEPSEEK_API_KEY || "";
+  }
+}
+
+// Rejects the given promise if it does not settle within `timeoutMs`.
+// fetchWithTimeout only aborts the connection at the header level; if the
+// provider responds 200 and then buffers the body (non-streaming requests),
+// `await res.json()` can still hang past maxDuration. Wrapping the body read
+// in withTimeout guarantees the whole call fails fast instead of 502ing.
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
