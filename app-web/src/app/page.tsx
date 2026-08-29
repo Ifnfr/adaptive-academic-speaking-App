@@ -2418,6 +2418,40 @@ export default function Home() {
     setView("active");
   };
 
+  const handleDiscussArticleInPodchat = (result: ArticlePracticeResult) => {
+    const context: PodchatArticleContext = {
+      articleTitle: result.sourceTitle,
+      articleBrief: result.articleBrief,
+      mainIdea: result.mainIdea,
+      keyPoints: result.keyPoints,
+      speakingTaskTitle: result.speakingTask.title,
+      speakingTaskInstruction: result.speakingTask.instruction,
+      targetStructure: result.speakingTask.targetStructure,
+      sourceDomain: result.sourceDomain,
+      articleText: [
+        result.articleBrief,
+        result.mainIdea ? `Main idea: ${result.mainIdea}` : "",
+        result.keyPoints.length
+          ? `Key points: ${result.keyPoints.join("; ")}`
+          : "",
+        result.usefulVocabulary.length
+          ? `Vocabulary: ${result.usefulVocabulary
+              .map((v) => `${v.word} (${v.meaning})`)
+              .join(", ")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      usefulVocabulary: result.usefulVocabulary,
+    };
+    setPendingArticleContext(context);
+    setPendingCommonplaceContext(null);
+    setTarget(`Discussion: ${result.sourceTitle}`);
+    setMode("Reading-to-Speaking");
+    setActiveSessionPanel("podchat");
+    setView("active");
+  };
+
   const handleDiscussCommonplaceInPodchat = (
     context: PodchatCommonplaceContextRef,
   ) => {
