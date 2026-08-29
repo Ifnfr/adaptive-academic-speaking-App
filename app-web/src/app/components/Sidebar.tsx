@@ -339,9 +339,6 @@ export function Sidebar({
             >
               {t("sidebar.viewArticlePractice")}
             </SidebarItem>
-            <SidebarItem href="/word-builder/practice">
-              Word Builder
-            </SidebarItem>
           </SidebarGroup>
 
           {/* Group 3: ANALYTICS */}
@@ -351,9 +348,6 @@ export function Sidebar({
             isCollapsed={isMobile && !analyticsExpanded}
             onToggle={toggleAnalytics}
           >
-            <SidebarItem href="/word-builder/dashboard">
-              Word Builder Stats
-            </SidebarItem>
             <SidebarItem
               active={view === "session-log"}
               onClick={() => onSelectView("session-log")}
