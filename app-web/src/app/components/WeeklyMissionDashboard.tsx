@@ -138,8 +138,6 @@ function sourceFeatureLabel(feature: WeeklyMissionSourceFeature): string {
   switch (feature) {
     case "podchat":
       return "Podchat";
-    case "pattern_drill":
-      return "Drill Mode";
     case "vocabulary":
       return "Vocabulary";
     case "article_practice":

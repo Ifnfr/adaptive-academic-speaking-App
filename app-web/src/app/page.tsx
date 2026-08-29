@@ -351,7 +351,6 @@ const FONETIK_RETURN_VIEWS = new Set<SidebarView>([
   "mental-model",
   "settings",
   "leaderboard",
-  "learning-path",
   "profile",
   "listening",
 ]);
@@ -1575,12 +1574,6 @@ export default function Home() {
   };
 
   const handleSelectView = (nextView: SidebarView) => {
-    if (nextView === "drill") {
-      setActiveSessionPanel("patternDrill");
-      setView("active");
-      setIsMobileNavOpen(false);
-      return;
-    }
     if (nextView === "active") {
       setActiveSessionPanel("podchat");
     }
@@ -1596,11 +1589,6 @@ export default function Home() {
   ) => {
     if (routeTarget === "podchat") {
       setActiveSessionPanel("podchat");
-      handleSelectView("active");
-      return;
-    }
-    if (routeTarget === "pattern_drill") {
-      setActiveSessionPanel("patternDrill");
       handleSelectView("active");
       return;
     }
@@ -1632,11 +1620,6 @@ export default function Home() {
     } else if ((view as string) === "level-up-check") {
       const timer = setTimeout(() => {
         setView("progress");
-      }, 0);
-      return () => clearTimeout(timer);
-    } else if (view === "learning-path") {
-      const timer = setTimeout(() => {
-        setView("active");
       }, 0);
       return () => clearTimeout(timer);
     }
@@ -3072,8 +3055,6 @@ export default function Home() {
               stopAIOnSpeech={stopAIOnSpeech}
               autoSendOnPause={autoSendOnPause}
               isActiveView={view === "active"}
-              activePanel={activeSessionPanel}
-              onActivePanelChange={setActiveSessionPanel}
               latestSession={sessions[0] ?? null}
               dayStreak={dayStreak}
               onAddEvaluationVocabulary={handleAddEvaluationVocabulary}
@@ -3870,8 +3851,7 @@ function viewTitle(view: string, translate: Translate): string {
       return translate("topbar.titleSettings");
     case "leaderboard":
       return translate("topbar.titleLeaderboard");
-    case "learning-path":
-      return translate("topbar.titleLearningPath");
+
     default:
       return "fonetik";
   }
@@ -3905,8 +3885,7 @@ function viewSubtitle(view: string, translate: Translate): string {
       return translate("sidebar.viewSettings");
     case "leaderboard":
       return translate("sidebar.viewLeaderboard");
-    case "learning-path":
-      return translate("sidebar.viewLearningPath");
+
     default:
       return "fonetik";
   }
@@ -3936,8 +3915,7 @@ function viewDescription(view: string, translate: Translate): string {
       return translate("topbar.descSettings");
     case "leaderboard":
       return translate("topbar.descLeaderboard");
-    case "learning-path":
-      return translate("topbar.descLearningPath");
+
     default:
       return "";
   }

@@ -11,7 +11,6 @@ export const WEEKLY_MISSION_TARGET_BOUNDS: Record<
 > = {
   speaking_minutes: { min: 15, max: 180 },
   podchat_sessions: { min: 1, max: 14 },
-  pattern_drill_sessions: { min: 1, max: 10 },
   vocabulary_collected: { min: 5, max: 150 },
   vocabulary_reviewed: { min: 5, max: 200 },
   vocab_sentence_submitted: { min: 1, max: 50 },

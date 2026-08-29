@@ -41,7 +41,8 @@ export interface TutorMemoryProfile {
   version: TutorMemoryVersion;
   learnerLevel: FeedbackSignalLearnerLevel;
   signals: TutorMemorySignal[];
-  learningPath: TutorMemoryLearningPathSnapshot;
+  // Learning Path snapshot is optional: null when no Learning Path progress exists.
+  learningPath: TutorMemoryLearningPathSnapshot | null;
   recentFocusCategories: FeedbackSignalCategory[]; // top 3
   repeatedFocusCategories: FeedbackSignalCategory[]; // count >= 3
   lastSummaryWindow: TutorMemoryWindow;
@@ -62,7 +63,8 @@ export interface TutorMemorySummary {
   totalSignalCount: number;
   topCategory: FeedbackSignalCategory | null;
   repeatedCategories: FeedbackSignalCategory[];
-  learningPathCompletionPercent: number; // 0-100 integer
+  // 0-100 integer; 0 when no Learning Path snapshot is present.
+  learningPathCompletionPercent: number;
   recommendedCardType: TutorMemoryCardType | null;
   lastUpdatedAt: string;
 }

@@ -86,7 +86,6 @@ function emptyWeeklyMissionSourceSnapshot(): WeeklyMissionSourceSnapshot {
     podchatSessions: 0,
     speakingSeconds: 0,
     speakingMinutes: 0,
-    patternDrillSessions: 0,
     vocabularyCollected: 0,
     vocabularySentencesSubmitted: 0,
     vocabularyCorrectionsSaved: 0,

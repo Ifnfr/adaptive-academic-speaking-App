@@ -40,14 +40,14 @@ export function getPhase2ReadinessStatus(snapshot: DeveloperDiagnosticSnapshot):
   }
 
   // 3. Evaluate static implementation safety
-  const learningPathReady = snapshot.foundations.learning_path.status === "ready";
+  const lpReady = snapshot.foundations.learning_path.status === "ready";
   const microPracticeReady = snapshot.foundations.micro_practice.status === "ready";
   const testsReady = snapshot.foundations.tests.status === "ready";
   const privacyReady = snapshot.foundations.privacy.status === "ready";
   const noHighOrCriticalRisks = !snapshot.risks.some(r => r.severity === "high" || r.severity === "critical");
 
   const staticImplementationSafe =
-    learningPathReady &&
+    lpReady &&
     microPracticeReady &&
     testsReady &&
     privacyReady &&
@@ -95,7 +95,7 @@ export function getPhase2ReadinessStatus(snapshot: DeveloperDiagnosticSnapshot):
   }
 
   // 5. Evaluate curriculum design readiness
-  const learningPathReadyOrPartial =
+  const lpReadyOrPartial =
     snapshot.foundations.learning_path.status === "ready" ||
     snapshot.foundations.learning_path.status === "partially_ready";
   const microPracticeReadyOrPartial =
@@ -109,7 +109,7 @@ export function getPhase2ReadinessStatus(snapshot: DeveloperDiagnosticSnapshot):
   );
 
   if (
-    learningPathReadyOrPartial &&
+    lpReadyOrPartial &&
     microPracticeReadyOrPartial &&
     docsReadyOrPartial &&
     privacyReadyOrPartial &&

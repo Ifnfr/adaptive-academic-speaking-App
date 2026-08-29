@@ -15,10 +15,8 @@ export type SidebarView =
   | "mental-model"
   | "settings"
   | "leaderboard"
-  | "learning-path"
   | "profile"
-  | "listening"
-  | "drill";
+  | "listening";
 
 export type SidebarProps = {
   view: SidebarView;
@@ -33,7 +31,7 @@ export type SidebarProps = {
   gamificationReady: boolean;
   appLanguage?: AppLanguage | null;
   onSelectView: (view: SidebarView) => void;
-  activeSessionPanel?: "podchat" | "patternDrill";
+  activeSessionPanel?: "podchat";
   collapsed?: boolean;
 };
 
@@ -295,16 +293,10 @@ export function Sidebar({
           {/* Group 1: PRACTICE */}
           <SidebarGroup label={t("sidebar.groupPractice")}>
             <SidebarItem
-              active={view === "active" && activeSessionPanel !== "patternDrill"}
+              active={view === "active"}
               onClick={() => onSelectView("active")}
             >
               {t("sidebar.viewActive")}
-            </SidebarItem>
-            <SidebarItem
-              active={view === "active" && activeSessionPanel === "patternDrill"}
-              onClick={() => onSelectView("drill")}
-            >
-              {t("sidebar.viewDrillMode" as any) || "Drill Mode"}
             </SidebarItem>
             <SidebarItem
               active={view === "listening"}

@@ -15,7 +15,6 @@ export function classifyWeeklyMissionDataSufficiency(
   const activeDays = safeCount(summary.activeDays);
   const vocabularyItemsCollected = safeCount(summary.vocabularyItemsCollected);
   const articlePracticeCompleted = safeCount(summary.articlePracticeCompleted);
-  const patternDrillSessionsCompleted = safeCount(summary.patternDrillSessionsCompleted);
   const repeatedWeaknessCount = safeCount(summary.repeatedWeaknessCount);
 
   const meaningfulSignals = [
@@ -24,7 +23,6 @@ export function classifyWeeklyMissionDataSufficiency(
     activeDays > 1,
     vocabularyItemsCollected >= 3,
     articlePracticeCompleted > 0,
-    patternDrillSessionsCompleted > 0,
   ].filter(Boolean).length;
 
   if (meaningfulSignals === 0) {
@@ -34,7 +32,6 @@ export function classifyWeeklyMissionDataSufficiency(
   const hasStrongActivity =
     speakingMinutes >= 20 ||
     completedPodchatSessions >= 2 ||
-    patternDrillSessionsCompleted >= 1 ||
     articlePracticeCompleted >= 1;
 
   if (repeatedWeaknessCount >= 1 && hasStrongActivity) {

@@ -5,7 +5,7 @@ import { XP_RULES, getLocalDateString } from "../lib/gamification";
 import { XpClaimCard } from "./XpClaimCard";
 import type { SidebarView } from "./Sidebar";
 
-const learningPathEnabled = false;
+
 
 type QuestStatus =
   | "completed"
@@ -84,18 +84,6 @@ export function GamificationPanel({
   );
 
   const quests: DailyQuest[] = [
-    ...(learningPathEnabled
-      ? [
-          {
-            id: "lp",
-            title: t("progress.quests.lp.title"),
-            desc: t("progress.quests.lp.desc"),
-            status: "available" as const,
-            xpHint: null,
-            view: "learning-path" as const,
-          },
-        ]
-      : []),
     {
       id: "sentence-practice",
       title: "Sentence Practice",

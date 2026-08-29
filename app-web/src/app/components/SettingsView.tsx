@@ -1298,8 +1298,7 @@ const RESET_LOCAL_STORAGE_KEYS = [
   "adaptive-speaking-app:xp-profile",
   "adaptive-speaking-app:xp-events",
   "adaptive-speaking-app:badges",
-  "fonetik:learning-path-progress:v1",
-] as const;
+  ] as const;
 
 const CONFIRM_PHRASE = "DELETE";
 
@@ -1391,7 +1390,6 @@ function ResetUsageDataSection() {
                   "Vocabulary notebook",
                   "Listening exercise history & audio files",
                   "Podchat & article writing history",
-                  "Pattern drill sessions",
                   "Commonplace notes & mind maps",
                   "Weekly reviews & mission logs",
                 ].map((item) => (
@@ -1453,7 +1451,7 @@ function ResetUsageDataSection() {
             {/* Body */}
             <div className="px-6 py-5 flex flex-col gap-4">
               <p className="text-sm text-[var(--brand-ink-soft)] leading-relaxed">
-                This will permanently delete your <strong className="text-[var(--brand-ink)]">speaking sessions, XP, vocabulary, badges, listening/podchat/writing/pattern-drill history, commonplace notes and mind maps, weekly reviews,</strong> and all <strong className="text-[var(--brand-ink)]">generated listening audio files</strong>.
+                This will permanently delete your <strong className="text-[var(--brand-ink)]">speaking sessions, XP, vocabulary, badges, listening/podchat/writing history, commonplace notes and mind maps, weekly reviews,</strong> and all <strong className="text-[var(--brand-ink)]">generated listening audio files</strong>.
               </p>
               <p className="text-sm text-[var(--brand-ink-soft)] leading-relaxed">
                 Your <strong className="text-[var(--brand-ink)]">account settings</strong> — profile, language preferences, theme, TTS voice, and AI provider choices — <strong className="text-[var(--brand-ink)]">will not be affected</strong>.

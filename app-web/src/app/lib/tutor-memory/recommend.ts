@@ -1,31 +1,12 @@
 import {
   TutorMemoryProfile,
   TutorMemoryRecommendation,
-  TutorMemoryCardType,
 } from "./types";
-import { phase1Curriculum } from "../learning-path/phase1-curriculum";
 
-// Helper to look up a card type from static curriculum by ID
-export function mapCardIdToType(cardId: string): TutorMemoryCardType | null {
-  const phase = phase1Curriculum.phases[0];
-  if (!phase) return null;
-  for (const unit of phase.units) {
-    for (const day of unit.days) {
-      for (const card of day.cards) {
-        if (card.id === cardId) {
-          return card.type as TutorMemoryCardType;
-        }
-      }
-    }
-  }
-  return null;
-}
-
+// Decision table implementation
 export function getTutorMemoryRecommendation(
   profile: TutorMemoryProfile
 ): TutorMemoryRecommendation {
-  // Decision table implementation
-
   // 1. Grammar
   if (profile.repeatedFocusCategories.includes("grammar")) {
     return {
@@ -108,8 +89,8 @@ export function getTutorMemoryRecommendation(
     };
   }
 
-  // 7. Phase Complete
-  if (profile.learningPath.isPhaseComplete) {
+  // 7. Phase Complete (guarded: snapshot may be null)
+  if (profile.learningPath?.isPhaseComplete) {
     return {
       suggestedCardType: "weekly-checkpoint",
       priority: "low",
@@ -120,11 +101,10 @@ export function getTutorMemoryRecommendation(
     };
   }
 
-  // 8. Current Card Continuation
-  if (profile.learningPath.currentCardId) {
-    const cardType = mapCardIdToType(profile.learningPath.currentCardId) || "guided-word";
+  // 8. Current Card Continuation (guarded: snapshot may be null)
+  if (profile.learningPath?.currentCardId) {
     return {
-      suggestedCardType: cardType,
+      suggestedCardType: "guided-word",
       priority: "medium",
       category: null,
       safeReason: "Continue your current Learning Path card",

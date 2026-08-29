@@ -210,16 +210,6 @@ export function SessionLogView({
                       {selectedSession.retryTask}
                     </p>
                   </div>
-
-                  <div className="border-t border-[var(--brand-border)] pt-6">
-                    <button
-                      type="button"
-                      onClick={onGoToActiveSession}
-                      className="w-full rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)]"
-                    >
-                      Start drill on this weakness
-                    </button>
-                  </div>
                 </div>
               </div>
             )}

@@ -19,7 +19,6 @@ export type WeeklyMissionAiInput = {
   dataSufficiency: WeeklyMissionDataSufficiency;
   sourceCounts: {
     podchatSessions: number;
-    patternDrillSessions: number;
     vocabularyCollected: number;
     vocabularySentencesSubmitted: number;
     vocabularyCorrectionsSaved: number;
@@ -58,7 +57,6 @@ export type WeeklyMissionAnalyticOutput = {
 export type WeeklyMissionTitleKey =
   | "complete_speaking_minutes"
   | "complete_podchat_sessions"
-  | "complete_pattern_drill_sessions"
   | "collect_vocabulary_items"
   | "submit_vocabulary_sentences"
   | "save_vocabulary_corrections"
@@ -112,14 +110,12 @@ export type FinalizeWeeklyMissionsInput = {
 
 const ROUTE_TARGETS = new Set<WeeklyMissionRouteTarget>([
   "podchat",
-  "pattern_drill",
   "vocabulary",
   "article_practice",
   "commonplace",
 ]);
 const SOURCE_FEATURES = new Set<WeeklyMissionSourceFeature>([
   "podchat",
-  "pattern_drill",
   "vocabulary",
   "article_practice",
   "commonplace",
@@ -147,7 +143,6 @@ const FORBIDDEN_OUTPUT_KEYS = new Set([
 const TITLE_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionTitleKey | null> = {
   speaking_minutes: "complete_speaking_minutes",
   podchat_sessions: "complete_podchat_sessions",
-  pattern_drill_sessions: "complete_pattern_drill_sessions",
   vocabulary_collected: "collect_vocabulary_items",
   vocabulary_reviewed: null,
   vocab_sentence_submitted: "submit_vocabulary_sentences",
@@ -161,7 +156,6 @@ const TITLE_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionTitleKey
 const DESCRIPTION_KEY_BY_METRIC: Record<WeeklyMissionMetricType, WeeklyMissionDescriptionKey | null> = {
   speaking_minutes: "build_speaking_volume",
   podchat_sessions: "add_evaluated_speaking_samples",
-  pattern_drill_sessions: "target_repeated_weakness",
   vocabulary_collected: "build_active_vocabulary",
   vocabulary_reviewed: null,
   vocab_sentence_submitted: "apply_vocabulary_in_sentences",
@@ -300,8 +294,6 @@ function labelForRouteTarget(routeTarget: WeeklyMissionRouteTarget): string {
   switch (routeTarget) {
     case "podchat":
       return "Start Podchat";
-    case "pattern_drill":
-      return "Open Drill Mode";
     case "vocabulary":
       return "Open Vocabulary";
     case "article_practice":
@@ -320,10 +312,6 @@ function defaultReasonForMetric(
       return "Speaking volume helps turn feedback into more fluent academic responses.";
     case "podchat_sessions":
       return "Evaluated speaking sessions create reliable evidence for future feedback.";
-    case "pattern_drill_sessions":
-      return weaknessTarget
-        ? "Targeted pattern practice helps convert repeated feedback into control."
-        : "Targeted drills help turn feedback patterns into repeatable speaking habits.";
     case "vocabulary_collected":
       return "Useful vocabulary gives the week concrete material for review and transfer.";
     case "vocab_sentence_submitted":
@@ -366,7 +354,6 @@ export function buildWeeklyMissionAiInput(input: {
     dataSufficiency: input.dataSufficiency,
     sourceCounts: {
       podchatSessions: input.sourceSnapshot.podchatSessions,
-      patternDrillSessions: input.sourceSnapshot.patternDrillSessions,
       vocabularyCollected: input.sourceSnapshot.vocabularyCollected,
       vocabularySentencesSubmitted: input.sourceSnapshot.vocabularySentencesSubmitted,
       vocabularyCorrectionsSaved: input.sourceSnapshot.vocabularyCorrectionsSaved,
@@ -390,7 +377,6 @@ export function classifySnapshotDataSufficiency(
     activeDays: sourceSnapshot.activeDays.length,
     vocabularyItemsCollected: sourceSnapshot.vocabularyCollected,
     articlePracticeCompleted: sourceSnapshot.articlePracticeCompleted,
-    patternDrillSessionsCompleted: sourceSnapshot.patternDrillSessions,
     repeatedWeaknessCount: sourceSnapshot.repeatedWeaknessCount,
   });
 }
@@ -613,8 +599,6 @@ function routeForMetric(metricType: WeeklyMissionMetricType): {
       return { sourceFeatures: ["podchat"], recommendedAction: { label: "Start Podchat", routeTarget: "podchat" }, unit: "minutes" };
     case "podchat_sessions":
       return { sourceFeatures: ["podchat"], recommendedAction: { label: "Start Podchat", routeTarget: "podchat" }, unit: "sessions" };
-    case "pattern_drill_sessions":
-      return { sourceFeatures: ["pattern_drill"], recommendedAction: { label: "Open Drill Mode", routeTarget: "pattern_drill" }, unit: "sessions" };
     case "vocabulary_collected":
       return { sourceFeatures: ["vocabulary"], recommendedAction: { label: "Open Vocabulary", routeTarget: "vocabulary" }, unit: "items" };
     case "vocab_sentence_submitted":
@@ -642,8 +626,6 @@ function renderWeeklyMissionTitle(input: {
       return `Reach ${input.targetValue} speaking minutes`;
     case "complete_podchat_sessions":
       return `Complete ${input.targetValue} Podchat ${input.targetValue === 1 ? "session" : "sessions"}`;
-    case "complete_pattern_drill_sessions":
-      return `Complete ${input.targetValue} Drill Mode ${input.targetValue === 1 ? "session" : "sessions"}`;
     case "collect_vocabulary_items":
       return `Collect ${input.targetValue} vocabulary items`;
     case "submit_vocabulary_sentences":
@@ -738,12 +720,12 @@ export function buildFallbackWeeklyMissionOutput(input: {
       addFallbackMission(missions, fallbackMission("article_practice_completed", 1, "Article work adds structured academic writing evidence."));
     }
     if (topWeakness) {
-      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "A real weakness signal is available, so targeted practice can be useful.", weaknessTarget));
+      addFallbackMission(missions, fallbackMission("vocab_correction_saved", 1, "A real weakness signal is available, so targeted practice can be useful.", weaknessTarget));
     }
     addFallbackMission(missions, fallbackMission("daily_practice_days", 3, "Spacing practice across the week improves retention."));
   } else {
     if (topWeakness) {
-      addFallbackMission(missions, fallbackMission("pattern_drill_sessions", 1, "Targeted pattern practice turns repeated feedback into repeatable control.", weaknessTarget));
+      addFallbackMission(missions, fallbackMission("vocab_correction_saved", 1, "Targeted pattern practice turns repeated feedback into repeatable control.", weaknessTarget));
     }
     addFallbackMission(missions, fallbackMission("speaking_minutes", 45, "Strong data is most useful when you transfer it back into live speaking.", weaknessTarget));
     if (vocabularyGap) {

@@ -1,35 +1,16 @@
 import { useEffect, useState } from "react";
 import { PodchatView, type PodchatViewProps } from "./PodchatView";
-import { PatternDrillPrototype } from "./PatternDrillPrototype";
 import type { StoredSessionRecord } from "../lib/storage";
 
-export type ActiveSessionPanel = "podchat" | "patternDrill";
+export type ActiveSessionPanel = "podchat";
 
 export function ActiveSessionShell(
   props: PodchatViewProps & {
-    activePanel?: ActiveSessionPanel;
-    isActiveView?: boolean;
-    onActivePanelChange?: (panel: ActiveSessionPanel) => void;
     latestSession?: StoredSessionRecord | null;
     dayStreak?: number;
   },
 ) {
-  const [internalPanel, setInternalPanel] = useState<ActiveSessionPanel>("podchat");
-  const {
-    activePanel,
-    isActiveView = true,
-    onActivePanelChange,
-    latestSession = null,
-    dayStreak = 0,
-    ...podchatProps
-  } = props;
-  const panel = activePanel ?? internalPanel;
-  const setPanel = (nextPanel: ActiveSessionPanel) => {
-    if (activePanel === undefined) {
-      setInternalPanel(nextPanel);
-    }
-    onActivePanelChange?.(nextPanel);
-  };
+  const { latestSession = null, dayStreak = 0, ...podchatProps } = props;
 
   const [weaknessText, setWeaknessText] = useState<string | null>(null);
   const [targetText, setTargetText] = useState<string | null>(null);
@@ -40,65 +21,16 @@ export function ActiveSessionShell(
   const [tipsError, setTipsError] = useState<boolean>(false);
 
   useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 3000);
-
-    async function fetchLatestWeakness() {
-      try {
-        const res = await fetch("/api/pattern-drill/latest-weakness", {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-        });
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-          throw new Error("API request failed");
-        }
-
-        const data = await res.json();
-        if (!active) return;
-
-        if (data.status === "found" && data.weakness) {
-          setWeaknessText(data.weakness.title || null);
-          setTargetText(data.weakness.practiceFocus || null);
-          setWeaknessError(false);
-          setIsLoading(false);
-        } else {
-          if (latestSession) {
-            setWeaknessText(latestSession.mainWeakness || null);
-            setTargetText(latestSession.retryTask || null);
-          } else {
-            setWeaknessText(null);
-            setTargetText(null);
-          }
-          setWeaknessError(false);
-          setIsLoading(false);
-        }
-      } catch (error) {
-        if (!active) return;
-        if (latestSession) {
-          setWeaknessText(latestSession.mainWeakness || null);
-          setTargetText(latestSession.retryTask || null);
-          setWeaknessError(false);
-        } else {
-          setWeaknessText(null);
-          setTargetText(null);
-          setWeaknessError(true);
-        }
-        setIsLoading(false);
-      }
+    if (latestSession) {
+      setWeaknessText(latestSession.mainWeakness || null);
+      setTargetText(latestSession.retryTask || null);
+      setWeaknessError(false);
+    } else {
+      setWeaknessText(null);
+      setTargetText(null);
+      setWeaknessError(false);
     }
-
-    fetchLatestWeakness();
-
-    return () => {
-      active = false;
-      controller.abort();
-      clearTimeout(timeoutId);
-    };
+    setIsLoading(false);
   }, [latestSession]);
 
   useEffect(() => {
@@ -162,17 +94,7 @@ export function ActiveSessionShell(
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column (Wider, ~65% / 8 cols) - Main Workspace */}
         <div className="lg:col-span-8 rounded-2xl border border-[var(--brand-border)] bg-[var(--brand-surface)] shadow-sm flex flex-col">
-          {panel === "podchat" ? (
-            <PodchatView {...podchatProps} isActiveView={isActiveView} />
-          ) : (
-            <PatternDrillPrototype
-              onExit={() => setPanel("podchat")}
-              ttsProvider={podchatProps.ttsProvider}
-              ttsVoiceProfile={podchatProps.ttsVoiceProfile}
-              elevenLabsModelId={podchatProps.elevenLabsModelId}
-              elevenLabsVoiceId={podchatProps.elevenLabsVoiceId}
-            />
-          )}
+          <PodchatView {...podchatProps} />
         </div>
 
         {/* Right Column (Narrower, ~35% / 4 cols) - Weakness Banner + Session Info */}
@@ -205,22 +127,6 @@ export function ActiveSessionShell(
                     <span>{targetText}</span>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-1">
-                  <button
-                    type="button"
-                    onClick={() => setPanel("patternDrill")}
-                    className="rounded-lg bg-[var(--brand-teal)] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--brand-teal-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-teal)] focus:ring-offset-2 focus:ring-offset-[var(--brand-bg)] w-full sm:w-auto text-center"
-                  >
-                    Start Drill Mode
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPanel("podchat")}
-                    className="text-sm font-medium text-[var(--brand-teal-ink)] hover:underline focus:outline-none focus:underline w-full sm:w-auto text-center sm:text-left py-2 sm:py-0"
-                  >
-                    or start Podchat
-                  </button>
-                </div>
               </div>
             )
           )}
@@ -235,7 +141,7 @@ export function ActiveSessionShell(
                 🔥 {dayStreak} {dayStreak === 1 ? "day" : "days"}
               </span>
             </div>
-            
+
             <div className="border-t border-[var(--brand-border)] pt-3 flex flex-col gap-3">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[var(--brand-ink-soft)]">Current Level</span>

@@ -13,7 +13,6 @@ const TABLE = "weekly_mission_reviews";
 export const READY_WEEKLY_MISSION_METRICS: WeeklyMissionMetricType[] = [
   "speaking_minutes",
   "podchat_sessions",
-  "pattern_drill_sessions",
   "vocabulary_collected",
   "vocab_sentence_submitted",
   "vocab_correction_saved",
@@ -26,7 +25,6 @@ export type WeeklyMissionSourceSnapshot = {
   podchatSessions: number;
   speakingSeconds: number;
   speakingMinutes: number;
-  patternDrillSessions: number;
   vocabularyCollected: number;
   vocabularySentencesSubmitted: number;
   vocabularyCorrectionsSaved: number;
@@ -291,7 +289,6 @@ export async function getWeeklyMissionSourceSnapshot(input: {
   const range = dateRange(input.weekStart, input.weekEnd);
   const [
     podchatRows,
-    patternRows,
     vocabularyRows,
     sentenceRows,
     correctionRows,
@@ -300,7 +297,6 @@ export async function getWeeklyMissionSourceSnapshot(input: {
     listeningResult,
   ] = await Promise.all([
     selectRows<PodchatSnapshotRow>(supabaseClient, "podchat_sessions", "id, created_at, duration_seconds, elapsed_seconds", input.ownerId, "created_at", input.weekStart, input.weekEnd),
-    selectRows<TimestampRow>(supabaseClient, "pattern_drill_sessions", "id, created_at", input.ownerId, "created_at", input.weekStart, input.weekEnd),
     selectRows<TimestampRow>(supabaseClient, "vocabulary_items", "id, created_at", input.ownerId, "created_at", input.weekStart, input.weekEnd),
     selectRows<TimestampRow>(supabaseClient, "vocabulary_sentences", "id, created_at", input.ownerId, "created_at", input.weekStart, input.weekEnd),
     selectRows<TimestampRow>(supabaseClient, "vocabulary_corrections", "id, checked_at", input.ownerId, "checked_at", input.weekStart, input.weekEnd),
@@ -325,7 +321,6 @@ export async function getWeeklyMissionSourceSnapshot(input: {
 
   const activityRows = [
     ...podchatRows,
-    ...patternRows,
     ...vocabularyRows,
     ...sentenceRows,
     ...correctionRows,
@@ -337,7 +332,6 @@ export async function getWeeklyMissionSourceSnapshot(input: {
     podchatSessions: podchatRows.length,
     speakingSeconds,
     speakingMinutes: Math.floor(speakingSeconds / 60),
-    patternDrillSessions: patternRows.length,
     vocabularyCollected: vocabularyRows.length,
     vocabularySentencesSubmitted: sentenceRows.length,
     vocabularyCorrectionsSaved: correctionRows.length,
@@ -355,8 +349,6 @@ function progressForMetric(metricType: WeeklyMissionMetricType, snapshot: Weekly
       return snapshot.speakingMinutes;
     case "podchat_sessions":
       return snapshot.podchatSessions;
-    case "pattern_drill_sessions":
-      return snapshot.patternDrillSessions;
     case "vocabulary_collected":
       return snapshot.vocabularyCollected;
     case "vocab_sentence_submitted":

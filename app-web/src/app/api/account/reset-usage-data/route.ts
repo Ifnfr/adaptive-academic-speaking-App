@@ -49,14 +49,10 @@ const OWNER_ID_TABLES = [
   "commonplace_notes",
   "commonplace_mindmaps",
   "commonplace_shortcode_counters",
-  "pattern_drill_sessions",
   "weekly_mission_reviews",
   "listening_exercise_sessions",
   "contextual_tips_cache",
 ] as const;
-
-// word_builder_sessions uses user_id instead of owner_id
-const USER_ID_TABLE = "word_builder_sessions" as const;
 
 const STORAGE_BUCKET = "listening-audio";
 const STORAGE_PAGE_SIZE = 100;
@@ -101,29 +97,7 @@ export async function POST() {
     }
   }
 
-  // 4. Delete word_builder_sessions (uses user_id column, not owner_id)
-  {
-    const { error } = await supabase
-      .from(USER_ID_TABLE)
-      .delete()
-      .eq("user_id", ownerId);
-
-    if (error) {
-      console.error(
-        `reset-usage-data: delete failed on table "${USER_ID_TABLE}":`,
-        error
-      );
-      return NextResponse.json(
-        {
-          error: `Database delete failed on table "${USER_ID_TABLE}".`,
-          detail: error.message,
-          code: error.code,
-        },
-        { status: 500 }
-      );
-    }
-  }
-
+  // 4. (word_builder_sessions was removed when Word Builder feature was deleted.)
   // 5. Delete all Storage objects under listening/${ownerId}/ in "listening-audio".
   //
   //    Supabase Storage list() only returns immediate-level entries — the first

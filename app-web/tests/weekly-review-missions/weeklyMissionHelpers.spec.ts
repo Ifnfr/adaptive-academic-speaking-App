@@ -187,7 +187,6 @@ test.describe("Weekly Review mission helpers", () => {
         activeDays: 0,
         vocabularyItemsCollected: 0,
         articlePracticeCompleted: 0,
-        patternDrillSessionsCompleted: 0,
         repeatedWeaknessCount: 0,
       }),
     ).toBe("starter");
@@ -199,7 +198,6 @@ test.describe("Weekly Review mission helpers", () => {
         activeDays: 1,
         vocabularyItemsCollected: 0,
         articlePracticeCompleted: 0,
-        patternDrillSessionsCompleted: 0,
         repeatedWeaknessCount: 0,
       }),
     ).toBe("starter");
@@ -213,7 +211,6 @@ test.describe("Weekly Review mission helpers", () => {
         activeDays: 2,
         vocabularyItemsCollected: 4,
         articlePracticeCompleted: 0,
-        patternDrillSessionsCompleted: 0,
         repeatedWeaknessCount: 0,
       }),
     ).toBe("partial");
@@ -225,7 +222,6 @@ test.describe("Weekly Review mission helpers", () => {
         activeDays: 2,
         vocabularyItemsCollected: 0,
         articlePracticeCompleted: 0,
-        patternDrillSessionsCompleted: 0,
         repeatedWeaknessCount: 1,
       }),
     ).toBe("strong");

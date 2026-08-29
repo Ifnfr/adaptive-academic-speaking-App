@@ -1,7 +1,6 @@
 export const WEEKLY_MISSION_METRIC_TYPES = [
   "speaking_minutes",
   "podchat_sessions",
-  "pattern_drill_sessions",
   "vocabulary_collected",
   "vocabulary_reviewed",
   "vocab_sentence_submitted",
@@ -39,14 +38,12 @@ export type WeeklyMissionStatus =
 
 export type WeeklyMissionSourceFeature =
   | "podchat"
-  | "pattern_drill"
   | "vocabulary"
   | "article_practice"
   | "commonplace";
 
 export type WeeklyMissionRouteTarget =
   | "podchat"
-  | "pattern_drill"
   | "vocabulary"
   | "article_practice"
   | "commonplace";
@@ -138,6 +135,5 @@ export type WeeklyMissionActivitySummary = {
   activeDays: number;
   vocabularyItemsCollected: number;
   articlePracticeCompleted: number;
-  patternDrillSessionsCompleted: number;
   repeatedWeaknessCount: number;
 };
