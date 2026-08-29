@@ -110,7 +110,7 @@ type ArticlePracticeParseResult =
   | { ok: false; reason: "parse" | "validation" };
 
 const MAX_URL_LENGTH = 2000;
-const MAX_HTML_BYTES = 1_000_000;
+const MAX_HTML_BYTES = 2_500_000;
 const ARTICLE_TEXT_CHAR_BUDGET = 10_000;
 const PREPARED_MARKDOWN_CHAR_BUDGET = 20_000;
 const MIN_EXTRACTED_TEXT_CHARS = 400;
