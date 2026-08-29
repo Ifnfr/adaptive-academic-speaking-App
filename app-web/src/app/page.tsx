@@ -867,9 +867,13 @@ export default function Home() {
 
   // --- Article Practice state ---
   const [articleUrl, setArticleUrl] = useState("");
-  const [articleInputMode, setArticleInputMode] = useState<"url" | "markdown">(
-    "url",
-  );
+  const [articleInputMode, setArticleInputMode] = useState<
+    "url" | "markdown" | "file"
+  >("url");
+  const [articleFile, setArticleFile] = useState<{
+    fileName: string;
+    fileData: string;
+  } | null>(null);
   const [preparedContextMarkdown, setPreparedContextMarkdown] = useState("");
   const [preparedContextMarkdownError, setPreparedContextMarkdownError] =
     useState<string | null>(null);
@@ -2653,6 +2657,10 @@ export default function Home() {
         return;
       }
     }
+    if (inputMode === "file" && !articleFile) {
+      setArticlePracticeError("Unggah dokumen PDF atau .docx terlebih dahulu.");
+      return;
+    }
 
     const focus = effectiveArticleFocus.trim();
     setArticlePracticeLoading(true);
@@ -2671,7 +2679,9 @@ export default function Home() {
           inputMode,
           ...(inputMode === "url"
             ? { url }
-            : { preparedContextMarkdown: markdown }),
+            : inputMode === "file" && articleFile
+              ? { fileName: articleFile.fileName, fileData: articleFile.fileData }
+              : { preparedContextMarkdown: markdown }),
           level,
           mode,
           focus,
@@ -3150,6 +3160,8 @@ export default function Home() {
               appLanguage={appLanguage}
               onArticleUrlChange={setArticleUrl}
               onArticleInputModeChange={setArticleInputMode}
+              articleFile={articleFile}
+              onArticleFileChange={setArticleFile}
               onPreparedContextMarkdownChange={setPreparedContextMarkdown}
               onPreparedContextMarkdownErrorChange={setPreparedContextMarkdownError}
               onArticleFocusChange={setArticleFocus}

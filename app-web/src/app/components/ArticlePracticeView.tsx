@@ -71,7 +71,7 @@ export type ArticlePracticeResult = {
 
 type ArticlePracticeViewProps = {
   articleUrl: string;
-  articleInputMode: "url" | "markdown";
+  articleInputMode: "url" | "markdown" | "file";
   preparedContextMarkdown: string;
   preparedContextMarkdownError: string | null;
   articleFocus: string;
@@ -87,7 +87,11 @@ type ArticlePracticeViewProps = {
   savedVocabularyWords: ReadonlySet<string>;
   appLanguage?: AppLanguage | null;
   onArticleUrlChange: (value: string) => void;
-  onArticleInputModeChange: (value: "url" | "markdown") => void;
+  onArticleInputModeChange: (value: "url" | "markdown" | "file") => void;
+  articleFile: { fileName: string; fileData: string } | null;
+  onArticleFileChange: (
+    file: { fileName: string; fileData: string } | null,
+  ) => void;
   onPreparedContextMarkdownChange: (value: string) => void;
   onPreparedContextMarkdownErrorChange: (value: string | null) => void;
   onArticleFocusChange: (value: string) => void;
@@ -264,6 +268,8 @@ export function ArticlePracticeView({
   appLanguage,
   onArticleUrlChange,
   onArticleInputModeChange,
+  articleFile,
+  onArticleFileChange,
   onPreparedContextMarkdownChange,
   onPreparedContextMarkdownErrorChange,
   onArticleFocusChange,
@@ -402,6 +408,54 @@ export function ArticlePracticeView({
     }
   };
 
+  const [articleFileError, setArticleFileError] = useState<string | null>(null);
+
+  const handleArticleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setArticleFileError(null);
+    if (!file) {
+      onArticleFileChange(null);
+      return;
+    }
+
+    if (!/\.(pdf|docx)$/i.test(file.name)) {
+      setArticleFileError("Hanya file PDF atau .docx yang didukung.");
+      onArticleFileChange(null);
+      return;
+    }
+
+    const MAX_BYTES = 3_000_000;
+    if (file.size > MAX_BYTES) {
+      setArticleFileError("Ukuran file melebihi batas maksimal 3 MB.");
+      onArticleFileChange(null);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setArticleFileError("Tidak dapat membaca file. Coba lagi.");
+      onArticleFileChange(null);
+    };
+    reader.onload = () => {
+      try {
+        const result = reader.result;
+        if (typeof result !== "string" || !result.startsWith("data:")) {
+          setArticleFileError("Format file tidak valid.");
+          onArticleFileChange(null);
+          return;
+        }
+        const comma = result.indexOf(",");
+        const base64 = result.slice(comma + 1);
+        onArticleFileChange({ fileName: file.name, fileData: base64 });
+      } catch {
+        setArticleFileError("Tidak dapat membaca file. Coba lagi.");
+        onArticleFileChange(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCopyMarkdownPrompt = async () => {
     setMarkdownPromptCopyStatus("idle");
 
@@ -531,10 +585,11 @@ export function ArticlePracticeView({
 
           <div className="mt-5">
             <p className={labelClass}>Input mode</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {[
                 { value: "url", label: "Article URL" },
                 { value: "markdown", label: "Prepared Markdown Context" },
+                { value: "file", label: "Unggah Dokumen" },
               ].map((option) => (
                 <label
                   key={option.value}
@@ -551,7 +606,7 @@ export function ArticlePracticeView({
                     checked={articleInputMode === option.value}
                     onChange={() =>
                       onArticleInputModeChange(
-                        option.value as "url" | "markdown",
+                        option.value as "url" | "markdown" | "file",
                       )
                     }
                   />
@@ -669,11 +724,13 @@ export function ArticlePracticeView({
                 Use a prepared Article Context Markdown
               </h3>
               <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
-                Use this when your reading material comes from a PDF, Word
-                document, textbook, journal, class material, or copied article.
-                Do not upload the raw reading. First, ask another AI tool to
-                convert the reading into the Article Context Markdown format,
-                then paste or upload the .md file here.
+                Use this when you already have Article Context Markdown from
+                another tool, or want full control over the reading text. For
+                PDF or Word documents, use the{" "}
+                <span className="font-medium text-[var(--brand-ink)]">
+                  Unggah Dokumen
+                </span>{" "}
+                tab instead — no conversion needed.
               </p>
 
               <div className="mt-4 rounded-lg border border-[var(--brand-border)] bg-[var(--brand-surface-2)] p-3">
@@ -772,6 +829,49 @@ export function ArticlePracticeView({
             </div>
           )}
 
+          {articleInputMode === "file" && (
+            <div
+              className="mt-5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-surface)] p-4"
+              data-testid="article-file-input"
+            >
+              <h3 className="text-sm font-semibold text-[var(--brand-ink)]">
+                Unggah dokumen bacaan
+              </h3>
+              <p className="mt-2 text-xs leading-5 text-[var(--brand-ink-soft)]">
+                Unggah PDF atau dokumen Word (.docx). Teks di dalam dokumen akan
+                dijadikan bahan latihan — gambar diabaikan. Dokumen hasil scan
+                tanpa teks (OCR) belum didukung. Maksimal 3 MB.
+              </p>
+
+              <div className="mt-4">
+                <label htmlFor="article-file" className={labelClass}>
+                  Pilih file PDF atau .docx
+                </label>
+                <input
+                  id="article-file"
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleArticleFileChange}
+                  className="block w-full text-sm text-[var(--brand-ink)] file:mr-3 file:rounded-lg file:border file:border-[var(--brand-border)] file:bg-[var(--brand-surface-2)] file:px-3 file:py-2 file:text-sm file:font-medium file:text-[var(--brand-ink)]"
+                />
+                {articleFile && (
+                  <p className="mt-2 text-xs font-medium text-[var(--brand-teal-ink)]">
+                    Terpilih: {articleFile.fileName}
+                  </p>
+                )}
+                {articleFileError && (
+                  <p className="mt-2 text-xs font-medium text-[var(--brand-coral)]">
+                    {articleFileError}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-[var(--brand-ink-soft)]">
+                  File dibaca di peramban Anda saja; tidak diunggah ke server
+                  lain selain Fonetik.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="mt-5">
             <label htmlFor="article-focus" className={labelClass}>
               {t("article.focus")}
@@ -799,7 +899,8 @@ export function ArticlePracticeView({
               disabled={
                 articlePracticeLoading ||
                 (articleInputMode === "markdown" &&
-                  Boolean(preparedContextMarkdownError))
+                  Boolean(preparedContextMarkdownError)) ||
+                (articleInputMode === "file" && !articleFile)
               }
               className={`${buttonPrimary} w-full sm:w-auto`}
             >
