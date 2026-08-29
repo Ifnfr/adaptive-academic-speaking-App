@@ -1,2 +1,7 @@
 .vercel
 /.next/
+
+# Hermes agent artifacts
+.hermes/
+nul
+app-web/nul
