@@ -578,11 +578,11 @@ async function fetchArticle(url: string): Promise<ExtractedArticle> {
       throw new ArticleFetchError("The page does not look like an HTML article.");
     }
 
-    const contentLength = Number(response.headers.get("content-length") ?? 0);
-    if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
-      throw new ArticleFetchError("The page is too large for Article Practice.");
-    }
-
+    // Note: we do NOT reject on content-length here. Many legit article pages
+    // (e.g. CNN) ship 5-10 MB of ad/tracking/script payload but the readable
+    // article body is near the top of the document. Instead we cap the DOWNLOAD
+    // at MAX_HTML_BYTES via readLimitedResponseText — the first 1 MB almost
+    // always contains the full article, so truncation rarely loses content.
     const html = await readLimitedResponseText(response, MAX_HTML_BYTES);
     const canonicalUrl = extractCanonicalUrl(html, currentUrl);
     return extractReadableArticle(html, canonicalUrl.toString());
@@ -597,8 +597,12 @@ async function readLimitedResponseText(
 ): Promise<string> {
   if (!response.body) {
     const text = await response.text();
-    if (new TextEncoder().encode(text).length > maxBytes) {
-      throw new ArticleFetchError("The page is too large for Article Practice.");
+    const encoded = new TextEncoder().encode(text);
+    // Soft cap: keep the first maxBytes of the page instead of rejecting. The
+    // readable article body usually sits high in the document, so truncation
+    // rarely loses content while keeping memory/AI-token cost bounded.
+    if (encoded.length > maxBytes) {
+      return new TextDecoder("utf-8", { fatal: false }).decode(encoded.slice(0, maxBytes));
     }
     return text;
   }
@@ -612,11 +616,13 @@ async function readLimitedResponseText(
     if (done) break;
     if (!value) continue;
     received += value.byteLength;
-    if (received > maxBytes) {
-      await reader.cancel();
-      throw new ArticleFetchError("The page is too large for Article Practice.");
-    }
     chunks.push(value);
+    // Soft cap: once we pass maxBytes, stop reading and decode what we have.
+    // The readable article body usually sits high in the document, so we lose
+    // almost nothing while bounding download size / memory / AI-token cost.
+    if (received > maxBytes) {
+      break;
+    }
   }
 
   const bytes = new Uint8Array(received);
