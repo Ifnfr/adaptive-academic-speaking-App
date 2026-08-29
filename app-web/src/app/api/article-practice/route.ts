@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import mammoth from "mammoth";
-import { getDocumentProxy, extractText } from "unpdf";
 import {
   getArticlePracticeCacheKey,
   getGlobalCachedResponse,
@@ -419,40 +417,79 @@ async function parseDocument(
   fileName: string,
   fileData: string,
 ): Promise<{ title: string; text: string }> {
-  if (!/^[A-Za-z0-9 _.\-]+\.(pdf|docx)$/i.test(fileName)) {
-    throw new ArticleParseError("Unsupported file type. Upload a PDF or .docx file.");
+  // fileName is only ever used as a display label, never as a path.
+  if (!/^[A-Za-z0-9 _.-]+\.(pdf|docx)$/i.test(fileName)) {
+    throw new ArticleParseError(
+      "Tipe file tidak didukung. Unggah dokumen berformat PDF atau .docx.",
+    );
   }
-  let buffer: Buffer;
-  try {
-    buffer = Buffer.from(fileData, "base64");
-  } catch {
-    throw new ArticleParseError("File data is not valid base64.");
+
+  // Normalize base64: trim whitespace, support URL-safe alphabet, validate charset.
+  const normalized = (fileData || "")
+    .replace(/\s+/g, "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/=]+$/.test(normalized)) {
+    throw new ArticleParseError("Data file bukan base64 yang valid.");
   }
+  const buffer = Buffer.from(normalized, "base64");
   if (buffer.length > MAX_FILE_BYTES) {
-    throw new ArticleParseError("File is too large (max 3 MB).");
+    throw new ArticleParseError("Ukuran file melebihi batas maksimal 3 MB.");
   }
 
+  const cleanTitle = fileName.replace(/\.(pdf|docx)$/i, "");
   const lower = fileName.toLowerCase();
-  if (lower.endsWith(".pdf")) {
-    const pdf = await getDocumentProxy(new Uint8Array(buffer));
-    const result = await extractText(pdf, { mergePages: true });
-    const text = (typeof result.text === "string" ? result.text : "").trim();
-    if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
-      throw new ArticleParseError(
-        "This PDF has no selectable text (it appears to be a scanned image). OCR is not supported yet.",
-      );
-    }
-    return { title: fileName, text: limitText(text, ARTICLE_TEXT_CHAR_BUDGET) };
-  }
 
-  // .docx
-  const result = await mammoth.extractRawText({ buffer });
-  const text = (result.value ?? "").trim();
-  if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
-    throw new ArticleParseError("This document has no extractable text.");
+  try {
+    if (lower.endsWith(".pdf")) {
+      const pdfLib = (await import("unpdf")) as any;
+      const getDocumentProxy =
+        pdfLib.getDocumentProxy ?? pdfLib.default?.getDocumentProxy;
+      const extractText = pdfLib.extractText ?? pdfLib.default?.extractText;
+      const pdf = await withTimeout(
+        getDocumentProxy(new Uint8Array(buffer)),
+        20000,
+        "timeout",
+      );
+      const result = await withTimeout(
+        extractText(pdf, { mergePages: true }),
+        20000,
+        "timeout",
+      );
+      const text = (
+        typeof (result as any).text === "string" ? (result as any).text : ""
+      ).trim();
+      if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
+        throw new ArticleParseError(
+          "PDF ini tidak memiliki teks yang bisa diambil (kemungkinan hasil scan). OCR belum didukung.",
+        );
+      }
+      return { title: cleanTitle, text: limitText(text, ARTICLE_TEXT_CHAR_BUDGET) };
+    }
+
+    // .docx
+    const mammothMod = await import("mammoth");
+    const mammoth = (
+      (mammothMod as any).extractRawText ? mammothMod : (mammothMod as any).default
+    ) as any;
+    const result = await withTimeout(
+      mammoth.extractRawText({ buffer }),
+      20000,
+      "timeout",
+    );
+    const text = ((result as any).value ?? "").trim();
+    if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
+      throw new ArticleParseError("Dokumen ini tidak memiliki teks yang bisa diambil.");
+    }
+    return { title: cleanTitle, text: limitText(text, ARTICLE_TEXT_CHAR_BUDGET) };
+  } catch (err) {
+    if (err instanceof ArticleParseError) throw err;
+    throw new ArticleParseError(
+      "Dokumen gagal diproses. Pastikan file tidak rusak dan berformat PDF atau .docx.",
+    );
   }
-  return { title: fileName, text: limitText(text, ARTICLE_TEXT_CHAR_BUDGET) };
 }
+
 
 function normalizeLevel(value: unknown): LearnerLevel | null {
   if (typeof value !== "string") return null;

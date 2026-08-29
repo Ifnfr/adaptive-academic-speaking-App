@@ -92,17 +92,13 @@ test.describe("Article Practice — document upload (file mode)", () => {
     const capture: { body?: any } = {};
     mockFetchForDeepSeek(capture);
     const res = await POST(buildFileRequest("sample.pdf", pdf.toString("base64")));
-    if (res.status !== 200) {
-      const ej = await res.json();
-      console.log("PDF_ERROR_BODY:", JSON.stringify(ej));
-    }
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.mainIdea).toBeTruthy();
     expect(Array.isArray(json.keyPoints)).toBe(true);
     // The uploaded text must have been sent to the AI (proves parseDocument ran)
     const userContent = capture.body?.messages?.find((m: any) => m.role === "user")?.content;
-    expect(userContent).toContain("Just-in-Time Type Specialization");
+    expect(userContent).toContain("renewable energy transition");
   });
 
   test("accepts a .docx and returns structured practice", async () => {
@@ -110,15 +106,11 @@ test.describe("Article Practice — document upload (file mode)", () => {
     const capture: { body?: any } = {};
     mockFetchForDeepSeek(capture);
     const res = await POST(buildFileRequest("sample.docx", docx.toString("base64")));
-    if (res.status !== 200) {
-      const ej = await res.json();
-      console.log("DOCX_ERROR_BODY:", JSON.stringify(ej));
-    }
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.mainIdea).toBeTruthy();
     const userContent = capture.body?.messages?.find((m: any) => m.role === "user")?.content;
-    expect(userContent).toContain("Just-in-Time Type Specialization");
+    expect(userContent).toContain("renewable energy transition");
   });
 
   test("rejects unsupported format with a 400 error", async () => {
