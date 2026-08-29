@@ -78,6 +78,25 @@ export async function POST(request: Request) {
   const resolvedDifficulty: "easy" | "medium" | "hard" =
     difficultyInput === "easy" || difficultyInput === "hard" ? difficultyInput : "medium";
 
+  const articleContextInput = b.article_context as
+    | { title?: unknown; text?: unknown; keyPoints?: unknown }
+    | undefined;
+  const articleContext =
+    articleContextInput &&
+    typeof articleContextInput.title === "string" &&
+    typeof articleContextInput.text === "string"
+      ? {
+          title: articleContextInput.title.slice(0, 300),
+          text: articleContextInput.text.slice(0, 6000),
+          keyPoints: Array.isArray(articleContextInput.keyPoints)
+            ? articleContextInput.keyPoints
+                .filter((k: unknown) => typeof k === "string")
+                .slice(0, 12)
+                .map((k: string) => k)
+            : [],
+        }
+      : null;
+
   const ownerId = await resolveCurrentUserId();
   if (!ownerId) {
     return NextResponse.json(
@@ -107,7 +126,10 @@ export async function POST(request: Request) {
       section_count: sectionCount,
       is_placement: isPlacement,
       status: "in_progress",
-      generation_plan: { difficulty: resolvedDifficulty },
+      generation_plan: {
+        difficulty: resolvedDifficulty,
+        ...(articleContext ? { articleContext } : {}),
+      },
     })
     .select("id")
     .single();
