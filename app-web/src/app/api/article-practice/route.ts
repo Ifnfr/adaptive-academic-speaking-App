@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import mammoth from "mammoth";
+import { getDocumentProxy, extractText } from "unpdf";
 import {
   getArticlePracticeCacheKey,
   getGlobalCachedResponse,
@@ -42,10 +44,12 @@ type FeedbackLanguage = "en" | "id";
 type TargetLanguage = "en";
 
 type ArticlePracticeRequest = {
-  inputMode: "url" | "markdown";
+  inputMode: "url" | "markdown" | "file";
   provider: Provider;
   url?: string;
   preparedContextMarkdown?: string;
+  fileName?: string;
+  fileData?: string;
   level: LearnerLevel;
   mode: string;
   focus: string;
@@ -119,6 +123,8 @@ const MIN_EXTRACTED_TEXT_CHARS = 400;
 // (worst case: 1 attempt 8s + AI call ~10s + parsing/Supabase writes ~5s ≈ 23s).
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_REDIRECTS = 3;
+const MAX_FILE_BYTES = 3_000_000; // 3 MB cap (base64 ~4MB fits Vercel body limit)
+const MAX_BASE64_FILE_CHARS = Math.floor((MAX_FILE_BYTES * 4) / 3) + 100;
 const ARTICLE_PRACTICE_PROMPT_VERSION = "v1.2";
 const ESSAY_TARGET_SKILLS = [
   "main_idea",
@@ -156,6 +162,13 @@ class ArticleFetchError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ArticleFetchError";
+  }
+}
+
+class ArticleParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ArticleParseError";
   }
 }
 
@@ -397,6 +410,50 @@ function buildPreparedMarkdownArticle(markdown: string): ExtractedArticle {
   };
 }
 
+// Parse an uploaded document (PDF / .docx) into plain text. Images inside the
+// document are ignored automatically: pdf-parse reads the TEXT LAYER only (a
+// scanned-page image yields no text and is skipped silently), and mammoth reads
+// raw text from docx. Mixed image+text PDFs -> text extracted, images dropped.
+// A fully-scanned PDF (zero text layer) -> ArticleParseError (OCR out of scope).
+async function parseDocument(
+  fileName: string,
+  fileData: string,
+): Promise<{ title: string; text: string }> {
+  if (!/^[A-Za-z0-9 _.\-]+\.(pdf|docx)$/i.test(fileName)) {
+    throw new ArticleParseError("Unsupported file type. Upload a PDF or .docx file.");
+  }
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(fileData, "base64");
+  } catch {
+    throw new ArticleParseError("File data is not valid base64.");
+  }
+  if (buffer.length > MAX_FILE_BYTES) {
+    throw new ArticleParseError("File is too large (max 3 MB).");
+  }
+
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".pdf")) {
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    const result = await extractText(pdf, { mergePages: true });
+    const text = (typeof result.text === "string" ? result.text : "").trim();
+    if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
+      throw new ArticleParseError(
+        "This PDF has no selectable text (it appears to be a scanned image). OCR is not supported yet.",
+      );
+    }
+    return { title: fileName, text: limitText(text, ARTICLE_TEXT_CHAR_BUDGET) };
+  }
+
+  // .docx
+  const result = await mammoth.extractRawText({ buffer });
+  const text = (result.value ?? "").trim();
+  if (text.length < MIN_EXTRACTED_TEXT_CHARS) {
+    throw new ArticleParseError("This document has no extractable text.");
+  }
+  return { title: fileName, text: limitText(text, ARTICLE_TEXT_CHAR_BUDGET) };
+}
+
 function normalizeLevel(value: unknown): LearnerLevel | null {
   if (typeof value !== "string") return null;
   const match = (LEVELS as readonly string[]).find(
@@ -413,9 +470,11 @@ function validateRequest(body: unknown): ArticlePracticeRequest | string {
       ? "url"
       : source.inputMode === "markdown"
         ? "markdown"
-        : null;
+        : source.inputMode === "file"
+          ? "file"
+          : null;
   if (!inputMode) {
-    return "Unsupported inputMode. Use url or markdown.";
+    return "Unsupported inputMode. Use url, markdown, or file.";
   }
 
   const provider = source.provider;
@@ -441,7 +500,7 @@ function validateRequest(body: unknown): ArticlePracticeRequest | string {
     const parsedUrl = parseSafeArticleUrl(url);
     if (typeof parsedUrl === "string") return parsedUrl;
     safeUrl = parsedUrl.toString();
-  } else {
+  } else if (inputMode === "markdown") {
     if (hasForbiddenMarkdownModeKey(source)) {
       return "Markdown mode request contains unsupported private data.";
     }
@@ -452,12 +511,29 @@ function validateRequest(body: unknown): ArticlePracticeRequest | string {
     preparedContextMarkdown = markdownResult.markdown;
   }
 
+  let fileName = "";
+  let fileData = "";
+  if (inputMode === "file") {
+    const rawName = normalizeString(source.fileName, 260);
+    const rawData = typeof source.fileData === "string" ? source.fileData : "";
+    if (!rawName || !rawData) {
+      return "File name and base64 file data are required.";
+    }
+    if (rawData.length > MAX_BASE64_FILE_CHARS) {
+      return "File is too large (max 3 MB).";
+    }
+    fileName = rawName;
+    fileData = rawData;
+  }
+
   return {
     inputMode,
     provider,
     ...(inputMode === "url"
       ? { url: safeUrl }
-      : { preparedContextMarkdown }),
+      : inputMode === "markdown"
+        ? { preparedContextMarkdown }
+        : { fileName, fileData }),
     level,
     mode: normalizeString(source.mode, 100),
     focus: normalizeString(source.focus, 300),
@@ -1515,6 +1591,7 @@ export async function POST(request: Request) {
 
   const resolvedModel = resolveProviderModel(validated.provider);
   const isUrlMode = validated.inputMode === "url";
+  const isFileMode = validated.inputMode === "file";
 
   const rawIdempotencyKey = request.headers.get("x-fonetik-idempotency-key");
   const idempotencyKeyValid =
@@ -1666,6 +1743,29 @@ export async function POST(request: Request) {
         }).catch(() => {});
       }
 
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  } else if (isFileMode) {
+    tlog("parseDocument_start", { fileName: validated.fileName });
+    try {
+      const parsed = await parseDocument(validated.fileName ?? "", validated.fileData ?? "");
+      article = {
+        title: parsed.title,
+        sourceUrl: "uploaded-document",
+        sourceDomain: "Uploaded Document",
+        text: parsed.text,
+        wasTrimmed: parsed.text.length >= ARTICLE_TEXT_CHAR_BUDGET,
+        images: [],
+      };
+      tlog("parseDocument_done", { textChars: article.text.length });
+    } catch (err) {
+      tlog("parseDocument_failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      const message =
+        err instanceof ArticleParseError
+          ? err.message
+          : "The document could not be parsed.";
       return NextResponse.json({ error: message }, { status: 400 });
     }
   } else {

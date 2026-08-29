@@ -15,12 +15,14 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.7.2",
     "@vercel/speed-insights": "^2.0.0",
+    "mammoth": "^1.12.2",
     "next": "16.2.6",
     "ogl": "^1.0.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "reactflow": "^11.11.4",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
@@ -31,6 +33,7 @@
     "@types/three": "^0.184.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "pdf-lib": "^1.17.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
