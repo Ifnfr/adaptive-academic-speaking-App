@@ -15,6 +15,10 @@ export type PodchatArticleContext = {
   speakingTaskInstruction: string;
   targetStructure?: string[];
   sourceDomain?: string;
+  /** Full article substance (brief + main idea + key points + vocabulary) used to ground the conversation. */
+  articleText?: string;
+  /** Vocabulary extracted from the article, surfaced as context for the host. */
+  usefulVocabulary?: Array<{ word: string; meaning: string; whyUseful: string }>;
 };
 
 type MockTurnRequest = {
