@@ -103,6 +103,7 @@ type ExtractedArticle = {
   sourceDomain: string;
   text: string;
   wasTrimmed: boolean;
+  images: string[];
 };
 
 type ArticlePracticeParseResult =
@@ -392,6 +393,7 @@ function buildPreparedMarkdownArticle(markdown: string): ExtractedArticle {
     sourceDomain: "Prepared Markdown",
     text: limitText(markdown, PREPARED_MARKDOWN_CHAR_BUDGET),
     wasTrimmed: markdown.trim().length > PREPARED_MARKDOWN_CHAR_BUDGET,
+    images: [],
   };
 }
 
@@ -677,13 +679,51 @@ function extractReadableArticle(html: string, sourceUrl: string): ExtractedArtic
   }
 
   const wasTrimmed = readableText.length > ARTICLE_TEXT_CHAR_BUDGET;
+  const images = extractArticleImages(withoutNoise, sourceUrl);
   return {
     title,
     sourceUrl,
     sourceDomain: sourceDomainFromUrl(sourceUrl),
     text: limitText(readableText, ARTICLE_TEXT_CHAR_BUDGET),
     wasTrimmed,
+    images,
   };
+}
+
+// Extract up to `max` content-image URLs from the article HTML. We deliberately
+// skip tracking/advertising pixels (1x1, adnxs, rubicon, beacon, analytics) and
+// inline data: URIs / SVGs — those are not article content and would waste vision
+// tokens. Only absolute http(s) image URLs are returned (relative -> resolved).
+const AD_TRACKING_HINT = /(pixel|beacon|analytics|track|adnxs|rubicon|doubleclick|pubmatic|adservice|gstatic\/.*logo|favicon|icon)/i;
+function extractArticleImages(html: string, baseUrl: string, max = 3): string[] {
+  const srcs: string[] = [];
+  const imgRe = /<img\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = imgRe.exec(html)) !== null) {
+    const tag = m[0];
+    const src =
+      tag.match(/\bsrc=["']([^"']+)["']/i)?.[1] ??
+      tag.match(/\bdata-src=["']([^"']+)["']/i)?.[1] ??
+      tag.match(/\bsrcset=["']([^"']+)/i)?.[1];
+    if (!src) continue;
+    if (src.startsWith("data:") || src.startsWith("blob:")) continue;
+    if (/\.svg(\?|$)/i.test(src)) continue;
+    if (AD_TRACKING_HINT.test(src)) continue;
+    // skip tiny icons referenced via width/height attributes
+    const w = tag.match(/\bwidth=["']?(\d+)/i)?.[1];
+    const h = tag.match(/\bheight=["']?(\d+)/i)?.[1];
+    if (w && h && Number(w) <= 80 && Number(h) <= 80) continue;
+    let abs: string;
+    try {
+      abs = new URL(src, baseUrl).toString();
+    } catch {
+      continue;
+    }
+    if (!/^https?:\/\//i.test(abs)) continue;
+    if (!srcs.includes(abs)) srcs.push(abs);
+    if (srcs.length >= max) break;
+  }
+  return srcs;
 }
 
 function extractTitle(html: string): string {
@@ -1249,7 +1289,21 @@ async function callDeepSeek(
   apiKey: string,
   system: string,
   user: string,
+  images?: string[],
 ): Promise<string> {
+  // Vision models (deepseek-v4-flash-vision-exp) accept multi-part content:
+  // text + image_url parts. When no images are present we keep the plain string
+  // shape for backward compatibility (and so non-vision models still work).
+  const userContent: unknown =
+    images && images.length > 0
+      ? [
+          { type: "text", text: user },
+          ...images.slice(0, 3).map((url) => ({
+            type: "image_url",
+            image_url: { url },
+          })),
+        ]
+      : user;
   const res = await fetchWithTimeout((process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions"), {
     method: "POST",
     headers: {
@@ -1266,7 +1320,7 @@ async function callDeepSeek(
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
-        { role: "user", content: user },
+        { role: "user", content: userContent },
       ],
     }),
   });
@@ -1646,12 +1700,12 @@ export async function POST(request: Request) {
   const estimatedInputTokens = estimateTokensFromText(systemPrompt + userPrompt);
 
   let raw = "";
-  tlog("provider_call_start", { provider: validated.provider, model: process.env.DEEPSEEK_MODEL });
+  tlog("provider_call_start", { provider: validated.provider, model: process.env.DEEPSEEK_MODEL, imageCount: article.images?.length ?? 0 });
   try {
     if (validated.provider === "Claude") {
       raw = await callClaude(apiKey, systemPrompt, userPrompt);
     } else if (validated.provider === "DeepSeek") {
-      raw = await callDeepSeek(apiKey, systemPrompt, userPrompt);
+      raw = await callDeepSeek(apiKey, systemPrompt, userPrompt, article.images);
     } else {
       raw = await callGemini(apiKey, systemPrompt, userPrompt);
     }
