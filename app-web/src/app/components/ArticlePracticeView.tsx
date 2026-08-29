@@ -97,6 +97,8 @@ type ArticlePracticeViewProps = {
   onArticleFocusChange: (value: string) => void;
   onGenerateArticlePractice: () => void;
   onPracticeSpeakingTask: (result: ArticlePracticeResult) => void;
+  onDiscussArticleInPodchat: (result: ArticlePracticeResult) => void;
+  onPracticeListeningFromArticle: (result: ArticlePracticeResult) => void;
   onSaveVocabularyCandidate: (candidate: {
     word: string;
     meaning: string;
@@ -275,6 +277,8 @@ export function ArticlePracticeView({
   onArticleFocusChange,
   onGenerateArticlePractice,
   onPracticeSpeakingTask,
+  onDiscussArticleInPodchat,
+  onPracticeListeningFromArticle,
   onSaveVocabularyCandidate,
   onEssayEvaluationComplete,
 }: ArticlePracticeViewProps) {
@@ -1060,13 +1064,29 @@ export function ArticlePracticeView({
                 <p className="text-xs text-[var(--brand-ink-soft)]">
                   {t("article.taskTagline")}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => onPracticeSpeakingTask(articlePracticeResult)}
-                  className={`${buttonPrimary} w-full sm:w-auto`}
-                >
-                  {t("article.practiceTaskBtn")}
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={() => onPracticeSpeakingTask(articlePracticeResult)}
+                    className={`${buttonPrimary} w-full sm:w-auto`}
+                  >
+                    {t("article.practiceTaskBtn")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDiscussArticleInPodchat(articlePracticeResult)}
+                    className={`${buttonSecondary} w-full sm:w-auto`}
+                  >
+                    Diskusikan di Podchat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onPracticeListeningFromArticle(articlePracticeResult)}
+                    className={`${buttonSecondary} w-full sm:w-auto`}
+                  >
+                    Latihan Listening dari Artikel
+                  </button>
+                </div>
               </div>
             </div>
 

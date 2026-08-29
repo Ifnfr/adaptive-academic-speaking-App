@@ -2452,6 +2452,53 @@ export default function Home() {
     setView("active");
   };
 
+  const handlePracticeListeningFromArticle = async (
+    result: ArticlePracticeResult,
+  ) => {
+    setArticlePracticeLoading(true);
+    try {
+      const res = await fetch("/api/listening-exercise/session/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          cefr_level: level,
+          article_context: {
+            title: result.sourceTitle,
+            text: [
+              result.articleBrief,
+              result.mainIdea ? `Main idea: ${result.mainIdea}` : "",
+              result.keyPoints.length
+                ? `Key points: ${result.keyPoints.join("; ")}`
+                : "",
+              result.usefulVocabulary.length
+                ? `Vocabulary: ${result.usefulVocabulary
+                    .map((v) => `${v.word} (${v.meaning})`)
+                    .join(", ")}`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+            keyPoints: result.keyPoints,
+          },
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("Listening start failed");
+      }
+      const data = (await res.json()) as { session_id?: string };
+      if (!data.session_id) {
+        throw new Error("Listening session id missing");
+      }
+      setView("listening");
+    } catch {
+      setArticlePracticeError(
+        "Gagal memulai latihan listening dari artikel. Coba lagi.",
+      );
+    } finally {
+      setArticlePracticeLoading(false);
+    }
+  };
+
   const handleDiscussCommonplaceInPodchat = (
     context: PodchatCommonplaceContextRef,
   ) => {
@@ -3201,6 +3248,8 @@ export default function Home() {
               onArticleFocusChange={setArticleFocus}
               onGenerateArticlePractice={handleGenerateArticlePractice}
               onPracticeSpeakingTask={handlePracticeArticleSpeakingTask}
+              onDiscussArticleInPodchat={handleDiscussArticleInPodchat}
+              onPracticeListeningFromArticle={handlePracticeListeningFromArticle}
               onSaveVocabularyCandidate={handleSaveArticleVocabularyCandidate}
               onEssayEvaluationComplete={handleArticleEssayEvaluationComplete}
             />
