@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { buildNextSectionSystemPrompt, buildNextSectionUserPrompt } from "../../../_lib/providers";
-import { buildPlanOnlySystemPrompt, buildPlanOnlyUserPrompt } from "../../../_lib/plan-prompts";
+import { buildPlanOnlySystemPrompt, buildPlanOnlyUserPrompt, deriveArticleTopics } from "../../../_lib/plan-prompts";
 import { selectSessionDomains } from "../../../_lib/topic-domains";
 import { getWeakestEligibleSubSkill } from "../../../../../lib/listening-exercise/metrics";
 import { fireEdgeJob, fetchHistorySummary } from "../../../_lib/orchestrator";
@@ -187,6 +187,11 @@ export async function GET(
         topic?: string;
         question_types?: string[];
       }>;
+      articleContext?: {
+        title: string;
+        text: string;
+        keyPoints?: string[];
+      };
     } | null;
 
     const difficulty: "easy" | "medium" | "hard" =
@@ -206,7 +211,9 @@ export async function GET(
         ownerId,
         isPlacement
       );
-      const assignedTopics = selectSessionDomains(recentSessions, 3);
+      const assignedTopics = plan?.articleContext
+        ? deriveArticleTopics(plan.articleContext)
+        : selectSessionDomains(recentSessions, 3);
       let weakSubSkill: string | null = null;
       if (!isPlacement) {
         weakSubSkill = await getWeakestEligibleSubSkill(supabase, ownerId);
@@ -224,7 +231,8 @@ export async function GET(
           isPlacement,
           historySummary,
           weakSubSkill,
-          assignedTopics
+          assignedTopics,
+          plan?.articleContext ?? null
         ),
         assignedTopics,
         difficulty,

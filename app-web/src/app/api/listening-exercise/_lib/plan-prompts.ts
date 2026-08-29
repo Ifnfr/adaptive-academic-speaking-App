@@ -41,7 +41,8 @@ export function buildPlanOnlyUserPrompt(
   isPlacement: boolean,
   historySummary?: string,
   weakSubSkill?: string | null,
-  assignedTopics?: Array<{ domainId: string; topic: string }>
+  assignedTopics?: Array<{ domainId: string; topic: string }>,
+  articleContext?: { title: string; text: string; keyPoints?: string[] } | null
 ): string {
   const assignedTopicsLine =
     assignedTopics && assignedTopics.length > 0
@@ -59,6 +60,37 @@ export function buildPlanOnlyUserPrompt(
       `The learner has recently shown comparatively weaker performance on "${weakSubSkill}"-type questions. Where it fits naturally with the session plan, prefer choosing topics and question slants that give more practice on that sub-skill.`
     );
   }
+  if (articleContext && articleContext.text.trim().length > 0) {
+    lines.push(
+      `ARTICLE CONTEXT (the listening session MUST be built from this source article — derive the 3 section topics from DIFFERENT parts of it: one from the main idea, one from a key point, one from vocabulary/细节 in context; do NOT invent topics outside this article):`,
+      `Article title: ${articleContext.title}`,
+      `Article substance:\n${articleContext.text}`,
+      articleContext.keyPoints && articleContext.keyPoints.length
+        ? `Key points: ${articleContext.keyPoints.join("; ")}`
+        : ""
+    );
+  }
   if (assignedTopicsLine) lines.push(assignedTopicsLine);
   return lines.join("\n");
+}
+
+/**
+ * Derive up to 3 short topic labels from an article context, used as the
+ * pre-assigned section topics so the plan stays grounded in the article.
+ */
+export function deriveArticleTopics(
+  articleContext: { title: string; text: string; keyPoints?: string[] } | null | undefined
+): Array<{ domainId: string; topic: string }> {
+  if (!articleContext || !articleContext.text.trim()) {
+    return [];
+  }
+  const base = articleContext.title?.trim() || "Article";
+  const keyPoints = Array.isArray(articleContext.keyPoints)
+    ? articleContext.keyPoints.filter((k) => typeof k === "string" && k.trim()).map((k) => k.trim())
+    : [];
+  const topics: string[] = [base];
+  if (keyPoints.length >= 1) topics.push(keyPoints[0]);
+  if (keyPoints.length >= 2) topics.push(keyPoints[1]);
+  while (topics.length < 3) topics.push(`${base} — part ${topics.length + 1}`);
+  return topics.slice(0, 3).map((topic, i) => ({ domainId: `article-${i}`, topic }));
 }
