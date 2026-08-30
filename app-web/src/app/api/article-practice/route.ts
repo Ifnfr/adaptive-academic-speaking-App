@@ -554,10 +554,10 @@ function validateRequest(body: unknown): ArticlePracticeRequest | string {
     const rawName = normalizeString(source.fileName, 260);
     const rawData = typeof source.fileData === "string" ? source.fileData : "";
     if (!rawName || !rawData) {
-      return "File name and base64 file data are required.";
+      return "Nama file dan data base64 file wajib diisi.";
     }
     if (rawData.length > MAX_BASE64_FILE_CHARS) {
-      return "File is too large (max 3 MB).";
+      return "Ukuran file melebihi batas maksimal 3 MB.";
     }
     fileName = rawName;
     fileData = rawData;
