@@ -101,13 +101,16 @@ async function callGenAI(systemPrompt: string, userPrompt: string): Promise<stri
   const model = useDeepSeek ? DS_MODEL : TR_MODEL;
   const endpoint = base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
 
-  // Single attempt with a 90s timeout. No retry here: the Vercel status route
+  // Single attempt with a 140s timeout. No retry here: the Vercel status route
   // owns retry via transient-error recovery (reset error -> pending -> re-fire),
-  // and the stale-claim recovery resets stuck 'generating' after 100s. A retry
-  // loop here would run PAST the stale threshold and cause two parallel AI
-  // calls for the same section (duplicate spend).
+  // and the stale-claim recovery resets stuck 'generating' after 150s (must stay
+  // ABOVE this 140s attempt so a slow-but-alive generation is never reset while
+  // still running). A retry loop here would run PAST the stale threshold and
+  // cause two parallel AI calls for the same section (duplicate spend).
+  // Note: DeepSeek official can exceed 90s on the large listening prompts, so
+  // the attempt budget was raised 90s -> 140s (still under the 150s edge cap).
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000);
+  const timer = setTimeout(() => controller.abort(), 140000);
 
   try {
     const res = await fetch(endpoint, {
