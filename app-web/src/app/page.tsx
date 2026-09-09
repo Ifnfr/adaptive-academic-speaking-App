@@ -883,6 +883,12 @@ export default function Home() {
   const [articlePracticeError, setArticlePracticeError] = useState<
     string | null
   >(null);
+  const [pendingListeningArticleContext, setPendingListeningArticleContext] =
+    useState<{
+      title: string;
+      text: string;
+      keyPoints?: string[];
+    } | null>(null);
   const [pendingArticleContext, setPendingArticleContext] =
     useState<PodchatArticleContext | null>(null);
   const [pendingCommonplaceContext, setPendingCommonplaceContext] =
@@ -1622,6 +1628,12 @@ export default function Home() {
         setView("progress");
       }, 0);
       return () => clearTimeout(timer);
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "listening") {
+      setPendingListeningArticleContext(null);
     }
   }, [view]);
 
@@ -2440,43 +2452,25 @@ export default function Home() {
   ) => {
     setArticlePracticeLoading(true);
     try {
-      const res = await fetch("/api/listening-exercise/session/start", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          cefr_level: level,
-          article_context: {
-            title: result.sourceTitle,
-            text: [
-              result.articleBrief,
-              result.mainIdea ? `Main idea: ${result.mainIdea}` : "",
-              result.keyPoints.length
-                ? `Key points: ${result.keyPoints.join("; ")}`
-                : "",
-              result.usefulVocabulary.length
-                ? `Vocabulary: ${result.usefulVocabulary
-                    .map((v) => `${v.word} (${v.meaning})`)
-                    .join(", ")}`
-                : "",
-            ]
-              .filter(Boolean)
-              .join("\n\n"),
-            keyPoints: result.keyPoints,
-          },
-        }),
+      setPendingListeningArticleContext({
+        title: result.sourceTitle,
+        text: [
+          result.articleBrief,
+          result.mainIdea ? `Main idea: ${result.mainIdea}` : "",
+          result.keyPoints.length
+            ? `Key points: ${result.keyPoints.join("; ")}`
+            : "",
+          result.usefulVocabulary.length
+            ? `Vocabulary: ${result.usefulVocabulary
+                .map((v) => `${v.word} (${v.meaning})`)
+                .join(", ")}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        keyPoints: result.keyPoints,
       });
-      if (!res.ok) {
-        throw new Error("Listening start failed");
-      }
-      const data = (await res.json()) as { session_id?: string };
-      if (!data.session_id) {
-        throw new Error("Listening session id missing");
-      }
       setView("listening");
-    } catch {
-      setArticlePracticeError(
-        "Gagal memulai latihan listening dari artikel. Coba lagi.",
-      );
     } finally {
       setArticlePracticeLoading(false);
     }
@@ -3247,6 +3241,7 @@ export default function Home() {
                 ttsProvider={ttsProvider}
                 elevenLabsModelId={elevenLabsModel}
                 elevenLabsVoiceId={elevenLabsVoice}
+                articleContext={pendingListeningArticleContext}
               />
             </div>
           )}

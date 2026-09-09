@@ -86,7 +86,20 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
-async function callGenAI(systemPrompt: string, userPrompt: string): Promise<string> {
+type GenerationDiagnostics = {
+  finish_reason: unknown;
+  usage: unknown;
+  reasoning_content_length: number;
+  content_length: number;
+  content_head: string;
+};
+
+type GenAIError = Error & { diag?: Record<string, unknown> };
+
+async function callGenAI(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<{ content: string; diag: GenerationDiagnostics }> {
   const useDeepSeek = GEN_PROVIDER === "deepseek";
   const apiKey = useDeepSeek ? DS_KEY : TR_KEY;
   if (!apiKey) {
@@ -134,15 +147,32 @@ async function callGenAI(systemPrompt: string, userPrompt: string): Promise<stri
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`AI request failed: ${res.status} ${text.slice(0, 400)}`);
+      const error = new Error(`AI request failed: ${res.status} ${text.slice(0, 400)}`) as GenAIError;
+      error.diag = {
+        http_status: res.status,
+        response_snippet: text.slice(0, 600),
+      };
+      throw error;
     }
 
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content ?? "";
+    const diag: GenerationDiagnostics = {
+      finish_reason: data?.choices?.[0]?.finish_reason ?? null,
+      usage: data?.usage ?? null,
+      reasoning_content_length:
+        typeof data?.choices?.[0]?.message?.reasoning_content === "string"
+          ? data.choices[0].message.reasoning_content.length
+          : 0,
+      content_length: typeof content === "string" ? content.length : 0,
+      content_head: typeof content === "string" ? content.slice(0, 600) : "",
+    };
     if (typeof content !== "string" || content.trim().length === 0) {
-      throw new Error("AI provider returned empty content.");
+      const error = new Error("AI provider returned empty content.") as GenAIError;
+      error.diag = { ...diag, content_length: 0, content_head: "" };
+      throw error;
     }
-    return content;
+    return { content, diag };
   } finally {
     clearTimeout(timer);
   }
@@ -157,14 +187,18 @@ async function claimSection(sectionId: string): Promise<boolean> {
   return !claim.error && Array.isArray(claim.data) && claim.data.length > 0;
 }
 
-async function markError(sectionId: string, message: string): Promise<void> {
+async function markError(
+  sectionId: string,
+  message: string,
+  diag?: Record<string, unknown>,
+): Promise<void> {
   await pg(
     "PATCH",
     `listening_exercise_sections?id=eq.${encodeURIComponent(sectionId)}`,
     {
       generation_status: "error",
       generation_error: message,
-      generation_error_raw_response: null,
+      generation_error_raw_response: diag ? JSON.stringify(diag).slice(0, 2000) : null,
     },
   );
 }
@@ -197,8 +231,11 @@ async function handlePlan(body: Record<string, unknown>): Promise<Response> {
     return json({ ok: true, claimed: false, status: "already_running" });
   }
 
+  let aiDiag: GenerationDiagnostics | undefined;
   try {
-    const aiText = await callGenAI(systemPrompt, userPrompt);
+    const aiResult = await callGenAI(systemPrompt, userPrompt);
+    aiDiag = aiResult.diag;
+    const aiText = aiResult.content;
     const jsonText = extractJsonObject(aiText);
     if (!jsonText) {
       throw new Error("AI provider returned invalid JSON formatting.");
@@ -256,8 +293,9 @@ async function handlePlan(body: Record<string, unknown>): Promise<Response> {
     return json({ ok: true, claimed: true, status: "plan_ready" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const diag = err instanceof Error ? (err as GenAIError).diag ?? aiDiag : aiDiag;
     console.error("listening-generate (plan) failed:", message);
-    await markError(sectionId, message);
+    await markError(sectionId, message, diag);
     return json({ ok: false, claimed: true, status: "error", error: message }, 200);
   }
 }
@@ -288,8 +326,11 @@ async function handleContent(body: Record<string, unknown>): Promise<Response> {
     return json({ ok: true, claimed: false, status: "already_running" });
   }
 
+  let aiDiag: GenerationDiagnostics | undefined;
   try {
-    const aiText = await callGenAI(systemPrompt, userPrompt);
+    const aiResult = await callGenAI(systemPrompt, userPrompt);
+    aiDiag = aiResult.diag;
+    const aiText = aiResult.content;
     const jsonText = extractJsonObject(aiText);
     if (!jsonText) {
       throw new Error("AI provider returned invalid JSON formatting.");
@@ -340,8 +381,9 @@ async function handleContent(body: Record<string, unknown>): Promise<Response> {
     return json({ ok: true, claimed: true, status: "ready" });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const diag = err instanceof Error ? (err as GenAIError).diag ?? aiDiag : aiDiag;
     console.error("listening-generate (content) failed:", message);
-    await markError(sectionId, message);
+    await markError(sectionId, message, diag);
     return json({ ok: false, claimed: true, status: "error", error: message }, 200);
   }
 }

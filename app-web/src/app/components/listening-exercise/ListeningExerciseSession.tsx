@@ -30,6 +30,7 @@ export interface ListeningExerciseSessionProps {
   elevenLabsModelId?: ElevenLabsModelId | "";
   /** Selected ElevenLabs voice from Settings ("" = unset → server env default). */
   elevenLabsVoiceId?: ElevenLabsVoiceId | "";
+  articleContext?: { title: string; text: string; keyPoints?: string[] } | null;
 }
 
 type StepType =
@@ -134,6 +135,7 @@ export function ListeningExerciseSession({
   ttsProvider,
   elevenLabsModelId,
   elevenLabsVoiceId,
+  articleContext,
 }: ListeningExerciseSessionProps) {
   const [step, setStep] = useState<StepType>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -148,6 +150,7 @@ export function ListeningExerciseSession({
   };
   
   const isMountedRef = useRef(true);
+  const articleAutoStartRef = useRef(false);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -326,6 +329,7 @@ export function ListeningExerciseSession({
           section_count: initialSectionCount,
           is_placement: initialIsPlacement,
           difficulty,
+          ...(articleContext ? { article_context: articleContext } : {}),
         }),
       });
 
@@ -342,6 +346,15 @@ export function ListeningExerciseSession({
       setErrorPhase("start");
     }
   };
+
+  useEffect(() => {
+    if (articleContext && !articleAutoStartRef.current) {
+      articleAutoStartRef.current = true;
+      void handleStartSession();
+    }
+    // Auto-start only once for article-context sessions, including StrictMode remount effects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articleContext]);
 
   const handleTriggerNextSection = async () => {
     setStep("generating");
