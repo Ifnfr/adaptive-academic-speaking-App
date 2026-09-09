@@ -152,15 +152,36 @@ export async function GET(
     const ageMs = createdMs === 0 ? 0 : Date.now() - createdMs;
     const recentEnough = createdMs === 0 || ageMs < 15 * 60 * 1000;
     if (transient && recentEnough) {
-      await supabase
-        .from("listening_exercise_sections")
-        .update({
-          generation_status: "pending",
-          generation_error: null,
-          generation_error_raw_response: null,
-        })
-        .eq("id", activeSection.id);
-      dbStatus = "pending";
+      // Throttle re-fires: the AI provider (TokenRouter) allows ~5 calls per
+      // minute INCLUDING failed attempts. Resetting on every 2s poll would
+      // exhaust the budget with 429s and starve legitimate calls. Only reset
+      // when the last attempt is at least 25s old.
+      let lastAttemptAt = 0;
+      try {
+        const { data: tsRow } = await supabase
+          .from("listening_exercise_sections")
+          .select("updated_at")
+          .eq("id", activeSection.id)
+          .maybeSingle();
+        if (tsRow && typeof tsRow.updated_at === "string") {
+          const t = new Date(tsRow.updated_at).getTime();
+          if (!Number.isNaN(t)) lastAttemptAt = t;
+        }
+      } catch {
+        // updated_at missing — allow the reset (pre-throttle behavior)
+      }
+      const throttled = lastAttemptAt !== 0 && Date.now() - lastAttemptAt <= 25000;
+      if (!throttled) {
+        await supabase
+          .from("listening_exercise_sections")
+          .update({
+            generation_status: "pending",
+            generation_error: null,
+            generation_error_raw_response: null,
+          })
+          .eq("id", activeSection.id);
+        dbStatus = "pending";
+      }
     }
   }
 
@@ -266,14 +287,15 @@ export async function GET(
         sectionTopicOverride: sectionIndex === 0 ? targetTopic : undefined,
       });
 
-      // STEP 3: while the user works on section 0, PRE-GENERATE sections 1-2
-      // in the background so there is zero wait when moving between sections.
+      // STEP 3: when section 0's content job is fired, PRE-CREATE the rows for
+      // sections 1-2 so the readiness chain in STEP 4 has rows to claim. Rows
+      // are NOT fired here: the AI provider allows ~5 calls/minute including
+      // failed attempts, so bursting 3 concurrent content jobs would trip its
+      // 429 limit. Firing is chained one section per ready-transition below.
       if (sectionIndex === 0 && plan?.sections) {
         for (const ps of plan.sections) {
           const idx = typeof ps.section_index === "number" ? ps.section_index : -1;
           if (idx <= 0) continue;
-          const qTypes = ps.question_types || ["fill_blank"];
-          const qType = qTypes[0] || "fill_blank";
 
           // Check if the row already exists (avoid duplicates)
           const { data: existing } = await supabase
@@ -302,21 +324,6 @@ export async function GET(
             console.error(`Failed to pre-create section ${idx}:`, newRowError);
             continue;
           }
-
-          await fireEdgeJob({
-            kind: "content",
-            sessionId,
-            sectionId: newRow.id,
-            sectionIndex: idx,
-            systemPrompt: buildNextSectionSystemPrompt(qType, difficulty, idx),
-            userPrompt: buildNextSectionUserPrompt(
-              idx,
-              ps.cefr_level || cefrLevel,
-              ps.topic || `Section ${idx + 1}`,
-              qTypes,
-              weakSubSkill
-            ),
-          });
         }
       }
     }
@@ -332,6 +339,79 @@ export async function GET(
     if (refreshed) {
       activeSection = refreshed;
       dbStatus = refreshed.generation_status;
+    }
+  }
+
+  // STEP 4: CHAIN next-section generation once the awaited section is ready.
+  // The AI provider allows ~5 calls/minute, so sections 1-2 must not be fired
+  // together with section 0. Instead, fire exactly ONE content job for the
+  // next planned section when this one turns ready; the chain advances one
+  // section per ready-transition, paced by the user's own work (listening +
+  // answering takes minutes), so AI calls stay well under the cap. The edge
+  // function's atomic claim makes duplicate fires harmless.
+  if (dbStatus === "ready") {
+    const { data: readySession } = await supabase
+      .from("listening_exercise_sessions")
+      .select("cefr_level, section_count, generation_plan, is_placement")
+      .eq("id", sessionId)
+      .eq("owner_id", ownerId)
+      .single();
+
+    const nextIndex = activeSection.section_index + 1;
+    if (readySession && nextIndex < (readySession.section_count || 0)) {
+      const readyPlan = (readySession.generation_plan ?? null) as {
+        difficulty?: string;
+        sections?: Array<{
+          section_index?: number;
+          cefr_level?: string;
+          topic?: string;
+          question_types?: string[];
+        }>;
+      } | null;
+      const planSection = readyPlan?.sections?.find(
+        (s) => s.section_index === nextIndex
+      );
+      if (planSection) {
+        const { data: nextRow } = await supabase
+          .from("listening_exercise_sections")
+          .select("id, generation_status")
+          .eq("session_id", sessionId)
+          .eq("owner_id", ownerId)
+          .eq("section_index", nextIndex)
+          .maybeSingle();
+
+        if (nextRow && nextRow.generation_status === "pending") {
+          let weakSubSkill: string | null = null;
+          if (readySession.is_placement !== true) {
+            weakSubSkill = await getWeakestEligibleSubSkill(supabase, ownerId);
+          }
+          const qTypes = planSection.question_types || ["fill_blank"];
+          const qType = qTypes[0] || "fill_blank";
+          const chainDifficulty =
+            readyPlan?.difficulty === "easy" || readyPlan?.difficulty === "hard"
+              ? readyPlan.difficulty
+              : "medium";
+
+          await fireEdgeJob({
+            kind: "content",
+            sessionId,
+            sectionId: nextRow.id,
+            sectionIndex: nextIndex,
+            systemPrompt: buildNextSectionSystemPrompt(
+              qType,
+              chainDifficulty,
+              nextIndex
+            ),
+            userPrompt: buildNextSectionUserPrompt(
+              nextIndex,
+              planSection.cefr_level || readySession.cefr_level,
+              planSection.topic || `Section ${nextIndex + 1}`,
+              qTypes,
+              weakSubSkill
+            ),
+          });
+        }
+      }
     }
   }
 
